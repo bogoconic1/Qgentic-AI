@@ -36,46 +36,47 @@ class ResearcherAgent:
         base_dir = os.path.join("task", self.slug)
         overview = _safe_read(os.path.join(base_dir, "overview.md"))
         data_description = _safe_read(os.path.join(base_dir, "data_description.md"))
-        return (
-            "You are the Researcher agent (Lead Research Strategist).\n"
-            "You have access to a function tool `ask_domain_expert(question)` which \n"
-            "answers questions using the provided docs and threads.\n"
-            "Goal: produce a clear, summarized step-by-step coding plan for the Developer. Each step should not be more than 2 lines.\n"
-            "- Ask one clarifying question at a time via the tool when needed.\n"
-            "- Stop calling tools once you can write the final plan.\n"
-            "- Output the final plan as Markdown with concrete, actionable steps.\n\n"
-            "- The Developer is expected to write all code within ONE python script.\n"
-            f"Competition Overview:\n{overview}\n\n"
-            f"Data Description:\n{data_description}\n"
-        )
+        return f"""
+You are an experienced Kaggle Competitions Grandmaster. Your strength is not in writing code, but in quickly identifying the 'game within the game.' You excel at finding hidden nuances in the data description, evaluation metric, and community discussions to form a winning strategy. You are methodical, prioritizing foundational understanding before exploring complex solutions.
+
+Your goal is to design a winning strategy for this competition.
+
+You have access to a function tool `ask_domain_expert(question)` which is trained on Kaggle Discussions related to the competition. There could be hints on how to achieve high rankings in the competitions, be it data processing, modelling approaches, or postprocessing.
+
+Call the function as needed and finish with one high-level instruction for the Developer.
+
+Guidelines:
+- Ask at most one clarifying question at a time via the tool
+- Every tool question must be concise (1-2 lines), end with a question mark
+- The question should guide you towards the goal of winning the competition
+- Stop calling tools once you can state the final instruction
+- The final instruction should be a high-level overview for the Developer to implement
+- Do not specify particular technologies or libraries in your final instruction
+
+Competition Overview:
+{overview}
+
+Data Description:
+{data_description}
+"""
 
     def build_plan(self, max_steps: int = 16) -> str:
         system_prompt = self._compose_system()
-        winning_approaches_summary = ask_domain_expert("What are the possible winning approaches to the competition? Summarize them.")
-        print(f"Winning approaches summary: \n{winning_approaches_summary}")
         self.messages = [
             {"role": "system", "content": system_prompt},
             {
                 "role": "user",
                 "content": (
-                    "Begin your investigation. Use the ask_domain_expert tool as needed "
-                    "When you no longer need tools, provide the final "
-                    "step-by-step instructions for the Developer in Markdown."
+                    "Begin your investigation. Use the ask_domain_expert tool as needed. Please win the competition. All the best."
                 ),
             },
-            {
-                "role": "user",
-                "content": (
-                    "This is a short brief on possible winning approaches to the competition. "
-                    "Please use this to guide your investigation. "
-                    f"Possible winning approaches: \n{winning_approaches_summary}"
-                )
-            },
         ]
+        
 
         tools = get_tools()
 
         for step in range(max_steps):
+            print(self.messages[-2:])
             print("--"*50)
             print(f"\n[Step {step + 1}/{max_steps}]")
             if step == max_steps - 1:
@@ -102,7 +103,7 @@ class ResearcherAgent:
                     if function_name == "ask_domain_expert":
                         question = arguments.get("question", "")
                         if len(question) == 0:
-                            tool_output = "I don't know"
+                            tool_output = "Your question cannot be answered based on the competition discussion threads."
                         else:
                             tool_output = ask_domain_expert(question)
 
@@ -112,7 +113,7 @@ class ResearcherAgent:
                             {
                                 "role": "tool",
                                 "tool_call_id": tool_call.id,
-                                "content": tool_output or "I don't know",
+                                "content": tool_output or "Your question cannot be answered based on the competition discussion threads.",
                             }
                         )
                 continue
@@ -123,4 +124,3 @@ class ResearcherAgent:
             if len(final_content) == 0:
                 raise RuntimeError("No plan produced. Please review the docs and craft a plan.")
             return final_content
-

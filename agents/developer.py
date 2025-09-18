@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 from tools.developer import execute_code
+from tools.helpers import call_llm_with_retry
 
 
 def _safe_read(path: str) -> str:
@@ -57,53 +58,51 @@ class DeveloperAgent:
     def _submission_path(self) -> str:
         return os.path.join(self.outputs_dir, "submission.csv")
 
-    def _compose_messages(self, plan_markdown: str, previous_feedback: Optional[str]) -> list:
-        docs = self._read_docs()
-        system_prompt = (
-            "You are a senior Kaggle developer. Based on the competition docs and the \n"
-            "Researcher plan, write a single Python script that:\n"
-            f"- Saves a submission file to: {self._submission_path()}\n"
-            "- Uses only local files under the repository.\n"
-            "- Is self-contained and runnable with `python script.py`.\n"
-            "- Avoids interactive inputs and external credentials.\n"
-            "- Prints progress with clear logs.\n"
-            "Return ONLY one fenced python code block."
-        )
+    def _compose_system(self) -> str:
+        base_dir = os.path.join("task", self.slug)
+        overview = _safe_read(os.path.join(base_dir, "overview.md"))
+        data_description = _safe_read(os.path.join(base_dir, "data_description.md"))
+        return f"""
+You are an experienced Kaggle Competitions Grandmaster with 10 years of coding experience in Python. You have top-notch coding ability in machine learning and data science pipelines.
 
-        user_prompt = (
-            f"Competition Docs:\n{docs}\n\n"
-            f"Researcher Strategic Plan:\n{plan_markdown}\n\n"
-            f"Outputs Directory: {self.outputs_dir}\n"
-            f"Submission Path: {self._submission_path()}\n"
-            f"Slug: {self.slug}\n"
-            "Implement a baseline solution that adheres to the data description and\n"
-            "submission format. If target/metric are unclear, implement a safe stub that\n"
-            "creates the correct submission schema with placeholder predictions, derived\n"
-            "from available IDs per docs.\n\n"
-            "Environment-aware data directory requirements:\n"
-            "- Define `import os` and compute a `DATA_DIR` variable as follows:\n"
-            f"  `DATA_DIR = '/kaggle/input/{self.slug}' if os.getenv('KAGGLE_KERNEL_RUN_TYPE') else os.path.join('task', '{self.slug}')`\n"
-            "- Always load input files from `DATA_DIR`.\n"
-            f"- Create the outputs directory with `os.makedirs('{self.outputs_dir}', exist_ok=True)` before writing.\n"
-            f"- Write the final submission to exactly '{self._submission_path()}'."
-        )
+Competition Overview:
+{overview}
 
-        if previous_feedback:
-            user_prompt += ("\n\nPrevious Attempt Feedback (errors/output):\n" + previous_feedback[:8000])
+Data Description:
+{data_description}
 
-        messages = [
-            {"role": "developer", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
+Your code must adhere to these guidelines
+- Begin with importing os and defining DATA_DIR as follows:
+    ```python
+    import os
+    DATA_DIR = '/kaggle/input/{self.slug}' if os.getenv('KAGGLE_KERNEL_RUN_TYPE') else os.path.join('task', '{self.slug}')
+    ```
+- End with 
+    ```python
+    submission.to_csv("submission.csv", index=False)
+    ```     
+- You will be given a plan/instruction to implement. Do not deviate from the plan.
+- YOU MUST ONLY implement one code block within ```python backticks. Do not write any other text outside the code block.
+"""
+
+    def _generate_code_text(self, plan_markdown: str) -> str:
+        system_prompt = self._compose_system()
+        self.messages = [
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": f"Instruction: {plan_markdown}\n\n"
+            },
         ]
-        return messages
-
-    def _generate_code_text(self, plan_markdown: str, previous_feedback: Optional[str]) -> str:
-        messages = self._compose_messages(plan_markdown, previous_feedback)
-        response = self.client.responses.create(
+        completion = call_llm_with_retry(
+            self.client,
             model="gpt-5",
-            input=messages,
+            messages=self.messages,
+            max_completion_tokens=16384,
         )
-        return response.output[0].content[0].text
+        print(completion)
+        message = completion.choices[0].message
+        return message.content or ""
 
     def _write_code(self, code_text: str) -> str:
         code_only = self._extract_code_from_text(code_text)
@@ -136,5 +135,4 @@ class DeveloperAgent:
             self.code_try += 1
 
         return False
-
 
