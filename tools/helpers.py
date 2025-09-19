@@ -5,7 +5,7 @@ def call_llm_with_retry(llm_client, max_retries=3, **kwargs):
     """Call LLM with retry logic."""
     for attempt in range(max_retries):
         try:
-            return llm_client.chat.completions.create(**kwargs)
+            return llm_client.chat.completions.create(extra_body={}, **kwargs)
         except openai.InternalServerError as e:
             if "504" in str(e) and attempt < max_retries - 1:
                 wait_time = 2**attempt

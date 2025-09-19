@@ -1,27 +1,17 @@
 """
-Metadata extraction utilities for Kaggle Meta datasets.
+Metadata extraction utilities for Kaggle Meta datasets (Pandas-only).
 
-This module provides a `MetadataExtractor` class that exports Kaggle
-forum discussions for a given competition slug into Markdown files.
+This module provides a `MetadataExtractor` class that can:
+  - Export Kaggle forum discussions for a competition slug to Markdown files
+  - Extract notebook ids (Kernels.Id) for a competition, created on/before the deadline
 
-For each forum topic under the target competition, a Markdown file is
-generated at:
+For each forum topic under the target competition, a Markdown file is generated at:
+    <output_root>/task/<competition_slug>/discussions/<ForumTopicId>.md
 
-    <competition_slug>/<ForumTopicId>.md
-
-Each file starts with optional YAML front matter (for LLM-friendly metadata),
-an H1 heading containing the topic title, followed by the discussion messages
-rendered as a threaded list. Messages are rendered as bullet points with
-indentation representing reply depth. Continuation lines for multi-line
-messages are indented to remain under the bullet. Each first line is prefixed
-with a compact bracketed metadata token, e.g. `[id:123 parent:100 user:42 date:2017-01-01T00:00:00Z]`.
-
-Posts with `PostDate` strictly after the competition end cutoff are excluded.
-The cutoff is `DeadlineDate` from `Competitions.parquet`.
-
-Requirements:
-    - pyarrow>=14
-    - pandas>=2.1
+Assumptions (no edge cases handled):
+  - Required columns exist in all parquet files
+  - Kernels.MadePublicDate uses the format "%m/%d/%Y" (e.g., "04/19/2016")
+  - All timestamps are compared in UTC
 
 Example CLI usage:
     python extraction.py --slug <competition-slug>
@@ -34,8 +24,9 @@ from typing import Dict, Iterable, List, Optional, Tuple
 import logging
 
 import pandas as pd
-import pyarrow as pa
-import pyarrow.dataset as ds
+import json
+import shutil
+import os
 
 
 logger = logging.getLogger(__name__)
@@ -67,6 +58,8 @@ class MetadataExtractor:
         competitions_path: Path | str = "Competitions.parquet",
         topics_path: Path | str = "ForumTopics.parquet",
         messages_path: Path | str = "ForumMessages.parquet",
+        kernel_version_competition_sources_path: Path | str = "KernelVersionCompetitionSources.parquet",
+        kernels_path: Path | str = "Kernels.parquet",
         output_root: Path | str = ".",
         indent_spaces: int = 4,
         sort_by: str = "PostDate",
@@ -74,6 +67,8 @@ class MetadataExtractor:
         self.competitions_path = Path(competitions_path)
         self.topics_path = Path(topics_path)
         self.messages_path = Path(messages_path)
+        self.kernel_version_competition_sources_path = Path(kernel_version_competition_sources_path)
+        self.kernels_path = Path(kernels_path)
         self.output_root = Path(output_root)
         self.indent_spaces = int(indent_spaces)
         self.sort_by = sort_by
@@ -105,12 +100,14 @@ class MetadataExtractor:
             cutoff_iso,
         )
 
+        self.export_notebook_codes(slug)
+
         topics = list(self._iter_topics(forum_id))
         if not topics:
             logger.warning("No topics found for forum_id=%s (slug=%s)", forum_id, slug)
             return 0
 
-        out_dir = self.output_root / "task" / slug / "threads"
+        out_dir = self.output_root / "task" / slug / "discussions"
         out_dir.mkdir(parents=True, exist_ok=True)
 
         num_written = 0
@@ -164,61 +161,17 @@ class MetadataExtractor:
 
     # --------------------------- Data Loading ---------------------------
     def _get_competition_and_forum_ids(self, slug: str) -> Tuple[int, int, Optional[pd.Timestamp]]:
-        """Resolve competition id, forum id, and end cutoff timestamp (UTC) from slug.
-
-        The cutoff is taken from `DeadlineDate` only.
-
-        Returns
-        -------
-        (competition_id, forum_id, cutoff_ts_utc)
-
-        Raises
-        ------
-        ValueError
-            If the slug is not found or forum id is missing.
-        """
-        comp_ds = ds.dataset(self.competitions_path, format="parquet")
-        columns = [
-            "Id",
-            "ForumId",
-            "Slug",
-            "DeadlineDate",
-        ]
-        existing_cols = [c for c in columns if c in comp_ds.schema.names]
-        table = comp_ds.to_table(
-            filter=ds.field("Slug") == pa.scalar(slug, pa.string()),
-            columns=existing_cols,
-        )
-        if table.num_rows == 0:
-            raise ValueError(f"Competition slug not found: {slug}")
-
-        # Values
-        comp_val = table.column("Id")[0].as_py() if "Id" in table.column_names else None
-        forum_val = table.column("ForumId")[0].as_py()
-        if forum_val is None:
-            raise ValueError(f"ForumId is missing for slug: {slug}")
-
-        # Coerce ids
-        try:
-            forum_id = int(forum_val)
-        except Exception as exc:  # noqa: BLE001
-            raise ValueError(f"Invalid ForumId value for slug {slug}: {forum_val}") from exc
-        competition_id = int(comp_val) if comp_val is not None else -1
-
-        # Determine cutoff
-        def parse_utc(val: object) -> Optional[pd.Timestamp]:
-            try:
-                ts = pd.to_datetime(val, errors="coerce", utc=True)
-                if pd.isna(ts):
-                    return None
-                return ts.tz_convert("UTC")
-            except Exception:
-                return None
-
-        cutoff_ts = None
-        if "DeadlineDate" in table.column_names:
-            cutoff_ts = parse_utc(table.column("DeadlineDate")[0].as_py())
-
+        """Resolve competition id, forum id, and deadline (UTC) for a slug using Pandas."""
+        cols = ["Id", "ForumId", "Slug", "DeadlineDate"]
+        df = pd.read_parquet(self.competitions_path, columns=cols)
+        row = df.loc[df["Slug"] == slug].iloc[0]
+        competition_id = int(row["Id"]) if pd.notna(row["Id"]) else -1
+        forum_id = int(row["ForumId"])
+        cutoff_ts = pd.to_datetime(row["DeadlineDate"], errors="coerce", utc=True)
+        if pd.notna(cutoff_ts):
+            cutoff_ts = cutoff_ts.tz_convert("UTC")
+        else:
+            cutoff_ts = None
         return competition_id, forum_id, cutoff_ts
 
     def _iter_topics(self, forum_id: int) -> Iterable[Tuple[int, str, Optional[str]]]:
@@ -227,18 +180,11 @@ class MetadataExtractor:
         Topics are loaded using predicate pushdown on `ForumId` and we only
         materialize the `Id`, `Title`, and `CreationDate` columns.
         """
-        topics_ds = ds.dataset(self.topics_path, format="parquet")
-        table = topics_ds.to_table(
-            filter=ds.field("ForumId") == pa.scalar(forum_id, pa.int64()),
-            columns=["Id", "Title", "CreationDate"],
-        )
-
-        ids = table.column("Id").to_pylist() if table.num_rows else []
-        titles = table.column("Title").to_pylist() if table.num_rows else []
-        created = table.column("CreationDate").to_pylist() if table.num_rows else []
-
-        for topic_id, title, created_at in zip(ids, titles, created):
-            yield int(topic_id), (title or "").strip(), (created_at or None)
+        cols = ["Id", "Title", "CreationDate", "ForumId"]
+        df = pd.read_parquet(self.topics_path, columns=cols)
+        df = df.loc[df["ForumId"] == int(forum_id), ["Id", "Title", "CreationDate"]]
+        for row in df.itertuples(index=False):
+            yield int(row.Id), (row.Title or "").strip(), row.CreationDate
 
     def _load_messages_for_topic(self, topic_id: int) -> pd.DataFrame:
         """Load messages for a topic and prepare them for tree rendering.
@@ -249,49 +195,24 @@ class MetadataExtractor:
             - RawMarkdown (str, possibly empty)
             - PostDate (datetime64[ns, UTC] or NaT)
         """
-        msgs_ds = ds.dataset(self.messages_path, format="parquet")
-        table = msgs_ds.to_table(
-            filter=ds.field("ForumTopicId") == pa.scalar(topic_id, pa.int64()),
-            columns=[
-                "Id",
-                "ForumTopicId",
-                "ReplyToForumMessageId",
-                "RawMarkdown",
-                "PostDate",
-                "PostUserId",
-            ],
-        )
+        cols = [
+            "Id",
+            "ForumTopicId",
+            "ReplyToForumMessageId",
+            "RawMarkdown",
+            "PostDate",
+            "PostUserId",
+        ]
+        df = pd.read_parquet(self.messages_path, columns=cols)
+        df = df.loc[df["ForumTopicId"] == int(topic_id)].copy()
 
-        if table.num_rows == 0:
-            # Return empty DataFrame with the required schema
-            return pd.DataFrame(
-                {
-                    "Id": pd.Series(dtype="Int64"),
-                    "ReplyToForumMessageId": pd.Series(dtype="Int64"),
-                    "RawMarkdown": pd.Series(dtype="string"),
-                    "PostDate": pd.Series(dtype="datetime64[ns]"),
-                    "PostUserId": pd.Series(dtype="Int64"),
-                }
-            )
-
-        df = table.to_pandas(types_mapper=pd.ArrowDtype)
-
-        # Normalize dtypes and parse dates
         df["Id"] = pd.to_numeric(df["Id"], errors="coerce").astype("Int64")
-        df["ReplyToForumMessageId"] = (
-            pd.to_numeric(df["ReplyToForumMessageId"], errors="coerce").astype("Int64")
-        )
-        df["PostUserId"] = pd.to_numeric(df.get("PostUserId"), errors="coerce").astype("Int64")
-        # Keep raw markdown as Python strings; fill NAs with empty strings
+        df["ReplyToForumMessageId"] = pd.to_numeric(df["ReplyToForumMessageId"], errors="coerce").astype("Int64")
+        df["PostUserId"] = pd.to_numeric(df["PostUserId"], errors="coerce").astype("Int64")
         df["RawMarkdown"] = df["RawMarkdown"].astype("string").fillna("")
-        # Parse PostDate and keep NaT where invalid
         df["PostDate"] = pd.to_datetime(df["PostDate"], errors="coerce", utc=True).dt.tz_convert("UTC")
 
-        # Stable ordering: by PostDate (if present) then by Id
-        sort_cols: List[str] = []
-        if self.sort_by in df.columns:
-            sort_cols.append(self.sort_by)
-        sort_cols.append("Id")
+        sort_cols: List[str] = [self.sort_by if self.sort_by in df.columns else "PostDate", "Id"]
         df = df.sort_values(sort_cols, kind="mergesort")
 
         return df
@@ -446,12 +367,116 @@ class MetadataExtractor:
         with open(out_path, "w", encoding="utf-8", newline="\n") as f:
             f.write(content)
 
+    # --------------------------- Notebook extraction ---------------------------
+    def get_notebook_ids_before_deadline(
+        self,
+        *,
+        slug: Optional[str] = None,
+        competition_id: Optional[int] = None,
+    ) -> List[int]:
+        """Return unique notebook ids (Kernels.Id) created on/before the competition deadline.
 
-def _default_paths(root: Path) -> Tuple[Path, Path, Path]:
+        Assumes required columns exist and MadePublicDate format is "%m/%d/%Y".
+        Uses SourceCompetitionId and Id from KernelVersionCompetitionSources (version ids),
+        and Id, CurrentKernelVersionId, MadePublicDate, Medal from Kernels.
+        """
+
+        # Resolve competition id and deadline
+        if slug is not None:
+            comp_id, _forum_id, cutoff_ts = self._get_competition_and_forum_ids(slug)
+            target_competition_id = int(comp_id)
+        else:
+            target_competition_id = int(competition_id)  # type: ignore[arg-type]
+            comp_df = pd.read_parquet(self.competitions_path, columns=["Id", "DeadlineDate"])
+            cutoff_val = comp_df.loc[comp_df["Id"] == target_competition_id, "DeadlineDate"].iloc[0]
+            cutoff_ts = pd.to_datetime(cutoff_val, errors="coerce", utc=True)
+            cutoff_ts = cutoff_ts.tz_convert("UTC") if pd.notna(cutoff_ts) else None
+
+        # Version ids for this competition
+        kvcs = pd.read_parquet(
+            self.kernel_version_competition_sources_path,
+            columns=["Id", "KernelVersionId", "SourceCompetitionId"],
+        ).copy()
+        version_ids = kvcs.loc[
+            kvcs["SourceCompetitionId"] == target_competition_id, "KernelVersionId"
+        ].astype("Int64")
+
+        # Join to Kernels by CurrentKernelVersionId and filter by Medal and MadePublicDate <= cutoff
+        kernels = pd.read_parquet(
+            self.kernels_path,
+            columns=["Id", "CurrentKernelVersionId", "MadePublicDate", "Medal"],
+        ).copy()
+        kernels = kernels[kernels["CurrentKernelVersionId"].isin(version_ids)]
+        kernels = kernels.loc[kernels["Medal"] == 1]
+        kernels["MadePublicDate"] = pd.to_datetime(
+            kernels["MadePublicDate"], format="%m/%d/%Y", errors="coerce", utc=True
+        )
+        if cutoff_ts is not None:
+            kernels = kernels.loc[
+                kernels["MadePublicDate"].notna() & (kernels["MadePublicDate"] <= cutoff_ts)
+            ]
+
+        notebook_ids = sorted(
+            {int(x) for x in pd.to_numeric(kernels["CurrentKernelVersionId"], errors="coerce").dropna().astype(int).tolist()}
+        )
+        logger.info(
+            "Found %s unique medalized notebook ids for competition_id=%s on/before cutoff %s",
+            len(notebook_ids),
+            target_competition_id,
+            cutoff_ts.strftime("%Y-%m-%dT%H:%M:%SZ") if cutoff_ts is not None else "null",
+        )
+        return notebook_ids
+
+    # --------------------------- Notebook files ---------------------------
+    def export_notebook_codes(
+        self,
+        slug: str,
+        datasets_root: Path | str = "../../Downloads/datasets",
+    ) -> Tuple[int, int]:
+        """Copy .ipynb files for the competition's IDs and convert to Markdown.
+
+        For each ID, builds source path: `<datasets_root>/0{first3}/{next3}/{ID}.ipynb`,
+        where first3/next3 come from the first 6 digits of the ID.
+
+        Copies to `<output_root>/task/<slug>/codes/` and writes a sibling `.md`.
+
+        Returns a tuple: (num_copied, num_converted).
+        """
+        ids = self.get_notebook_ids_before_deadline(slug=slug)
+        out_dir = self.output_root / "task" / slug / "codes"
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        num_copied = 0
+        num_converted = 0
+        root = Path(datasets_root)
+        print(ids)
+
+        for id_val in ids:
+            id_str = str(int(id_val))
+            first6 = id_str[:6]
+            first3 = first6[:3]
+            next3 = first6[3:6]
+            src = root / f"0{first3}" / f"{next3}" / f"{id_str}.ipynb"
+            dst = out_dir / f"{id_str}.ipynb"
+            try:
+                shutil.copy2(src, dst)
+                num_copied += 1
+                read_jupyter_notebook(dst)
+                os.remove(dst)
+                num_converted += 1
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Failed to copy/convert %s: %s", id_str, exc)
+
+        return num_copied, num_converted
+
+
+def _default_paths(root: Path) -> Tuple[Path, Path, Path, Path, Path]:
     return (
         root / "Competitions.parquet",
         root / "ForumTopics.parquet",
         root / "ForumMessages.parquet",
+        root / "KernelVersionCompetitionSources.parquet",
+        root / "Kernels.parquet",
     )
 
 
@@ -461,15 +486,47 @@ def _build_extractor_from_defaults(
     sort_by: str = "PostDate",
 ) -> MetadataExtractor:
     cwd = Path.cwd()
-    competitions, topics, messages = _default_paths(cwd)
+    competitions, topics, messages, kvcs, kernels = _default_paths(cwd)
     return MetadataExtractor(
         competitions_path=competitions,
         topics_path=topics,
         messages_path=messages,
+        kernel_version_competition_sources_path=kvcs,
+        kernels_path=kernels,
         output_root=output_root,
         indent_spaces=indent_spaces,
         sort_by=sort_by,
     )
+
+
+# --------------------------- Utilities ---------------------------
+def read_jupyter_notebook(file_path: Path) -> str:
+    """Read code and markdown cells from a Jupyter notebook and write .md alongside."""
+    assert file_path.suffix == ".ipynb", "File must be a Jupyter notebook."
+
+    with open(file_path, "r", encoding="utf-8") as f:
+        notebook = json.load(f)
+
+    result = ""
+    last_cell_type = "markdown"
+    for cell in notebook["cells"]:
+        if last_cell_type != cell["cell_type"]:
+            result += "\n```\n"
+        else:
+            result += "\n"
+        if cell["cell_type"] == "code":
+            result += "".join(cell.get("source", []))
+        elif cell["cell_type"] == "markdown":
+            result += "".join(cell.get("source", []))
+        last_cell_type = cell["cell_type"]
+    if last_cell_type == "code":
+        result += "\n```\n"
+
+    with open(file_path.with_suffix(".md"), "w", encoding="utf-8") as f:
+        f.write(result)
+
+    logger.info("Converted notebook %s to Markdown", file_path.name)
+    return result
 
 
 if __name__ == "__main__":
@@ -515,6 +572,16 @@ if __name__ == "__main__":
         help="Path to ForumMessages.parquet (default: <cwd>/ForumMessages.parquet)",
     )
     parser.add_argument(
+        "--kernel-version-competition-sources",
+        default=None,
+        help="Path to KernelVersionCompetitionSources.parquet (default: <cwd>/KernelVersionCompetitionSources.parquet)",
+    )
+    parser.add_argument(
+        "--kernels",
+        default=None,
+        help="Path to Kernels.parquet (default: <cwd>/Kernels.parquet)",
+    )
+    parser.add_argument(
         "--no-front-matter",
         action="store_true",
         help="Disable YAML front matter at the top of each file",
@@ -532,11 +599,13 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if args.competitions and args.topics and args.messages:
+    if args.competitions and args.topics and args.messages and args.kernel_version_competition_sources and args.kernels:
         extractor = MetadataExtractor(
             competitions_path=args.competitions,
             topics_path=args.topics,
             messages_path=args.messages,
+            kernel_version_competition_sources_path=args.kernel_version_competition_sources,
+            kernels_path=args.kernels,
             output_root=args.output_root,
             indent_spaces=args.indent_spaces,
             sort_by=args.sort_by,
@@ -555,5 +624,3 @@ if __name__ == "__main__":
 
     written = extractor.extract_for_competition(args.slug)
     logger.info("Exported %s topic file(s) to '%s'", written, Path(args.output_root) / args.slug)
-
-

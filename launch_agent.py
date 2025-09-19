@@ -6,8 +6,8 @@ from agents.orchestrator import Orchestrator
 
 def main():
     parser = argparse.ArgumentParser(description="Run Researcher+Developer pipeline")
-    parser.add_argument("slug", type=str, help="Competition slug under task/<slug>")
-    parser.add_argument("iteration", type=int, help="Iteration number (e.g., 1)")
+    parser.add_argument("--slug", type=str, help="Competition slug under task/<slug>")
+    parser.add_argument("--iteration", type=int, help="Iteration number (e.g., 1)")
     parser.add_argument("--tries", type=int, default=3, help="Max code attempts per iteration")
     args = parser.parse_args()
 

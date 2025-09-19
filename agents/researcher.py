@@ -5,7 +5,7 @@ from typing import List, Optional
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from tools.researcher import ask_domain_expert, get_tools
+from tools.researcher import ask_domain_expert, ask_eda, get_tools
 from tools.helpers import call_llm_with_retry
 
 
@@ -41,7 +41,9 @@ You are an experienced Kaggle Competitions Grandmaster. Your strength is not in 
 
 Your goal is to design a winning strategy for this competition.
 
-You have access to a function tool `ask_domain_expert(question)` which is trained on Kaggle Discussions related to the competition. There could be hints on how to achieve high rankings in the competitions, be it data processing, modelling approaches, or postprocessing.
+You have access to two function tools 
+- `ask_domain_expert(question)` which is trained on Kaggle Discussions related to the competition. There could be hints on how to achieve high rankings in the competitions, be it data processing, modelling approaches, or postprocessing.
+- `ask_eda(question)` which can answer exploratory questions about the data.
 
 Call the function as needed and finish with one high-level instruction for the Developer.
 
