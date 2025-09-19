@@ -108,6 +108,12 @@ Data Description:
                             tool_output = "Your question cannot be answered based on the competition discussion threads."
                         else:
                             tool_output = ask_domain_expert(question)
+                    elif function_name == "ask_eda":
+                        question = arguments.get("question", "")
+                        if len(question) == 0:
+                            tool_output = "Your question cannot be answered based on the competition discussion threads."
+                        else:
+                            tool_output = ask_eda(question, self.data_description, self.overview, data_path=f"task/{self.slug}")
 
                         print(f"Tool #{step + 1}: {function_name}({tool_output})")
 
