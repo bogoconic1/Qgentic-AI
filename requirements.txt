@@ -28,9 +28,9 @@ opencv-python>=4.8
 anthropic>=0.34.0
 
 # Optional helpers (uncomment if needed)
-# polars>=0.20  # fast tabular EDA/processing
-# catboost>=1.2
-# pyyaml>=6.0
+polars>=0.20  # fast tabular EDA/processing
+catboost>=1.2
+pyyaml>=6.0
 
 exa
 sentence-transformers
@@ -39,3 +39,5 @@ sentence-transformers
 openai>=1.40.0
 python-dotenv>=1.0.1
 
+kaggle
+kagglehub

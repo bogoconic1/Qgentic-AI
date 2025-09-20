@@ -1,12 +1,14 @@
 import os
 import re
+import json
+from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from tools.developer import execute_code
 from tools.helpers import call_llm_with_retry
+from tools.developer import execute_code
 
 
 def _safe_read(path: str) -> str:
@@ -18,121 +20,140 @@ def _safe_read(path: str) -> str:
 
 
 class DeveloperAgent:
-    """Developer/Coder
+    """Turns the Researcher plan into a runnable single-file solution.
 
-    Consumes the Researcher plan, generates runnable Python code that writes
-    a submission.csv to task/<slug>/outputs/<iteration>/, and iterates until success.
+    - Generates a single python file: code_{iteration}_v{version}.py
+    - Executes it and iterates on failures up to max_tries
+    - Success condition: writes submission.csv at
+      task/<slug>/outputs/<iteration>/submission.csv
+    - Uses OpenRouter (qwen/qwen3-coder) for code generation
+    - Ensures Torch MPS fallback flags for Apple Silicon
     """
 
     def __init__(self, slug: str, iteration: int):
         load_dotenv()
         self.slug = slug
-        self.iteration = int(iteration)
-        os.environ["TASK_SLUG"] = slug
-        self.outputs_dir = os.path.join("task", slug, "outputs", str(self.iteration))
-        os.makedirs(self.outputs_dir, exist_ok=True)
-        self.client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-        self.code_try = 1
+        self.iteration = iteration
 
-    def _read_docs(self) -> str:
-        base_dir = os.path.join("task", self.slug)
-        overview = _safe_read(os.path.join(base_dir, "overview.md"))
-        data_description = _safe_read(os.path.join(base_dir, "data_description.md"))
-        return f"Overview:\n{overview}\n\nData Description:\n{data_description}"
+        self.base_dir = Path("task") / slug
+        self.outputs_dir = self.base_dir / "outputs" / str(iteration)
+        self.outputs_dir.mkdir(parents=True, exist_ok=True)
 
-    def _extract_code_from_text(self, text: str) -> str:
-        # Prefer ```python fenced blocks
-        match = re.search(r"```python\s*(.*?)```", text, flags=re.DOTALL | re.IGNORECASE)
-        if match:
-            return match.group(1).strip()
-        # Fallback to any fenced block
-        match_any = re.search(r"```\s*(.*?)```", text, flags=re.DOTALL)
-        if match_any:
-            return match_any.group(1).strip()
-        # As last resort, return the whole text
-        return text.strip()
+        # File targets
+        self.submission_path = self.outputs_dir / "submission.csv"
+        self.plan_path = self.outputs_dir / "plan.md"
 
-    def _current_code_path(self) -> str:
-        return os.path.join(self.outputs_dir, f"code_{self.iteration}_v{self.code_try}.py")
+        # OpenRouter client
+        self.client = OpenAI(api_key=os.environ.get("OPENROUTER_API_KEY"), base_url="https://openrouter.ai/api/v1")
 
-    def _submission_path(self) -> str:
-        return os.path.join(self.outputs_dir, "submission.csv")
+        # Encourage safe Torch usage on Apple Silicon
+        os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
+        os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
     def _compose_system(self) -> str:
-        base_dir = os.path.join("task", self.slug)
-        overview = _safe_read(os.path.join(base_dir, "overview.md"))
-        data_description = _safe_read(os.path.join(base_dir, "data_description.md"))
+        description = _safe_read(str(self.base_dir / "description.md"))
         return f"""
-You are an experienced Kaggle Competitions Grandmaster with 10 years of coding experience in Python. You have top-notch coding ability in machine learning and data science pipelines.
+You are a meticulous Kaggle Developer. Produce a single, self-contained Python script that reads data only from task/{self.slug} and writes a submission to task/{self.slug}/outputs/{self.iteration}/submission.csv.
 
-Competition Overview:
-{overview}
+Hard constraints:
+- Single file script. Name must be code_{self.iteration}_v{{version}}.py
+- No network access; do not download anything.
+- Support Apple Silicon MPS: select device = 'mps' if available, else CPU. Set torch backends safely.
+- Create parent directories as needed.
+- Always write the final CSV to the exact path above.
+- Keep logging informative but concise.
 
-Data Description:
-{data_description}
+Environment context:
+{description}
 
-Your code must adhere to these guidelines
-- Begin with importing os and defining DATA_DIR as follows:
-    ```python
-    import os
-    DATA_DIR = '/kaggle/input/{self.slug}' if os.getenv('KAGGLE_KERNEL_RUN_TYPE') else os.path.join('task', '{self.slug}')
-    ```
-- End with 
-    ```python
-    submission.to_csv("submission.csv", index=False)
-    ```     
-- You will be given a plan/instruction to implement. Do not deviate from the plan.
-- YOU MUST ONLY implement one code block within ```python backticks. Do not write any other text outside the code block.
+Deliver only Python. If using code fences, use ```python.
 """
 
-    def _generate_code_text(self, plan_markdown: str) -> str:
+    def _build_user_prompt(self, plan_markdown: str, prior_error: Optional[str] = None, prior_code: Optional[str] = None) -> str:
+        base = f"""
+Researcher Technical Plan (Markdown):
+{plan_markdown}
+
+Project structure:
+- Base data dir: task/{self.slug}
+- Outputs dir: task/{self.slug}/outputs/{self.iteration}
+- Required output: task/{self.slug}/outputs/{self.iteration}/submission.csv
+
+Implementation requirements:
+- Single file script. Ensure deterministic paths using pathlib.
+- If PyTorch is used, pick device by:
+    device = 'cuda' if torch.cuda.is_available() else 'mps' if getattr(torch.backends, 'mps', None) and torch.backends.mps.is_available() else 'cpu'
+- If using tokenizers/transformers, set TOKENIZERS_PARALLELISM=false and keep batch sizes modest.
+- Do not exceed RAM by loading huge data unnecessarily.
+- Print a brief run log with key steps and final submission shape.
+"""
+        if prior_error:
+            base += "\nPrevious run failed. Here is the traceback and analysis to fix:\n" + prior_error[:8000]
+        if prior_code:
+            base += "\nPrevious script (for reference):\n" + prior_code[:8000]
+        base += "\nReturn the complete Python script that, when run, writes the submission.csv."
+        return base
+
+    def _extract_code(self, content: str) -> str:
+        pattern = r"```python\s*(.*?)\s*```"
+        m = re.search(pattern, content, re.DOTALL | re.IGNORECASE)
+        if m:
+            return m.group(1).strip()
+        return content.strip()
+
+    def _generate_code(self, plan_markdown: str, prior_error: Optional[str], prior_code: Optional[str]) -> str:
         system_prompt = self._compose_system()
-        self.messages = [
-            {"role": "system", "content": system_prompt},
-            {
-                "role": "user",
-                "content": f"Instruction: {plan_markdown}\n\n"
-            },
-        ]
+        user_prompt = self._build_user_prompt(plan_markdown, prior_error, prior_code)
         completion = call_llm_with_retry(
             self.client,
-            model="gpt-5",
-            messages=self.messages,
-            max_completion_tokens=16384,
+            model="qwen/qwen3-coder",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
         )
-        print(completion)
-        message = completion.choices[0].message
-        return message.content or ""
+        msg = completion.choices[0].message
+        content = msg.content or ""
+        return self._extract_code(content)
 
-    def _write_code(self, code_text: str) -> str:
-        code_only = self._extract_code_from_text(code_text)
-        path = self._current_code_path()
-        with open(path, "w") as f:
-            f.write(code_only + "\n")
-        return path
+    def _write_code(self, code: str, version: int) -> Path:
+        code_path = self.outputs_dir / f"code_{self.iteration}_v{version}.py"
+        with open(code_path, "w") as f:
+            f.write(code)
+        return code_path
 
     def run(self, plan_markdown: str, max_tries: int = 3) -> bool:
-        previous_feedback: Optional[str] = None
-        while self.code_try <= max_tries:
-            print("--"*50)
-            print(f"\n[Try {self.code_try}/{max_tries}]")
-            raw = self._generate_code_text(plan_markdown, previous_feedback)
-            code_path = self._write_code(raw)
+        try:
+            with open(self.plan_path, "w") as f:
+                f.write(plan_markdown)
+        except Exception:
+            pass
 
-            output = execute_code(code_path)
-            submission_path = self._submission_path()
+        prior_error: Optional[str] = None
+        prior_code: Optional[str] = None
 
-            if os.path.exists(submission_path) and os.path.getsize(submission_path) > 0:
+        for attempt in range(1, max_tries + 1):
+            version = attempt
+            code = self._generate_code(plan_markdown, prior_error, prior_code)
+            code_path = self._write_code(code, version)
+
+            # Execute the code (inherits current env with MPS flags)
+            output = execute_code(str(code_path))
+
+            # Save run log
+            try:
+                with open(self.outputs_dir / f"run_v{version}.log", "w") as f:
+                    f.write(output or "")
+            except Exception:
+                pass
+
+            # Success condition
+            if self.submission_path.exists():
                 return True
 
-            # Prepare feedback and iterate
-            if not output:
-                output = "No output captured. Submission not found."
-            if not os.path.exists(submission_path):
-                output += f"\nSubmission not found at: {submission_path}"
-
-            previous_feedback = output
-            self.code_try += 1
+            # Prepare for next attempt
+            prior_error = output
+            prior_code = code
 
         return False
 

@@ -19,6 +19,7 @@ def _safe_read(path: str) -> str:
     except Exception:
         return ""
 
+'''
 # https://huggingface.co/Qwen/Qwen3-Reranker-0.6B
 def format_instruction(instruction, query, doc):
     if instruction is None:
@@ -48,8 +49,13 @@ def compute_logits(inputs, **kwargs):
     scores = batch_scores[:, 1].exp().tolist()
     return scores
 
+device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
+model_kwargs = {}
+if device == "cuda":
+    model_kwargs["torch_dtype"] = torch.float16
+    model_kwargs["attn_implementation"] = "flash_attention_2"
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-Reranker-0.6B", padding_side='left')
-model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-Reranker-0.6B", dtype=torch.float16, attn_implementation="flash_attention_2").cuda().eval()
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-Reranker-0.6B", **model_kwargs).eval()
 
 token_false_id = tokenizer.convert_tokens_to_ids("no")
 token_true_id = tokenizer.convert_tokens_to_ids("yes")
@@ -105,16 +111,14 @@ Question:
         messages=messages
     )
     return response.choices[0].message.content
+'''
 
 
-def ask_eda(question: str, data_description: str, overview: str, data_path: str, max_attempts: int = 5) -> str:
+def ask_eda(question: str, description: str, data_path: str, max_attempts: int = 5) -> str:
     """Asks a question about the data provided for exploratory data analysis (EDA)"""
     PROMPT = f"""You are an experienced Kaggle Competitions Grandmaster. Your goal is to write code that answers questions about the data provided.
-Competition Overview:
-{overview}
-
-Data Description:
-{data_description}
+Competition Description:
+{description}
 
 You will be given one or more questions related to the data. Your task is to generate code that, when executed, will answer all questions using the data provided.
 Before generating the code, provide around 5 lines of reasoning about the approach.
@@ -128,7 +132,6 @@ data_path = "{data_path}"
 ```
 
 IMPORTANT: Always provide descriptive answers. Instead of just printing a number like "100", print a complete sentence like "There are a total of 100 records". Make your final answer clear and informative.
-IMPORTANT: If you read in train_labels.csv, make sure to remove records with type = 'Missing' before doing any analysis.
 """
     all_messages = [
         {"role": "system", "content": PROMPT},
@@ -191,20 +194,6 @@ IMPORTANT: If you read in train_labels.csv, make sure to remove records with typ
 
 def get_tools():
     return [
-        {
-            "type": "function",
-            "function": {
-                "name": "ask_domain_expert",
-                "description": "Ask a question to the domain expert",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "question": {"type": "string", "description": "The question to ask the domain expert"}
-                    },
-                    "required": ["question"],
-                },
-            },
-        },
         {
             "type": "function",
             "function": {
