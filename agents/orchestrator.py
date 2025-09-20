@@ -1,4 +1,5 @@
 from typing import Tuple
+import subprocess
 
 # from agents.eda import EDAAgent
 # from agents.researcher import ResearcherAgent
@@ -98,6 +99,14 @@ Based on the EDA results, I now understand the data structure and key challenges
 **Deploy on CPU only**, validate against public leaderboard, submit final ensemble.
 """
         success = self.developer.run(plan, max_tries=max_code_tries)
+        if success:
+            # mlebench grade-sample /workspace/gstar-project/task/learning-agency-lab-automated-essay-scoring-2/outputs/3/submission.csv learning-agency-lab-automated-essay-scoring-2
+            subprocess.run([
+                "mlebench", "grade-sample",
+                f"/workspace/gstar-project/task/{self.slug}/outputs/{self.iteration}/submission.csv",
+                self.slug
+            ])
+  
         return success, plan
     
 

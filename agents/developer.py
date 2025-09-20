@@ -1,21 +1,32 @@
+import json
+import logging
 import os
 import re
-import json
 from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from tools.helpers import call_llm_with_retry
 from tools.developer import execute_code
+from tools.helpers import call_llm_with_retry
+
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 
 def _safe_read(path: str) -> str:
     try:
         with open(path, "r") as f:
-            return f.read()
+            content = f.read()
+            logger.debug("Successfully read file: %s", path)
+            return content
     except Exception:
+        logger.exception("Failed to read file: %s", path)
         return ""
 
 
@@ -42,26 +53,30 @@ class DeveloperAgent:
         # File targets
         self.submission_path = self.outputs_dir / "submission.csv"
         self.plan_path = self.outputs_dir / "plan.md"
+        self.messages = []
 
         # OpenRouter client
         self.client = OpenAI(api_key=os.environ.get("OPENROUTER_API_KEY"), base_url="https://openrouter.ai/api/v1")
-
-        # Encourage safe Torch usage on Apple Silicon
-        os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
         os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
+        logger.info(
+            "Initialized DeveloperAgent for slug=%s iteration=%s", self.slug, self.iteration
+        )
+        logger.debug("Outputs directory resolved to: %s", self.outputs_dir)
+
     def _compose_system(self) -> str:
+        logger.debug("Composing system prompt for slug=%s", self.slug)
         description = _safe_read(str(self.base_dir / "description.md"))
+        logger.debug("Description length: %s characters", len(description))
         return f"""
-You are a meticulous Kaggle Developer. Produce a single, self-contained Python script that reads data only from task/{self.slug} and writes a submission to task/{self.slug}/outputs/{self.iteration}/submission.csv.
+You are a expert Python developer with 10 years of experience. Produce a single, self-contained Python script that reads data only from task/{self.slug} and writes a submission to task/{self.slug}/outputs/{self.iteration}/submission.csv.
 
 Hard constraints:
 - Single file script. Name must be code_{self.iteration}_v{{version}}.py
 - No network access; do not download anything.
-- Support Apple Silicon MPS: select device = 'mps' if available, else CPU. Set torch backends safely.
-- Create parent directories as needed.
+- Use CUDA everywhere where possible.
+- Write logging.info statements everywhere where possible in your code.
 - Always write the final CSV to the exact path above.
-- Keep logging informative but concise.
 
 Environment context:
 {description}
@@ -70,6 +85,11 @@ Deliver only Python. If using code fences, use ```python.
 """
 
     def _build_user_prompt(self, plan_markdown: str, prior_error: Optional[str] = None, prior_code: Optional[str] = None) -> str:
+        logger.debug(
+            "Building user prompt. prior_error_present=%s, prior_code_present=%s",
+            bool(prior_error),
+            bool(prior_code),
+        )
         base = f"""
 Researcher Technical Plan (Markdown):
 {plan_markdown}
@@ -78,14 +98,6 @@ Project structure:
 - Base data dir: task/{self.slug}
 - Outputs dir: task/{self.slug}/outputs/{self.iteration}
 - Required output: task/{self.slug}/outputs/{self.iteration}/submission.csv
-
-Implementation requirements:
-- Single file script. Ensure deterministic paths using pathlib.
-- If PyTorch is used, pick device by:
-    device = 'cuda' if torch.cuda.is_available() else 'mps' if getattr(torch.backends, 'mps', None) and torch.backends.mps.is_available() else 'cpu'
-- If using tokenizers/transformers, set TOKENIZERS_PARALLELISM=false and keep batch sizes modest.
-- Do not exceed RAM by loading huge data unnecessarily.
-- Print a brief run log with key steps and final submission shape.
 """
         if prior_error:
             base += "\nPrevious run failed. Here is the traceback and analysis to fix:\n" + prior_error[:8000]
@@ -95,65 +107,94 @@ Implementation requirements:
         return base
 
     def _extract_code(self, content: str) -> str:
+        logger.debug("Extracting code from completion content. Content length: %s", len(content))
         pattern = r"```python\s*(.*?)\s*```"
         m = re.search(pattern, content, re.DOTALL | re.IGNORECASE)
         if m:
+            logger.debug("Python fenced block located in completion output.")
             return m.group(1).strip()
+        logger.debug("No fenced block detected; returning raw content.")
         return content.strip()
 
-    def _generate_code(self, plan_markdown: str, prior_error: Optional[str], prior_code: Optional[str]) -> str:
-        system_prompt = self._compose_system()
-        user_prompt = self._build_user_prompt(plan_markdown, prior_error, prior_code)
-        completion = call_llm_with_retry(
-            self.client,
-            model="qwen/qwen3-coder",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-        )
-        msg = completion.choices[0].message
-        content = msg.content or ""
+    def _generate_code(self, messages: list[dict[str, str]]) -> str:
+        logger.info("Requesting code generation from model for iteration %s", self.iteration)
+        for msg in messages:
+            logger.debug("============================")
+            logger.debug("Message role: %s, content length: %s start: %s", msg['role'], len(msg['content']), msg['content'][:100])
+            logger.debug("============================")
+        
+        content = ""
+        while content == "":
+            completion = call_llm_with_retry(
+                self.client,
+                model="openai/gpt-5",
+                messages=messages,
+            )
+            msg = completion.choices[0].message
+            content = msg.content or ""
+
+        logger.info("Model response received for iteration %s", self.iteration)
+        logger.debug("Completion content length: %s", len(content))
         return self._extract_code(content)
 
     def _write_code(self, code: str, version: int) -> Path:
         code_path = self.outputs_dir / f"code_{self.iteration}_v{version}.py"
+        logger.info("Writing generated code to %s", code_path)
         with open(code_path, "w") as f:
             f.write(code)
+        logger.debug("Written code size: %s characters", len(code))
         return code_path
 
     def run(self, plan_markdown: str, max_tries: int = 3) -> bool:
+        logger.info(
+            "Starting developer run for slug=%s iteration=%s with max_tries=%s",
+            self.slug,
+            self.iteration,
+            max_tries,
+        )
         try:
             with open(self.plan_path, "w") as f:
                 f.write(plan_markdown)
+            logger.debug("Plan markdown persisted to %s", self.plan_path)
         except Exception:
-            pass
+            logger.exception("Failed to persist plan markdown to %s", self.plan_path)
 
-        prior_error: Optional[str] = None
-        prior_code: Optional[str] = None
+        system_prompt = self._compose_system()
+        user_prompt = self._build_user_prompt(plan_markdown)
+        self.messages.append({"role": "system", "content": system_prompt})
+        self.messages.append({"role": "user", "content": user_prompt})
 
         for attempt in range(1, max_tries + 1):
+            logger.info("Attempt %s/%s for developer run", attempt, max_tries)
             version = attempt
-            code = self._generate_code(plan_markdown, prior_error, prior_code)
+            code = self._generate_code(self.messages)
             code_path = self._write_code(code, version)
 
             # Execute the code (inherits current env with MPS flags)
             output = execute_code(str(code_path))
+            logger.info("Execution output captured for version v%s", version)
+            logger.debug("Execution output: %s", output)
 
             # Save run log
             try:
                 with open(self.outputs_dir / f"run_v{version}.log", "w") as f:
                     f.write(output or "")
+                logger.debug("Run log written for version v%s", version)
             except Exception:
-                pass
+                logger.exception("Failed to write run log for version v%s", version)
 
             # Success condition
             if self.submission_path.exists():
+                logger.info(
+                    "Submission detected at %s after attempt %s", self.submission_path, attempt
+                )
                 return True
 
-            # Prepare for next attempt
-            prior_error = output
-            prior_code = code
+            self.messages.append({'role': 'assistant', 'content': code})
+            self.messages.append({'role': 'user', 'content': output})
 
+        logger.warning(
+            "Developer run exhausted all attempts without creating submission: %s",
+            self.submission_path,
+        )
         return False
-
