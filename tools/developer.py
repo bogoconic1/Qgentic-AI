@@ -2,12 +2,13 @@
 
 import logging
 import os
+import pickle
 import subprocess
+import textwrap
 import traceback
 
 from dotenv import load_dotenv
 from openai import OpenAI
-import pickle
 
 load_dotenv()
 
@@ -52,6 +53,62 @@ def web_search_stack_trace(query: str) -> str:
     return response.output[-1].content[0].text
 
 
+def search_sota_suggestions(description: str, context: str) -> str:
+    """Use web search to surface potential SOTA improvements for the competition."""
+    logger.info("Dispatching SOTA web search")
+    messages = [
+        {
+            "role": "user",
+            "content": f"""You are assisting with improvements for a Kaggle competition.
+Competition Description: 
+{description}
+
+Refer to the experiment code and notes below and suggest up to three state-of-the-art models or architectures that could meaningfully improve the score.
+If you are listing a huggingface model, include the model in the format <author>/<model>.
+
+Experiment code and notes:
+{context}
+
+Output it in valid YAML format as:
+```yaml
+models:
+    - <author>/<model>
+    - <author>/<model>
+    - <author>/<model>
+
+techniques:
+    - <technique 1>
+    - <technique 2>
+    - <technique 3>
+```
+If you cannot find any relevant suggestions, return an empty list for both sections.
+"""
+        }
+    ]
+
+    logger.debug("SOTA search messages: %s", messages)
+
+    try:
+        response = client.responses.create(
+            model="gpt-5",
+            input=messages,
+            tools=[{"type": "web_search"}],
+        )
+        logger.debug("SOTA search raw response: %s", response)
+
+        raw_output = response.output[-1].content[0].text
+        # parse yaml
+        if "```yaml" in raw_output:
+            yaml_content = raw_output.split("```yaml")[1].split("```")[0]
+        else:
+            yaml_content = raw_output
+        logger.debug("SOTA search YAML content: %s", yaml_content)
+        return yaml_content
+    except Exception:
+        logger.exception("SOTA suggestions web search failed")
+        return ""
+
+
 
 def execute_code(filepath: str) -> str:
     """Execute a generated Python file and enrich errors with search guidance."""
@@ -78,7 +135,10 @@ def execute_code(filepath: str) -> str:
         return trace + "\n" + search_result
 
     except Exception:
-        return trace + "\n"
+        trace = traceback.format_exc()
+        logger.exception("Unexpected error while executing %s", filepath)
+        search_result = web_search_stack_trace(trace)
+        return trace + "\n" + search_result
 
 
 if __name__ == "__main__":

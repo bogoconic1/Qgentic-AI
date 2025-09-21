@@ -8,7 +8,7 @@ from typing import Optional
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from tools.developer import execute_code
+from tools.developer import execute_code, search_sota_suggestions
 from tools.helpers import call_llm_with_retry
 
 
@@ -91,8 +91,8 @@ class DeveloperAgent:
 
     def _compose_system(self) -> str:
         logger.debug("Composing system prompt for slug=%s", self.slug)
-        description = _safe_read(str(self.base_dir / "description.md"))
-        logger.debug("Description length: %s characters", len(description))
+        self.description = _safe_read(str(self.base_dir / "description.md"))
+        logger.debug("Description length: %s characters", len(self.description))
         directory_listing = self._build_directory_listing()
         logger.debug(
             "Directory listing prepared for %s (length=%s)", self.base_dir, len(directory_listing)
@@ -112,7 +112,7 @@ Hard constraints:
 - If possible, DO NOT train from scratch. Use pretrained models.
 
 Environment context:
-{description}
+{self.description}
 
 Directory structure for task/{self.slug}:
 {directory_listing}
@@ -159,7 +159,7 @@ Project structure:
         logger.info("Requesting code generation from model for iteration %s", self.iteration)
         for msg in messages:
             logger.debug("============================")
-            logger.debug("Message role: %s, content length: %s start: %s", msg['role'], len(msg['content']), msg['content'][:100])
+            logger.debug("Message role: %s, content length: %s start: %s", msg['role'], len(msg['content']), msg['content'])
             logger.debug("============================")
         
         content = ""
@@ -279,13 +279,23 @@ Project structure:
                 if grade_feedback:
                     feedback_parts.append("Grader report:\n" + grade_feedback)
 
+                sota_context = code + "\n\n".join(part for part in feedback_parts if part)
+                try:
+                    sota_suggestions = search_sota_suggestions(self.description, sota_context)
+                except Exception:
+                    logger.exception("Failed to fetch SOTA suggestions for attempt %s", attempt)
+                    sota_suggestions = ""
+                if sota_suggestions:
+                    feedback_parts.append("Web search suggestions:\n" + sota_suggestions)
+
                 feedback = "\n\n".join(part for part in feedback_parts if part) or "Submission generated successfully."
                 next_instr = (
-                    f"\nAbove are the logs. Please study them and try to think of ways to improve the validation score. In your refined solution, continue writing logs to "
+                    f"\nAbove are the logs and suggestions. Please study them and try to think of ways to improve the validation score. In your refined solution, continue writing logs to "
                     f"task/{self.slug}/outputs/{self.iteration}/code_{self.iteration}_v{version+1}.txt "
                     f"and produce the next submission at task/{self.slug}/outputs/{self.iteration}/submission_{version+1}.csv."
                 )
                 self.messages.append({'role': 'user', 'content': feedback + next_instr})
+                return True
             else:
                 feedback = "\n\n".join(part for part in feedback_parts if part) or "Run did not produce a submission."
                 next_instr = (
