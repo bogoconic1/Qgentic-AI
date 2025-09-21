@@ -1,0 +1,44 @@
+2025-09-21 03:19:25,404 | INFO | Starting AES 2.0 training script with CUDA and fp16 mixed precision.
+2025-09-21 03:19:25,405 | INFO | Random seeds set to 42.
+2025-09-21 03:19:25,405 | INFO | Using device: cuda
+2025-09-21 03:19:25,405 | INFO | Data paths set: train=task/learning-agency-lab-automated-essay-scoring-2/train.csv, test=task/learning-agency-lab-automated-essay-scoring-2/test.csv
+2025-09-21 03:19:25,406 | INFO | Reading CSVs...
+2025-09-21 03:19:25,731 | INFO | Train shape: (15576, 3) | Test shape: (1731, 2)
+2025-09-21 03:19:25,732 | INFO | Score distribution (train): {
+  "1": 1124,
+  "2": 4249,
+  "3": 5629,
+  "4": 3563,
+  "5": 876,
+  "6": 135
+}
+2025-09-21 03:19:25,732 | INFO | Tokenizing and extracting features for train...
+2025-09-21 03:19:26,987 | INFO | Processed 2000/15576 train rows
+2025-09-21 03:19:28,189 | INFO | Processed 4000/15576 train rows
+2025-09-21 03:19:29,410 | INFO | Processed 6000/15576 train rows
+2025-09-21 03:19:30,597 | INFO | Processed 8000/15576 train rows
+2025-09-21 03:19:31,816 | INFO | Processed 10000/15576 train rows
+2025-09-21 03:19:33,023 | INFO | Processed 12000/15576 train rows
+2025-09-21 03:19:34,247 | INFO | Processed 14000/15576 train rows
+2025-09-21 03:19:35,222 | INFO | Tokenizing and extracting features for test...
+2025-09-21 03:19:36,263 | INFO | Feature names: ['char_count', 'word_count', 'sentence_count', 'avg_sentence_len', 'paragraph_count', 'colon_count', 'semicolon_count', 'dash_count', 'ttr', 'punctuation_diversity']
+2025-09-21 03:19:36,516 | INFO | Feature means: [2073.4541015625, 373.38385009765625, 19.88629913330078, 20.58951759338379, 4.969247341156006, 0.13251155614852905, 0.1834874153137207, 1.0962377786636353, 0.47494539618492126, 5.136941432952881]
+2025-09-21 03:19:36,516 | INFO | Feature stds: [930.0852661132812, 152.76539611816406, 8.829238891601562, 13.583124160766602, 3.3253095149993896, 0.6126713156700134, 0.6259998679161072, 2.0394952297210693, 0.07551667094230652, 1.9875688552856445]
+2025-09-21 03:19:36,516 | INFO | Hashing tokens to ids for train...
+2025-09-21 03:19:37,375 | INFO | Hashed 2000/15576 train token lists
+2025-09-21 03:19:38,211 | INFO | Hashed 4000/15576 train token lists
+2025-09-21 03:19:39,049 | INFO | Hashed 6000/15576 train token lists
+2025-09-21 03:19:39,874 | INFO | Hashed 8000/15576 train token lists
+2025-09-21 03:19:40,722 | INFO | Hashed 10000/15576 train token lists
+2025-09-21 03:19:41,593 | INFO | Hashed 12000/15576 train token lists
+2025-09-21 03:19:42,432 | INFO | Hashed 14000/15576 train token lists
+2025-09-21 03:19:43,117 | INFO | Hashing tokens to ids for test...
+2025-09-21 03:19:43,869 | INFO | Collator created with max_len=512, num_features=10
+2025-09-21 03:19:43,870 | INFO | EssayDataset initialized with 1731 samples.
+2025-09-21 03:19:43,874 | INFO | ========== Fold 1/5 ==========
+2025-09-21 03:19:43,892 | INFO | EssayDataset initialized with 12460 samples.
+2025-09-21 03:19:43,892 | INFO | EssayDataset initialized with 3116 samples.
+2025-09-21 03:19:44,418 | INFO | Model initialized for fold 1 with 26,101,958 parameters.
+2025-09-21 03:19:45,422 | INFO | Class counts: [899.0, 3399.0, 4503.0, 2851.0, 700.0, 108.0]
+2025-09-21 03:19:45,422 | INFO | Computed class weights: [2.309974045235447, 0.6109640090222614, 0.4611740321267303, 0.7283993920261896, 2.966666666666667, 19.228395061728396]
+2025-09-21 03:19:45,423 | INFO | Fold 1 | Epoch 1/2 started.

@@ -1,0 +1,276 @@
+2025-09-21 03:22:18,578 | INFO | Starting AES 2.0 training script with CUDA and fp16 mixed precision (AMP).
+2025-09-21 03:22:18,579 | INFO | Random seeds set to 42.
+2025-09-21 03:22:18,579 | INFO | Using device: cuda
+2025-09-21 03:22:18,579 | INFO | Data paths set: train=task/learning-agency-lab-automated-essay-scoring-2/train.csv, test=task/learning-agency-lab-automated-essay-scoring-2/test.csv
+2025-09-21 03:22:18,580 | INFO | Reading CSVs...
+2025-09-21 03:22:18,903 | INFO | Train shape: (15576, 3) | Test shape: (1731, 2)
+2025-09-21 03:22:18,905 | INFO | Score distribution (train): {
+  "1": 1124,
+  "2": 4249,
+  "3": 5629,
+  "4": 3563,
+  "5": 876,
+  "6": 135
+}
+2025-09-21 03:22:18,905 | INFO | Tokenizing and extracting features for train...
+2025-09-21 03:22:20,162 | INFO | Processed 2000/15576 train rows
+2025-09-21 03:22:21,362 | INFO | Processed 4000/15576 train rows
+2025-09-21 03:22:22,594 | INFO | Processed 6000/15576 train rows
+2025-09-21 03:22:23,806 | INFO | Processed 8000/15576 train rows
+2025-09-21 03:22:25,055 | INFO | Processed 10000/15576 train rows
+2025-09-21 03:22:26,283 | INFO | Processed 12000/15576 train rows
+2025-09-21 03:22:27,534 | INFO | Processed 14000/15576 train rows
+2025-09-21 03:22:28,529 | INFO | Tokenizing and extracting features for test...
+2025-09-21 03:22:29,611 | INFO | Feature names: ['char_count', 'word_count', 'sentence_count', 'avg_sentence_len', 'paragraph_count', 'colon_count', 'semicolon_count', 'dash_count', 'ttr', 'punctuation_diversity']
+2025-09-21 03:22:30,067 | INFO | Feature means: [2073.4541015625, 373.38385009765625, 19.88629913330078, 20.58951759338379, 4.969247341156006, 0.13251155614852905, 0.1834874153137207, 1.0962377786636353, 0.47494539618492126, 5.136941432952881]
+2025-09-21 03:22:30,067 | INFO | Feature stds: [930.0852661132812, 152.76539611816406, 8.829238891601562, 13.583124160766602, 3.3253095149993896, 0.6126713156700134, 0.6259998679161072, 2.0394952297210693, 0.07551667094230652, 1.9875688552856445]
+2025-09-21 03:22:30,067 | INFO | Hashing tokens to ids for train...
+2025-09-21 03:22:30,940 | INFO | Hashed 2000/15576 train token lists
+2025-09-21 03:22:31,792 | INFO | Hashed 4000/15576 train token lists
+2025-09-21 03:22:32,659 | INFO | Hashed 6000/15576 train token lists
+2025-09-21 03:22:33,510 | INFO | Hashed 8000/15576 train token lists
+2025-09-21 03:22:34,369 | INFO | Hashed 10000/15576 train token lists
+2025-09-21 03:22:35,282 | INFO | Hashed 12000/15576 train token lists
+2025-09-21 03:22:36,151 | INFO | Hashed 14000/15576 train token lists
+2025-09-21 03:22:36,855 | INFO | Hashing tokens to ids for test...
+2025-09-21 03:22:37,620 | INFO | Collator created with max_len=512, num_features=10
+2025-09-21 03:22:37,620 | INFO | EssayDataset initialized with 1731 samples.
+2025-09-21 03:22:37,626 | INFO | ========== Fold 1/5 ==========
+2025-09-21 03:22:37,643 | INFO | EssayDataset initialized with 12460 samples.
+2025-09-21 03:22:37,643 | INFO | EssayDataset initialized with 3116 samples.
+2025-09-21 03:22:38,145 | INFO | Model initialized for fold 1 with 26,101,958 parameters.
+2025-09-21 03:22:38,146 | INFO | Model first parameter dtype (should be float32 for AMP): torch.float32
+2025-09-21 03:22:39,247 | INFO | Class counts: [899.0, 3399.0, 4503.0, 2851.0, 700.0, 108.0]
+2025-09-21 03:22:39,247 | INFO | Computed class weights: [2.309974045235447, 0.6109640090222614, 0.4611740321267303, 0.7283993920261896, 2.966666666666667, 19.228395061728396]
+2025-09-21 03:22:39,249 | INFO | Fold 1 | Epoch 1/2 started.
+2025-09-21 03:22:42,221 | INFO | Train step 50/779 | Loss: 1.8639
+2025-09-21 03:22:43,860 | INFO | Train step 100/779 | Loss: 1.6713
+2025-09-21 03:22:45,509 | INFO | Train step 150/779 | Loss: 1.5521
+2025-09-21 03:22:47,150 | INFO | Train step 200/779 | Loss: 1.4836
+2025-09-21 03:22:48,800 | INFO | Train step 250/779 | Loss: 1.4397
+2025-09-21 03:22:50,463 | INFO | Train step 300/779 | Loss: 1.4160
+2025-09-21 03:22:52,108 | INFO | Train step 350/779 | Loss: 1.3841
+2025-09-21 03:22:53,752 | INFO | Train step 400/779 | Loss: 1.3692
+2025-09-21 03:22:55,399 | INFO | Train step 450/779 | Loss: 1.3543
+2025-09-21 03:22:57,064 | INFO | Train step 500/779 | Loss: 1.3433
+2025-09-21 03:22:58,706 | INFO | Train step 550/779 | Loss: 1.3337
+2025-09-21 03:23:00,381 | INFO | Train step 600/779 | Loss: 1.3210
+2025-09-21 03:23:02,102 | INFO | Train step 650/779 | Loss: 1.3217
+2025-09-21 03:23:03,804 | INFO | Train step 700/779 | Loss: 1.3194
+2025-09-21 03:23:05,468 | INFO | Train step 750/779 | Loss: 1.3175
+2025-09-21 03:23:06,989 | INFO | Epoch train loss: 1.3172 | Time: 27.74s
+2025-09-21 03:23:08,255 | INFO | Validation QWK: 0.669800 | Time: 1.27s
+2025-09-21 03:23:08,340 | INFO | Fold 1 | Epoch 1 done. TrainLoss=1.3172, ValQWK=0.669800, BestQWK=0.669800
+2025-09-21 03:23:08,340 | INFO | Fold 1 | Epoch 2/2 started.
+2025-09-21 03:23:10,190 | INFO | Train step 50/779 | Loss: 1.2857
+2025-09-21 03:23:11,847 | INFO | Train step 100/779 | Loss: 1.2160
+2025-09-21 03:23:13,473 | INFO | Train step 150/779 | Loss: 1.2222
+2025-09-21 03:23:15,122 | INFO | Train step 200/779 | Loss: 1.2033
+2025-09-21 03:23:16,781 | INFO | Train step 250/779 | Loss: 1.1883
+2025-09-21 03:23:18,430 | INFO | Train step 300/779 | Loss: 1.1973
+2025-09-21 03:23:20,076 | INFO | Train step 350/779 | Loss: 1.1978
+2025-09-21 03:23:21,736 | INFO | Train step 400/779 | Loss: 1.1988
+2025-09-21 03:23:23,393 | INFO | Train step 450/779 | Loss: 1.2025
+2025-09-21 03:23:25,060 | INFO | Train step 500/779 | Loss: 1.2041
+2025-09-21 03:23:26,703 | INFO | Train step 550/779 | Loss: 1.2012
+2025-09-21 03:23:28,349 | INFO | Train step 600/779 | Loss: 1.1978
+2025-09-21 03:23:30,015 | INFO | Train step 650/779 | Loss: 1.1956
+2025-09-21 03:23:31,697 | INFO | Train step 700/779 | Loss: 1.1959
+2025-09-21 03:23:33,335 | INFO | Train step 750/779 | Loss: 1.1925
+2025-09-21 03:23:34,400 | INFO | Epoch train loss: 1.1889 | Time: 26.06s
+2025-09-21 03:23:35,667 | INFO | Validation QWK: 0.692553 | Time: 1.27s
+2025-09-21 03:23:35,758 | INFO | Fold 1 | Epoch 2 done. TrainLoss=1.1889, ValQWK=0.692553, BestQWK=0.692553
+2025-09-21 03:23:37,016 | INFO | Validation QWK: 0.692553 | Time: 1.23s
+2025-09-21 03:23:37,801 | INFO | Fold 1 finished. Best Validation QWK: 0.692553
+2025-09-21 03:23:37,802 | INFO | ========== Fold 2/5 ==========
+2025-09-21 03:23:37,818 | INFO | EssayDataset initialized with 12461 samples.
+2025-09-21 03:23:37,824 | INFO | EssayDataset initialized with 3115 samples.
+2025-09-21 03:23:38,059 | INFO | Model initialized for fold 2 with 26,101,958 parameters.
+2025-09-21 03:23:38,059 | INFO | Model first parameter dtype (should be float32 for AMP): torch.float32
+2025-09-21 03:23:38,060 | INFO | Class counts: [899.0, 3399.0, 4503.0, 2851.0, 701.0, 108.0]
+2025-09-21 03:23:38,060 | INFO | Computed class weights: [2.3101594364108267, 0.611013043051878, 0.4612110444888593, 0.7284578510464165, 2.962672372800761, 19.229938271604937]
+2025-09-21 03:23:38,075 | INFO | Fold 2 | Epoch 1/2 started.
+2025-09-21 03:23:39,810 | INFO | Train step 50/779 | Loss: 1.8763
+2025-09-21 03:23:41,433 | INFO | Train step 100/779 | Loss: 1.7032
+2025-09-21 03:23:43,068 | INFO | Train step 150/779 | Loss: 1.5887
+2025-09-21 03:23:44,717 | INFO | Train step 200/779 | Loss: 1.5189
+2025-09-21 03:23:46,390 | INFO | Train step 250/779 | Loss: 1.4602
+2025-09-21 03:23:48,065 | INFO | Train step 300/779 | Loss: 1.4543
+2025-09-21 03:23:49,725 | INFO | Train step 350/779 | Loss: 1.4318
+2025-09-21 03:23:51,368 | INFO | Train step 400/779 | Loss: 1.4139
+2025-09-21 03:23:53,033 | INFO | Train step 450/779 | Loss: 1.3913
+2025-09-21 03:23:54,689 | INFO | Train step 500/779 | Loss: 1.3823
+2025-09-21 03:23:56,355 | INFO | Train step 550/779 | Loss: 1.3705
+2025-09-21 03:23:58,001 | INFO | Train step 600/779 | Loss: 1.3512
+2025-09-21 03:23:59,674 | INFO | Train step 650/779 | Loss: 1.3506
+2025-09-21 03:24:01,372 | INFO | Train step 700/779 | Loss: 1.3374
+2025-09-21 03:24:03,014 | INFO | Train step 750/779 | Loss: 1.3320
+2025-09-21 03:24:04,519 | INFO | Epoch train loss: 1.3274 | Time: 26.44s
+2025-09-21 03:24:05,898 | INFO | Validation QWK: 0.657317 | Time: 1.38s
+2025-09-21 03:24:05,979 | INFO | Fold 2 | Epoch 1 done. TrainLoss=1.3274, ValQWK=0.657317, BestQWK=0.657317
+2025-09-21 03:24:05,979 | INFO | Fold 2 | Epoch 2/2 started.
+2025-09-21 03:24:07,808 | INFO | Train step 50/779 | Loss: 1.1799
+2025-09-21 03:24:09,440 | INFO | Train step 100/779 | Loss: 1.1690
+2025-09-21 03:24:11,075 | INFO | Train step 150/779 | Loss: 1.2019
+2025-09-21 03:24:12,710 | INFO | Train step 200/779 | Loss: 1.2064
+2025-09-21 03:24:14,343 | INFO | Train step 250/779 | Loss: 1.1875
+2025-09-21 03:24:16,014 | INFO | Train step 300/779 | Loss: 1.1878
+2025-09-21 03:24:17,668 | INFO | Train step 350/779 | Loss: 1.1939
+2025-09-21 03:24:19,315 | INFO | Train step 400/779 | Loss: 1.2011
+2025-09-21 03:24:20,970 | INFO | Train step 450/779 | Loss: 1.1961
+2025-09-21 03:24:22,613 | INFO | Train step 500/779 | Loss: 1.1856
+2025-09-21 03:24:24,254 | INFO | Train step 550/779 | Loss: 1.1936
+2025-09-21 03:24:25,892 | INFO | Train step 600/779 | Loss: 1.1899
+2025-09-21 03:24:27,536 | INFO | Train step 650/779 | Loss: 1.1916
+2025-09-21 03:24:29,185 | INFO | Train step 700/779 | Loss: 1.1926
+2025-09-21 03:24:30,812 | INFO | Train step 750/779 | Loss: 1.1913
+2025-09-21 03:24:31,919 | INFO | Epoch train loss: 1.1965 | Time: 25.94s
+2025-09-21 03:24:33,189 | INFO | Validation QWK: 0.662631 | Time: 1.27s
+2025-09-21 03:24:33,283 | INFO | Fold 2 | Epoch 2 done. TrainLoss=1.1965, ValQWK=0.662631, BestQWK=0.662631
+2025-09-21 03:24:34,573 | INFO | Validation QWK: 0.662631 | Time: 1.26s
+2025-09-21 03:24:35,197 | INFO | Fold 2 finished. Best Validation QWK: 0.662631
+2025-09-21 03:24:35,197 | INFO | ========== Fold 3/5 ==========
+2025-09-21 03:24:35,215 | INFO | EssayDataset initialized with 12461 samples.
+2025-09-21 03:24:35,218 | INFO | EssayDataset initialized with 3115 samples.
+2025-09-21 03:24:35,451 | INFO | Model initialized for fold 3 with 26,101,958 parameters.
+2025-09-21 03:24:35,451 | INFO | Model first parameter dtype (should be float32 for AMP): torch.float32
+2025-09-21 03:24:35,452 | INFO | Class counts: [900.0, 3399.0, 4503.0, 2850.0, 701.0, 108.0]
+2025-09-21 03:24:35,452 | INFO | Computed class weights: [2.3075925925925924, 0.611013043051878, 0.4612110444888593, 0.7287134502923976, 2.962672372800761, 19.229938271604937]
+2025-09-21 03:24:35,468 | INFO | Fold 3 | Epoch 1/2 started.
+2025-09-21 03:24:37,243 | INFO | Train step 50/779 | Loss: 1.6829
+2025-09-21 03:24:38,883 | INFO | Train step 100/779 | Loss: 1.6303
+2025-09-21 03:24:40,555 | INFO | Train step 150/779 | Loss: 1.5588
+2025-09-21 03:24:42,241 | INFO | Train step 200/779 | Loss: 1.5022
+2025-09-21 03:24:43,904 | INFO | Train step 250/779 | Loss: 1.4605
+2025-09-21 03:24:45,576 | INFO | Train step 300/779 | Loss: 1.4334
+2025-09-21 03:24:47,265 | INFO | Train step 350/779 | Loss: 1.4090
+2025-09-21 03:24:48,944 | INFO | Train step 400/779 | Loss: 1.4043
+2025-09-21 03:24:50,609 | INFO | Train step 450/779 | Loss: 1.3871
+2025-09-21 03:24:52,244 | INFO | Train step 500/779 | Loss: 1.3819
+2025-09-21 03:24:53,918 | INFO | Train step 550/779 | Loss: 1.3661
+2025-09-21 03:24:55,576 | INFO | Train step 600/779 | Loss: 1.3535
+2025-09-21 03:24:57,229 | INFO | Train step 650/779 | Loss: 1.3482
+2025-09-21 03:24:58,868 | INFO | Train step 700/779 | Loss: 1.3552
+2025-09-21 03:25:00,508 | INFO | Train step 750/779 | Loss: 1.3438
+2025-09-21 03:25:01,585 | INFO | Epoch train loss: 1.3375 | Time: 26.12s
+2025-09-21 03:25:02,836 | INFO | Validation QWK: 0.691738 | Time: 1.25s
+2025-09-21 03:25:02,915 | INFO | Fold 3 | Epoch 1 done. TrainLoss=1.3375, ValQWK=0.691738, BestQWK=0.691738
+2025-09-21 03:25:02,916 | INFO | Fold 3 | Epoch 2/2 started.
+2025-09-21 03:25:04,728 | INFO | Train step 50/779 | Loss: 1.2497
+2025-09-21 03:25:06,379 | INFO | Train step 100/779 | Loss: 1.3362
+2025-09-21 03:25:08,033 | INFO | Train step 150/779 | Loss: 1.2534
+2025-09-21 03:25:09,690 | INFO | Train step 200/779 | Loss: 1.2253
+2025-09-21 03:25:11,335 | INFO | Train step 250/779 | Loss: 1.2103
+2025-09-21 03:25:12,978 | INFO | Train step 300/779 | Loss: 1.1844
+2025-09-21 03:25:14,631 | INFO | Train step 350/779 | Loss: 1.1749
+2025-09-21 03:25:16,268 | INFO | Train step 400/779 | Loss: 1.1790
+2025-09-21 03:25:17,909 | INFO | Train step 450/779 | Loss: 1.1722
+2025-09-21 03:25:19,557 | INFO | Train step 500/779 | Loss: 1.1657
+2025-09-21 03:25:21,217 | INFO | Train step 550/779 | Loss: 1.1501
+2025-09-21 03:25:22,862 | INFO | Train step 600/779 | Loss: 1.1623
+2025-09-21 03:25:24,506 | INFO | Train step 650/779 | Loss: 1.1615
+2025-09-21 03:25:26,149 | INFO | Train step 700/779 | Loss: 1.1607
+2025-09-21 03:25:27,781 | INFO | Train step 750/779 | Loss: 1.1645
+2025-09-21 03:25:28,887 | INFO | Epoch train loss: 1.1640 | Time: 25.97s
+2025-09-21 03:25:30,176 | INFO | Validation QWK: 0.696199 | Time: 1.29s
+2025-09-21 03:25:30,270 | INFO | Fold 3 | Epoch 2 done. TrainLoss=1.1640, ValQWK=0.696199, BestQWK=0.696199
+2025-09-21 03:25:31,954 | INFO | Validation QWK: 0.696199 | Time: 1.65s
+2025-09-21 03:25:32,523 | INFO | Fold 3 finished. Best Validation QWK: 0.696199
+2025-09-21 03:25:32,524 | INFO | ========== Fold 4/5 ==========
+2025-09-21 03:25:32,538 | INFO | EssayDataset initialized with 12461 samples.
+2025-09-21 03:25:32,543 | INFO | EssayDataset initialized with 3115 samples.
+2025-09-21 03:25:32,775 | INFO | Model initialized for fold 4 with 26,101,958 parameters.
+2025-09-21 03:25:32,776 | INFO | Model first parameter dtype (should be float32 for AMP): torch.float32
+2025-09-21 03:25:32,776 | INFO | Class counts: [899.0, 3400.0, 4503.0, 2850.0, 701.0, 108.0]
+2025-09-21 03:25:32,777 | INFO | Computed class weights: [2.3101594364108267, 0.6108333333333333, 0.4612110444888593, 0.7287134502923976, 2.962672372800761, 19.229938271604937]
+2025-09-21 03:25:32,792 | INFO | Fold 4 | Epoch 1/2 started.
+2025-09-21 03:25:34,549 | INFO | Train step 50/779 | Loss: 1.7537
+2025-09-21 03:25:36,156 | INFO | Train step 100/779 | Loss: 1.6490
+2025-09-21 03:25:37,814 | INFO | Train step 150/779 | Loss: 1.5325
+2025-09-21 03:25:39,450 | INFO | Train step 200/779 | Loss: 1.4963
+2025-09-21 03:25:41,102 | INFO | Train step 250/779 | Loss: 1.4574
+2025-09-21 03:25:42,746 | INFO | Train step 300/779 | Loss: 1.4367
+2025-09-21 03:25:44,371 | INFO | Train step 350/779 | Loss: 1.4142
+2025-09-21 03:25:46,038 | INFO | Train step 400/779 | Loss: 1.3899
+2025-09-21 03:25:47,665 | INFO | Train step 450/779 | Loss: 1.3730
+2025-09-21 03:25:49,308 | INFO | Train step 500/779 | Loss: 1.3687
+2025-09-21 03:25:50,957 | INFO | Train step 550/779 | Loss: 1.3601
+2025-09-21 03:25:52,604 | INFO | Train step 600/779 | Loss: 1.3531
+2025-09-21 03:25:54,242 | INFO | Train step 650/779 | Loss: 1.3404
+2025-09-21 03:25:55,892 | INFO | Train step 700/779 | Loss: 1.3290
+2025-09-21 03:25:57,531 | INFO | Train step 750/779 | Loss: 1.3208
+2025-09-21 03:25:58,586 | INFO | Epoch train loss: 1.3131 | Time: 25.79s
+2025-09-21 03:25:59,842 | INFO | Validation QWK: 0.724545 | Time: 1.26s
+2025-09-21 03:25:59,922 | INFO | Fold 4 | Epoch 1 done. TrainLoss=1.3131, ValQWK=0.724545, BestQWK=0.724545
+2025-09-21 03:25:59,922 | INFO | Fold 4 | Epoch 2/2 started.
+2025-09-21 03:26:01,764 | INFO | Train step 50/779 | Loss: 1.1555
+2025-09-21 03:26:03,443 | INFO | Train step 100/779 | Loss: 1.1715
+2025-09-21 03:26:05,103 | INFO | Train step 150/779 | Loss: 1.1717
+2025-09-21 03:26:06,772 | INFO | Train step 200/779 | Loss: 1.1754
+2025-09-21 03:26:08,406 | INFO | Train step 250/779 | Loss: 1.1701
+2025-09-21 03:26:10,032 | INFO | Train step 300/779 | Loss: 1.1921
+2025-09-21 03:26:11,685 | INFO | Train step 350/779 | Loss: 1.1752
+2025-09-21 03:26:13,334 | INFO | Train step 400/779 | Loss: 1.1857
+2025-09-21 03:26:14,978 | INFO | Train step 450/779 | Loss: 1.1862
+2025-09-21 03:26:16,628 | INFO | Train step 500/779 | Loss: 1.1814
+2025-09-21 03:26:18,265 | INFO | Train step 550/779 | Loss: 1.1662
+2025-09-21 03:26:19,909 | INFO | Train step 600/779 | Loss: 1.1790
+2025-09-21 03:26:21,548 | INFO | Train step 650/779 | Loss: 1.1747
+2025-09-21 03:26:23,187 | INFO | Train step 700/779 | Loss: 1.1846
+2025-09-21 03:26:24,832 | INFO | Train step 750/779 | Loss: 1.1816
+2025-09-21 03:26:25,908 | INFO | Epoch train loss: 1.1805 | Time: 25.99s
+2025-09-21 03:26:27,169 | INFO | Validation QWK: 0.721972 | Time: 1.26s
+2025-09-21 03:26:27,169 | INFO | Fold 4 | Epoch 2 done. TrainLoss=1.1805, ValQWK=0.721972, BestQWK=0.724545
+2025-09-21 03:26:28,458 | INFO | Validation QWK: 0.724545 | Time: 1.26s
+2025-09-21 03:26:29,090 | INFO | Fold 4 finished. Best Validation QWK: 0.724545
+2025-09-21 03:26:29,090 | INFO | ========== Fold 5/5 ==========
+2025-09-21 03:26:29,108 | INFO | EssayDataset initialized with 12461 samples.
+2025-09-21 03:26:29,111 | INFO | EssayDataset initialized with 3115 samples.
+2025-09-21 03:26:29,345 | INFO | Model initialized for fold 5 with 26,101,958 parameters.
+2025-09-21 03:26:29,345 | INFO | Model first parameter dtype (should be float32 for AMP): torch.float32
+2025-09-21 03:26:29,346 | INFO | Class counts: [899.0, 3399.0, 4504.0, 2850.0, 701.0, 108.0]
+2025-09-21 03:26:29,346 | INFO | Computed class weights: [2.3101594364108267, 0.611013043051878, 0.46110864416814684, 0.7287134502923976, 2.962672372800761, 19.229938271604937]
+2025-09-21 03:26:29,362 | INFO | Fold 5 | Epoch 1/2 started.
+2025-09-21 03:26:31,159 | INFO | Train step 50/779 | Loss: 1.8267
+2025-09-21 03:26:32,809 | INFO | Train step 100/779 | Loss: 1.6989
+2025-09-21 03:26:34,477 | INFO | Train step 150/779 | Loss: 1.5998
+2025-09-21 03:26:36,124 | INFO | Train step 200/779 | Loss: 1.5412
+2025-09-21 03:26:37,782 | INFO | Train step 250/779 | Loss: 1.4905
+2025-09-21 03:26:39,462 | INFO | Train step 300/779 | Loss: 1.4450
+2025-09-21 03:26:41,120 | INFO | Train step 350/779 | Loss: 1.4169
+2025-09-21 03:26:42,768 | INFO | Train step 400/779 | Loss: 1.3859
+2025-09-21 03:26:44,418 | INFO | Train step 450/779 | Loss: 1.3678
+2025-09-21 03:26:46,073 | INFO | Train step 500/779 | Loss: 1.3595
+2025-09-21 03:26:47,733 | INFO | Train step 550/779 | Loss: 1.3584
+2025-09-21 03:26:49,361 | INFO | Train step 600/779 | Loss: 1.3588
+2025-09-21 03:26:51,021 | INFO | Train step 650/779 | Loss: 1.3487
+2025-09-21 03:26:52,685 | INFO | Train step 700/779 | Loss: 1.3398
+2025-09-21 03:26:54,346 | INFO | Train step 750/779 | Loss: 1.3297
+2025-09-21 03:26:55,427 | INFO | Epoch train loss: 1.3168 | Time: 26.06s
+2025-09-21 03:26:56,658 | INFO | Validation QWK: 0.695730 | Time: 1.23s
+2025-09-21 03:26:56,739 | INFO | Fold 5 | Epoch 1 done. TrainLoss=1.3168, ValQWK=0.695730, BestQWK=0.695730
+2025-09-21 03:26:56,740 | INFO | Fold 5 | Epoch 2/2 started.
+2025-09-21 03:26:58,575 | INFO | Train step 50/779 | Loss: 1.2336
+2025-09-21 03:27:00,237 | INFO | Train step 100/779 | Loss: 1.1985
+2025-09-21 03:27:01,879 | INFO | Train step 150/779 | Loss: 1.1488
+2025-09-21 03:27:03,561 | INFO | Train step 200/779 | Loss: 1.1679
+2025-09-21 03:27:05,211 | INFO | Train step 250/779 | Loss: 1.1653
+2025-09-21 03:27:06,869 | INFO | Train step 300/779 | Loss: 1.1664
+2025-09-21 03:27:08,524 | INFO | Train step 350/779 | Loss: 1.1744
+2025-09-21 03:27:10,180 | INFO | Train step 400/779 | Loss: 1.1778
+2025-09-21 03:27:11,842 | INFO | Train step 450/779 | Loss: 1.1709
+2025-09-21 03:27:13,505 | INFO | Train step 500/779 | Loss: 1.1657
+2025-09-21 03:27:15,169 | INFO | Train step 550/779 | Loss: 1.1601
+2025-09-21 03:27:16,814 | INFO | Train step 600/779 | Loss: 1.1669
+2025-09-21 03:27:18,481 | INFO | Train step 650/779 | Loss: 1.1667
+2025-09-21 03:27:20,135 | INFO | Train step 700/779 | Loss: 1.1577
+2025-09-21 03:27:21,774 | INFO | Train step 750/779 | Loss: 1.1585
+2025-09-21 03:27:22,838 | INFO | Epoch train loss: 1.1605 | Time: 26.10s
+2025-09-21 03:27:24,077 | INFO | Validation QWK: 0.714093 | Time: 1.24s
+2025-09-21 03:27:24,173 | INFO | Fold 5 | Epoch 2 done. TrainLoss=1.1605, ValQWK=0.714093, BestQWK=0.714093
+2025-09-21 03:27:25,491 | INFO | Validation QWK: 0.714093 | Time: 1.29s
+2025-09-21 03:27:26,158 | INFO | Fold 5 finished. Best Validation QWK: 0.714093
+2025-09-21 03:27:26,180 | INFO | OOF Quadratic Weighted Kappa across folds: 0.697496
+2025-09-21 03:27:26,180 | INFO | Per-fold QWK: [0.6925529337131526, 0.6626308168268397, 0.6961991581268505, 0.7245453456846604, 0.714092680295535]
+2025-09-21 03:27:26,185 | INFO | Submission saved to task/learning-agency-lab-automated-essay-scoring-2/outputs/6/submission.csv with shape (1731, 2).
+2025-09-21 03:27:26,185 | INFO | All done in 5.13 minutes. Final OOF QWK: 0.697496

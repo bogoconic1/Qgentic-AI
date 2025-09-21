@@ -1,0 +1,35 @@
+2025-09-21 05:03:40,590 [INFO] Initialized logging and created output directories for v2 pipeline.
+2025-09-21 05:03:40,590 [INFO] Setting all random seeds to 42.
+2025-09-21 05:03:40,591 [INFO] Reading train data from task/us-patent-phrase-to-phrase-matching/train.csv.
+2025-09-21 05:03:40,629 [INFO] Reading test data from task/us-patent-phrase-to-phrase-matching/test.csv.
+2025-09-21 05:03:40,635 [INFO] Train shape: (32825, 5), columns: ['id', 'anchor', 'target', 'context', 'score']
+2025-09-21 05:03:40,635 [INFO] Test shape:  (3648, 5), columns: ['id', 'anchor', 'target', 'context', 'score']
+2025-09-21 05:03:40,642 [INFO] Train missing values by column: {'id': 0, 'anchor': 0, 'target': 0, 'context': 0, 'score': 0}
+2025-09-21 05:03:40,642 [INFO] Test missing values by column: {'id': 0, 'anchor': 0, 'target': 0, 'context': 0, 'score': 0}
+2025-09-21 05:03:40,642 [INFO] Building vocabulary from segmented corpus.
+2025-09-21 05:03:40,979 [INFO] Built vocabulary of size 9042.
+2025-09-21 05:03:40,980 [INFO] Tokenizing and numericalizing dataframe with 32825 rows (with token types).
+2025-09-21 05:03:41,097 [INFO] Processed 5000 rows.
+2025-09-21 05:03:41,217 [INFO] Processed 10000 rows.
+2025-09-21 05:03:41,336 [INFO] Processed 15000 rows.
+2025-09-21 05:03:41,454 [INFO] Processed 20000 rows.
+2025-09-21 05:03:41,573 [INFO] Processed 25000 rows.
+2025-09-21 05:03:41,691 [INFO] Processed 30000 rows.
+2025-09-21 05:03:41,758 [INFO] Tokenizing and numericalizing dataframe with 3648 rows (with token types).
+2025-09-21 05:03:41,845 [INFO] Labels statistics: min=0.0, max=1.0, mean=0.3619, std=0.2588
+2025-09-21 05:03:41,850 [INFO] Found 106 unique context codes across train+test.
+2025-09-21 05:03:42,116 [INFO] Class counts: [6774.0, 10306.0, 11068.0, 3634.0, 1043.0] | CE weights: [0.15397107601165771, 0.10120318084955215, 0.0942356288433075, 0.2870115637779236, 1.0]
+2025-09-21 05:03:42,117 [INFO] Creating stratified folds on 5-class bins.
+2025-09-21 05:03:42,136 [INFO] Fold 0: 6567 samples.
+2025-09-21 05:03:42,137 [INFO] Fold 1: 6566 samples.
+2025-09-21 05:03:42,137 [INFO] Fold 2: 6566 samples.
+2025-09-21 05:03:42,137 [INFO] Fold 3: 6564 samples.
+2025-09-21 05:03:42,137 [INFO] Fold 4: 6562 samples.
+2025-09-21 05:03:42,137 [INFO] Initializing PatentDataset with 3648 samples.
+2025-09-21 05:03:42,138 [INFO] ========== Fold 1/5 ==========
+2025-09-21 05:03:42,168 [INFO] Train split: 26258 samples; Val split: 6567 samples.
+2025-09-21 05:03:42,169 [INFO] Initializing PatentDataset with 26258 samples.
+2025-09-21 05:03:42,169 [INFO] Initializing PatentDataset with 6567 samples.
+2025-09-21 05:03:42,169 [INFO] Initializing TransformerRegressor++ with vocab_size=9042, embed_dim=192, heads=6, layers=3, max_len=64, ctxs=106
+2025-09-21 05:03:43,161 [INFO] Creating Warmup+Cosine scheduler: warmup_steps=68, total_steps=685.
+2025-09-21 05:03:43,161 [INFO] Fold 0 - Epoch 1/5 started.

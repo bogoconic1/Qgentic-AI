@@ -1,0 +1,152 @@
+2025-09-21 10:24:55,989 [INFO] Initialized logging and created output directories for v12 pipeline.
+2025-09-21 10:24:55,990 [INFO] Setting all random seeds to 42.
+2025-09-21 10:24:55,990 [INFO] Reading train data from task/us-patent-phrase-to-phrase-matching/train.csv.
+2025-09-21 10:24:56,028 [INFO] Reading test data from task/us-patent-phrase-to-phrase-matching/test.csv.
+2025-09-21 10:24:56,035 [INFO] Train shape: (32825, 5), columns: ['id', 'anchor', 'target', 'context', 'score']
+2025-09-21 10:24:56,035 [INFO] Test shape:  (3648, 5), columns: ['id', 'anchor', 'target', 'context', 'score']
+2025-09-21 10:24:56,040 [INFO] Train missing values by column: {'id': 0, 'anchor': 0, 'target': 0, 'context': 0, 'score': 0}
+2025-09-21 10:24:56,040 [INFO] Test missing values by column: {'id': 0, 'anchor': 0, 'target': 0, 'context': 0, 'score': 0}
+2025-09-21 10:24:56,040 [INFO] Building vocabulary from segmented corpus.
+2025-09-21 10:24:56,511 [INFO] Built vocabulary of size 9042.
+2025-09-21 10:24:56,511 [INFO] Tokenizing and numericalizing dataframe with 32825 rows (with token types).
+2025-09-21 10:24:56,652 [INFO] Processed 5000 rows.
+2025-09-21 10:24:56,793 [INFO] Processed 10000 rows.
+2025-09-21 10:24:56,933 [INFO] Processed 15000 rows.
+2025-09-21 10:24:57,073 [INFO] Processed 20000 rows.
+2025-09-21 10:24:57,213 [INFO] Processed 25000 rows.
+2025-09-21 10:24:57,353 [INFO] Processed 30000 rows.
+2025-09-21 10:24:57,435 [INFO] Tokenizing and numericalizing dataframe with 3648 rows (with token types).
+2025-09-21 10:24:57,539 [INFO] Tokenizing and numericalizing SWAPPED dataframe with 3648 rows (anchor<->target).
+2025-09-21 10:24:57,641 [INFO] Prepared swapped TTA arrays for test data.
+2025-09-21 10:24:57,641 [INFO] Tokenizing and numericalizing SWAPPED dataframe with 32825 rows (anchor<->target).
+2025-09-21 10:24:57,784 [INFO] Processed 5000 swapped rows.
+2025-09-21 10:24:57,926 [INFO] Processed 10000 swapped rows.
+2025-09-21 10:24:58,068 [INFO] Processed 15000 swapped rows.
+2025-09-21 10:24:58,211 [INFO] Processed 20000 swapped rows.
+2025-09-21 10:24:58,353 [INFO] Processed 25000 swapped rows.
+2025-09-21 10:24:58,495 [INFO] Processed 30000 swapped rows.
+2025-09-21 10:24:58,575 [INFO] Prepared swapped augmentation arrays for training.
+2025-09-21 10:24:58,576 [INFO] Computing handcrafted similarity features.
+2025-09-21 10:24:59,162 [INFO] Computed handcrafted features for 5000 rows.
+2025-09-21 10:24:59,740 [INFO] Computed handcrafted features for 10000 rows.
+2025-09-21 10:25:00,323 [INFO] Computed handcrafted features for 15000 rows.
+2025-09-21 10:25:00,907 [INFO] Computed handcrafted features for 20000 rows.
+2025-09-21 10:25:01,477 [INFO] Computed handcrafted features for 25000 rows.
+2025-09-21 10:25:02,031 [INFO] Computed handcrafted features for 30000 rows.
+2025-09-21 10:25:02,350 [INFO] Finished computing handcrafted features.
+2025-09-21 10:25:02,351 [INFO] Computing handcrafted similarity features.
+2025-09-21 10:25:02,757 [INFO] Finished computing handcrafted features.
+2025-09-21 10:25:02,757 [INFO] Handcrafted feature dimension: 14
+2025-09-21 10:25:02,758 [INFO] Labels statistics: min=0.0, max=1.0, mean=0.3619, std=0.2588
+2025-09-21 10:25:02,762 [INFO] Found 106 unique context codes across train+test.
+2025-09-21 10:25:03,066 [INFO] Class counts: [6774.0, 10306.0, 11068.0, 3634.0, 1043.0] | CE weights: [0.15397107601165771, 0.10120318084955215, 0.0942356288433075, 0.2870115637779236, 1.0]
+2025-09-21 10:25:03,070 [INFO] Creating stratified folds on 5-class bins.
+2025-09-21 10:25:03,085 [INFO] Fold 0: 6567 samples.
+2025-09-21 10:25:03,085 [INFO] Fold 1: 6566 samples.
+2025-09-21 10:25:03,085 [INFO] Fold 2: 6566 samples.
+2025-09-21 10:25:03,085 [INFO] Fold 3: 6564 samples.
+2025-09-21 10:25:03,085 [INFO] Fold 4: 6562 samples.
+2025-09-21 10:25:03,086 [INFO] Initializing PatentDataset with 3648 samples.
+2025-09-21 10:25:03,086 [INFO] Initializing PatentDataset with 3648 samples.
+2025-09-21 10:25:03,086 [INFO] ========== Fold 1/5 ==========
+2025-09-21 10:25:06,534 [INFO] Applied swap augmentation. New train size: 52516
+2025-09-21 10:25:06,547 [INFO] Prepared swapped TTA arrays for validation data.
+2025-09-21 10:25:06,547 [INFO] Train split: 52516 samples; Val split: 6567 samples.
+2025-09-21 10:25:06,547 [INFO] Initializing PatentDataset with 52516 samples.
+2025-09-21 10:25:06,547 [INFO] Initializing PatentDataset with 6567 samples.
+2025-09-21 10:25:06,547 [INFO] Initializing PatentDataset with 6567 samples.
+2025-09-21 10:25:06,548 [INFO] Initializing TransformerRegressor++ with vocab_size=9042, embed_dim=256, heads=8, layers=6, max_len=64, ctxs=106, feat_dim=14, msd=5
+2025-09-21 10:25:07,775 [INFO] Creating Warmup+Cosine scheduler: warmup_steps=164, total_steps=1644.
+2025-09-21 10:25:07,775 [INFO] Initializing EMA state from current model weights.
+2025-09-21 10:25:08,201 [INFO] Fold 0 - Epoch 1/6 started.
+2025-09-21 10:25:42,292 [INFO] Train step 50/274 - Loss: 0.374272 (wMSE 0.147172, SoftCE 0.501922, Corr 0.954869, Cons 0.224053, CSim 0.156811, Rank 0.695861, RDropCLS 0.898708, RDropREG 0.076240, GateReg 0.101932) | LR: 6.097561e-05
+2025-09-21 10:26:15,229 [INFO] Train step 100/274 - Loss: 0.332287 (wMSE 0.129758, SoftCE 0.426985, Corr 0.915620, Cons 0.204667, CSim 0.118225, Rank 0.690225, RDropCLS 0.701008, RDropREG 0.055455, GateReg 0.096737) | LR: 1.219512e-04
+2025-09-21 10:26:48,141 [INFO] Train step 150/274 - Loss: 0.308850 (wMSE 0.120400, SoftCE 0.391120, Corr 0.878321, Cons 0.183274, CSim 0.101608, Rank 0.686162, RDropCLS 0.552708, RDropREG 0.046161, GateReg 0.091741) | LR: 1.829268e-04
+2025-09-21 10:27:21,092 [INFO] Train step 200/274 - Loss: 0.293245 (wMSE 0.113774, SoftCE 0.369438, Corr 0.846049, Cons 0.172776, CSim 0.092932, Rank 0.682562, RDropCLS 0.454446, RDropREG 0.038901, GateReg 0.089147) | LR: 1.997082e-04
+2025-09-21 10:27:54,011 [INFO] Train step 250/274 - Loss: 0.280808 (wMSE 0.108398, SoftCE 0.354883, Corr 0.808998, Cons 0.161296, CSim 0.087695, Rank 0.678893, RDropCLS 0.383996, RDropREG 0.033819, GateReg 0.086233) | LR: 1.983384e-04
+2025-09-21 10:28:09,775 [INFO] Epoch training completed in 181.57s with average loss 0.275313
+2025-09-21 10:28:09,776 [INFO] Evaluating with a provided state dict (e.g., EMA).
+2025-09-21 10:28:11,960 [INFO] Evaluation pass completed.
+2025-09-21 10:28:12,255 [INFO] Fold 0 - Epoch 1 - Train Loss: 0.275313 | EMA Val wMSE: 0.091989 | EMA Val SoftCE: 0.326915 | EMA Val Pearson: 0.186582
+2025-09-21 10:28:12,261 [INFO] Fold 0 - Epoch 1 - New best EMA model with Pearson 0.186582.
+2025-09-21 10:28:12,261 [INFO] Fold 0 - Epoch 2/6 started.
+2025-09-21 10:28:45,399 [INFO] Train step 50/274 - Loss: 0.209362 (wMSE 0.074801, SoftCE 0.285248, Corr 0.535179, Cons 0.110496, CSim 0.065355, Rank 0.650507, RDropCLS 0.066782, RDropREG 0.007510, GateReg 0.083910) | LR: 1.942877e-04
+2025-09-21 10:29:18,292 [INFO] Train step 100/274 - Loss: 0.203600 (wMSE 0.070456, SoftCE 0.281526, Corr 0.513240, Cons 0.104409, CSim 0.063342, Rank 0.645749, RDropCLS 0.063742, RDropREG 0.007199, GateReg 0.088540) | LR: 1.902280e-04
+2025-09-21 10:29:51,121 [INFO] Train step 150/274 - Loss: 0.200053 (wMSE 0.068267, SoftCE 0.278148, Corr 0.500164, Cons 0.101569, CSim 0.062694, Rank 0.643029, RDropCLS 0.060343, RDropREG 0.007176, GateReg 0.090522) | LR: 1.851529e-04
+2025-09-21 10:30:24,036 [INFO] Train step 200/274 - Loss: 0.197162 (wMSE 0.066429, SoftCE 0.275875, Corr 0.488481, Cons 0.097566, CSim 0.061811, Rank 0.641020, RDropCLS 0.058088, RDropREG 0.006860, GateReg 0.092425) | LR: 1.791195e-04
+2025-09-21 10:30:56,935 [INFO] Train step 250/274 - Loss: 0.194724 (wMSE 0.064961, SoftCE 0.274347, Corr 0.476820, Cons 0.094554, CSim 0.061336, Rank 0.638553, RDropCLS 0.056156, RDropREG 0.006679, GateReg 0.094081) | LR: 1.721956e-04
+2025-09-21 10:31:12,726 [INFO] Epoch training completed in 180.46s with average loss 0.193599
+2025-09-21 10:31:12,727 [INFO] Evaluating with a provided state dict (e.g., EMA).
+2025-09-21 10:31:14,920 [INFO] Evaluation pass completed.
+2025-09-21 10:31:15,220 [INFO] Fold 0 - Epoch 2 - Train Loss: 0.193599 | EMA Val wMSE: 0.074049 | EMA Val SoftCE: 0.283258 | EMA Val Pearson: 0.444409
+2025-09-21 10:31:15,228 [INFO] Fold 0 - Epoch 2 - New best EMA model with Pearson 0.444409.
+2025-09-21 10:31:15,228 [INFO] Fold 0 - Epoch 3/6 started.
+2025-09-21 10:31:48,474 [INFO] Train step 50/274 - Loss: 0.171496 (wMSE 0.051878, SoftCE 0.257721, Corr 0.363168, Cons 0.070873, CSim 0.056011, Rank 0.614412, RDropCLS 0.051788, RDropREG 0.006812, GateReg 0.110240) | LR: 1.604825e-04
+2025-09-21 10:32:21,405 [INFO] Train step 100/274 - Loss: 0.171320 (wMSE 0.051828, SoftCE 0.257790, Corr 0.362440, Cons 0.068400, CSim 0.054739, Rank 0.614781, RDropCLS 0.051041, RDropREG 0.006412, GateReg 0.110654) | LR: 1.517058e-04
+2025-09-21 10:32:54,334 [INFO] Train step 150/274 - Loss: 0.170147 (wMSE 0.051028, SoftCE 0.257576, Corr 0.355549, Cons 0.068152, CSim 0.054606, Rank 0.613012, RDropCLS 0.049997, RDropREG 0.006345, GateReg 0.111493) | LR: 1.423473e-04
+2025-09-21 10:33:27,234 [INFO] Train step 200/274 - Loss: 0.169340 (wMSE 0.050506, SoftCE 0.257027, Corr 0.352420, Cons 0.066011, CSim 0.054139, Rank 0.612224, RDropCLS 0.049750, RDropREG 0.006389, GateReg 0.112610) | LR: 1.325122e-04
+2025-09-21 10:34:00,236 [INFO] Train step 250/274 - Loss: 0.168591 (wMSE 0.050126, SoftCE 0.256864, Corr 0.347777, Cons 0.065100, CSim 0.053881, Rank 0.610442, RDropCLS 0.049692, RDropREG 0.006442, GateReg 0.112807) | LR: 1.223112e-04
+2025-09-21 10:34:16,062 [INFO] Epoch training completed in 180.83s with average loss 0.167948
+2025-09-21 10:34:16,063 [INFO] Evaluating with a provided state dict (e.g., EMA).
+2025-09-21 10:34:18,271 [INFO] Evaluation pass completed.
+2025-09-21 10:34:18,562 [INFO] Fold 0 - Epoch 3 - Train Loss: 0.167948 | EMA Val wMSE: 0.063139 | EMA Val SoftCE: 0.271223 | EMA Val Pearson: 0.552627
+2025-09-21 10:34:18,569 [INFO] Fold 0 - Epoch 3 - New best EMA model with Pearson 0.552627.
+2025-09-21 10:34:18,569 [INFO] Fold 0 - Epoch 4/6 started.
+2025-09-21 10:34:51,804 [INFO] Train step 50/274 - Loss: 0.152429 (wMSE 0.039738, SoftCE 0.246904, Corr 0.271231, Cons 0.052696, CSim 0.048129, Rank 0.593791, RDropCLS 0.049795, RDropREG 0.006918, GateReg 0.117802) | LR: 1.067874e-04
+2025-09-21 10:35:24,687 [INFO] Train step 100/274 - Loss: 0.154122 (wMSE 0.041065, SoftCE 0.248203, Corr 0.277373, Cons 0.053191, CSim 0.048500, Rank 0.594854, RDropCLS 0.049774, RDropREG 0.006843, GateReg 0.117891) | LR: 9.618007e-05
+2025-09-21 10:35:57,634 [INFO] Train step 150/274 - Loss: 0.153584 (wMSE 0.040777, SoftCE 0.247780, Corr 0.275427, Cons 0.051806, CSim 0.048432, Rank 0.593365, RDropCLS 0.050261, RDropREG 0.006970, GateReg 0.117624) | LR: 8.561573e-05
+2025-09-21 10:36:30,627 [INFO] Train step 200/274 - Loss: 0.153192 (wMSE 0.040658, SoftCE 0.246961, Corr 0.275178, Cons 0.050701, CSim 0.048207, Rank 0.592482, RDropCLS 0.050855, RDropREG 0.006951, GateReg 0.118446) | LR: 7.521326e-05
+2025-09-21 10:37:03,535 [INFO] Train step 250/274 - Loss: 0.152707 (wMSE 0.040450, SoftCE 0.246133, Corr 0.274072, Cons 0.050165, CSim 0.048017, Rank 0.592333, RDropCLS 0.050499, RDropREG 0.006876, GateReg 0.118819) | LR: 6.508975e-05
+2025-09-21 10:37:19,353 [INFO] Epoch training completed in 180.78s with average loss 0.152501
+2025-09-21 10:37:19,354 [INFO] Evaluating with a provided state dict (e.g., EMA).
+2025-09-21 10:37:21,587 [INFO] Evaluation pass completed.
+2025-09-21 10:37:21,879 [INFO] Fold 0 - Epoch 4 - Train Loss: 0.152501 | EMA Val wMSE: 0.058049 | EMA Val SoftCE: 0.261970 | EMA Val Pearson: 0.592864
+2025-09-21 10:37:21,886 [INFO] Fold 0 - Epoch 4 - New best EMA model with Pearson 0.592864.
+2025-09-21 10:37:21,886 [INFO] Fold 0 - Epoch 5/6 started.
+2025-09-21 10:37:55,164 [INFO] Train step 50/274 - Loss: 0.147461 (wMSE 0.037182, SoftCE 0.243598, Corr 0.249013, Cons 0.043559, CSim 0.045390, Rank 0.583353, RDropCLS 0.051711, RDropREG 0.007024, GateReg 0.119428) | LR: 5.086032e-05
+2025-09-21 10:38:28,129 [INFO] Train step 100/274 - Loss: 0.145653 (wMSE 0.036265, SoftCE 0.240761, Corr 0.243541, Cons 0.042143, CSim 0.045228, Rank 0.583979, RDropCLS 0.051300, RDropREG 0.006909, GateReg 0.119587) | LR: 4.191050e-05
+2025-09-21 10:39:01,041 [INFO] Train step 150/274 - Loss: 0.145068 (wMSE 0.036011, SoftCE 0.239791, Corr 0.242006, Cons 0.041718, CSim 0.044942, Rank 0.583730, RDropCLS 0.051360, RDropREG 0.006830, GateReg 0.120027) | LR: 3.361443e-05
+2025-09-21 10:39:34,031 [INFO] Train step 200/274 - Loss: 0.145014 (wMSE 0.035954, SoftCE 0.240044, Corr 0.240779, Cons 0.041537, CSim 0.044947, Rank 0.583447, RDropCLS 0.052094, RDropREG 0.006941, GateReg 0.120309) | LR: 2.606547e-05
+2025-09-21 10:40:06,962 [INFO] Train step 250/274 - Loss: 0.144470 (wMSE 0.035608, SoftCE 0.239424, Corr 0.239454, Cons 0.040947, CSim 0.044535, Rank 0.582765, RDropCLS 0.052315, RDropREG 0.007049, GateReg 0.120271) | LR: 1.934857e-05
+2025-09-21 10:40:22,781 [INFO] Epoch training completed in 180.89s with average loss 0.144597
+2025-09-21 10:40:22,783 [INFO] Evaluating with a provided state dict (e.g., EMA).
+2025-09-21 10:40:24,974 [INFO] Evaluation pass completed.
+2025-09-21 10:40:25,266 [INFO] Fold 0 - Epoch 5 - Train Loss: 0.144597 | EMA Val wMSE: 0.058013 | EMA Val SoftCE: 0.257734 | EMA Val Pearson: 0.606061
+2025-09-21 10:40:25,272 [INFO] Fold 0 - Epoch 5 - New best EMA model with Pearson 0.606061.
+2025-09-21 10:40:25,272 [INFO] Fold 0 - Epoch 6/6 started.
+2025-09-21 10:40:58,628 [INFO] Train step 50/274 - Loss: 0.140987 (wMSE 0.033323, SoftCE 0.236840, Corr 0.224780, Cons 0.040305, CSim 0.043015, Rank 0.579234, RDropCLS 0.051802, RDropREG 0.007022, GateReg 0.120013) | LR: 1.109289e-05
+2025-09-21 10:41:31,599 [INFO] Train step 100/274 - Loss: 0.140831 (wMSE 0.033054, SoftCE 0.237545, Corr 0.222418, Cons 0.040355, CSim 0.043584, Rank 0.578213, RDropCLS 0.051485, RDropREG 0.007028, GateReg 0.119540) | LR: 6.743759e-06
+2025-09-21 10:42:04,529 [INFO] Train step 150/274 - Loss: 0.140718 (wMSE 0.033101, SoftCE 0.237241, Corr 0.221621, Cons 0.040361, CSim 0.043601, Rank 0.578337, RDropCLS 0.051838, RDropREG 0.006999, GateReg 0.120003) | LR: 3.444140e-06
+2025-09-21 10:42:37,401 [INFO] Train step 200/274 - Loss: 0.140778 (wMSE 0.033140, SoftCE 0.237048, Corr 0.222846, Cons 0.040112, CSim 0.043184, Rank 0.578583, RDropCLS 0.052406, RDropREG 0.007021, GateReg 0.119892) | LR: 1.231166e-06
+2025-09-21 10:43:10,327 [INFO] Train step 250/274 - Loss: 0.141000 (wMSE 0.033388, SoftCE 0.236955, Corr 0.223955, Cons 0.039954, CSim 0.043465, Rank 0.578745, RDropCLS 0.052652, RDropREG 0.007045, GateReg 0.120048) | LR: 1.297403e-07
+2025-09-21 10:43:26,170 [INFO] Epoch training completed in 180.90s with average loss 0.140923
+2025-09-21 10:43:26,171 [INFO] Evaluating with a provided state dict (e.g., EMA).
+2025-09-21 10:43:28,380 [INFO] Evaluation pass completed.
+2025-09-21 10:43:28,674 [INFO] Fold 0 - Epoch 6 - Train Loss: 0.140923 | EMA Val wMSE: 0.059699 | EMA Val SoftCE: 0.256837 | EMA Val Pearson: 0.609817
+2025-09-21 10:43:28,681 [INFO] Fold 0 - Epoch 6 - New best EMA model with Pearson 0.609817.
+2025-09-21 10:43:28,974 [INFO] Generating validation predictions with MC-Dropout TTA and Swap TTA
+2025-09-21 10:43:30,350 [INFO] Prediction in eval mode completed.
+2025-09-21 10:43:30,350 [INFO] Running MC-Dropout prediction with 4 samples.
+2025-09-21 10:43:36,922 [INFO] MC-Dropout prediction completed.
+2025-09-21 10:43:38,311 [INFO] Prediction in eval mode completed.
+2025-09-21 10:43:38,312 [INFO] Running MC-Dropout prediction with 4 samples.
+2025-09-21 10:43:44,850 [INFO] MC-Dropout prediction completed.
+2025-09-21 10:43:44,850 [INFO] Fold 0 - Final Val Pearson (with MC-Dropout TTA + swap): 0.619041 | Final Val MSE: 0.042961
+2025-09-21 10:43:44,850 [INFO] Generating test predictions with MC-Dropout TTA and Swap TTA
+2025-09-21 10:43:45,717 [INFO] Prediction in eval mode completed.
+2025-09-21 10:43:45,718 [INFO] Running MC-Dropout prediction with 6 samples.
+2025-09-21 10:43:51,669 [INFO] MC-Dropout prediction completed.
+2025-09-21 10:43:52,511 [INFO] Prediction in eval mode completed.
+2025-09-21 10:43:52,511 [INFO] Running MC-Dropout prediction with 6 samples.
+2025-09-21 10:43:58,449 [INFO] MC-Dropout prediction completed.
+2025-09-21 10:43:58,508 [INFO] ========== Fold 2/5 ==========
+2025-09-21 10:43:58,569 [INFO] Applied swap augmentation. New train size: 52518
+2025-09-21 10:43:58,578 [INFO] Prepared swapped TTA arrays for validation data.
+2025-09-21 10:43:58,578 [INFO] Train split: 52518 samples; Val split: 6566 samples.
+2025-09-21 10:43:58,578 [INFO] Initializing PatentDataset with 52518 samples.
+2025-09-21 10:43:58,578 [INFO] Initializing PatentDataset with 6566 samples.
+2025-09-21 10:43:58,578 [INFO] Initializing PatentDataset with 6566 samples.
+2025-09-21 10:43:58,580 [INFO] Initializing TransformerRegressor++ with vocab_size=9042, embed_dim=256, heads=8, layers=6, max_len=64, ctxs=106, feat_dim=14, msd=5
+2025-09-21 10:43:58,950 [INFO] Creating Warmup+Cosine scheduler: warmup_steps=164, total_steps=1644.
+2025-09-21 10:43:58,951 [INFO] Initializing EMA state from current model weights.
+2025-09-21 10:43:59,366 [INFO] Fold 1 - Epoch 1/6 started.

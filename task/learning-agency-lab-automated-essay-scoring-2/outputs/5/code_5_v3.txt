@@ -1,0 +1,24 @@
+2025-09-21 02:47:24,365 | INFO | Initialized logging.
+2025-09-21 02:47:24,367 | INFO | Setting all seeds to 42.
+2025-09-21 02:47:24,369 | INFO | Acquiring CUDA device.
+2025-09-21 02:47:24,642 | INFO | Using device: cuda, name: NVIDIA L4
+2025-09-21 02:47:24,642 | INFO | Reading datasets.
+2025-09-21 02:47:24,954 | INFO | Train shape: (15576, 3), Test shape: (1731, 2), Sample sub shape: (1731, 2)
+2025-09-21 02:47:24,954 | INFO | Applying text preprocessing to train and test.
+2025-09-21 02:47:24,954 | INFO | Starting text cleaning.
+2025-09-21 02:47:36,164 | INFO | Completed text cleaning.
+2025-09-21 02:47:36,167 | INFO | Starting text cleaning.
+2025-09-21 02:47:37,085 | INFO | Completed text cleaning.
+2025-09-21 02:47:37,086 | INFO | Loading tokenizer: microsoft/deberta-v3-large
+2025-09-21 02:47:37,810 | INFO | Tokenizing full training and test sets.
+2025-09-21 02:47:57,398 | INFO | Computing class weights.
+2025-09-21 02:47:57,399 | INFO | Class counts: [1124.0, 4249.0, 5629.0, 3563.0, 876.0, 135.0], Class weights: [2.3096084594726562, 0.6109672784805298, 0.4611831605434418, 0.728599488735199, 2.963470220565796, 19.229629516601562]
+2025-09-21 02:47:57,401 | INFO | ===== Fold 1/5 =====
+2025-09-21 02:47:57,402 | INFO | Created EncodedDataset with 12460 samples. Labels provided: True
+2025-09-21 02:47:57,402 | INFO | Created EncodedDataset with 3116 samples. Labels provided: True
+2025-09-21 02:47:57,402 | INFO | Loading model for fold 1: microsoft/deberta-v3-large
+2025-09-21 02:47:58,307 | INFO | Model loaded and moved to CUDA. Gradient checkpointing enabled.
+2025-09-21 02:47:58,358 | INFO | Initialized WeightedLossTrainer with base_lr=2e-05, head_lr=0.0003
+2025-09-21 02:47:58,358 | INFO | Starting training for this fold.
+2025-09-21 02:47:58,615 | INFO | Creating AdamW optimizer with differential learning rates and weight decay.
+2025-09-21 02:47:58,617 | INFO | Optimizer created with 4 parameter groups.

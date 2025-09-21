@@ -1,0 +1,770 @@
+2025-09-21 09:12:02,701 [INFO] Initialized logging and created output directories for v11 pipeline.
+2025-09-21 09:12:02,702 [INFO] Setting all random seeds to 42.
+2025-09-21 09:12:02,702 [INFO] Reading train data from task/us-patent-phrase-to-phrase-matching/train.csv.
+2025-09-21 09:12:02,741 [INFO] Reading test data from task/us-patent-phrase-to-phrase-matching/test.csv.
+2025-09-21 09:12:02,747 [INFO] Train shape: (32825, 5), columns: ['id', 'anchor', 'target', 'context', 'score']
+2025-09-21 09:12:02,747 [INFO] Test shape:  (3648, 5), columns: ['id', 'anchor', 'target', 'context', 'score']
+2025-09-21 09:12:02,753 [INFO] Train missing values by column: {'id': 0, 'anchor': 0, 'target': 0, 'context': 0, 'score': 0}
+2025-09-21 09:12:02,753 [INFO] Test missing values by column: {'id': 0, 'anchor': 0, 'target': 0, 'context': 0, 'score': 0}
+2025-09-21 09:12:02,753 [INFO] Building vocabulary from segmented corpus.
+2025-09-21 09:12:03,105 [INFO] Built vocabulary of size 9042.
+2025-09-21 09:12:03,105 [INFO] Tokenizing and numericalizing dataframe with 32825 rows (with token types).
+2025-09-21 09:12:03,227 [INFO] Processed 5000 rows.
+2025-09-21 09:12:03,347 [INFO] Processed 10000 rows.
+2025-09-21 09:12:03,467 [INFO] Processed 15000 rows.
+2025-09-21 09:12:03,588 [INFO] Processed 20000 rows.
+2025-09-21 09:12:03,708 [INFO] Processed 25000 rows.
+2025-09-21 09:12:03,829 [INFO] Processed 30000 rows.
+2025-09-21 09:12:03,897 [INFO] Tokenizing and numericalizing dataframe with 3648 rows (with token types).
+2025-09-21 09:12:03,986 [INFO] Tokenizing and numericalizing SWAPPED dataframe with 3648 rows (anchor<->target).
+2025-09-21 09:12:04,073 [INFO] Prepared swapped TTA arrays for test data.
+2025-09-21 09:12:04,073 [INFO] Tokenizing and numericalizing SWAPPED dataframe with 32825 rows (anchor<->target).
+2025-09-21 09:12:04,195 [INFO] Processed 5000 swapped rows.
+2025-09-21 09:12:04,315 [INFO] Processed 10000 swapped rows.
+2025-09-21 09:12:04,435 [INFO] Processed 15000 swapped rows.
+2025-09-21 09:12:04,555 [INFO] Processed 20000 swapped rows.
+2025-09-21 09:12:04,675 [INFO] Processed 25000 swapped rows.
+2025-09-21 09:12:04,794 [INFO] Processed 30000 swapped rows.
+2025-09-21 09:12:04,862 [INFO] Prepared swapped augmentation arrays for training.
+2025-09-21 09:12:04,863 [INFO] Computing handcrafted similarity features.
+2025-09-21 09:12:05,410 [INFO] Computed handcrafted features for 5000 rows.
+2025-09-21 09:12:05,948 [INFO] Computed handcrafted features for 10000 rows.
+2025-09-21 09:12:06,493 [INFO] Computed handcrafted features for 15000 rows.
+2025-09-21 09:12:07,037 [INFO] Computed handcrafted features for 20000 rows.
+2025-09-21 09:12:07,578 [INFO] Computed handcrafted features for 25000 rows.
+2025-09-21 09:12:08,116 [INFO] Computed handcrafted features for 30000 rows.
+2025-09-21 09:12:08,427 [INFO] Finished computing handcrafted features.
+2025-09-21 09:12:08,427 [INFO] Computing handcrafted similarity features.
+2025-09-21 09:12:08,820 [INFO] Finished computing handcrafted features.
+2025-09-21 09:12:08,820 [INFO] Handcrafted feature dimension: 14
+2025-09-21 09:12:08,820 [INFO] Labels statistics: min=0.0, max=1.0, mean=0.3619, std=0.2588
+2025-09-21 09:12:08,824 [INFO] Found 106 unique context codes across train+test.
+2025-09-21 09:12:09,078 [INFO] Class counts: [6774.0, 10306.0, 11068.0, 3634.0, 1043.0] | CE weights: [0.15397107601165771, 0.10120318084955215, 0.0942356288433075, 0.2870115637779236, 1.0]
+2025-09-21 09:12:09,080 [INFO] Creating stratified folds on 5-class bins.
+2025-09-21 09:12:09,096 [INFO] Fold 0: 6567 samples.
+2025-09-21 09:12:09,096 [INFO] Fold 1: 6566 samples.
+2025-09-21 09:12:09,096 [INFO] Fold 2: 6566 samples.
+2025-09-21 09:12:09,096 [INFO] Fold 3: 6564 samples.
+2025-09-21 09:12:09,096 [INFO] Fold 4: 6562 samples.
+2025-09-21 09:12:09,096 [INFO] Initializing PatentDataset with 3648 samples.
+2025-09-21 09:12:09,097 [INFO] Initializing PatentDataset with 3648 samples.
+2025-09-21 09:12:09,097 [INFO] ========== Fold 1/5 ==========
+2025-09-21 09:12:11,574 [INFO] Applied swap augmentation. New train size: 52516
+2025-09-21 09:12:11,587 [INFO] Prepared swapped TTA arrays for validation data.
+2025-09-21 09:12:11,587 [INFO] Train split: 52516 samples; Val split: 6567 samples.
+2025-09-21 09:12:11,588 [INFO] Initializing PatentDataset with 52516 samples.
+2025-09-21 09:12:11,588 [INFO] Initializing PatentDataset with 6567 samples.
+2025-09-21 09:12:11,588 [INFO] Initializing PatentDataset with 6567 samples.
+2025-09-21 09:12:11,588 [INFO] Initializing TransformerRegressor++ with vocab_size=9042, embed_dim=256, heads=8, layers=6, max_len=64, ctxs=106, feat_dim=14, msd=5
+2025-09-21 09:12:12,638 [INFO] Creating Warmup+Cosine scheduler: warmup_steps=164, total_steps=1644.
+2025-09-21 09:12:12,639 [INFO] Initializing EMA state from current model weights.
+2025-09-21 09:12:12,860 [INFO] Fold 0 - Epoch 1/6 started.
+2025-09-21 09:12:32,904 [INFO] Train step 50/274 - Loss: 0.374272 (wMSE 0.147172, SoftCE 0.501922, Corr 0.954869, Cons 0.224053, CSim 0.156811, Rank 0.695861, RDropCLS 0.898708, RDropREG 0.076240, GateReg 0.101932) | LR: 6.097561e-05
+2025-09-21 09:12:51,702 [INFO] Train step 100/274 - Loss: 0.332287 (wMSE 0.129758, SoftCE 0.426985, Corr 0.915620, Cons 0.204667, CSim 0.118225, Rank 0.690225, RDropCLS 0.701008, RDropREG 0.055455, GateReg 0.096737) | LR: 1.219512e-04
+2025-09-21 09:13:10,426 [INFO] Train step 150/274 - Loss: 0.308850 (wMSE 0.120400, SoftCE 0.391120, Corr 0.878321, Cons 0.183274, CSim 0.101608, Rank 0.686162, RDropCLS 0.552708, RDropREG 0.046161, GateReg 0.091741) | LR: 1.829268e-04
+2025-09-21 09:13:29,146 [INFO] Train step 200/274 - Loss: 0.293245 (wMSE 0.113774, SoftCE 0.369438, Corr 0.846049, Cons 0.172776, CSim 0.092932, Rank 0.682562, RDropCLS 0.454446, RDropREG 0.038901, GateReg 0.089147) | LR: 1.997082e-04
+2025-09-21 09:13:47,891 [INFO] Train step 250/274 - Loss: 0.280808 (wMSE 0.108398, SoftCE 0.354883, Corr 0.808998, Cons 0.161296, CSim 0.087695, Rank 0.678893, RDropCLS 0.383996, RDropREG 0.033819, GateReg 0.086233) | LR: 1.983384e-04
+2025-09-21 09:13:57,078 [INFO] Epoch training completed in 104.22s with average loss 0.275313
+2025-09-21 09:13:57,080 [INFO] Evaluating with a provided state dict (e.g., EMA).
+2025-09-21 09:13:58,698 [INFO] Fold 0 - Epoch 1 - Train Loss: 0.275313 | EMA Val wMSE: 0.091989 | EMA Val SoftCE: 0.326915 | EMA Val Pearson: 0.186582
+2025-09-21 09:13:58,705 [INFO] Fold 0 - Epoch 1 - New best EMA model with Pearson 0.186582.
+2025-09-21 09:13:58,705 [INFO] Fold 0 - Epoch 2/6 started.
+2025-09-21 09:14:17,730 [INFO] Train step 50/274 - Loss: 0.209362 (wMSE 0.074801, SoftCE 0.285248, Corr 0.535179, Cons 0.110496, CSim 0.065355, Rank 0.650507, RDropCLS 0.066782, RDropREG 0.007510, GateReg 0.083910) | LR: 1.942877e-04
+2025-09-21 09:14:36,462 [INFO] Train step 100/274 - Loss: 0.203600 (wMSE 0.070456, SoftCE 0.281526, Corr 0.513240, Cons 0.104409, CSim 0.063342, Rank 0.645749, RDropCLS 0.063742, RDropREG 0.007199, GateReg 0.088540) | LR: 1.902280e-04
+2025-09-21 09:14:55,189 [INFO] Train step 150/274 - Loss: 0.200053 (wMSE 0.068267, SoftCE 0.278148, Corr 0.500164, Cons 0.101569, CSim 0.062694, Rank 0.643029, RDropCLS 0.060343, RDropREG 0.007176, GateReg 0.090522) | LR: 1.851529e-04
+2025-09-21 09:15:13,986 [INFO] Train step 200/274 - Loss: 0.197162 (wMSE 0.066429, SoftCE 0.275875, Corr 0.488481, Cons 0.097566, CSim 0.061811, Rank 0.641020, RDropCLS 0.058088, RDropREG 0.006860, GateReg 0.092425) | LR: 1.791195e-04
+2025-09-21 09:15:32,721 [INFO] Train step 250/274 - Loss: 0.194724 (wMSE 0.064961, SoftCE 0.274347, Corr 0.476820, Cons 0.094554, CSim 0.061336, Rank 0.638553, RDropCLS 0.056156, RDropREG 0.006679, GateReg 0.094081) | LR: 1.721956e-04
+2025-09-21 09:15:41,820 [INFO] Epoch training completed in 103.11s with average loss 0.193599
+2025-09-21 09:15:41,822 [INFO] Evaluating with a provided state dict (e.g., EMA).
+2025-09-21 09:15:43,395 [INFO] Fold 0 - Epoch 2 - Train Loss: 0.193599 | EMA Val wMSE: 0.074049 | EMA Val SoftCE: 0.283258 | EMA Val Pearson: 0.444409
+2025-09-21 09:15:43,401 [INFO] Fold 0 - Epoch 2 - New best EMA model with Pearson 0.444409.
+2025-09-21 09:15:43,401 [INFO] Fold 0 - Epoch 3/6 started.
+2025-09-21 09:16:02,483 [INFO] Train step 50/274 - Loss: 0.171496 (wMSE 0.051878, SoftCE 0.257721, Corr 0.363168, Cons 0.070873, CSim 0.056011, Rank 0.614412, RDropCLS 0.051788, RDropREG 0.006812, GateReg 0.110240) | LR: 1.604825e-04
+2025-09-21 09:16:21,209 [INFO] Train step 100/274 - Loss: 0.171320 (wMSE 0.051828, SoftCE 0.257790, Corr 0.362440, Cons 0.068400, CSim 0.054739, Rank 0.614781, RDropCLS 0.051041, RDropREG 0.006412, GateReg 0.110654) | LR: 1.517058e-04
+2025-09-21 09:16:39,925 [INFO] Train step 150/274 - Loss: 0.170147 (wMSE 0.051028, SoftCE 0.257576, Corr 0.355549, Cons 0.068152, CSim 0.054606, Rank 0.613012, RDropCLS 0.049997, RDropREG 0.006345, GateReg 0.111493) | LR: 1.423473e-04
+2025-09-21 09:16:58,629 [INFO] Train step 200/274 - Loss: 0.169340 (wMSE 0.050506, SoftCE 0.257027, Corr 0.352420, Cons 0.066011, CSim 0.054139, Rank 0.612224, RDropCLS 0.049750, RDropREG 0.006389, GateReg 0.112610) | LR: 1.325122e-04
+2025-09-21 09:17:17,386 [INFO] Train step 250/274 - Loss: 0.168591 (wMSE 0.050126, SoftCE 0.256864, Corr 0.347777, Cons 0.065100, CSim 0.053881, Rank 0.610442, RDropCLS 0.049692, RDropREG 0.006442, GateReg 0.112807) | LR: 1.223112e-04
+2025-09-21 09:17:26,383 [INFO] Epoch training completed in 102.98s with average loss 0.167948
+2025-09-21 09:17:26,385 [INFO] Evaluating with a provided state dict (e.g., EMA).
+2025-09-21 09:17:27,974 [INFO] Fold 0 - Epoch 3 - Train Loss: 0.167948 | EMA Val wMSE: 0.063139 | EMA Val SoftCE: 0.271223 | EMA Val Pearson: 0.552627
+2025-09-21 09:17:27,980 [INFO] Fold 0 - Epoch 3 - New best EMA model with Pearson 0.552627.
+2025-09-21 09:17:27,980 [INFO] Fold 0 - Epoch 4/6 started.
+2025-09-21 09:17:47,078 [INFO] Train step 50/274 - Loss: 0.152429 (wMSE 0.039738, SoftCE 0.246904, Corr 0.271231, Cons 0.052696, CSim 0.048129, Rank 0.593791, RDropCLS 0.049795, RDropREG 0.006918, GateReg 0.117802) | LR: 1.067874e-04
+2025-09-21 09:18:05,831 [INFO] Train step 100/274 - Loss: 0.154122 (wMSE 0.041065, SoftCE 0.248203, Corr 0.277373, Cons 0.053191, CSim 0.048500, Rank 0.594854, RDropCLS 0.049774, RDropREG 0.006843, GateReg 0.117891) | LR: 9.618007e-05
+2025-09-21 09:18:24,790 [INFO] Train step 150/274 - Loss: 0.153584 (wMSE 0.040777, SoftCE 0.247780, Corr 0.275427, Cons 0.051806, CSim 0.048432, Rank 0.593365, RDropCLS 0.050261, RDropREG 0.006970, GateReg 0.117624) | LR: 8.561573e-05
+2025-09-21 09:18:43,532 [INFO] Train step 200/274 - Loss: 0.153192 (wMSE 0.040658, SoftCE 0.246961, Corr 0.275178, Cons 0.050701, CSim 0.048207, Rank 0.592482, RDropCLS 0.050855, RDropREG 0.006951, GateReg 0.118446) | LR: 7.521326e-05
+2025-09-21 09:19:02,288 [INFO] Train step 250/274 - Loss: 0.152707 (wMSE 0.040450, SoftCE 0.246133, Corr 0.274072, Cons 0.050165, CSim 0.048017, Rank 0.592333, RDropCLS 0.050499, RDropREG 0.006876, GateReg 0.118819) | LR: 6.508975e-05
+2025-09-21 09:19:11,273 [INFO] Epoch training completed in 103.29s with average loss 0.152501
+2025-09-21 09:19:11,274 [INFO] Evaluating with a provided state dict (e.g., EMA).
+2025-09-21 09:19:12,867 [INFO] Fold 0 - Epoch 4 - Train Loss: 0.152501 | EMA Val wMSE: 0.058049 | EMA Val SoftCE: 0.261970 | EMA Val Pearson: 0.592864
+2025-09-21 09:19:12,873 [INFO] Fold 0 - Epoch 4 - New best EMA model with Pearson 0.592864.
+2025-09-21 09:19:12,873 [INFO] Fold 0 - Epoch 5/6 started.
+2025-09-21 09:19:31,985 [INFO] Train step 50/274 - Loss: 0.147461 (wMSE 0.037182, SoftCE 0.243598, Corr 0.249013, Cons 0.043559, CSim 0.045390, Rank 0.583353, RDropCLS 0.051711, RDropREG 0.007024, GateReg 0.119428) | LR: 5.086032e-05
+2025-09-21 09:19:50,720 [INFO] Train step 100/274 - Loss: 0.145653 (wMSE 0.036265, SoftCE 0.240761, Corr 0.243541, Cons 0.042143, CSim 0.045228, Rank 0.583979, RDropCLS 0.051300, RDropREG 0.006909, GateReg 0.119587) | LR: 4.191050e-05
+2025-09-21 09:20:09,455 [INFO] Train step 150/274 - Loss: 0.145068 (wMSE 0.036011, SoftCE 0.239791, Corr 0.242006, Cons 0.041718, CSim 0.044942, Rank 0.583730, RDropCLS 0.051360, RDropREG 0.006830, GateReg 0.120027) | LR: 3.361443e-05
+2025-09-21 09:20:28,168 [INFO] Train step 200/274 - Loss: 0.145014 (wMSE 0.035954, SoftCE 0.240044, Corr 0.240779, Cons 0.041537, CSim 0.044947, Rank 0.583447, RDropCLS 0.052094, RDropREG 0.006941, GateReg 0.120309) | LR: 2.606547e-05
+2025-09-21 09:20:46,860 [INFO] Train step 250/274 - Loss: 0.144470 (wMSE 0.035608, SoftCE 0.239424, Corr 0.239454, Cons 0.040947, CSim 0.044535, Rank 0.582765, RDropCLS 0.052315, RDropREG 0.007049, GateReg 0.120271) | LR: 1.934857e-05
+2025-09-21 09:20:55,908 [INFO] Epoch training completed in 103.03s with average loss 0.144597
+2025-09-21 09:20:55,910 [INFO] Evaluating with a provided state dict (e.g., EMA).
+2025-09-21 09:20:57,500 [INFO] Fold 0 - Epoch 5 - Train Loss: 0.144597 | EMA Val wMSE: 0.058013 | EMA Val SoftCE: 0.257734 | EMA Val Pearson: 0.606061
+2025-09-21 09:20:57,507 [INFO] Fold 0 - Epoch 5 - New best EMA model with Pearson 0.606061.
+2025-09-21 09:20:57,507 [INFO] Fold 0 - Epoch 6/6 started.
+2025-09-21 09:21:16,631 [INFO] Train step 50/274 - Loss: 0.140987 (wMSE 0.033323, SoftCE 0.236840, Corr 0.224780, Cons 0.040305, CSim 0.043015, Rank 0.579234, RDropCLS 0.051802, RDropREG 0.007022, GateReg 0.120013) | LR: 1.109289e-05
+2025-09-21 09:21:35,367 [INFO] Train step 100/274 - Loss: 0.140831 (wMSE 0.033054, SoftCE 0.237545, Corr 0.222418, Cons 0.040355, CSim 0.043584, Rank 0.578213, RDropCLS 0.051485, RDropREG 0.007028, GateReg 0.119540) | LR: 6.743759e-06
+2025-09-21 09:21:54,068 [INFO] Train step 150/274 - Loss: 0.140718 (wMSE 0.033101, SoftCE 0.237241, Corr 0.221621, Cons 0.040361, CSim 0.043601, Rank 0.578337, RDropCLS 0.051838, RDropREG 0.006999, GateReg 0.120003) | LR: 3.444140e-06
+2025-09-21 09:22:12,766 [INFO] Train step 200/274 - Loss: 0.140778 (wMSE 0.033140, SoftCE 0.237048, Corr 0.222846, Cons 0.040112, CSim 0.043184, Rank 0.578583, RDropCLS 0.052406, RDropREG 0.007021, GateReg 0.119892) | LR: 1.231166e-06
+2025-09-21 09:22:31,504 [INFO] Train step 250/274 - Loss: 0.141000 (wMSE 0.033388, SoftCE 0.236955, Corr 0.223955, Cons 0.039954, CSim 0.043465, Rank 0.578745, RDropCLS 0.052652, RDropREG 0.007045, GateReg 0.120048) | LR: 1.297403e-07
+2025-09-21 09:22:40,514 [INFO] Epoch training completed in 103.01s with average loss 0.140923
+2025-09-21 09:22:40,516 [INFO] Evaluating with a provided state dict (e.g., EMA).
+2025-09-21 09:22:42,106 [INFO] Fold 0 - Epoch 6 - Train Loss: 0.140923 | EMA Val wMSE: 0.059699 | EMA Val SoftCE: 0.256837 | EMA Val Pearson: 0.609817
+2025-09-21 09:22:42,112 [INFO] Fold 0 - Epoch 6 - New best EMA model with Pearson 0.609817.
+2025-09-21 09:22:42,262 [INFO] Generating validation predictions with MC-Dropout TTA and Swap TTA
+2025-09-21 09:22:43,271 [INFO] Running MC-Dropout prediction with 4 samples.
+2025-09-21 09:22:49,002 [INFO] Running MC-Dropout prediction with 4 samples.
+2025-09-21 09:22:53,696 [INFO] Fold 0 - Final Val Pearson (with MC-Dropout TTA + swap): 0.619041 | Final Val MSE: 0.042961
+2025-09-21 09:22:53,696 [INFO] Generating test predictions with MC-Dropout TTA and Swap TTA
+2025-09-21 09:22:54,374 [INFO] Running MC-Dropout prediction with 6 samples.
+2025-09-21 09:22:59,723 [INFO] Running MC-Dropout prediction with 6 samples.
+2025-09-21 09:23:04,458 [INFO] ========== Fold 2/5 ==========
+2025-09-21 09:23:04,515 [INFO] Applied swap augmentation. New train size: 52518
+2025-09-21 09:23:04,522 [INFO] Prepared swapped TTA arrays for validation data.
+2025-09-21 09:23:04,523 [INFO] Train split: 52518 samples; Val split: 6566 samples.
+2025-09-21 09:23:04,523 [INFO] Initializing PatentDataset with 52518 samples.
+2025-09-21 09:23:04,523 [INFO] Initializing PatentDataset with 6566 samples.
+2025-09-21 09:23:04,523 [INFO] Initializing PatentDataset with 6566 samples.
+2025-09-21 09:23:04,524 [INFO] Initializing TransformerRegressor++ with vocab_size=9042, embed_dim=256, heads=8, layers=6, max_len=64, ctxs=106, feat_dim=14, msd=5
+2025-09-21 09:23:04,749 [INFO] Creating Warmup+Cosine scheduler: warmup_steps=164, total_steps=1644.
+2025-09-21 09:23:04,749 [INFO] Initializing EMA state from current model weights.
+2025-09-21 09:23:04,960 [INFO] Fold 1 - Epoch 1/6 started.
+2025-09-21 09:23:24,110 [INFO] Train step 50/274 - Loss: 0.357397 (wMSE 0.152640, SoftCE 0.440648, Corr 0.946759, Cons 0.270357, CSim 0.132129, Rank 0.692545, RDropCLS 0.897514, RDropREG 0.037274, GateReg 0.109236) | LR: 6.097561e-05
+2025-09-21 09:23:42,861 [INFO] Train step 100/274 - Loss: 0.320421 (wMSE 0.130117, SoftCE 0.392988, Corr 0.901503, Cons 0.227226, CSim 0.106274, Rank 0.687628, RDropCLS 0.685792, RDropREG 0.033684, GateReg 0.109600) | LR: 1.219512e-04
+2025-09-21 09:24:01,594 [INFO] Train step 150/274 - Loss: 0.301860 (wMSE 0.121362, SoftCE 0.367787, Corr 0.877962, Cons 0.197103, CSim 0.094178, Rank 0.685225, RDropCLS 0.539434, RDropREG 0.029847, GateReg 0.107598) | LR: 1.829268e-04
+2025-09-21 09:24:20,326 [INFO] Train step 200/274 - Loss: 0.288285 (wMSE 0.114340, SoftCE 0.352652, Corr 0.849380, Cons 0.172671, CSim 0.087213, Rank 0.682492, RDropCLS 0.444569, RDropREG 0.026922, GateReg 0.110496) | LR: 1.997082e-04
+2025-09-21 09:24:39,089 [INFO] Train step 250/274 - Loss: 0.276323 (wMSE 0.108260, SoftCE 0.340587, Corr 0.813456, Cons 0.159559, CSim 0.082951, Rank 0.678513, RDropCLS 0.374572, RDropREG 0.024215, GateReg 0.105903) | LR: 1.983384e-04
+2025-09-21 09:24:48,114 [INFO] Epoch training completed in 103.15s with average loss 0.271153
+2025-09-21 09:24:48,115 [INFO] Evaluating with a provided state dict (e.g., EMA).
+2025-09-21 09:24:49,690 [INFO] Fold 1 - Epoch 1 - Train Loss: 0.271153 | EMA Val wMSE: 0.088931 | EMA Val SoftCE: 0.311080 | EMA Val Pearson: 0.212767
+2025-09-21 09:24:49,696 [INFO] Fold 1 - Epoch 1 - New best EMA model with Pearson 0.212767.
+2025-09-21 09:24:49,696 [INFO] Fold 1 - Epoch 2/6 started.
+2025-09-21 09:25:08,742 [INFO] Train step 50/274 - Loss: 0.207663 (wMSE 0.073563, SoftCE 0.281851, Corr 0.541752, Cons 0.089080, CSim 0.063719, Rank 0.650995, RDropCLS 0.060914, RDropREG 0.008017, GateReg 0.098350) | LR: 1.942877e-04
+2025-09-21 09:25:27,485 [INFO] Train step 100/274 - Loss: 0.201476 (wMSE 0.069180, SoftCE 0.277905, Corr 0.514688, Cons 0.085261, CSim 0.062402, Rank 0.646915, RDropCLS 0.056284, RDropREG 0.007175, GateReg 0.102471) | LR: 1.902280e-04
+2025-09-21 09:25:46,226 [INFO] Train step 150/274 - Loss: 0.198544 (wMSE 0.067650, SoftCE 0.276022, Corr 0.498309, Cons 0.082594, CSim 0.062274, Rank 0.644699, RDropCLS 0.053564, RDropREG 0.006705, GateReg 0.105337) | LR: 1.851529e-04
+2025-09-21 09:26:04,963 [INFO] Train step 200/274 - Loss: 0.196083 (wMSE 0.066154, SoftCE 0.274204, Corr 0.487652, Cons 0.079455, CSim 0.061613, Rank 0.642242, RDropCLS 0.051905, RDropREG 0.006510, GateReg 0.107862) | LR: 1.791195e-04
+2025-09-21 09:26:23,885 [INFO] Train step 250/274 - Loss: 0.194108 (wMSE 0.064874, SoftCE 0.273092, Corr 0.478878, Cons 0.076371, CSim 0.060883, Rank 0.639978, RDropCLS 0.050375, RDropREG 0.006467, GateReg 0.109324) | LR: 1.721956e-04
+2025-09-21 09:26:32,910 [INFO] Epoch training completed in 103.21s with average loss 0.193069
+2025-09-21 09:26:32,912 [INFO] Evaluating with a provided state dict (e.g., EMA).
+2025-09-21 09:26:34,526 [INFO] Fold 1 - Epoch 2 - Train Loss: 0.193069 | EMA Val wMSE: 0.083884 | EMA Val SoftCE: 0.284295 | EMA Val Pearson: 0.424285
+2025-09-21 09:26:34,532 [INFO] Fold 1 - Epoch 2 - New best EMA model with Pearson 0.424285.
+2025-09-21 09:26:34,532 [INFO] Fold 1 - Epoch 3/6 started.
+2025-09-21 09:26:53,985 [INFO] Train step 50/274 - Loss: 0.170694 (wMSE 0.050953, SoftCE 0.258909, Corr 0.360080, Cons 0.058690, CSim 0.054621, Rank 0.613071, RDropCLS 0.048675, RDropREG 0.006943, GateReg 0.118004) | LR: 1.604825e-04
+2025-09-21 09:27:13,275 [INFO] Train step 100/274 - Loss: 0.171138 (wMSE 0.051430, SoftCE 0.258970, Corr 0.362227, Cons 0.056338, CSim 0.054738, Rank 0.613647, RDropCLS 0.048179, RDropREG 0.006917, GateReg 0.120794) | LR: 1.517058e-04
+2025-09-21 09:27:32,202 [INFO] Train step 150/274 - Loss: 0.170098 (wMSE 0.051070, SoftCE 0.257853, Corr 0.357406, Cons 0.054994, CSim 0.054446, Rank 0.612201, RDropCLS 0.047750, RDropREG 0.006674, GateReg 0.121427) | LR: 1.423473e-04
+2025-09-21 09:27:50,934 [INFO] Train step 200/274 - Loss: 0.169698 (wMSE 0.051023, SoftCE 0.257629, Corr 0.353983, Cons 0.053897, CSim 0.054058, Rank 0.612724, RDropCLS 0.046585, RDropREG 0.006486, GateReg 0.122897) | LR: 1.325122e-04
+2025-09-21 09:28:09,633 [INFO] Train step 250/274 - Loss: 0.168260 (wMSE 0.050296, SoftCE 0.256412, Corr 0.347273, Cons 0.052193, CSim 0.053725, Rank 0.611210, RDropCLS 0.045881, RDropREG 0.006426, GateReg 0.123822) | LR: 1.223112e-04
+2025-09-21 09:28:18,650 [INFO] Epoch training completed in 104.12s with average loss 0.167628
+2025-09-21 09:28:18,652 [INFO] Evaluating with a provided state dict (e.g., EMA).
+2025-09-21 09:28:20,240 [INFO] Fold 1 - Epoch 3 - Train Loss: 0.167628 | EMA Val wMSE: 0.069994 | EMA Val SoftCE: 0.272618 | EMA Val Pearson: 0.545562
+2025-09-21 09:28:20,246 [INFO] Fold 1 - Epoch 3 - New best EMA model with Pearson 0.545562.
+2025-09-21 09:28:20,246 [INFO] Fold 1 - Epoch 4/6 started.
+2025-09-21 09:28:39,390 [INFO] Train step 50/274 - Loss: 0.154797 (wMSE 0.042043, SoftCE 0.249288, Corr 0.277662, Cons 0.044177, CSim 0.049064, Rank 0.594815, RDropCLS 0.044837, RDropREG 0.006257, GateReg 0.127420) | LR: 1.067874e-04
+2025-09-21 09:28:58,129 [INFO] Train step 100/274 - Loss: 0.154064 (wMSE 0.041704, SoftCE 0.247222, Corr 0.279239, Cons 0.043975, CSim 0.048380, Rank 0.593658, RDropCLS 0.047266, RDropREG 0.006461, GateReg 0.126004) | LR: 9.618007e-05
+2025-09-21 09:29:16,845 [INFO] Train step 150/274 - Loss: 0.154254 (wMSE 0.041952, SoftCE 0.247054, Corr 0.281117, Cons 0.042036, CSim 0.048267, Rank 0.593203, RDropCLS 0.048150, RDropREG 0.006494, GateReg 0.126496) | LR: 8.561573e-05
+2025-09-21 09:29:35,584 [INFO] Train step 200/274 - Loss: 0.153662 (wMSE 0.041563, SoftCE 0.246603, Corr 0.278739, Cons 0.041920, CSim 0.047963, Rank 0.592537, RDropCLS 0.047900, RDropREG 0.006516, GateReg 0.127133) | LR: 7.521326e-05
+2025-09-21 09:29:54,348 [INFO] Train step 250/274 - Loss: 0.152775 (wMSE 0.041010, SoftCE 0.245687, Corr 0.276039, Cons 0.041408, CSim 0.047535, Rank 0.591280, RDropCLS 0.047886, RDropREG 0.006594, GateReg 0.127636) | LR: 6.508975e-05
+2025-09-21 09:30:03,388 [INFO] Epoch training completed in 103.14s with average loss 0.152569
+2025-09-21 09:30:03,389 [INFO] Evaluating with a provided state dict (e.g., EMA).
+2025-09-21 09:30:04,984 [INFO] Fold 1 - Epoch 4 - Train Loss: 0.152569 | EMA Val wMSE: 0.062380 | EMA Val SoftCE: 0.262827 | EMA Val Pearson: 0.586833
+2025-09-21 09:30:04,990 [INFO] Fold 1 - Epoch 4 - New best EMA model with Pearson 0.586833.
+2025-09-21 09:30:04,990 [INFO] Fold 1 - Epoch 5/6 started.
+2025-09-21 09:30:24,160 [INFO] Train step 50/274 - Loss: 0.145303 (wMSE 0.036812, SoftCE 0.239756, Corr 0.241484, Cons 0.036327, CSim 0.045463, Rank 0.581285, RDropCLS 0.051462, RDropREG 0.007199, GateReg 0.129278) | LR: 5.086032e-05
+2025-09-21 09:30:42,861 [INFO] Train step 100/274 - Loss: 0.144261 (wMSE 0.035859, SoftCE 0.238874, Corr 0.238301, Cons 0.035305, CSim 0.044784, Rank 0.582914, RDropCLS 0.050249, RDropREG 0.007033, GateReg 0.129216) | LR: 4.191050e-05
+2025-09-21 09:31:01,561 [INFO] Train step 150/274 - Loss: 0.144291 (wMSE 0.035745, SoftCE 0.238842, Corr 0.239623, Cons 0.035338, CSim 0.044439, Rank 0.583267, RDropCLS 0.050203, RDropREG 0.006894, GateReg 0.128817) | LR: 3.361443e-05
+2025-09-21 09:31:20,347 [INFO] Train step 200/274 - Loss: 0.144469 (wMSE 0.035888, SoftCE 0.239181, Corr 0.239735, Cons 0.035554, CSim 0.044612, Rank 0.582637, RDropCLS 0.050600, RDropREG 0.006948, GateReg 0.128584) | LR: 2.606547e-05
+2025-09-21 09:31:39,110 [INFO] Train step 250/274 - Loss: 0.144675 (wMSE 0.035954, SoftCE 0.239508, Corr 0.240585, Cons 0.035563, CSim 0.044625, Rank 0.582746, RDropCLS 0.050437, RDropREG 0.006956, GateReg 0.128607) | LR: 1.934857e-05
+2025-09-21 09:31:48,113 [INFO] Epoch training completed in 103.12s with average loss 0.144508
+2025-09-21 09:31:48,115 [INFO] Evaluating with a provided state dict (e.g., EMA).
+2025-09-21 09:31:49,705 [INFO] Fold 1 - Epoch 5 - Train Loss: 0.144508 | EMA Val wMSE: 0.060486 | EMA Val SoftCE: 0.257901 | EMA Val Pearson: 0.602742
+2025-09-21 09:31:49,714 [INFO] Fold 1 - Epoch 5 - New best EMA model with Pearson 0.602742.
+2025-09-21 09:31:49,715 [INFO] Fold 1 - Epoch 6/6 started.
+2025-09-21 09:32:08,827 [INFO] Train step 50/274 - Loss: 0.141937 (wMSE 0.033987, SoftCE 0.238126, Corr 0.227783, Cons 0.037057, CSim 0.043193, Rank 0.579039, RDropCLS 0.050901, RDropREG 0.007038, GateReg 0.128512) | LR: 1.109289e-05
+2025-09-21 09:32:27,560 [INFO] Train step 100/274 - Loss: 0.140908 (wMSE 0.033578, SoftCE 0.236730, Corr 0.223922, Cons 0.035810, CSim 0.043107, Rank 0.577857, RDropCLS 0.051275, RDropREG 0.007106, GateReg 0.129236) | LR: 6.743759e-06
+2025-09-21 09:32:46,309 [INFO] Train step 150/274 - Loss: 0.140780 (wMSE 0.033450, SoftCE 0.236830, Corr 0.223189, Cons 0.035169, CSim 0.043020, Rank 0.577632, RDropCLS 0.051294, RDropREG 0.007109, GateReg 0.129036) | LR: 3.444140e-06
+2025-09-21 09:33:05,068 [INFO] Train step 200/274 - Loss: 0.140706 (wMSE 0.033479, SoftCE 0.236527, Corr 0.223358, Cons 0.034783, CSim 0.042906, Rank 0.577792, RDropCLS 0.051002, RDropREG 0.007086, GateReg 0.128974) | LR: 1.231166e-06
+2025-09-21 09:33:23,885 [INFO] Train step 250/274 - Loss: 0.140560 (wMSE 0.033332, SoftCE 0.236412, Corr 0.222653, Cons 0.034507, CSim 0.042956, Rank 0.578316, RDropCLS 0.051119, RDropREG 0.007085, GateReg 0.128983) | LR: 1.297403e-07
+2025-09-21 09:33:32,909 [INFO] Epoch training completed in 103.19s with average loss 0.140695
+2025-09-21 09:33:32,911 [INFO] Evaluating with a provided state dict (e.g., EMA).
+2025-09-21 09:33:34,504 [INFO] Fold 1 - Epoch 6 - Train Loss: 0.140695 | EMA Val wMSE: 0.061385 | EMA Val SoftCE: 0.256830 | EMA Val Pearson: 0.608354
+2025-09-21 09:33:34,511 [INFO] Fold 1 - Epoch 6 - New best EMA model with Pearson 0.608354.
+2025-09-21 09:33:34,662 [INFO] Generating validation predictions with MC-Dropout TTA and Swap TTA
+2025-09-21 09:33:35,690 [INFO] Running MC-Dropout prediction with 4 samples.
+2025-09-21 09:33:41,450 [INFO] Running MC-Dropout prediction with 4 samples.
+2025-09-21 09:33:46,194 [INFO] Fold 1 - Final Val Pearson (with MC-Dropout TTA + swap): 0.618748 | Final Val MSE: 0.043032
+2025-09-21 09:33:46,195 [INFO] Generating test predictions with MC-Dropout TTA and Swap TTA
+2025-09-21 09:33:46,905 [INFO] Running MC-Dropout prediction with 6 samples.
+2025-09-21 09:33:52,313 [INFO] Running MC-Dropout prediction with 6 samples.
+2025-09-21 09:33:57,078 [INFO] ========== Fold 3/5 ==========
+2025-09-21 09:33:57,133 [INFO] Applied swap augmentation. New train size: 52518
+2025-09-21 09:33:57,146 [INFO] Prepared swapped TTA arrays for validation data.
+2025-09-21 09:33:57,146 [INFO] Train split: 52518 samples; Val split: 6566 samples.
+2025-09-21 09:33:57,146 [INFO] Initializing PatentDataset with 52518 samples.
+2025-09-21 09:33:57,146 [INFO] Initializing PatentDataset with 6566 samples.
+2025-09-21 09:33:57,146 [INFO] Initializing PatentDataset with 6566 samples.
+2025-09-21 09:33:57,148 [INFO] Initializing TransformerRegressor++ with vocab_size=9042, embed_dim=256, heads=8, layers=6, max_len=64, ctxs=106, feat_dim=14, msd=5
+2025-09-21 09:33:57,371 [INFO] Creating Warmup+Cosine scheduler: warmup_steps=164, total_steps=1644.
+2025-09-21 09:33:57,371 [INFO] Initializing EMA state from current model weights.
+2025-09-21 09:33:57,582 [INFO] Fold 2 - Epoch 1/6 started.
+2025-09-21 09:34:16,790 [INFO] Train step 50/274 - Loss: 0.343025 (wMSE 0.127456, SoftCE 0.437074, Corr 0.936306, Cons 0.225172, CSim 0.156694, Rank 0.695086, RDropCLS 0.933791, RDropREG 0.045797, GateReg 0.134168) | LR: 6.097561e-05
+2025-09-21 09:34:35,510 [INFO] Train step 100/274 - Loss: 0.315898 (wMSE 0.118021, SoftCE 0.396973, Corr 0.899372, Cons 0.198072, CSim 0.122243, Rank 0.688788, RDropCLS 0.717819, RDropREG 0.037406, GateReg 0.140410) | LR: 1.219512e-04
+2025-09-21 09:34:54,253 [INFO] Train step 150/274 - Loss: 0.299023 (wMSE 0.112659, SoftCE 0.373029, Corr 0.872771, Cons 0.180578, CSim 0.105037, Rank 0.685436, RDropCLS 0.559986, RDropREG 0.031203, GateReg 0.136576) | LR: 1.829268e-04
+2025-09-21 09:35:13,009 [INFO] Train step 200/274 - Loss: 0.284937 (wMSE 0.107236, SoftCE 0.355044, Corr 0.838907, Cons 0.167229, CSim 0.095629, Rank 0.681982, RDropCLS 0.460397, RDropREG 0.027309, GateReg 0.125027) | LR: 1.997082e-04
+2025-09-21 09:35:31,732 [INFO] Train step 250/274 - Loss: 0.273556 (wMSE 0.102628, SoftCE 0.342939, Corr 0.801597, Cons 0.155564, CSim 0.089829, Rank 0.678323, RDropCLS 0.387783, RDropREG 0.024447, GateReg 0.116413) | LR: 1.983384e-04
+2025-09-21 09:35:40,711 [INFO] Epoch training completed in 103.13s with average loss 0.268347
+2025-09-21 09:35:40,713 [INFO] Evaluating with a provided state dict (e.g., EMA).
+2025-09-21 09:35:42,311 [INFO] Fold 2 - Epoch 1 - Train Loss: 0.268347 | EMA Val wMSE: 0.090357 | EMA Val SoftCE: 0.308178 | EMA Val Pearson: 0.259352
+2025-09-21 09:35:42,316 [INFO] Fold 2 - Epoch 1 - New best EMA model with Pearson 0.259352.
+2025-09-21 09:35:42,317 [INFO] Fold 2 - Epoch 2/6 started.
+2025-09-21 09:36:01,449 [INFO] Train step 50/274 - Loss: 0.205382 (wMSE 0.070485, SoftCE 0.280746, Corr 0.535628, Cons 0.100777, CSim 0.062611, Rank 0.648959, RDropCLS 0.071875, RDropREG 0.009159, GateReg 0.083552) | LR: 1.942877e-04
+2025-09-21 09:36:20,175 [INFO] Train step 100/274 - Loss: 0.201644 (wMSE 0.068626, SoftCE 0.278531, Corr 0.515792, Cons 0.091891, CSim 0.062472, Rank 0.644372, RDropCLS 0.067803, RDropREG 0.009013, GateReg 0.090157) | LR: 1.902280e-04
+2025-09-21 09:36:38,903 [INFO] Train step 150/274 - Loss: 0.198775 (wMSE 0.066998, SoftCE 0.276707, Corr 0.500984, Cons 0.087785, CSim 0.062240, Rank 0.642435, RDropCLS 0.064495, RDropREG 0.008358, GateReg 0.094341) | LR: 1.851529e-04
+2025-09-21 09:36:57,690 [INFO] Train step 200/274 - Loss: 0.196401 (wMSE 0.065804, SoftCE 0.274935, Corr 0.490308, Cons 0.081903, CSim 0.061339, Rank 0.640250, RDropCLS 0.060942, RDropREG 0.007997, GateReg 0.097518) | LR: 1.791195e-04
+2025-09-21 09:37:16,416 [INFO] Train step 250/274 - Loss: 0.193878 (wMSE 0.064491, SoftCE 0.273134, Corr 0.477737, Cons 0.078076, CSim 0.060811, Rank 0.638072, RDropCLS 0.058334, RDropREG 0.007769, GateReg 0.099712) | LR: 1.721956e-04
+2025-09-21 09:37:25,439 [INFO] Epoch training completed in 103.12s with average loss 0.193076
+2025-09-21 09:37:25,441 [INFO] Evaluating with a provided state dict (e.g., EMA).
+2025-09-21 09:37:27,056 [INFO] Fold 2 - Epoch 2 - Train Loss: 0.193076 | EMA Val wMSE: 0.071997 | EMA Val SoftCE: 0.281407 | EMA Val Pearson: 0.477475
+2025-09-21 09:37:27,062 [INFO] Fold 2 - Epoch 2 - New best EMA model with Pearson 0.477475.
+2025-09-21 09:37:27,062 [INFO] Fold 2 - Epoch 3/6 started.
+2025-09-21 09:37:46,161 [INFO] Train step 50/274 - Loss: 0.170155 (wMSE 0.050677, SoftCE 0.257111, Corr 0.361785, Cons 0.055849, CSim 0.054032, Rank 0.613662, RDropCLS 0.053506, RDropREG 0.007070, GateReg 0.112892) | LR: 1.604825e-04
+2025-09-21 09:38:04,902 [INFO] Train step 100/274 - Loss: 0.168850 (wMSE 0.050210, SoftCE 0.256496, Corr 0.352867, Cons 0.056146, CSim 0.054156, Rank 0.610451, RDropCLS 0.053459, RDropREG 0.007353, GateReg 0.112153) | LR: 1.517058e-04
+2025-09-21 09:38:23,686 [INFO] Train step 150/274 - Loss: 0.168831 (wMSE 0.050313, SoftCE 0.256793, Corr 0.351544, Cons 0.055011, CSim 0.053831, Rank 0.610218, RDropCLS 0.052735, RDropREG 0.007295, GateReg 0.113483) | LR: 1.423473e-04
+2025-09-21 09:38:42,417 [INFO] Train step 200/274 - Loss: 0.167814 (wMSE 0.049716, SoftCE 0.255998, Corr 0.347237, Cons 0.053872, CSim 0.053553, Rank 0.609013, RDropCLS 0.052075, RDropREG 0.007176, GateReg 0.114537) | LR: 1.325122e-04
+2025-09-21 09:39:01,129 [INFO] Train step 250/274 - Loss: 0.167224 (wMSE 0.049434, SoftCE 0.255338, Corr 0.345108, Cons 0.052342, CSim 0.053140, Rank 0.608883, RDropCLS 0.051499, RDropREG 0.007021, GateReg 0.115441) | LR: 1.223112e-04
+2025-09-21 09:39:10,189 [INFO] Epoch training completed in 103.13s with average loss 0.166658
+2025-09-21 09:39:10,191 [INFO] Evaluating with a provided state dict (e.g., EMA).
+2025-09-21 09:39:11,792 [INFO] Fold 2 - Epoch 3 - Train Loss: 0.166658 | EMA Val wMSE: 0.061510 | EMA Val SoftCE: 0.270772 | EMA Val Pearson: 0.565915
+2025-09-21 09:39:11,798 [INFO] Fold 2 - Epoch 3 - New best EMA model with Pearson 0.565915.
+2025-09-21 09:39:11,798 [INFO] Fold 2 - Epoch 4/6 started.
+2025-09-21 09:39:30,890 [INFO] Train step 50/274 - Loss: 0.153843 (wMSE 0.041656, SoftCE 0.247101, Corr 0.276893, Cons 0.043887, CSim 0.048909, Rank 0.590868, RDropCLS 0.054953, RDropREG 0.008037, GateReg 0.120872) | LR: 1.067874e-04
+2025-09-21 09:39:49,555 [INFO] Train step 100/274 - Loss: 0.153529 (wMSE 0.041378, SoftCE 0.246560, Corr 0.277468, Cons 0.043430, CSim 0.048794, Rank 0.590732, RDropCLS 0.053783, RDropREG 0.007605, GateReg 0.121717) | LR: 9.618007e-05
+2025-09-21 09:40:08,326 [INFO] Train step 150/274 - Loss: 0.153439 (wMSE 0.041313, SoftCE 0.246018, Corr 0.279356, Cons 0.042563, CSim 0.048170, Rank 0.591008, RDropCLS 0.053343, RDropREG 0.007549, GateReg 0.122033) | LR: 8.561573e-05
+2025-09-21 09:40:27,063 [INFO] Train step 200/274 - Loss: 0.152695 (wMSE 0.040854, SoftCE 0.245380, Corr 0.276225, Cons 0.042015, CSim 0.047938, Rank 0.590745, RDropCLS 0.052732, RDropREG 0.007326, GateReg 0.122233) | LR: 7.521326e-05
+2025-09-21 09:40:45,967 [INFO] Train step 250/274 - Loss: 0.152067 (wMSE 0.040512, SoftCE 0.244929, Corr 0.273371, Cons 0.040795, CSim 0.047622, Rank 0.589901, RDropCLS 0.052908, RDropREG 0.007279, GateReg 0.122866) | LR: 6.508975e-05
+2025-09-21 09:40:55,354 [INFO] Epoch training completed in 103.56s with average loss 0.151684
+2025-09-21 09:40:55,356 [INFO] Evaluating with a provided state dict (e.g., EMA).
+2025-09-21 09:40:56,959 [INFO] Fold 2 - Epoch 4 - Train Loss: 0.151684 | EMA Val wMSE: 0.056362 | EMA Val SoftCE: 0.262104 | EMA Val Pearson: 0.604277
+2025-09-21 09:40:56,965 [INFO] Fold 2 - Epoch 4 - New best EMA model with Pearson 0.604277.
+2025-09-21 09:40:56,966 [INFO] Fold 2 - Epoch 5/6 started.
+2025-09-21 09:41:16,285 [INFO] Train step 50/274 - Loss: 0.143908 (wMSE 0.035891, SoftCE 0.238214, Corr 0.235725, Cons 0.036725, CSim 0.045788, Rank 0.581921, RDropCLS 0.051681, RDropREG 0.006768, GateReg 0.124907) | LR: 5.086032e-05
+2025-09-21 09:41:35,063 [INFO] Train step 100/274 - Loss: 0.145080 (wMSE 0.036332, SoftCE 0.239201, Corr 0.243506, Cons 0.035739, CSim 0.044892, Rank 0.582855, RDropCLS 0.053158, RDropREG 0.006919, GateReg 0.124392) | LR: 4.191050e-05
+2025-09-21 09:41:53,810 [INFO] Train step 150/274 - Loss: 0.145050 (wMSE 0.036170, SoftCE 0.239801, Corr 0.242159, Cons 0.035025, CSim 0.044686, Rank 0.582935, RDropCLS 0.053618, RDropREG 0.006946, GateReg 0.124024) | LR: 3.361443e-05
+2025-09-21 09:42:12,915 [INFO] Train step 200/274 - Loss: 0.144538 (wMSE 0.035840, SoftCE 0.239003, Corr 0.241347, Cons 0.034095, CSim 0.044354, Rank 0.583346, RDropCLS 0.053095, RDropREG 0.006955, GateReg 0.123838) | LR: 2.606547e-05
+2025-09-21 09:42:32,746 [INFO] Train step 250/274 - Loss: 0.144339 (wMSE 0.035717, SoftCE 0.238931, Corr 0.240242, Cons 0.033356, CSim 0.044296, Rank 0.583188, RDropCLS 0.053327, RDropREG 0.006997, GateReg 0.123641) | LR: 1.934857e-05
+2025-09-21 09:42:41,784 [INFO] Epoch training completed in 104.82s with average loss 0.144143
+2025-09-21 09:42:41,785 [INFO] Evaluating with a provided state dict (e.g., EMA).
+2025-09-21 09:42:43,390 [INFO] Fold 2 - Epoch 5 - Train Loss: 0.144143 | EMA Val wMSE: 0.056368 | EMA Val SoftCE: 0.257466 | EMA Val Pearson: 0.619807
+2025-09-21 09:42:43,396 [INFO] Fold 2 - Epoch 5 - New best EMA model with Pearson 0.619807.
+2025-09-21 09:42:43,396 [INFO] Fold 2 - Epoch 6/6 started.
+2025-09-21 09:43:03,286 [INFO] Train step 50/274 - Loss: 0.139559 (wMSE 0.032512, SoftCE 0.235092, Corr 0.218951, Cons 0.033896, CSim 0.043276, Rank 0.579394, RDropCLS 0.056759, RDropREG 0.007199, GateReg 0.122930) | LR: 1.109289e-05
+2025-09-21 09:43:22,432 [INFO] Train step 100/274 - Loss: 0.140111 (wMSE 0.033075, SoftCE 0.236122, Corr 0.219313, Cons 0.033594, CSim 0.043463, Rank 0.577489, RDropCLS 0.056601, RDropREG 0.007165, GateReg 0.122997) | LR: 6.743759e-06
+2025-09-21 09:43:41,229 [INFO] Train step 150/274 - Loss: 0.139964 (wMSE 0.033129, SoftCE 0.235618, Corr 0.219246, Cons 0.033203, CSim 0.043459, Rank 0.577467, RDropCLS 0.056016, RDropREG 0.007170, GateReg 0.123124) | LR: 3.444140e-06
+2025-09-21 09:43:59,989 [INFO] Train step 200/274 - Loss: 0.139990 (wMSE 0.033038, SoftCE 0.235886, Corr 0.219459, Cons 0.033091, CSim 0.043169, Rank 0.577474, RDropCLS 0.055789, RDropREG 0.007149, GateReg 0.122992) | LR: 1.231166e-06
+2025-09-21 09:44:18,728 [INFO] Train step 250/274 - Loss: 0.139961 (wMSE 0.032948, SoftCE 0.235887, Corr 0.220172, Cons 0.032791, CSim 0.042856, Rank 0.577261, RDropCLS 0.055631, RDropREG 0.007117, GateReg 0.122785) | LR: 1.297403e-07
+2025-09-21 09:44:27,755 [INFO] Epoch training completed in 104.36s with average loss 0.139979
+2025-09-21 09:44:27,757 [INFO] Evaluating with a provided state dict (e.g., EMA).
+2025-09-21 09:44:29,368 [INFO] Fold 2 - Epoch 6 - Train Loss: 0.139979 | EMA Val wMSE: 0.058190 | EMA Val SoftCE: 0.256537 | EMA Val Pearson: 0.623993
+2025-09-21 09:44:29,373 [INFO] Fold 2 - Epoch 6 - New best EMA model with Pearson 0.623993.
+2025-09-21 09:44:29,524 [INFO] Generating validation predictions with MC-Dropout TTA and Swap TTA
+2025-09-21 09:44:30,559 [INFO] Running MC-Dropout prediction with 4 samples.
+2025-09-21 09:44:36,475 [INFO] Running MC-Dropout prediction with 4 samples.
+2025-09-21 09:44:41,249 [INFO] Fold 2 - Final Val Pearson (with MC-Dropout TTA + swap): 0.635077 | Final Val MSE: 0.041367
+2025-09-21 09:44:41,249 [INFO] Generating test predictions with MC-Dropout TTA and Swap TTA
+2025-09-21 09:44:41,992 [INFO] Running MC-Dropout prediction with 6 samples.
+2025-09-21 09:44:47,513 [INFO] Running MC-Dropout prediction with 6 samples.
+2025-09-21 09:44:52,506 [INFO] ========== Fold 4/5 ==========
+2025-09-21 09:44:52,561 [INFO] Applied swap augmentation. New train size: 52522
+2025-09-21 09:44:52,574 [INFO] Prepared swapped TTA arrays for validation data.
+2025-09-21 09:44:52,574 [INFO] Train split: 52522 samples; Val split: 6564 samples.
+2025-09-21 09:44:52,574 [INFO] Initializing PatentDataset with 52522 samples.
+2025-09-21 09:44:52,574 [INFO] Initializing PatentDataset with 6564 samples.
+2025-09-21 09:44:52,574 [INFO] Initializing PatentDataset with 6564 samples.
+2025-09-21 09:44:52,577 [INFO] Initializing TransformerRegressor++ with vocab_size=9042, embed_dim=256, heads=8, layers=6, max_len=64, ctxs=106, feat_dim=14, msd=5
+2025-09-21 09:44:52,802 [INFO] Creating Warmup+Cosine scheduler: warmup_steps=164, total_steps=1644.
+2025-09-21 09:44:52,803 [INFO] Initializing EMA state from current model weights.
+2025-09-21 09:44:53,014 [INFO] Fold 3 - Epoch 1/6 started.
+2025-09-21 09:45:13,349 [INFO] Train step 50/274 - Loss: 0.353895 (wMSE 0.139242, SoftCE 0.458009, Corr 0.937673, Cons 0.188663, CSim 0.147801, Rank 0.692442, RDropCLS 0.887731, RDropREG 0.058786, GateReg 0.153598) | LR: 6.097561e-05
+2025-09-21 09:45:32,663 [INFO] Train step 100/274 - Loss: 0.321854 (wMSE 0.127563, SoftCE 0.403734, Corr 0.903750, Cons 0.175418, CSim 0.114512, Rank 0.688373, RDropCLS 0.676881, RDropREG 0.047108, GateReg 0.122637) | LR: 1.219512e-04
+2025-09-21 09:45:51,409 [INFO] Train step 150/274 - Loss: 0.300508 (wMSE 0.117973, SoftCE 0.374832, Corr 0.867681, Cons 0.152516, CSim 0.098954, Rank 0.683697, RDropCLS 0.529922, RDropREG 0.040008, GateReg 0.115451) | LR: 1.829268e-04
+2025-09-21 09:46:10,182 [INFO] Train step 200/274 - Loss: 0.285930 (wMSE 0.111915, SoftCE 0.356679, Corr 0.831359, Cons 0.139183, CSim 0.091118, Rank 0.679649, RDropCLS 0.432524, RDropREG 0.034458, GateReg 0.109533) | LR: 1.997082e-04
+2025-09-21 09:46:29,288 [INFO] Train step 250/274 - Loss: 0.273338 (wMSE 0.105817, SoftCE 0.343435, Corr 0.791080, Cons 0.130491, CSim 0.085806, Rank 0.675648, RDropCLS 0.365227, RDropREG 0.029993, GateReg 0.106964) | LR: 1.983384e-04
+2025-09-21 09:46:38,332 [INFO] Epoch training completed in 105.32s with average loss 0.268418
+2025-09-21 09:46:38,334 [INFO] Evaluating with a provided state dict (e.g., EMA).
+2025-09-21 09:46:39,939 [INFO] Fold 3 - Epoch 1 - Train Loss: 0.268418 | EMA Val wMSE: 0.110394 | EMA Val SoftCE: 0.309294 | EMA Val Pearson: 0.210340
+2025-09-21 09:46:39,944 [INFO] Fold 3 - Epoch 1 - New best EMA model with Pearson 0.210340.
+2025-09-21 09:46:39,944 [INFO] Fold 3 - Epoch 2/6 started.
+2025-09-21 09:46:59,202 [INFO] Train step 50/274 - Loss: 0.204466 (wMSE 0.071055, SoftCE 0.281035, Corr 0.522800, Cons 0.091218, CSim 0.063241, Rank 0.649676, RDropCLS 0.059597, RDropREG 0.007152, GateReg 0.103530) | LR: 1.942877e-04
+2025-09-21 09:47:19,263 [INFO] Train step 100/274 - Loss: 0.199398 (wMSE 0.067749, SoftCE 0.278388, Corr 0.497091, Cons 0.088833, CSim 0.062482, Rank 0.643820, RDropCLS 0.057713, RDropREG 0.006672, GateReg 0.107905) | LR: 1.902280e-04
+2025-09-21 09:47:52,135 [INFO] Train step 150/274 - Loss: 0.197062 (wMSE 0.066377, SoftCE 0.276252, Corr 0.488943, Cons 0.082883, CSim 0.061997, Rank 0.642143, RDropCLS 0.053905, RDropREG 0.006327, GateReg 0.111537) | LR: 1.851529e-04
+2025-09-21 09:48:25,150 [INFO] Train step 200/274 - Loss: 0.194486 (wMSE 0.064853, SoftCE 0.274349, Corr 0.477611, Cons 0.079501, CSim 0.061353, Rank 0.639304, RDropCLS 0.052171, RDropREG 0.006199, GateReg 0.114963) | LR: 1.791195e-04
+2025-09-21 09:48:58,165 [INFO] Train step 250/274 - Loss: 0.191832 (wMSE 0.063421, SoftCE 0.272423, Corr 0.464763, Cons 0.075055, CSim 0.060865, Rank 0.636511, RDropCLS 0.050994, RDropREG 0.006233, GateReg 0.118136) | LR: 1.721956e-04
+2025-09-21 09:49:14,000 [INFO] Epoch training completed in 154.05s with average loss 0.191082
+2025-09-21 09:49:14,002 [INFO] Evaluating with a provided state dict (e.g., EMA).
+2025-09-21 09:49:16,550 [INFO] Fold 3 - Epoch 2 - Train Loss: 0.191082 | EMA Val wMSE: 0.081855 | EMA Val SoftCE: 0.285457 | EMA Val Pearson: 0.434736
+2025-09-21 09:49:16,557 [INFO] Fold 3 - Epoch 2 - New best EMA model with Pearson 0.434736.
+2025-09-21 09:49:16,557 [INFO] Fold 3 - Epoch 3/6 started.
+2025-09-21 09:49:49,982 [INFO] Train step 50/274 - Loss: 0.170808 (wMSE 0.051935, SoftCE 0.258096, Corr 0.360871, Cons 0.050321, CSim 0.053851, Rank 0.611632, RDropCLS 0.047037, RDropREG 0.006466, GateReg 0.131773) | LR: 1.604825e-04
+2025-09-21 09:50:23,085 [INFO] Train step 100/274 - Loss: 0.169796 (wMSE 0.051019, SoftCE 0.258580, Corr 0.352588, Cons 0.051549, CSim 0.053981, Rank 0.612033, RDropCLS 0.045140, RDropREG 0.006135, GateReg 0.131654) | LR: 1.517058e-04
+2025-09-21 09:50:56,177 [INFO] Train step 150/274 - Loss: 0.168413 (wMSE 0.050216, SoftCE 0.257656, Corr 0.346042, Cons 0.051410, CSim 0.053933, Rank 0.609347, RDropCLS 0.045030, RDropREG 0.006059, GateReg 0.132105) | LR: 1.423473e-04
+2025-09-21 09:51:29,265 [INFO] Train step 200/274 - Loss: 0.167506 (wMSE 0.049676, SoftCE 0.256446, Corr 0.343838, Cons 0.050719, CSim 0.053557, Rank 0.608544, RDropCLS 0.045159, RDropREG 0.006025, GateReg 0.132080) | LR: 1.325122e-04
+2025-09-21 09:52:02,451 [INFO] Train step 250/274 - Loss: 0.166931 (wMSE 0.049308, SoftCE 0.255925, Corr 0.341842, Cons 0.050281, CSim 0.053270, Rank 0.608160, RDropCLS 0.044425, RDropREG 0.005979, GateReg 0.132343) | LR: 1.223112e-04
+2025-09-21 09:52:18,770 [INFO] Epoch training completed in 182.21s with average loss 0.166569
+2025-09-21 09:52:18,771 [INFO] Evaluating with a provided state dict (e.g., EMA).
+2025-09-21 09:52:21,320 [INFO] Fold 3 - Epoch 3 - Train Loss: 0.166569 | EMA Val wMSE: 0.067338 | EMA Val SoftCE: 0.273658 | EMA Val Pearson: 0.538640
+2025-09-21 09:52:21,326 [INFO] Fold 3 - Epoch 3 - New best EMA model with Pearson 0.538640.
+2025-09-21 09:52:21,326 [INFO] Fold 3 - Epoch 4/6 started.
+2025-09-21 09:52:55,737 [INFO] Train step 50/274 - Loss: 0.154785 (wMSE 0.042070, SoftCE 0.248566, Corr 0.282646, Cons 0.041194, CSim 0.049074, Rank 0.590063, RDropCLS 0.046831, RDropREG 0.006852, GateReg 0.135885) | LR: 1.067874e-04
+2025-09-21 09:53:29,105 [INFO] Train step 100/274 - Loss: 0.154211 (wMSE 0.041620, SoftCE 0.247351, Corr 0.282053, Cons 0.040001, CSim 0.048679, Rank 0.593337, RDropCLS 0.045303, RDropREG 0.006666, GateReg 0.135317) | LR: 9.618007e-05
+2025-09-21 09:54:02,196 [INFO] Train step 150/274 - Loss: 0.153962 (wMSE 0.041595, SoftCE 0.246602, Corr 0.282384, Cons 0.039384, CSim 0.048453, Rank 0.592902, RDropCLS 0.045783, RDropREG 0.006559, GateReg 0.135259) | LR: 8.561573e-05
+2025-09-21 09:54:35,184 [INFO] Train step 200/274 - Loss: 0.153310 (wMSE 0.041066, SoftCE 0.246336, Corr 0.279528, Cons 0.038745, CSim 0.048015, Rank 0.592509, RDropCLS 0.045899, RDropREG 0.006455, GateReg 0.135338) | LR: 7.521326e-05
+2025-09-21 09:55:08,182 [INFO] Train step 250/274 - Loss: 0.152661 (wMSE 0.040770, SoftCE 0.245516, Corr 0.277052, Cons 0.038731, CSim 0.047829, Rank 0.591618, RDropCLS 0.046435, RDropREG 0.006395, GateReg 0.135763) | LR: 6.508975e-05
+2025-09-21 09:55:24,037 [INFO] Epoch training completed in 182.71s with average loss 0.152479
+2025-09-21 09:55:24,039 [INFO] Evaluating with a provided state dict (e.g., EMA).
+2025-09-21 09:55:26,600 [INFO] Fold 3 - Epoch 4 - Train Loss: 0.152479 | EMA Val wMSE: 0.060096 | EMA Val SoftCE: 0.264347 | EMA Val Pearson: 0.579959
+2025-09-21 09:55:26,606 [INFO] Fold 3 - Epoch 4 - New best EMA model with Pearson 0.579959.
+2025-09-21 09:55:26,606 [INFO] Fold 3 - Epoch 5/6 started.
+2025-09-21 09:56:00,006 [INFO] Train step 50/274 - Loss: 0.146861 (wMSE 0.037099, SoftCE 0.243136, Corr 0.245126, Cons 0.035111, CSim 0.046027, Rank 0.583858, RDropCLS 0.047790, RDropREG 0.006462, GateReg 0.137797) | LR: 5.086032e-05
+2025-09-21 09:56:33,038 [INFO] Train step 100/274 - Loss: 0.145824 (wMSE 0.036601, SoftCE 0.241088, Corr 0.243364, Cons 0.034946, CSim 0.045641, Rank 0.584098, RDropCLS 0.047976, RDropREG 0.006317, GateReg 0.137852) | LR: 4.191050e-05
+2025-09-21 09:57:06,066 [INFO] Train step 150/274 - Loss: 0.145761 (wMSE 0.036470, SoftCE 0.241272, Corr 0.242980, Cons 0.035267, CSim 0.045716, Rank 0.583577, RDropCLS 0.048110, RDropREG 0.006298, GateReg 0.137360) | LR: 3.361443e-05
+2025-09-21 09:57:39,098 [INFO] Train step 200/274 - Loss: 0.145310 (wMSE 0.036158, SoftCE 0.240729, Corr 0.242213, Cons 0.035093, CSim 0.045234, Rank 0.583021, RDropCLS 0.048223, RDropREG 0.006304, GateReg 0.137038) | LR: 2.606547e-05
+2025-09-21 09:58:12,134 [INFO] Train step 250/274 - Loss: 0.144924 (wMSE 0.035946, SoftCE 0.240206, Corr 0.241057, Cons 0.034771, CSim 0.045032, Rank 0.582871, RDropCLS 0.048424, RDropREG 0.006381, GateReg 0.136866) | LR: 1.934857e-05
+2025-09-21 09:58:27,964 [INFO] Epoch training completed in 181.36s with average loss 0.144721
+2025-09-21 09:58:27,966 [INFO] Evaluating with a provided state dict (e.g., EMA).
+2025-09-21 09:58:30,494 [INFO] Fold 3 - Epoch 5 - Train Loss: 0.144721 | EMA Val wMSE: 0.058620 | EMA Val SoftCE: 0.260462 | EMA Val Pearson: 0.596535
+2025-09-21 09:58:30,500 [INFO] Fold 3 - Epoch 5 - New best EMA model with Pearson 0.596535.
+2025-09-21 09:58:30,500 [INFO] Fold 3 - Epoch 6/6 started.
+2025-09-21 09:59:03,896 [INFO] Train step 50/274 - Loss: 0.141431 (wMSE 0.033670, SoftCE 0.238161, Corr 0.225169, Cons 0.032995, CSim 0.042581, Rank 0.578451, RDropCLS 0.049514, RDropREG 0.006645, GateReg 0.136476) | LR: 1.109289e-05
+2025-09-21 09:59:36,929 [INFO] Train step 100/274 - Loss: 0.141126 (wMSE 0.033493, SoftCE 0.237179, Corr 0.224967, Cons 0.033485, CSim 0.043438, Rank 0.579437, RDropCLS 0.049414, RDropREG 0.006664, GateReg 0.137120) | LR: 6.743759e-06
+2025-09-21 10:00:09,935 [INFO] Train step 150/274 - Loss: 0.141121 (wMSE 0.033613, SoftCE 0.236853, Corr 0.225354, Cons 0.033650, CSim 0.043571, Rank 0.579194, RDropCLS 0.049403, RDropREG 0.006652, GateReg 0.136719) | LR: 3.444140e-06
+2025-09-21 10:00:42,892 [INFO] Train step 200/274 - Loss: 0.141604 (wMSE 0.033860, SoftCE 0.237699, Corr 0.226385, Cons 0.033543, CSim 0.043752, Rank 0.579277, RDropCLS 0.049403, RDropREG 0.006638, GateReg 0.136647) | LR: 1.231166e-06
+2025-09-21 10:01:15,880 [INFO] Train step 250/274 - Loss: 0.141267 (wMSE 0.033662, SoftCE 0.237292, Corr 0.225716, Cons 0.033570, CSim 0.043555, Rank 0.578469, RDropCLS 0.049300, RDropREG 0.006640, GateReg 0.136528) | LR: 1.297403e-07
+2025-09-21 10:01:31,737 [INFO] Epoch training completed in 181.24s with average loss 0.141396
+2025-09-21 10:01:31,740 [INFO] Evaluating with a provided state dict (e.g., EMA).
+2025-09-21 10:01:34,278 [INFO] Fold 3 - Epoch 6 - Train Loss: 0.141396 | EMA Val wMSE: 0.059602 | EMA Val SoftCE: 0.259928 | EMA Val Pearson: 0.602333
+2025-09-21 10:01:34,284 [INFO] Fold 3 - Epoch 6 - New best EMA model with Pearson 0.602333.
+2025-09-21 10:01:34,578 [INFO] Generating validation predictions with MC-Dropout TTA and Swap TTA
+2025-09-21 10:01:35,971 [INFO] Running MC-Dropout prediction with 4 samples.
+2025-09-21 10:01:44,039 [INFO] Running MC-Dropout prediction with 4 samples.
+2025-09-21 10:01:50,614 [INFO] Fold 3 - Final Val Pearson (with MC-Dropout TTA + swap): 0.613615 | Final Val MSE: 0.043214
+2025-09-21 10:01:50,614 [INFO] Generating test predictions with MC-Dropout TTA and Swap TTA
+2025-09-21 10:01:51,531 [INFO] Running MC-Dropout prediction with 6 samples.
+2025-09-21 10:01:58,804 [INFO] Running MC-Dropout prediction with 6 samples.
+2025-09-21 10:02:05,174 [INFO] ========== Fold 5/5 ==========
+2025-09-21 10:02:05,234 [INFO] Applied swap augmentation. New train size: 52526
+2025-09-21 10:02:05,247 [INFO] Prepared swapped TTA arrays for validation data.
+2025-09-21 10:02:05,247 [INFO] Train split: 52526 samples; Val split: 6562 samples.
+2025-09-21 10:02:05,247 [INFO] Initializing PatentDataset with 52526 samples.
+2025-09-21 10:02:05,247 [INFO] Initializing PatentDataset with 6562 samples.
+2025-09-21 10:02:05,247 [INFO] Initializing PatentDataset with 6562 samples.
+2025-09-21 10:02:05,249 [INFO] Initializing TransformerRegressor++ with vocab_size=9042, embed_dim=256, heads=8, layers=6, max_len=64, ctxs=106, feat_dim=14, msd=5
+2025-09-21 10:02:05,612 [INFO] Creating Warmup+Cosine scheduler: warmup_steps=164, total_steps=1644.
+2025-09-21 10:02:05,612 [INFO] Initializing EMA state from current model weights.
+2025-09-21 10:02:06,033 [INFO] Fold 4 - Epoch 1/6 started.
+2025-09-21 10:02:39,434 [INFO] Train step 50/274 - Loss: 0.363915 (wMSE 0.141158, SoftCE 0.480416, Corr 0.974453, Cons 0.154902, CSim 0.155982, Rank 0.697707, RDropCLS 0.804516, RDropREG 0.073435, GateReg 0.318080) | LR: 6.097561e-05
+2025-09-21 10:03:12,488 [INFO] Train step 100/274 - Loss: 0.328002 (wMSE 0.125792, SoftCE 0.420950, Corr 0.932508, Cons 0.128368, CSim 0.119982, Rank 0.693260, RDropCLS 0.637146, RDropREG 0.064456, GateReg 0.262793) | LR: 1.219512e-04
+2025-09-21 10:03:45,569 [INFO] Train step 150/274 - Loss: 0.308635 (wMSE 0.118502, SoftCE 0.390927, Corr 0.902326, Cons 0.117241, CSim 0.103665, Rank 0.689575, RDropCLS 0.514342, RDropREG 0.052708, GateReg 0.234764) | LR: 1.829268e-04
+2025-09-21 10:04:18,683 [INFO] Train step 200/274 - Loss: 0.294264 (wMSE 0.113066, SoftCE 0.369876, Corr 0.874904, Cons 0.109386, CSim 0.094454, Rank 0.686303, RDropCLS 0.420263, RDropREG 0.044114, GateReg 0.210040) | LR: 1.997082e-04
+2025-09-21 10:04:51,700 [INFO] Train step 250/274 - Loss: 0.281781 (wMSE 0.107580, SoftCE 0.355210, Corr 0.837635, Cons 0.105993, CSim 0.088810, Rank 0.682255, RDropCLS 0.352476, RDropREG 0.037689, GateReg 0.187645) | LR: 1.983384e-04
+2025-09-21 10:05:07,604 [INFO] Epoch training completed in 181.57s with average loss 0.276657
+2025-09-21 10:05:07,606 [INFO] Evaluating with a provided state dict (e.g., EMA).
+2025-09-21 10:05:10,128 [INFO] Fold 4 - Epoch 1 - Train Loss: 0.276657 | EMA Val wMSE: 0.092642 | EMA Val SoftCE: 0.317721 | EMA Val Pearson: 0.222247
+2025-09-21 10:05:10,134 [INFO] Fold 4 - Epoch 1 - New best EMA model with Pearson 0.222247.
+2025-09-21 10:05:10,134 [INFO] Fold 4 - Epoch 2/6 started.
+2025-09-21 10:05:43,631 [INFO] Train step 50/274 - Loss: 0.210368 (wMSE 0.074049, SoftCE 0.285877, Corr 0.555360, Cons 0.092186, CSim 0.063741, Rank 0.654151, RDropCLS 0.054565, RDropREG 0.007059, GateReg 0.109788) | LR: 1.942877e-04
+2025-09-21 10:06:16,679 [INFO] Train step 100/274 - Loss: 0.205665 (wMSE 0.071364, SoftCE 0.282789, Corr 0.532137, Cons 0.086838, CSim 0.062782, Rank 0.649852, RDropCLS 0.050641, RDropREG 0.006563, GateReg 0.112060) | LR: 1.902280e-04
+2025-09-21 10:06:49,733 [INFO] Train step 150/274 - Loss: 0.202089 (wMSE 0.069147, SoftCE 0.280570, Corr 0.514402, Cons 0.083427, CSim 0.062125, Rank 0.646779, RDropCLS 0.049359, RDropREG 0.006528, GateReg 0.113687) | LR: 1.851529e-04
+2025-09-21 10:07:22,733 [INFO] Train step 200/274 - Loss: 0.198235 (wMSE 0.066759, SoftCE 0.278166, Corr 0.495305, Cons 0.080708, CSim 0.061468, Rank 0.642638, RDropCLS 0.048992, RDropREG 0.006420, GateReg 0.115856) | LR: 1.791195e-04
+2025-09-21 10:07:55,731 [INFO] Train step 250/274 - Loss: 0.195570 (wMSE 0.065292, SoftCE 0.276323, Corr 0.481456, Cons 0.077661, CSim 0.060908, Rank 0.640394, RDropCLS 0.048716, RDropREG 0.006335, GateReg 0.118027) | LR: 1.721956e-04
+2025-09-21 10:08:11,575 [INFO] Epoch training completed in 181.44s with average loss 0.194444
+2025-09-21 10:08:11,577 [INFO] Evaluating with a provided state dict (e.g., EMA).
+2025-09-21 10:08:14,092 [INFO] Fold 4 - Epoch 2 - Train Loss: 0.194444 | EMA Val wMSE: 0.077995 | EMA Val SoftCE: 0.286802 | EMA Val Pearson: 0.438595
+2025-09-21 10:08:14,098 [INFO] Fold 4 - Epoch 2 - New best EMA model with Pearson 0.438595.
+2025-09-21 10:08:14,098 [INFO] Fold 4 - Epoch 3/6 started.
+2025-09-21 10:08:47,504 [INFO] Train step 50/274 - Loss: 0.170419 (wMSE 0.051439, SoftCE 0.261089, Corr 0.345829, Cons 0.058815, CSim 0.054613, Rank 0.610198, RDropCLS 0.050371, RDropREG 0.006627, GateReg 0.128819) | LR: 1.604825e-04
+2025-09-21 10:09:20,532 [INFO] Train step 100/274 - Loss: 0.169113 (wMSE 0.050074, SoftCE 0.259436, Corr 0.345922, Cons 0.056103, CSim 0.054012, Rank 0.610968, RDropCLS 0.048878, RDropREG 0.006611, GateReg 0.130578) | LR: 1.517058e-04
+2025-09-21 10:09:53,581 [INFO] Train step 150/274 - Loss: 0.169076 (wMSE 0.050100, SoftCE 0.259116, Corr 0.346906, Cons 0.054233, CSim 0.053505, Rank 0.611470, RDropCLS 0.048748, RDropREG 0.006589, GateReg 0.131834) | LR: 1.423473e-04
+2025-09-21 10:10:26,567 [INFO] Train step 200/274 - Loss: 0.167800 (wMSE 0.049368, SoftCE 0.257651, Corr 0.343306, Cons 0.052146, CSim 0.052773, Rank 0.610097, RDropCLS 0.048526, RDropREG 0.006548, GateReg 0.133054) | LR: 1.325122e-04
+2025-09-21 10:10:59,937 [INFO] Train step 250/274 - Loss: 0.166869 (wMSE 0.048921, SoftCE 0.256981, Corr 0.338507, Cons 0.051555, CSim 0.052708, Rank 0.608144, RDropCLS 0.048899, RDropREG 0.006564, GateReg 0.134032) | LR: 1.223112e-04
+2025-09-21 10:11:15,824 [INFO] Epoch training completed in 181.72s with average loss 0.166367
+2025-09-21 10:11:15,825 [INFO] Evaluating with a provided state dict (e.g., EMA).
+2025-09-21 10:11:18,351 [INFO] Fold 4 - Epoch 3 - Train Loss: 0.166367 | EMA Val wMSE: 0.064899 | EMA Val SoftCE: 0.273730 | EMA Val Pearson: 0.559009
+2025-09-21 10:11:18,356 [INFO] Fold 4 - Epoch 3 - New best EMA model with Pearson 0.559009.
+2025-09-21 10:11:18,356 [INFO] Fold 4 - Epoch 4/6 started.
+2025-09-21 10:11:51,741 [INFO] Train step 50/274 - Loss: 0.151326 (wMSE 0.039802, SoftCE 0.245917, Corr 0.264073, Cons 0.043443, CSim 0.047626, Rank 0.590242, RDropCLS 0.050429, RDropREG 0.006656, GateReg 0.139383) | LR: 1.067874e-04
+2025-09-21 10:12:24,777 [INFO] Train step 100/274 - Loss: 0.150535 (wMSE 0.039246, SoftCE 0.243677, Corr 0.266895, Cons 0.040059, CSim 0.047028, Rank 0.590595, RDropCLS 0.052504, RDropREG 0.006823, GateReg 0.138826) | LR: 9.618007e-05
+2025-09-21 10:12:57,786 [INFO] Train step 150/274 - Loss: 0.151065 (wMSE 0.039645, SoftCE 0.244318, Corr 0.268338, Cons 0.039370, CSim 0.047278, Rank 0.590812, RDropCLS 0.052159, RDropREG 0.006855, GateReg 0.138786) | LR: 8.561573e-05
+2025-09-21 10:13:30,805 [INFO] Train step 200/274 - Loss: 0.150846 (wMSE 0.039418, SoftCE 0.244518, Corr 0.267137, Cons 0.038996, CSim 0.047011, Rank 0.590100, RDropCLS 0.052029, RDropREG 0.006905, GateReg 0.139024) | LR: 7.521326e-05
+2025-09-21 10:14:03,864 [INFO] Train step 250/274 - Loss: 0.150956 (wMSE 0.039467, SoftCE 0.244716, Corr 0.267586, Cons 0.038630, CSim 0.046963, Rank 0.589977, RDropCLS 0.052205, RDropREG 0.006912, GateReg 0.138916) | LR: 6.508975e-05
+2025-09-21 10:14:19,723 [INFO] Epoch training completed in 181.37s with average loss 0.150887
+2025-09-21 10:14:19,725 [INFO] Evaluating with a provided state dict (e.g., EMA).
+2025-09-21 10:14:22,246 [INFO] Fold 4 - Epoch 4 - Train Loss: 0.150887 | EMA Val wMSE: 0.057996 | EMA Val SoftCE: 0.262881 | EMA Val Pearson: 0.601857
+2025-09-21 10:14:22,251 [INFO] Fold 4 - Epoch 4 - New best EMA model with Pearson 0.601857.
+2025-09-21 10:14:22,252 [INFO] Fold 4 - Epoch 5/6 started.
+2025-09-21 10:14:55,620 [INFO] Train step 50/274 - Loss: 0.143767 (wMSE 0.035299, SoftCE 0.239609, Corr 0.234387, Cons 0.033033, CSim 0.044139, Rank 0.580201, RDropCLS 0.053623, RDropREG 0.007058, GateReg 0.139721) | LR: 5.086032e-05
+2025-09-21 10:15:28,771 [INFO] Train step 100/274 - Loss: 0.144269 (wMSE 0.035378, SoftCE 0.240351, Corr 0.235993, Cons 0.034210, CSim 0.044622, Rank 0.581415, RDropCLS 0.053713, RDropREG 0.006969, GateReg 0.139218) | LR: 4.191050e-05
+2025-09-21 10:16:01,829 [INFO] Train step 150/274 - Loss: 0.143966 (wMSE 0.035271, SoftCE 0.239899, Corr 0.235299, Cons 0.033365, CSim 0.044071, Rank 0.581112, RDropCLS 0.053959, RDropREG 0.007127, GateReg 0.139386) | LR: 3.361443e-05
+2025-09-21 10:16:34,803 [INFO] Train step 200/274 - Loss: 0.143729 (wMSE 0.035056, SoftCE 0.239195, Corr 0.236448, Cons 0.032863, CSim 0.043816, Rank 0.581633, RDropCLS 0.053846, RDropREG 0.007051, GateReg 0.139310) | LR: 2.606547e-05
+2025-09-21 10:17:07,859 [INFO] Train step 250/274 - Loss: 0.143126 (wMSE 0.034796, SoftCE 0.238497, Corr 0.233216, Cons 0.033096, CSim 0.044012, Rank 0.581259, RDropCLS 0.054392, RDropREG 0.007115, GateReg 0.139372) | LR: 1.934857e-05
+2025-09-21 10:17:23,767 [INFO] Epoch training completed in 181.51s with average loss 0.143117
+2025-09-21 10:17:23,768 [INFO] Evaluating with a provided state dict (e.g., EMA).
+2025-09-21 10:17:26,308 [INFO] Fold 4 - Epoch 5 - Train Loss: 0.143117 | EMA Val wMSE: 0.057982 | EMA Val SoftCE: 0.258007 | EMA Val Pearson: 0.613106
+2025-09-21 10:17:26,314 [INFO] Fold 4 - Epoch 5 - New best EMA model with Pearson 0.613106.
+2025-09-21 10:17:26,314 [INFO] Fold 4 - Epoch 6/6 started.
+2025-09-21 10:17:59,642 [INFO] Train step 50/274 - Loss: 0.137793 (wMSE 0.031369, SoftCE 0.234510, Corr 0.209475, Cons 0.031784, CSim 0.042116, Rank 0.576437, RDropCLS 0.055373, RDropREG 0.007052, GateReg 0.137636) | LR: 1.109289e-05
+2025-09-21 10:18:32,701 [INFO] Train step 100/274 - Loss: 0.138724 (wMSE 0.032174, SoftCE 0.235228, Corr 0.213145, Cons 0.031672, CSim 0.042458, Rank 0.575522, RDropCLS 0.055524, RDropREG 0.007177, GateReg 0.138780) | LR: 6.743759e-06
+2025-09-21 10:19:05,734 [INFO] Train step 150/274 - Loss: 0.139143 (wMSE 0.032358, SoftCE 0.235427, Corr 0.216014, Cons 0.031452, CSim 0.042383, Rank 0.576385, RDropCLS 0.055193, RDropREG 0.007199, GateReg 0.138714) | LR: 3.444140e-06
+2025-09-21 10:19:38,774 [INFO] Train step 200/274 - Loss: 0.139357 (wMSE 0.032455, SoftCE 0.235942, Corr 0.216287, Cons 0.031220, CSim 0.042551, Rank 0.576051, RDropCLS 0.054965, RDropREG 0.007203, GateReg 0.139002) | LR: 1.231166e-06
+2025-09-21 10:20:11,828 [INFO] Train step 250/274 - Loss: 0.139345 (wMSE 0.032376, SoftCE 0.236139, Corr 0.215656, Cons 0.031196, CSim 0.042664, Rank 0.576465, RDropCLS 0.054871, RDropREG 0.007190, GateReg 0.138916) | LR: 1.297403e-07
+2025-09-21 10:20:27,684 [INFO] Epoch training completed in 181.37s with average loss 0.139232
+2025-09-21 10:20:27,685 [INFO] Evaluating with a provided state dict (e.g., EMA).
+2025-09-21 10:20:30,212 [INFO] Fold 4 - Epoch 6 - Train Loss: 0.139232 | EMA Val wMSE: 0.060394 | EMA Val SoftCE: 0.257082 | EMA Val Pearson: 0.614387
+2025-09-21 10:20:30,223 [INFO] Fold 4 - Epoch 6 - New best EMA model with Pearson 0.614387.
+2025-09-21 10:20:30,516 [INFO] Generating validation predictions with MC-Dropout TTA and Swap TTA
+2025-09-21 10:20:31,945 [INFO] Running MC-Dropout prediction with 4 samples.
+2025-09-21 10:20:39,961 [INFO] Running MC-Dropout prediction with 4 samples.
+2025-09-21 10:20:46,767 [INFO] Fold 4 - Final Val Pearson (with MC-Dropout TTA + swap): 0.626484 | Final Val MSE: 0.042241
+2025-09-21 10:20:46,767 [INFO] Generating test predictions with MC-Dropout TTA and Swap TTA
+2025-09-21 10:20:47,693 [INFO] Running MC-Dropout prediction with 6 samples.
+2025-09-21 10:20:54,955 [INFO] Running MC-Dropout prediction with 6 samples.
+2025-09-21 10:21:01,284 [INFO] OOF Pearson correlation across all folds (pre-rule, pre-calibration): 0.622500
+2025-09-21 10:21:01,285 [INFO] OOF MSE across all folds (pre-rule, pre-calibration): 0.042563
+2025-09-21 10:21:01,285 [INFO] Ensembling test predictions from all folds by averaging.
+2025-09-21 10:21:01,285 [INFO] Applying rule-based post-processing for anchor == target -> score = 1.0
+2025-09-21 10:21:01,286 [INFO] Found 24 exact anchor==target pairs in test set.
+2025-09-21 10:21:01,288 [INFO] Found 255 exact anchor==target pairs in train (OOF) set; applying same rule to OOF predictions.
+2025-09-21 10:21:01,289 [INFO] OOF Pearson after rule (pre-calibration): 0.623430
+2025-09-21 10:21:01,289 [INFO] OOF MSE after rule (pre-calibration): 0.042547
+2025-09-21 10:21:01,289 [INFO] Fitting CPC-specific isotonic calibrators on OOF predictions.
+2025-09-21 10:21:01,289 [INFO] Fitting CPC isotonic for context id 0 (A01) with 566 OOF samples.
+2025-09-21 10:21:01,289 [INFO] Fitting isotonic regression (PAV) on 566 points.
+2025-09-21 10:21:01,290 [INFO] PAV produced 25 blocks.
+2025-09-21 10:21:01,290 [INFO] Fitting CPC isotonic for context id 1 (A21) with 78 OOF samples.
+2025-09-21 10:21:01,290 [INFO] Fitting isotonic regression (PAV) on 78 points.
+2025-09-21 10:21:01,290 [INFO] PAV produced 21 blocks.
+2025-09-21 10:21:01,290 [INFO] Fitting CPC isotonic for context id 2 (A22) with 66 OOF samples.
+2025-09-21 10:21:01,290 [INFO] Fitting isotonic regression (PAV) on 66 points.
+2025-09-21 10:21:01,291 [INFO] PAV produced 26 blocks.
+2025-09-21 10:21:01,291 [INFO] Fitting CPC isotonic for context id 3 (A23) with 91 OOF samples.
+2025-09-21 10:21:01,291 [INFO] Fitting isotonic regression (PAV) on 91 points.
+2025-09-21 10:21:01,291 [INFO] PAV produced 15 blocks.
+2025-09-21 10:21:01,291 [INFO] Fitting CPC isotonic for context id 4 (A24) with 64 OOF samples.
+2025-09-21 10:21:01,291 [INFO] Fitting isotonic regression (PAV) on 64 points.
+2025-09-21 10:21:01,291 [INFO] PAV produced 12 blocks.
+2025-09-21 10:21:01,291 [INFO] Fitting CPC isotonic for context id 5 (A41) with 153 OOF samples.
+2025-09-21 10:21:01,291 [INFO] Fitting isotonic regression (PAV) on 153 points.
+2025-09-21 10:21:01,291 [INFO] PAV produced 46 blocks.
+2025-09-21 10:21:01,291 [INFO] Fitting CPC isotonic for context id 6 (A43) with 186 OOF samples.
+2025-09-21 10:21:01,291 [INFO] Fitting isotonic regression (PAV) on 186 points.
+2025-09-21 10:21:01,292 [INFO] PAV produced 16 blocks.
+2025-09-21 10:21:01,292 [INFO] Fitting CPC isotonic for context id 7 (A44) with 76 OOF samples.
+2025-09-21 10:21:01,292 [INFO] Fitting isotonic regression (PAV) on 76 points.
+2025-09-21 10:21:01,292 [INFO] PAV produced 20 blocks.
+2025-09-21 10:21:01,292 [INFO] Fitting CPC isotonic for context id 8 (A45) with 101 OOF samples.
+2025-09-21 10:21:01,292 [INFO] Fitting isotonic regression (PAV) on 101 points.
+2025-09-21 10:21:01,292 [INFO] PAV produced 26 blocks.
+2025-09-21 10:21:01,292 [INFO] Fitting CPC isotonic for context id 9 (A46) with 98 OOF samples.
+2025-09-21 10:21:01,292 [INFO] Fitting isotonic regression (PAV) on 98 points.
+2025-09-21 10:21:01,293 [INFO] PAV produced 20 blocks.
+2025-09-21 10:21:01,293 [INFO] Fitting CPC isotonic for context id 10 (A47) with 385 OOF samples.
+2025-09-21 10:21:01,293 [INFO] Fitting isotonic regression (PAV) on 385 points.
+2025-09-21 10:21:01,293 [INFO] PAV produced 28 blocks.
+2025-09-21 10:21:01,293 [INFO] Fitting CPC isotonic for context id 11 (A61) with 1312 OOF samples.
+2025-09-21 10:21:01,293 [INFO] Fitting isotonic regression (PAV) on 1312 points.
+2025-09-21 10:21:01,295 [INFO] PAV produced 48 blocks.
+2025-09-21 10:21:01,295 [INFO] Fitting CPC isotonic for context id 12 (A62) with 20 OOF samples.
+2025-09-21 10:21:01,295 [INFO] Fitting isotonic regression (PAV) on 20 points.
+2025-09-21 10:21:01,295 [INFO] PAV produced 13 blocks.
+2025-09-21 10:21:01,295 [INFO] Fitting CPC isotonic for context id 13 (A63) with 475 OOF samples.
+2025-09-21 10:21:01,295 [INFO] Fitting isotonic regression (PAV) on 475 points.
+2025-09-21 10:21:01,296 [INFO] PAV produced 30 blocks.
+2025-09-21 10:21:01,296 [INFO] Fitting CPC isotonic for context id 14 (B01) with 810 OOF samples.
+2025-09-21 10:21:01,296 [INFO] Fitting isotonic regression (PAV) on 810 points.
+2025-09-21 10:21:01,297 [INFO] PAV produced 42 blocks.
+2025-09-21 10:21:01,297 [INFO] Fitting CPC isotonic for context id 15 (B02) with 56 OOF samples.
+2025-09-21 10:21:01,297 [INFO] Fitting isotonic regression (PAV) on 56 points.
+2025-09-21 10:21:01,297 [INFO] PAV produced 11 blocks.
+2025-09-21 10:21:01,297 [INFO] Fitting CPC isotonic for context id 16 (B03) with 40 OOF samples.
+2025-09-21 10:21:01,298 [INFO] Fitting isotonic regression (PAV) on 40 points.
+2025-09-21 10:21:01,298 [INFO] PAV produced 10 blocks.
+2025-09-21 10:21:01,298 [INFO] Fitting CPC isotonic for context id 17 (B05) with 268 OOF samples.
+2025-09-21 10:21:01,298 [INFO] Fitting isotonic regression (PAV) on 268 points.
+2025-09-21 10:21:01,298 [INFO] PAV produced 39 blocks.
+2025-09-21 10:21:01,298 [INFO] Fitting CPC isotonic for context id 18 (B07) with 89 OOF samples.
+2025-09-21 10:21:01,298 [INFO] Fitting isotonic regression (PAV) on 89 points.
+2025-09-21 10:21:01,298 [INFO] PAV produced 16 blocks.
+2025-09-21 10:21:01,298 [INFO] Fitting CPC isotonic for context id 19 (B08) with 58 OOF samples.
+2025-09-21 10:21:01,298 [INFO] Fitting isotonic regression (PAV) on 58 points.
+2025-09-21 10:21:01,298 [INFO] PAV produced 18 blocks.
+2025-09-21 10:21:01,299 [INFO] Fitting CPC isotonic for context id 20 (B21) with 281 OOF samples.
+2025-09-21 10:21:01,299 [INFO] Fitting isotonic regression (PAV) on 281 points.
+2025-09-21 10:21:01,299 [INFO] PAV produced 34 blocks.
+2025-09-21 10:21:01,299 [INFO] Fitting CPC isotonic for context id 21 (B22) with 314 OOF samples.
+2025-09-21 10:21:01,299 [INFO] Fitting isotonic regression (PAV) on 314 points.
+2025-09-21 10:21:01,299 [INFO] PAV produced 50 blocks.
+2025-09-21 10:21:01,300 [INFO] Fitting CPC isotonic for context id 22 (B23) with 590 OOF samples.
+2025-09-21 10:21:01,300 [INFO] Fitting isotonic regression (PAV) on 590 points.
+2025-09-21 10:21:01,300 [INFO] PAV produced 48 blocks.
+2025-09-21 10:21:01,300 [INFO] Fitting CPC isotonic for context id 23 (B24) with 200 OOF samples.
+2025-09-21 10:21:01,300 [INFO] Fitting isotonic regression (PAV) on 200 points.
+2025-09-21 10:21:01,301 [INFO] PAV produced 37 blocks.
+2025-09-21 10:21:01,301 [INFO] Fitting CPC isotonic for context id 24 (B25) with 118 OOF samples.
+2025-09-21 10:21:01,301 [INFO] Fitting isotonic regression (PAV) on 118 points.
+2025-09-21 10:21:01,301 [INFO] PAV produced 17 blocks.
+2025-09-21 10:21:01,301 [INFO] Fitting CPC isotonic for context id 25 (B27) with 135 OOF samples.
+2025-09-21 10:21:01,301 [INFO] Fitting isotonic regression (PAV) on 135 points.
+2025-09-21 10:21:01,301 [INFO] PAV produced 24 blocks.
+2025-09-21 10:21:01,301 [INFO] Fitting CPC isotonic for context id 26 (B28) with 165 OOF samples.
+2025-09-21 10:21:01,301 [INFO] Fitting isotonic regression (PAV) on 165 points.
+2025-09-21 10:21:01,302 [INFO] PAV produced 35 blocks.
+2025-09-21 10:21:01,302 [INFO] Fitting CPC isotonic for context id 27 (B29) with 532 OOF samples.
+2025-09-21 10:21:01,302 [INFO] Fitting isotonic regression (PAV) on 532 points.
+2025-09-21 10:21:01,302 [INFO] PAV produced 71 blocks.
+2025-09-21 10:21:01,303 [INFO] Fitting CPC isotonic for context id 28 (B31) with 21 OOF samples.
+2025-09-21 10:21:01,303 [INFO] Fitting isotonic regression (PAV) on 21 points.
+2025-09-21 10:21:01,303 [INFO] PAV produced 7 blocks.
+2025-09-21 10:21:01,303 [INFO] Fitting CPC isotonic for context id 29 (B32) with 122 OOF samples.
+2025-09-21 10:21:01,303 [INFO] Fitting isotonic regression (PAV) on 122 points.
+2025-09-21 10:21:01,303 [INFO] PAV produced 28 blocks.
+2025-09-21 10:21:01,303 [INFO] Fitting CPC isotonic for context id 30 (B41) with 582 OOF samples.
+2025-09-21 10:21:01,303 [INFO] Fitting isotonic regression (PAV) on 582 points.
+2025-09-21 10:21:01,304 [INFO] PAV produced 60 blocks.
+2025-09-21 10:21:01,304 [INFO] Fitting CPC isotonic for context id 31 (B44) with 89 OOF samples.
+2025-09-21 10:21:01,304 [INFO] Fitting isotonic regression (PAV) on 89 points.
+2025-09-21 10:21:01,304 [INFO] PAV produced 13 blocks.
+2025-09-21 10:21:01,304 [INFO] Fitting CPC isotonic for context id 32 (B60) with 822 OOF samples.
+2025-09-21 10:21:01,304 [INFO] Fitting isotonic regression (PAV) on 822 points.
+2025-09-21 10:21:01,305 [INFO] PAV produced 99 blocks.
+2025-09-21 10:21:01,305 [INFO] Fitting CPC isotonic for context id 33 (B61) with 265 OOF samples.
+2025-09-21 10:21:01,305 [INFO] Fitting isotonic regression (PAV) on 265 points.
+2025-09-21 10:21:01,306 [INFO] PAV produced 37 blocks.
+2025-09-21 10:21:01,306 [INFO] Fitting CPC isotonic for context id 34 (B62) with 286 OOF samples.
+2025-09-21 10:21:01,306 [INFO] Fitting isotonic regression (PAV) on 286 points.
+2025-09-21 10:21:01,306 [INFO] PAV produced 37 blocks.
+2025-09-21 10:21:01,306 [INFO] Fitting CPC isotonic for context id 35 (B63) with 156 OOF samples.
+2025-09-21 10:21:01,306 [INFO] Fitting isotonic regression (PAV) on 156 points.
+2025-09-21 10:21:01,307 [INFO] PAV produced 22 blocks.
+2025-09-21 10:21:01,307 [INFO] Fitting CPC isotonic for context id 36 (B64) with 160 OOF samples.
+2025-09-21 10:21:01,307 [INFO] Fitting isotonic regression (PAV) on 160 points.
+2025-09-21 10:21:01,307 [INFO] PAV produced 28 blocks.
+2025-09-21 10:21:01,307 [INFO] Fitting CPC isotonic for context id 37 (B65) with 686 OOF samples.
+2025-09-21 10:21:01,307 [INFO] Fitting isotonic regression (PAV) on 686 points.
+2025-09-21 10:21:01,308 [INFO] PAV produced 58 blocks.
+2025-09-21 10:21:01,308 [INFO] Fitting CPC isotonic for context id 38 (B66) with 215 OOF samples.
+2025-09-21 10:21:01,308 [INFO] Fitting isotonic regression (PAV) on 215 points.
+2025-09-21 10:21:01,308 [INFO] PAV produced 28 blocks.
+2025-09-21 10:21:01,308 [INFO] Fitting CPC isotonic for context id 39 (B67) with 98 OOF samples.
+2025-09-21 10:21:01,308 [INFO] Fitting isotonic regression (PAV) on 98 points.
+2025-09-21 10:21:01,308 [INFO] PAV produced 33 blocks.
+2025-09-21 10:21:01,309 [INFO] Fitting CPC isotonic for context id 40 (B81) with 50 OOF samples.
+2025-09-21 10:21:01,309 [INFO] Fitting isotonic regression (PAV) on 50 points.
+2025-09-21 10:21:01,309 [INFO] PAV produced 19 blocks.
+2025-09-21 10:21:01,309 [INFO] Fitting CPC isotonic for context id 41 (C01) with 318 OOF samples.
+2025-09-21 10:21:01,309 [INFO] Fitting isotonic regression (PAV) on 318 points.
+2025-09-21 10:21:01,309 [INFO] PAV produced 30 blocks.
+2025-09-21 10:21:01,309 [INFO] Fitting CPC isotonic for context id 42 (C02) with 89 OOF samples.
+2025-09-21 10:21:01,309 [INFO] Fitting isotonic regression (PAV) on 89 points.
+2025-09-21 10:21:01,309 [INFO] PAV produced 15 blocks.
+2025-09-21 10:21:01,310 [INFO] Fitting CPC isotonic for context id 43 (C03) with 144 OOF samples.
+2025-09-21 10:21:01,310 [INFO] Fitting isotonic regression (PAV) on 144 points.
+2025-09-21 10:21:01,310 [INFO] PAV produced 29 blocks.
+2025-09-21 10:21:01,310 [INFO] Fitting CPC isotonic for context id 44 (C04) with 307 OOF samples.
+2025-09-21 10:21:01,310 [INFO] Fitting isotonic regression (PAV) on 307 points.
+2025-09-21 10:21:01,310 [INFO] PAV produced 21 blocks.
+2025-09-21 10:21:01,310 [INFO] Fitting CPC isotonic for context id 45 (C06) with 54 OOF samples.
+2025-09-21 10:21:01,310 [INFO] Fitting isotonic regression (PAV) on 54 points.
+2025-09-21 10:21:01,311 [INFO] PAV produced 8 blocks.
+2025-09-21 10:21:01,311 [INFO] Fitting CPC isotonic for context id 46 (C07) with 954 OOF samples.
+2025-09-21 10:21:01,311 [INFO] Fitting isotonic regression (PAV) on 954 points.
+2025-09-21 10:21:01,312 [INFO] PAV produced 43 blocks.
+2025-09-21 10:21:01,312 [INFO] Fitting CPC isotonic for context id 47 (C08) with 592 OOF samples.
+2025-09-21 10:21:01,312 [INFO] Fitting isotonic regression (PAV) on 592 points.
+2025-09-21 10:21:01,313 [INFO] PAV produced 50 blocks.
+2025-09-21 10:21:01,313 [INFO] Fitting CPC isotonic for context id 48 (C09) with 511 OOF samples.
+2025-09-21 10:21:01,313 [INFO] Fitting isotonic regression (PAV) on 511 points.
+2025-09-21 10:21:01,314 [INFO] PAV produced 22 blocks.
+2025-09-21 10:21:01,314 [INFO] Fitting CPC isotonic for context id 49 (C10) with 542 OOF samples.
+2025-09-21 10:21:01,314 [INFO] Fitting isotonic regression (PAV) on 542 points.
+2025-09-21 10:21:01,314 [INFO] PAV produced 37 blocks.
+2025-09-21 10:21:01,314 [INFO] Fitting CPC isotonic for context id 50 (C11) with 153 OOF samples.
+2025-09-21 10:21:01,315 [INFO] Fitting isotonic regression (PAV) on 153 points.
+2025-09-21 10:21:01,315 [INFO] PAV produced 23 blocks.
+2025-09-21 10:21:01,315 [INFO] Fitting CPC isotonic for context id 51 (C12) with 580 OOF samples.
+2025-09-21 10:21:01,315 [INFO] Fitting isotonic regression (PAV) on 580 points.
+2025-09-21 10:21:01,316 [INFO] PAV produced 27 blocks.
+2025-09-21 10:21:01,316 [INFO] Fitting CPC isotonic for context id 52 (C13) with 90 OOF samples.
+2025-09-21 10:21:01,316 [INFO] Fitting isotonic regression (PAV) on 90 points.
+2025-09-21 10:21:01,316 [INFO] PAV produced 5 blocks.
+2025-09-21 10:21:01,316 [INFO] Fitting CPC isotonic for context id 53 (C14) with 46 OOF samples.
+2025-09-21 10:21:01,316 [INFO] Fitting isotonic regression (PAV) on 46 points.
+2025-09-21 10:21:01,316 [INFO] PAV produced 15 blocks.
+2025-09-21 10:21:01,316 [INFO] Fitting CPC isotonic for context id 54 (C21) with 70 OOF samples.
+2025-09-21 10:21:01,316 [INFO] Fitting isotonic regression (PAV) on 70 points.
+2025-09-21 10:21:01,316 [INFO] PAV produced 13 blocks.
+2025-09-21 10:21:01,316 [INFO] Fitting CPC isotonic for context id 55 (C22) with 101 OOF samples.
+2025-09-21 10:21:01,316 [INFO] Fitting isotonic regression (PAV) on 101 points.
+2025-09-21 10:21:01,317 [INFO] PAV produced 19 blocks.
+2025-09-21 10:21:01,317 [INFO] Fitting CPC isotonic for context id 56 (C23) with 137 OOF samples.
+2025-09-21 10:21:01,317 [INFO] Fitting isotonic regression (PAV) on 137 points.
+2025-09-21 10:21:01,317 [INFO] PAV produced 17 blocks.
+2025-09-21 10:21:01,317 [INFO] Fitting CPC isotonic for context id 57 (C25) with 82 OOF samples.
+2025-09-21 10:21:01,317 [INFO] Fitting isotonic regression (PAV) on 82 points.
+2025-09-21 10:21:01,317 [INFO] PAV produced 19 blocks.
+2025-09-21 10:21:01,317 [INFO] Fitting CPC isotonic for context id 58 (D01) with 308 OOF samples.
+2025-09-21 10:21:01,317 [INFO] Fitting isotonic regression (PAV) on 308 points.
+2025-09-21 10:21:01,318 [INFO] PAV produced 33 blocks.
+2025-09-21 10:21:01,318 [INFO] Fitting CPC isotonic for context id 59 (D03) with 187 OOF samples.
+2025-09-21 10:21:01,318 [INFO] Fitting isotonic regression (PAV) on 187 points.
+2025-09-21 10:21:01,318 [INFO] PAV produced 18 blocks.
+2025-09-21 10:21:01,318 [INFO] Fitting CPC isotonic for context id 60 (D04) with 97 OOF samples.
+2025-09-21 10:21:01,318 [INFO] Fitting isotonic regression (PAV) on 97 points.
+2025-09-21 10:21:01,318 [INFO] PAV produced 12 blocks.
+2025-09-21 10:21:01,318 [INFO] Fitting CPC isotonic for context id 61 (D05) with 72 OOF samples.
+2025-09-21 10:21:01,318 [INFO] Fitting isotonic regression (PAV) on 72 points.
+2025-09-21 10:21:01,318 [INFO] PAV produced 15 blocks.
+2025-09-21 10:21:01,318 [INFO] Fitting CPC isotonic for context id 62 (D06) with 224 OOF samples.
+2025-09-21 10:21:01,319 [INFO] Fitting isotonic regression (PAV) on 224 points.
+2025-09-21 10:21:01,319 [INFO] PAV produced 17 blocks.
+2025-09-21 10:21:01,319 [INFO] Fitting CPC isotonic for context id 63 (D21) with 269 OOF samples.
+2025-09-21 10:21:01,319 [INFO] Fitting isotonic regression (PAV) on 269 points.
+2025-09-21 10:21:01,319 [INFO] PAV produced 35 blocks.
+2025-09-21 10:21:01,319 [INFO] Fitting CPC isotonic for context id 64 (E01) with 214 OOF samples.
+2025-09-21 10:21:01,319 [INFO] Fitting isotonic regression (PAV) on 214 points.
+2025-09-21 10:21:01,320 [INFO] PAV produced 18 blocks.
+2025-09-21 10:21:01,320 [INFO] Fitting CPC isotonic for context id 65 (E02) with 151 OOF samples.
+2025-09-21 10:21:01,320 [INFO] Fitting isotonic regression (PAV) on 151 points.
+2025-09-21 10:21:01,320 [INFO] PAV produced 31 blocks.
+2025-09-21 10:21:01,320 [INFO] Fitting CPC isotonic for context id 66 (E03) with 137 OOF samples.
+2025-09-21 10:21:01,320 [INFO] Fitting isotonic regression (PAV) on 137 points.
+2025-09-21 10:21:01,320 [INFO] PAV produced 7 blocks.
+2025-09-21 10:21:01,320 [INFO] Fitting CPC isotonic for context id 67 (E04) with 350 OOF samples.
+2025-09-21 10:21:01,320 [INFO] Fitting isotonic regression (PAV) on 350 points.
+2025-09-21 10:21:01,321 [INFO] PAV produced 24 blocks.
+2025-09-21 10:21:01,321 [INFO] Fitting CPC isotonic for context id 68 (E05) with 215 OOF samples.
+2025-09-21 10:21:01,321 [INFO] Fitting isotonic regression (PAV) on 215 points.
+2025-09-21 10:21:01,321 [INFO] PAV produced 26 blocks.
+2025-09-21 10:21:01,321 [INFO] Fitting CPC isotonic for context id 69 (E06) with 79 OOF samples.
+2025-09-21 10:21:01,321 [INFO] Fitting isotonic regression (PAV) on 79 points.
+2025-09-21 10:21:01,322 [INFO] PAV produced 21 blocks.
+2025-09-21 10:21:01,322 [INFO] Fitting CPC isotonic for context id 70 (E21) with 246 OOF samples.
+2025-09-21 10:21:01,322 [INFO] Fitting isotonic regression (PAV) on 246 points.
+2025-09-21 10:21:01,322 [INFO] PAV produced 31 blocks.
+2025-09-21 10:21:01,322 [INFO] Fitting CPC isotonic for context id 71 (F01) with 365 OOF samples.
+2025-09-21 10:21:01,322 [INFO] Fitting isotonic regression (PAV) on 365 points.
+2025-09-21 10:21:01,323 [INFO] PAV produced 30 blocks.
+2025-09-21 10:21:01,323 [INFO] Fitting CPC isotonic for context id 72 (F02) with 515 OOF samples.
+2025-09-21 10:21:01,323 [INFO] Fitting isotonic regression (PAV) on 515 points.
+2025-09-21 10:21:01,323 [INFO] PAV produced 64 blocks.
+2025-09-21 10:21:01,323 [INFO] Fitting CPC isotonic for context id 73 (F03) with 196 OOF samples.
+2025-09-21 10:21:01,323 [INFO] Fitting isotonic regression (PAV) on 196 points.
+2025-09-21 10:21:01,324 [INFO] PAV produced 21 blocks.
+2025-09-21 10:21:01,324 [INFO] Fitting CPC isotonic for context id 74 (F04) with 260 OOF samples.
+2025-09-21 10:21:01,324 [INFO] Fitting isotonic regression (PAV) on 260 points.
+2025-09-21 10:21:01,324 [INFO] PAV produced 40 blocks.
+2025-09-21 10:21:01,324 [INFO] Fitting CPC isotonic for context id 75 (F15) with 88 OOF samples.
+2025-09-21 10:21:01,324 [INFO] Fitting isotonic regression (PAV) on 88 points.
+2025-09-21 10:21:01,324 [INFO] PAV produced 24 blocks.
+2025-09-21 10:21:01,324 [INFO] Fitting CPC isotonic for context id 76 (F16) with 970 OOF samples.
+2025-09-21 10:21:01,325 [INFO] Fitting isotonic regression (PAV) on 970 points.
+2025-09-21 10:21:01,326 [INFO] PAV produced 82 blocks.
+2025-09-21 10:21:01,326 [INFO] Fitting CPC isotonic for context id 77 (F17) with 30 OOF samples.
+2025-09-21 10:21:01,326 [INFO] Fitting isotonic regression (PAV) on 30 points.
+2025-09-21 10:21:01,326 [INFO] PAV produced 7 blocks.
+2025-09-21 10:21:01,326 [INFO] Fitting CPC isotonic for context id 78 (F21) with 101 OOF samples.
+2025-09-21 10:21:01,326 [INFO] Fitting isotonic regression (PAV) on 101 points.
+2025-09-21 10:21:01,326 [INFO] PAV produced 20 blocks.
+2025-09-21 10:21:01,326 [INFO] Fitting CPC isotonic for context id 79 (F22) with 133 OOF samples.
+2025-09-21 10:21:01,326 [INFO] Fitting isotonic regression (PAV) on 133 points.
+2025-09-21 10:21:01,326 [INFO] PAV produced 22 blocks.
+2025-09-21 10:21:01,327 [INFO] Fitting CPC isotonic for context id 80 (F23) with 201 OOF samples.
+2025-09-21 10:21:01,327 [INFO] Fitting isotonic regression (PAV) on 201 points.
+2025-09-21 10:21:01,327 [INFO] PAV produced 38 blocks.
+2025-09-21 10:21:01,327 [INFO] Fitting CPC isotonic for context id 81 (F24) with 232 OOF samples.
+2025-09-21 10:21:01,327 [INFO] Fitting isotonic regression (PAV) on 232 points.
+2025-09-21 10:21:01,327 [INFO] PAV produced 25 blocks.
+2025-09-21 10:21:01,327 [INFO] Fitting CPC isotonic for context id 82 (F25) with 64 OOF samples.
+2025-09-21 10:21:01,327 [INFO] Fitting isotonic regression (PAV) on 64 points.
+2025-09-21 10:21:01,328 [INFO] PAV produced 18 blocks.
+2025-09-21 10:21:01,328 [INFO] Fitting CPC isotonic for context id 83 (F26) with 17 OOF samples.
+2025-09-21 10:21:01,328 [INFO] Fitting isotonic regression (PAV) on 17 points.
+2025-09-21 10:21:01,328 [INFO] PAV produced 11 blocks.
+2025-09-21 10:21:01,328 [INFO] Fitting CPC isotonic for context id 84 (F27) with 102 OOF samples.
+2025-09-21 10:21:01,328 [INFO] Fitting isotonic regression (PAV) on 102 points.
+2025-09-21 10:21:01,328 [INFO] PAV produced 23 blocks.
+2025-09-21 10:21:01,328 [INFO] Fitting CPC isotonic for context id 85 (F28) with 100 OOF samples.
+2025-09-21 10:21:01,328 [INFO] Fitting isotonic regression (PAV) on 100 points.
+2025-09-21 10:21:01,328 [INFO] PAV produced 11 blocks.
+2025-09-21 10:21:01,328 [INFO] Fitting CPC isotonic for context id 86 (F41) with 137 OOF samples.
+2025-09-21 10:21:01,328 [INFO] Fitting isotonic regression (PAV) on 137 points.
+2025-09-21 10:21:01,328 [INFO] PAV produced 21 blocks.
+2025-09-21 10:21:01,329 [INFO] Fitting CPC isotonic for context id 87 (F42) with 137 OOF samples.
+2025-09-21 10:21:01,329 [INFO] Fitting isotonic regression (PAV) on 137 points.
+2025-09-21 10:21:01,329 [INFO] PAV produced 18 blocks.
+2025-09-21 10:21:01,329 [INFO] Fitting CPC isotonic for context id 88 (G01) with 1633 OOF samples.
+2025-09-21 10:21:01,329 [INFO] Fitting isotonic regression (PAV) on 1633 points.
+2025-09-21 10:21:01,331 [INFO] PAV produced 40 blocks.
+2025-09-21 10:21:01,331 [INFO] Fitting CPC isotonic for context id 89 (G02) with 788 OOF samples.
+2025-09-21 10:21:01,331 [INFO] Fitting isotonic regression (PAV) on 788 points.
+2025-09-21 10:21:01,332 [INFO] PAV produced 36 blocks.
+2025-09-21 10:21:01,332 [INFO] Fitting CPC isotonic for context id 90 (G03) with 490 OOF samples.
+2025-09-21 10:21:01,332 [INFO] Fitting isotonic regression (PAV) on 490 points.
+2025-09-21 10:21:01,333 [INFO] PAV produced 25 blocks.
+2025-09-21 10:21:01,333 [INFO] Fitting CPC isotonic for context id 91 (G04) with 281 OOF samples.
+2025-09-21 10:21:01,333 [INFO] Fitting isotonic regression (PAV) on 281 points.
+2025-09-21 10:21:01,333 [INFO] PAV produced 17 blocks.
+2025-09-21 10:21:01,334 [INFO] Fitting CPC isotonic for context id 92 (G05) with 193 OOF samples.
+2025-09-21 10:21:01,334 [INFO] Fitting isotonic regression (PAV) on 193 points.
+2025-09-21 10:21:01,334 [INFO] PAV produced 17 blocks.
+2025-09-21 10:21:01,334 [INFO] Fitting CPC isotonic for context id 93 (G06) with 964 OOF samples.
+2025-09-21 10:21:01,334 [INFO] Fitting isotonic regression (PAV) on 964 points.
+2025-09-21 10:21:01,335 [INFO] PAV produced 28 blocks.
+2025-09-21 10:21:01,335 [INFO] Fitting CPC isotonic for context id 94 (G07) with 111 OOF samples.
+2025-09-21 10:21:01,335 [INFO] Fitting isotonic regression (PAV) on 111 points.
+2025-09-21 10:21:01,336 [INFO] PAV produced 10 blocks.
+2025-09-21 10:21:01,336 [INFO] Fitting CPC isotonic for context id 95 (G08) with 152 OOF samples.
+2025-09-21 10:21:01,336 [INFO] Fitting isotonic regression (PAV) on 152 points.
+2025-09-21 10:21:01,336 [INFO] PAV produced 14 blocks.
+2025-09-21 10:21:01,336 [INFO] Fitting CPC isotonic for context id 96 (G09) with 290 OOF samples.
+2025-09-21 10:21:01,336 [INFO] Fitting isotonic regression (PAV) on 290 points.
+2025-09-21 10:21:01,336 [INFO] PAV produced 14 blocks.
+2025-09-21 10:21:01,336 [INFO] Fitting CPC isotonic for context id 97 (G10) with 77 OOF samples.
+2025-09-21 10:21:01,336 [INFO] Fitting isotonic regression (PAV) on 77 points.
+2025-09-21 10:21:01,337 [INFO] PAV produced 18 blocks.
+2025-09-21 10:21:01,337 [INFO] Fitting CPC isotonic for context id 98 (G11) with 293 OOF samples.
+2025-09-21 10:21:01,337 [INFO] Fitting isotonic regression (PAV) on 293 points.
+2025-09-21 10:21:01,337 [INFO] PAV produced 29 blocks.
+2025-09-21 10:21:01,337 [INFO] Fitting CPC isotonic for context id 99 (G16) with 50 OOF samples.
+2025-09-21 10:21:01,337 [INFO] Fitting isotonic regression (PAV) on 50 points.
+2025-09-21 10:21:01,337 [INFO] PAV produced 12 blocks.
+2025-09-21 10:21:01,337 [INFO] Fitting CPC isotonic for context id 100 (G21) with 98 OOF samples.
+2025-09-21 10:21:01,337 [INFO] Fitting isotonic regression (PAV) on 98 points.
+2025-09-21 10:21:01,338 [INFO] PAV produced 22 blocks.
+2025-09-21 10:21:01,338 [INFO] Fitting CPC isotonic for context id 101 (H01) with 1956 OOF samples.
+2025-09-21 10:21:01,338 [INFO] Fitting isotonic regression (PAV) on 1956 points.
+2025-09-21 10:21:01,340 [INFO] PAV produced 53 blocks.
+2025-09-21 10:21:01,340 [INFO] Fitting CPC isotonic for context id 102 (H02) with 483 OOF samples.
+2025-09-21 10:21:01,340 [INFO] Fitting isotonic regression (PAV) on 483 points.
+2025-09-21 10:21:01,341 [INFO] PAV produced 29 blocks.
+2025-09-21 10:21:01,341 [INFO] Fitting CPC isotonic for context id 103 (H03) with 715 OOF samples.
+2025-09-21 10:21:01,341 [INFO] Fitting isotonic regression (PAV) on 715 points.
+2025-09-21 10:21:01,342 [INFO] PAV produced 35 blocks.
+2025-09-21 10:21:01,342 [INFO] Fitting CPC isotonic for context id 104 (H04) with 1962 OOF samples.
+2025-09-21 10:21:01,342 [INFO] Fitting isotonic regression (PAV) on 1962 points.
+2025-09-21 10:21:01,345 [INFO] PAV produced 34 blocks.
+2025-09-21 10:21:01,345 [INFO] Fitting CPC isotonic for context id 105 (H05) with 443 OOF samples.
+2025-09-21 10:21:01,345 [INFO] Fitting isotonic regression (PAV) on 443 points.
+2025-09-21 10:21:01,345 [INFO] PAV produced 39 blocks.
+2025-09-21 10:21:01,346 [INFO] Applying CPC-specific isotonic calibrators to OOF and Test predictions.
+2025-09-21 10:21:01,355 [INFO] OOF Pearson after CPC isotonic calibration: 0.651525
+2025-09-21 10:21:01,355 [INFO] OOF MSE after CPC isotonic calibration: 0.038609
+2025-09-21 10:21:01,355 [INFO] Logging final validation results (OOF, post-rule, CPC-calibration):
+2025-09-21 10:21:01,355 [INFO] Final Validation Pearson: 0.651525 | Final Validation MSE: 0.038609
+2025-09-21 10:21:01,360 [INFO] Writing submission to task/us-patent-phrase-to-phrase-matching/outputs/1/submission_11.csv
+2025-09-21 10:21:01,368 [INFO] Submission file created successfully.
+2025-09-21 10:21:01,369 [INFO] All done (v11).

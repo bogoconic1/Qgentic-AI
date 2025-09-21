@@ -1,0 +1,58 @@
+2025-09-21 09:40:52,388 | INFO | Initialized logging.
+2025-09-21 09:40:52,389 | INFO | Base directory: task/us-patent-phrase-to-phrase-matching
+2025-09-21 09:40:52,389 | INFO | Output directory: task/us-patent-phrase-to-phrase-matching/outputs/2
+2025-09-21 09:40:52,389 | INFO | Log path: task/us-patent-phrase-to-phrase-matching/outputs/2/code_2_v1.txt
+2025-09-21 09:40:52,389 | INFO | Submission path: task/us-patent-phrase-to-phrase-matching/outputs/2/submission_1.csv
+2025-09-21 09:40:52,423 | INFO | Using device: cuda
+2025-09-21 09:40:52,455 | INFO | CUDA device count: 2
+2025-09-21 09:40:52,461 | INFO | Current CUDA device: 0
+2025-09-21 09:40:52,461 | INFO | GPU name: NVIDIA L4
+2025-09-21 09:40:52,461 | INFO | PyTorch version: 2.8.0+cu128
+2025-09-21 09:40:52,461 | INFO | Loading train data from task/us-patent-phrase-to-phrase-matching/train.csv
+2025-09-21 09:40:52,524 | INFO | Train shape: (32825, 5)
+2025-09-21 09:40:52,524 | INFO | Loading test data from task/us-patent-phrase-to-phrase-matching/test.csv
+2025-09-21 09:40:52,529 | INFO | Test shape: (3648, 5)
+2025-09-21 09:40:52,529 | INFO | Loading CPC titles from task/us-patent-phrase-to-phrase-matching/titles.csv
+2025-09-21 09:40:52,969 | INFO | Titles shape: (260476, 7)
+2025-09-21 09:40:52,969 | INFO | Titles columns: ['code', 'title', 'section', 'class', 'subclass', 'group', 'main_group']
+2025-09-21 09:40:53,006 | INFO | Merging CPC titles into train and test on 'context'
+2025-09-21 09:40:53,134 | INFO | Missing titles in train after merge: 0
+2025-09-21 09:40:53,135 | INFO | Missing titles in test after merge: 0
+2025-09-21 09:40:53,135 | INFO | Lowercasing text fields and concatenating with [SEP] placeholders (tokenizer sep_token will be used later).
+2025-09-21 09:40:53,169 | INFO | Unique contexts in train: 106
+2025-09-21 09:40:53,169 | INFO | Unique contexts in test: 106
+2025-09-21 09:40:53,169 | INFO | Loading tokenizer: microsoft/deberta-v3-large
+2025-09-21 09:40:54,221 | INFO | Tokenizer SEP token: [SEP]
+2025-09-21 09:40:54,233 | INFO | Creating binned labels for stratification.
+2025-09-21 09:40:54,248 | INFO | Bin 0 (score 0.00) count: 6774
+2025-09-21 09:40:54,249 | INFO | Bin 1 (score 0.25) count: 10306
+2025-09-21 09:40:54,249 | INFO | Bin 2 (score 0.50) count: 11068
+2025-09-21 09:40:54,249 | INFO | Bin 3 (score 0.75) count: 3634
+2025-09-21 09:40:54,249 | INFO | Bin 4 (score 1.00) count: 1043
+2025-09-21 09:40:54,249 | INFO | Computing per-context, per-bin sample weights to handle imbalance.
+2025-09-21 09:40:55,380 | INFO | Mean raw weight before normalization: 1.888743
+2025-09-21 09:40:55,381 | INFO | Mean normalized weight: 1.000000, std: 1.380317
+2025-09-21 09:40:55,381 | INFO | Sample weights (context,bin) mapping snapshot (first 10):
+2025-09-21 09:40:55,381 | INFO |   ('B60', 0): 1.9560
+2025-09-21 09:40:55,381 | INFO |   ('B60', 1): 1.0000
+2025-09-21 09:40:55,381 | INFO |   ('B60', 2): 1.3761
+2025-09-21 09:40:55,381 | INFO |   ('B60', 3): 3.7024
+2025-09-21 09:40:55,381 | INFO |   ('B60', 4): 7.4048
+2025-09-21 09:40:55,381 | INFO |   ('G06', 0): 2.3118
+2025-09-21 09:40:55,381 | INFO |   ('G06', 1): 1.6797
+2025-09-21 09:40:55,381 | INFO |   ('G06', 2): 1.0000
+2025-09-21 09:40:55,381 | INFO |   ('G06', 3): 5.6579
+2025-09-21 09:40:55,381 | INFO |   ('G06', 4): 26.8750
+2025-09-21 09:40:55,389 | INFO | Prepared StratifiedKFold with 4 splits. Fold sizes:
+2025-09-21 09:40:55,389 | INFO | Fold 0: train=24618, valid=8207
+2025-09-21 09:40:55,389 | INFO | Fold 1: train=24619, valid=8206
+2025-09-21 09:40:55,389 | INFO | Fold 2: train=24619, valid=8206
+2025-09-21 09:40:55,389 | INFO | Fold 3: train=24619, valid=8206
+2025-09-21 09:40:55,389 | INFO | ========== Fold 1/4 ==========
+2025-09-21 09:40:55,400 | INFO | Tokenizing train fold 0...
+2025-09-21 09:40:55,401 | INFO | Initializing PatentDataset with 24618 samples; encode now (labels present: True).
+2025-09-21 09:40:58,499 | INFO | Tokenizing valid fold 0...
+2025-09-21 09:40:58,509 | INFO | Initializing PatentDataset with 8207 samples; encode now (labels present: True).
+2025-09-21 09:40:59,802 | INFO | Loading pretrained model: microsoft/deberta-v3-large
+2025-09-21 09:41:02,385 | INFO | Model loaded and moved to CUDA with fp16; enabled gradient checkpointing.
+2025-09-21 09:41:02,385 | INFO | Training configuration: epochs=3, lr=2e-05, batch_size=8, grad_accum=2, total_steps_estimate=4617

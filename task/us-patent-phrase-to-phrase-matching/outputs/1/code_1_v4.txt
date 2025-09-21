@@ -1,0 +1,313 @@
+2025-09-21 05:11:15,906 [INFO] Initialized logging and created output directories for v4 pipeline.
+2025-09-21 05:11:15,906 [INFO] Setting all random seeds to 42.
+2025-09-21 05:11:15,906 [INFO] Reading train data from task/us-patent-phrase-to-phrase-matching/train.csv.
+2025-09-21 05:11:15,946 [INFO] Reading test data from task/us-patent-phrase-to-phrase-matching/test.csv.
+2025-09-21 05:11:15,952 [INFO] Train shape: (32825, 5), columns: ['id', 'anchor', 'target', 'context', 'score']
+2025-09-21 05:11:15,952 [INFO] Test shape:  (3648, 5), columns: ['id', 'anchor', 'target', 'context', 'score']
+2025-09-21 05:11:15,958 [INFO] Train missing values by column: {'id': 0, 'anchor': 0, 'target': 0, 'context': 0, 'score': 0}
+2025-09-21 05:11:15,958 [INFO] Test missing values by column: {'id': 0, 'anchor': 0, 'target': 0, 'context': 0, 'score': 0}
+2025-09-21 05:11:15,958 [INFO] Building vocabulary from segmented corpus.
+2025-09-21 05:11:16,294 [INFO] Built vocabulary of size 9042.
+2025-09-21 05:11:16,295 [INFO] Tokenizing and numericalizing dataframe with 32825 rows (with token types).
+2025-09-21 05:11:16,414 [INFO] Processed 5000 rows.
+2025-09-21 05:11:16,533 [INFO] Processed 10000 rows.
+2025-09-21 05:11:16,652 [INFO] Processed 15000 rows.
+2025-09-21 05:11:16,771 [INFO] Processed 20000 rows.
+2025-09-21 05:11:16,890 [INFO] Processed 25000 rows.
+2025-09-21 05:11:17,010 [INFO] Processed 30000 rows.
+2025-09-21 05:11:17,077 [INFO] Tokenizing and numericalizing dataframe with 3648 rows (with token types).
+2025-09-21 05:11:17,164 [INFO] Tokenizing and numericalizing SWAPPED dataframe with 32825 rows (anchor<->target).
+2025-09-21 05:11:17,284 [INFO] Processed 5000 swapped rows.
+2025-09-21 05:11:17,403 [INFO] Processed 10000 swapped rows.
+2025-09-21 05:11:17,526 [INFO] Processed 15000 swapped rows.
+2025-09-21 05:11:17,646 [INFO] Processed 20000 swapped rows.
+2025-09-21 05:11:17,765 [INFO] Processed 25000 swapped rows.
+2025-09-21 05:11:17,886 [INFO] Processed 30000 swapped rows.
+2025-09-21 05:11:17,954 [INFO] Prepared swapped augmentation arrays for training.
+2025-09-21 05:11:17,957 [INFO] Labels statistics: min=0.0, max=1.0, mean=0.3619, std=0.2588
+2025-09-21 05:11:17,961 [INFO] Found 106 unique context codes across train+test.
+2025-09-21 05:11:18,236 [INFO] Class counts: [6774.0, 10306.0, 11068.0, 3634.0, 1043.0] | CE weights: [0.15397107601165771, 0.10120318084955215, 0.0942356288433075, 0.2870115637779236, 1.0]
+2025-09-21 05:11:18,238 [INFO] Creating stratified folds on 5-class bins.
+2025-09-21 05:11:18,256 [INFO] Fold 0: 6567 samples.
+2025-09-21 05:11:18,256 [INFO] Fold 1: 6566 samples.
+2025-09-21 05:11:18,256 [INFO] Fold 2: 6566 samples.
+2025-09-21 05:11:18,256 [INFO] Fold 3: 6564 samples.
+2025-09-21 05:11:18,256 [INFO] Fold 4: 6562 samples.
+2025-09-21 05:11:18,256 [INFO] Initializing PatentDataset with 3648 samples.
+2025-09-21 05:11:18,257 [INFO] ========== Fold 1/5 ==========
+2025-09-21 05:11:18,493 [INFO] Applied swap augmentation. New train size: 52516
+2025-09-21 05:11:18,496 [INFO] Train split: 52516 samples; Val split: 6567 samples.
+2025-09-21 05:11:18,496 [INFO] Initializing PatentDataset with 52516 samples.
+2025-09-21 05:11:18,496 [INFO] Initializing PatentDataset with 6567 samples.
+2025-09-21 05:11:18,496 [INFO] Initializing TransformerRegressor++ with vocab_size=9042, embed_dim=224, heads=8, layers=4, max_len=64, ctxs=106
+2025-09-21 05:11:19,625 [INFO] Creating Warmup+Cosine scheduler: warmup_steps=137, total_steps=1370.
+2025-09-21 05:11:19,625 [INFO] Fold 0 - Epoch 1/5 started.
+2025-09-21 05:11:24,322 [INFO] Train step 50/274 - Loss: 0.991709 (MSE 0.085145, CE 2.467996, Corr 0.972172, Cons 0.165349) | LR: 7.299270e-05
+2025-09-21 05:11:28,022 [INFO] Train step 100/274 - Loss: 0.890801 (MSE 0.080965, CE 2.192997, Corr 0.946626, Cons 0.149573) | LR: 1.459854e-04
+2025-09-21 05:11:31,718 [INFO] Train step 150/274 - Loss: 0.836442 (MSE 0.078254, CE 2.049458, Corr 0.916660, Cons 0.137943) | LR: 1.999451e-04
+2025-09-21 05:11:35,438 [INFO] Train step 200/274 - Loss: 0.803400 (MSE 0.075846, CE 1.964622, Corr 0.895903, Cons 0.119726) | LR: 1.987144e-04
+2025-09-21 05:11:39,133 [INFO] Train step 250/274 - Loss: 0.779218 (MSE 0.074199, CE 1.903475, Corr 0.875009, Cons 0.109571) | LR: 1.958838e-04
+2025-09-21 05:11:40,940 [INFO] Epoch training completed in 21.31s with average loss 0.769566
+2025-09-21 05:11:42,101 [INFO] Fold 0 - Epoch 1 - Train Loss: 0.769566 | Val MSE: 0.064327 | Val CE: 1.590158 | Val Pearson: 0.284095
+2025-09-21 05:11:42,102 [INFO] Fold 0 - Epoch 1 - New best model with Pearson 0.284095.
+2025-09-21 05:11:42,102 [INFO] Fold 0 - Epoch 2/5 started.
+2025-09-21 05:11:46,049 [INFO] Train step 50/274 - Loss: 0.646284 (MSE 0.063759, CE 1.583292, Corr 0.698299, Cons 0.060015) | LR: 1.888623e-04
+2025-09-21 05:11:49,797 [INFO] Train step 100/274 - Loss: 0.640834 (MSE 0.062237, CE 1.574527, Corr 0.679757, Cons 0.056935) | LR: 1.823151e-04
+2025-09-21 05:11:53,535 [INFO] Train step 150/274 - Loss: 0.634725 (MSE 0.061370, CE 1.562722, Corr 0.661573, Cons 0.054651) | LR: 1.744337e-04
+2025-09-21 05:11:57,284 [INFO] Train step 200/274 - Loss: 0.630762 (MSE 0.060876, CE 1.554911, Corr 0.650035, Cons 0.052945) | LR: 1.653459e-04
+2025-09-21 05:12:01,033 [INFO] Train step 250/274 - Loss: 0.623681 (MSE 0.060006, CE 1.540162, Corr 0.632095, Cons 0.052712) | LR: 1.551990e-04
+2025-09-21 05:12:02,890 [INFO] Epoch training completed in 20.79s with average loss 0.620838
+2025-09-21 05:12:04,062 [INFO] Fold 0 - Epoch 2 - Train Loss: 0.620838 | Val MSE: 0.063383 | Val CE: 1.494212 | Val Pearson: 0.430500
+2025-09-21 05:12:04,064 [INFO] Fold 0 - Epoch 2 - New best model with Pearson 0.430500.
+2025-09-21 05:12:04,064 [INFO] Fold 0 - Epoch 3/5 started.
+2025-09-21 05:12:07,982 [INFO] Train step 50/274 - Loss: 0.548782 (MSE 0.049355, CE 1.381238, Corr 0.466821, Cons 0.042869) | LR: 1.385918e-04
+2025-09-21 05:12:11,690 [INFO] Train step 100/274 - Loss: 0.540819 (MSE 0.048743, CE 1.362675, Corr 0.453623, Cons 0.039194) | LR: 1.265581e-04
+2025-09-21 05:12:15,391 [INFO] Train step 150/274 - Loss: 0.540416 (MSE 0.048343, CE 1.363004, Corr 0.449826, Cons 0.039484) | LR: 1.140939e-04
+2025-09-21 05:12:19,114 [INFO] Train step 200/274 - Loss: 0.536422 (MSE 0.047535, CE 1.354506, Corr 0.442683, Cons 0.039290) | LR: 1.014013e-04
+2025-09-21 05:12:22,826 [INFO] Train step 250/274 - Loss: 0.532811 (MSE 0.046713, CE 1.347380, Corr 0.434709, Cons 0.037932) | LR: 8.868601e-05
+2025-09-21 05:12:24,673 [INFO] Epoch training completed in 20.61s with average loss 0.530617
+2025-09-21 05:12:25,831 [INFO] Fold 0 - Epoch 3 - Train Loss: 0.530617 | Val MSE: 0.064340 | Val CE: 1.502385 | Val Pearson: 0.498500
+2025-09-21 05:12:25,832 [INFO] Fold 0 - Epoch 3 - New best model with Pearson 0.498500.
+2025-09-21 05:12:25,832 [INFO] Fold 0 - Epoch 4/5 started.
+2025-09-21 05:12:29,739 [INFO] Train step 50/274 - Loss: 0.479251 (MSE 0.038889, CE 1.227729, Corr 0.343939, Cons 0.032082) | LR: 7.026373e-05
+2025-09-21 05:12:33,450 [INFO] Train step 100/274 - Loss: 0.476549 (MSE 0.038592, CE 1.220452, Corr 0.344159, Cons 0.031602) | LR: 5.837424e-05
+2025-09-21 05:12:37,168 [INFO] Train step 150/274 - Loss: 0.473434 (MSE 0.038421, CE 1.212669, Corr 0.340460, Cons 0.031541) | LR: 4.715941e-05
+2025-09-21 05:12:40,888 [INFO] Train step 200/274 - Loss: 0.473134 (MSE 0.038109, CE 1.212895, Corr 0.337885, Cons 0.031485) | LR: 3.680102e-05
+2025-09-21 05:12:44,558 [INFO] Train step 250/274 - Loss: 0.471580 (MSE 0.037816, CE 1.209659, Corr 0.334725, Cons 0.031111) | LR: 2.746695e-05
+2025-09-21 05:12:46,362 [INFO] Epoch training completed in 20.53s with average loss 0.470312
+2025-09-21 05:12:47,530 [INFO] Fold 0 - Epoch 4 - Train Loss: 0.470312 | Val MSE: 0.060657 | Val CE: 1.466540 | Val Pearson: 0.528371
+2025-09-21 05:12:47,531 [INFO] Fold 0 - Epoch 4 - New best model with Pearson 0.528371.
+2025-09-21 05:12:47,531 [INFO] Fold 0 - Epoch 5/5 started.
+2025-09-21 05:12:51,446 [INFO] Train step 50/274 - Loss: 0.448990 (MSE 0.036606, CE 1.151297, Corr 0.316015, Cons 0.031080) | LR: 1.584961e-05
+2025-09-21 05:12:55,079 [INFO] Train step 100/274 - Loss: 0.447386 (MSE 0.035249, CE 1.150694, Corr 0.308055, Cons 0.030620) | LR: 9.667564e-06
+2025-09-21 05:12:58,694 [INFO] Train step 150/274 - Loss: 0.444803 (MSE 0.034639, CE 1.145654, Corr 0.302191, Cons 0.029847) | LR: 4.949614e-06
+2025-09-21 05:13:02,291 [INFO] Train step 200/274 - Loss: 0.444472 (MSE 0.034659, CE 1.145124, Corr 0.300294, Cons 0.029633) | LR: 1.772230e-06
+2025-09-21 05:13:05,883 [INFO] Train step 250/274 - Loss: 0.444636 (MSE 0.034538, CE 1.145888, Corr 0.299923, Cons 0.029231) | LR: 1.869092e-07
+2025-09-21 05:13:07,674 [INFO] Epoch training completed in 20.14s with average loss 0.443899
+2025-09-21 05:13:08,851 [INFO] Fold 0 - Epoch 5 - Train Loss: 0.443899 | Val MSE: 0.065801 | Val CE: 1.510859 | Val Pearson: 0.525468
+2025-09-21 05:13:10,008 [INFO] Fold 0 - Final Val Pearson: 0.528371 | Final Val MSE: 0.060657 | Final Val CE: 1.466540
+2025-09-21 05:13:10,663 [INFO] ========== Fold 2/5 ==========
+2025-09-21 05:13:10,723 [INFO] Applied swap augmentation. New train size: 52518
+2025-09-21 05:13:10,732 [INFO] Train split: 52518 samples; Val split: 6566 samples.
+2025-09-21 05:13:10,732 [INFO] Initializing PatentDataset with 52518 samples.
+2025-09-21 05:13:10,732 [INFO] Initializing PatentDataset with 6566 samples.
+2025-09-21 05:13:10,734 [INFO] Initializing TransformerRegressor++ with vocab_size=9042, embed_dim=224, heads=8, layers=4, max_len=64, ctxs=106
+2025-09-21 05:13:10,882 [INFO] Creating Warmup+Cosine scheduler: warmup_steps=137, total_steps=1370.
+2025-09-21 05:13:10,883 [INFO] Fold 1 - Epoch 1/5 started.
+2025-09-21 05:13:14,798 [INFO] Train step 50/274 - Loss: 1.060692 (MSE 0.128358, CE 2.592040, Corr 1.003020, Cons 0.131945) | LR: 7.299270e-05
+2025-09-21 05:13:18,528 [INFO] Train step 100/274 - Loss: 0.919899 (MSE 0.101673, CE 2.244912, Corr 0.947889, Cons 0.121429) | LR: 1.459854e-04
+2025-09-21 05:13:22,264 [INFO] Train step 150/274 - Loss: 0.854713 (MSE 0.091720, CE 2.080319, Corr 0.923273, Cons 0.114669) | LR: 1.999451e-04
+2025-09-21 05:13:25,989 [INFO] Train step 200/274 - Loss: 0.817139 (MSE 0.086061, CE 1.986579, Corr 0.905023, Cons 0.105055) | LR: 1.987144e-04
+2025-09-21 05:13:29,711 [INFO] Train step 250/274 - Loss: 0.791154 (MSE 0.082477, CE 1.922736, Corr 0.885662, Cons 0.099073) | LR: 1.958838e-04
+2025-09-21 05:13:31,568 [INFO] Epoch training completed in 20.68s with average loss 0.781332
+2025-09-21 05:13:32,735 [INFO] Fold 1 - Epoch 1 - Train Loss: 0.781332 | Val MSE: 0.064147 | Val CE: 1.623762 | Val Pearson: 0.254991
+2025-09-21 05:13:32,736 [INFO] Fold 1 - Epoch 1 - New best model with Pearson 0.254991.
+2025-09-21 05:13:32,737 [INFO] Fold 1 - Epoch 2/5 started.
+2025-09-21 05:13:36,644 [INFO] Train step 50/274 - Loss: 0.656892 (MSE 0.065124, CE 1.605746, Corr 0.723000, Cons 0.061151) | LR: 1.888623e-04
+2025-09-21 05:13:40,370 [INFO] Train step 100/274 - Loss: 0.649625 (MSE 0.064305, CE 1.591859, Corr 0.698951, Cons 0.059501) | LR: 1.823151e-04
+2025-09-21 05:13:44,098 [INFO] Train step 150/274 - Loss: 0.642755 (MSE 0.062643, CE 1.578620, Corr 0.683192, Cons 0.056478) | LR: 1.744337e-04
+2025-09-21 05:13:47,736 [INFO] Train step 200/274 - Loss: 0.635481 (MSE 0.061562, CE 1.564221, Corr 0.663033, Cons 0.055102) | LR: 1.653459e-04
+2025-09-21 05:13:51,369 [INFO] Train step 250/274 - Loss: 0.626106 (MSE 0.060151, CE 1.544867, Corr 0.640864, Cons 0.052515) | LR: 1.551990e-04
+2025-09-21 05:13:53,175 [INFO] Epoch training completed in 20.44s with average loss 0.623865
+2025-09-21 05:13:54,326 [INFO] Fold 1 - Epoch 2 - Train Loss: 0.623865 | Val MSE: 0.059368 | Val CE: 1.528322 | Val Pearson: 0.432046
+2025-09-21 05:13:54,327 [INFO] Fold 1 - Epoch 2 - New best model with Pearson 0.432046.
+2025-09-21 05:13:54,327 [INFO] Fold 1 - Epoch 3/5 started.
+2025-09-21 05:13:58,157 [INFO] Train step 50/274 - Loss: 0.549327 (MSE 0.047878, CE 1.386549, Corr 0.462228, Cons 0.036166) | LR: 1.385918e-04
+2025-09-21 05:14:01,768 [INFO] Train step 100/274 - Loss: 0.549997 (MSE 0.048188, CE 1.388085, Corr 0.461933, Cons 0.035446) | LR: 1.265581e-04
+2025-09-21 05:14:05,395 [INFO] Train step 150/274 - Loss: 0.544247 (MSE 0.047480, CE 1.375094, Corr 0.451820, Cons 0.035209) | LR: 1.140939e-04
+2025-09-21 05:14:09,015 [INFO] Train step 200/274 - Loss: 0.540469 (MSE 0.047158, CE 1.365673, Corr 0.448050, Cons 0.035137) | LR: 1.014013e-04
+2025-09-21 05:14:12,639 [INFO] Train step 250/274 - Loss: 0.535330 (MSE 0.046624, CE 1.353997, Corr 0.438695, Cons 0.034620) | LR: 8.868601e-05
+2025-09-21 05:14:14,440 [INFO] Epoch training completed in 20.11s with average loss 0.533136
+2025-09-21 05:14:15,608 [INFO] Fold 1 - Epoch 3 - Train Loss: 0.533136 | Val MSE: 0.063946 | Val CE: 1.535901 | Val Pearson: 0.488350
+2025-09-21 05:14:15,610 [INFO] Fold 1 - Epoch 3 - New best model with Pearson 0.488350.
+2025-09-21 05:14:15,610 [INFO] Fold 1 - Epoch 4/5 started.
+2025-09-21 05:14:19,471 [INFO] Train step 50/274 - Loss: 0.481413 (MSE 0.038998, CE 1.233516, Corr 0.346035, Cons 0.027514) | LR: 7.026373e-05
+2025-09-21 05:14:23,170 [INFO] Train step 100/274 - Loss: 0.479107 (MSE 0.038811, CE 1.227872, Corr 0.343252, Cons 0.027314) | LR: 5.837424e-05
+2025-09-21 05:14:26,819 [INFO] Train step 150/274 - Loss: 0.480211 (MSE 0.038849, CE 1.230732, Corr 0.343992, Cons 0.028418) | LR: 4.715941e-05
+2025-09-21 05:14:30,471 [INFO] Train step 200/274 - Loss: 0.479869 (MSE 0.038540, CE 1.230701, Corr 0.342105, Cons 0.027915) | LR: 3.680102e-05
+2025-09-21 05:14:34,127 [INFO] Train step 250/274 - Loss: 0.476360 (MSE 0.038122, CE 1.222144, Corr 0.338595, Cons 0.027764) | LR: 2.746695e-05
+2025-09-21 05:14:35,958 [INFO] Epoch training completed in 20.35s with average loss 0.474874
+2025-09-21 05:14:37,122 [INFO] Fold 1 - Epoch 4 - Train Loss: 0.474874 | Val MSE: 0.062878 | Val CE: 1.537658 | Val Pearson: 0.512890
+2025-09-21 05:14:37,123 [INFO] Fold 1 - Epoch 4 - New best model with Pearson 0.512890.
+2025-09-21 05:14:37,123 [INFO] Fold 1 - Epoch 5/5 started.
+2025-09-21 05:14:41,051 [INFO] Train step 50/274 - Loss: 0.458323 (MSE 0.035547, CE 1.180260, Corr 0.314229, Cons 0.027133) | LR: 1.584961e-05
+2025-09-21 05:14:44,765 [INFO] Train step 100/274 - Loss: 0.455372 (MSE 0.035192, CE 1.173174, Corr 0.310929, Cons 0.026555) | LR: 9.667564e-06
+2025-09-21 05:14:48,486 [INFO] Train step 150/274 - Loss: 0.450599 (MSE 0.035008, CE 1.160946, Corr 0.306074, Cons 0.026380) | LR: 4.949614e-06
+2025-09-21 05:14:52,190 [INFO] Train step 200/274 - Loss: 0.450014 (MSE 0.034572, CE 1.160570, Corr 0.303407, Cons 0.026382) | LR: 1.772230e-06
+2025-09-21 05:14:55,912 [INFO] Train step 250/274 - Loss: 0.449311 (MSE 0.034600, CE 1.158647, Corr 0.302866, Cons 0.026253) | LR: 1.869092e-07
+2025-09-21 05:14:57,767 [INFO] Epoch training completed in 20.64s with average loss 0.448781
+2025-09-21 05:14:58,925 [INFO] Fold 1 - Epoch 5 - Train Loss: 0.448781 | Val MSE: 0.062481 | Val CE: 1.541832 | Val Pearson: 0.516672
+2025-09-21 05:14:58,927 [INFO] Fold 1 - Epoch 5 - New best model with Pearson 0.516672.
+2025-09-21 05:15:00,071 [INFO] Fold 1 - Final Val Pearson: 0.516672 | Final Val MSE: 0.062481 | Final Val CE: 1.541832
+2025-09-21 05:15:00,732 [INFO] ========== Fold 3/5 ==========
+2025-09-21 05:15:00,783 [INFO] Applied swap augmentation. New train size: 52518
+2025-09-21 05:15:00,785 [INFO] Train split: 52518 samples; Val split: 6566 samples.
+2025-09-21 05:15:00,785 [INFO] Initializing PatentDataset with 52518 samples.
+2025-09-21 05:15:00,785 [INFO] Initializing PatentDataset with 6566 samples.
+2025-09-21 05:15:00,787 [INFO] Initializing TransformerRegressor++ with vocab_size=9042, embed_dim=224, heads=8, layers=4, max_len=64, ctxs=106
+2025-09-21 05:15:00,939 [INFO] Creating Warmup+Cosine scheduler: warmup_steps=137, total_steps=1370.
+2025-09-21 05:15:00,940 [INFO] Fold 2 - Epoch 1/5 started.
+2025-09-21 05:15:04,849 [INFO] Train step 50/274 - Loss: 0.924545 (MSE 0.095975, CE 2.263836, Corr 0.959444, Cons 0.133009) | LR: 7.299270e-05
+2025-09-21 05:15:08,584 [INFO] Train step 100/274 - Loss: 0.849076 (MSE 0.086037, CE 2.073643, Corr 0.918365, Cons 0.125575) | LR: 1.459854e-04
+2025-09-21 05:15:12,299 [INFO] Train step 150/274 - Loss: 0.806696 (MSE 0.080854, CE 1.966885, Corr 0.894570, Cons 0.112576) | LR: 1.999451e-04
+2025-09-21 05:15:16,032 [INFO] Train step 200/274 - Loss: 0.781083 (MSE 0.077358, CE 1.903959, Corr 0.876184, Cons 0.102780) | LR: 1.987144e-04
+2025-09-21 05:15:19,768 [INFO] Train step 250/274 - Loss: 0.760676 (MSE 0.075260, CE 1.853238, Corr 0.859332, Cons 0.095125) | LR: 1.958838e-04
+2025-09-21 05:15:21,648 [INFO] Epoch training completed in 20.71s with average loss 0.752716
+2025-09-21 05:15:22,820 [INFO] Fold 2 - Epoch 1 - Train Loss: 0.752716 | Val MSE: 0.066909 | Val CE: 1.633811 | Val Pearson: 0.255829
+2025-09-21 05:15:22,822 [INFO] Fold 2 - Epoch 1 - New best model with Pearson 0.255829.
+2025-09-21 05:15:22,822 [INFO] Fold 2 - Epoch 2/5 started.
+2025-09-21 05:15:26,767 [INFO] Train step 50/274 - Loss: 0.646436 (MSE 0.062309, CE 1.587623, Corr 0.693118, Cons 0.052418) | LR: 1.888623e-04
+2025-09-21 05:15:30,473 [INFO] Train step 100/274 - Loss: 0.641631 (MSE 0.062182, CE 1.575868, Corr 0.684447, Cons 0.056052) | LR: 1.823151e-04
+2025-09-21 05:15:34,220 [INFO] Train step 150/274 - Loss: 0.633976 (MSE 0.060749, CE 1.562047, Corr 0.660117, Cons 0.051926) | LR: 1.744337e-04
+2025-09-21 05:15:37,957 [INFO] Train step 200/274 - Loss: 0.627419 (MSE 0.059828, CE 1.548829, Corr 0.642586, Cons 0.050852) | LR: 1.653459e-04
+2025-09-21 05:15:41,700 [INFO] Train step 250/274 - Loss: 0.619047 (MSE 0.058834, CE 1.531229, Corr 0.622040, Cons 0.049714) | LR: 1.551990e-04
+2025-09-21 05:15:43,563 [INFO] Epoch training completed in 20.74s with average loss 0.615906
+2025-09-21 05:15:44,724 [INFO] Fold 2 - Epoch 2 - Train Loss: 0.615906 | Val MSE: 0.059932 | Val CE: 1.538359 | Val Pearson: 0.448227
+2025-09-21 05:15:44,726 [INFO] Fold 2 - Epoch 2 - New best model with Pearson 0.448227.
+2025-09-21 05:15:44,726 [INFO] Fold 2 - Epoch 3/5 started.
+2025-09-21 05:15:48,661 [INFO] Train step 50/274 - Loss: 0.537859 (MSE 0.048105, CE 1.356353, Corr 0.448946, Cons 0.038114) | LR: 1.385918e-04
+2025-09-21 05:15:52,402 [INFO] Train step 100/274 - Loss: 0.537135 (MSE 0.047346, CE 1.356125, Corr 0.446321, Cons 0.037246) | LR: 1.265581e-04
+2025-09-21 05:15:56,144 [INFO] Train step 150/274 - Loss: 0.534011 (MSE 0.046375, CE 1.350858, Corr 0.437144, Cons 0.036658) | LR: 1.140939e-04
+2025-09-21 05:15:59,868 [INFO] Train step 200/274 - Loss: 0.530286 (MSE 0.045942, CE 1.342526, Corr 0.430089, Cons 0.036338) | LR: 1.014013e-04
+2025-09-21 05:16:03,595 [INFO] Train step 250/274 - Loss: 0.527221 (MSE 0.045435, CE 1.335852, Corr 0.424584, Cons 0.035849) | LR: 8.868601e-05
+2025-09-21 05:16:05,467 [INFO] Epoch training completed in 20.74s with average loss 0.525146
+2025-09-21 05:16:06,642 [INFO] Fold 2 - Epoch 3 - Train Loss: 0.525146 | Val MSE: 0.058995 | Val CE: 1.472795 | Val Pearson: 0.527511
+2025-09-21 05:16:06,643 [INFO] Fold 2 - Epoch 3 - New best model with Pearson 0.527511.
+2025-09-21 05:16:06,644 [INFO] Fold 2 - Epoch 4/5 started.
+2025-09-21 05:16:10,566 [INFO] Train step 50/274 - Loss: 0.473082 (MSE 0.038630, CE 1.211259, Corr 0.341203, Cons 0.029939) | LR: 7.026373e-05
+2025-09-21 05:16:14,302 [INFO] Train step 100/274 - Loss: 0.473062 (MSE 0.038283, CE 1.211783, Corr 0.341365, Cons 0.028661) | LR: 5.837424e-05
+2025-09-21 05:16:18,043 [INFO] Train step 150/274 - Loss: 0.472310 (MSE 0.037991, CE 1.210662, Corr 0.338754, Cons 0.029143) | LR: 4.715941e-05
+2025-09-21 05:16:21,780 [INFO] Train step 200/274 - Loss: 0.470593 (MSE 0.037907, CE 1.206452, Corr 0.336269, Cons 0.029233) | LR: 3.680102e-05
+2025-09-21 05:16:25,522 [INFO] Train step 250/274 - Loss: 0.468467 (MSE 0.037687, CE 1.201420, Corr 0.333277, Cons 0.028997) | LR: 2.746695e-05
+2025-09-21 05:16:27,388 [INFO] Epoch training completed in 20.74s with average loss 0.468139
+2025-09-21 05:16:28,572 [INFO] Fold 2 - Epoch 4 - Train Loss: 0.468139 | Val MSE: 0.060081 | Val CE: 1.487639 | Val Pearson: 0.546786
+2025-09-21 05:16:28,573 [INFO] Fold 2 - Epoch 4 - New best model with Pearson 0.546786.
+2025-09-21 05:16:28,573 [INFO] Fold 2 - Epoch 5/5 started.
+2025-09-21 05:16:32,537 [INFO] Train step 50/274 - Loss: 0.440668 (MSE 0.033927, CE 1.136641, Corr 0.295629, Cons 0.026668) | LR: 1.584961e-05
+2025-09-21 05:16:36,282 [INFO] Train step 100/274 - Loss: 0.442786 (MSE 0.034411, CE 1.140909, Corr 0.299984, Cons 0.027115) | LR: 9.667564e-06
+2025-09-21 05:16:40,026 [INFO] Train step 150/274 - Loss: 0.441990 (MSE 0.034018, CE 1.139981, Corr 0.296743, Cons 0.027371) | LR: 4.949614e-06
+2025-09-21 05:16:43,773 [INFO] Train step 200/274 - Loss: 0.441852 (MSE 0.033897, CE 1.139809, Corr 0.296634, Cons 0.027221) | LR: 1.772230e-06
+2025-09-21 05:16:47,480 [INFO] Train step 250/274 - Loss: 0.441295 (MSE 0.033959, CE 1.138217, Corr 0.296243, Cons 0.027111) | LR: 1.869092e-07
+2025-09-21 05:16:49,298 [INFO] Epoch training completed in 20.72s with average loss 0.440920
+2025-09-21 05:16:50,446 [INFO] Fold 2 - Epoch 5 - Train Loss: 0.440920 | Val MSE: 0.059958 | Val CE: 1.498004 | Val Pearson: 0.551188
+2025-09-21 05:16:50,448 [INFO] Fold 2 - Epoch 5 - New best model with Pearson 0.551188.
+2025-09-21 05:16:51,592 [INFO] Fold 2 - Final Val Pearson: 0.551188 | Final Val MSE: 0.059958 | Final Val CE: 1.498004
+2025-09-21 05:16:52,242 [INFO] ========== Fold 4/5 ==========
+2025-09-21 05:16:55,408 [INFO] Applied swap augmentation. New train size: 52522
+2025-09-21 05:16:55,412 [INFO] Train split: 52522 samples; Val split: 6564 samples.
+2025-09-21 05:16:55,412 [INFO] Initializing PatentDataset with 52522 samples.
+2025-09-21 05:16:55,412 [INFO] Initializing PatentDataset with 6564 samples.
+2025-09-21 05:16:55,416 [INFO] Initializing TransformerRegressor++ with vocab_size=9042, embed_dim=224, heads=8, layers=4, max_len=64, ctxs=106
+2025-09-21 05:16:55,571 [INFO] Creating Warmup+Cosine scheduler: warmup_steps=137, total_steps=1370.
+2025-09-21 05:16:55,572 [INFO] Fold 3 - Epoch 1/5 started.
+2025-09-21 05:16:59,452 [INFO] Train step 50/274 - Loss: 0.906621 (MSE 0.082414, CE 2.234770, Corr 0.949546, Cons 0.158007) | LR: 7.299270e-05
+2025-09-21 05:17:03,119 [INFO] Train step 100/274 - Loss: 0.842265 (MSE 0.078484, CE 2.065115, Corr 0.918311, Cons 0.142168) | LR: 1.459854e-04
+2025-09-21 05:17:06,798 [INFO] Train step 150/274 - Loss: 0.802708 (MSE 0.076260, CE 1.962868, Corr 0.890684, Cons 0.125328) | LR: 1.999451e-04
+2025-09-21 05:17:10,542 [INFO] Train step 200/274 - Loss: 0.777271 (MSE 0.074442, CE 1.898120, Corr 0.871321, Cons 0.113985) | LR: 1.987144e-04
+2025-09-21 05:17:14,252 [INFO] Train step 250/274 - Loss: 0.758609 (MSE 0.072980, CE 1.851911, Corr 0.852739, Cons 0.104118) | LR: 1.958838e-04
+2025-09-21 05:17:16,079 [INFO] Epoch training completed in 20.51s with average loss 0.750461
+2025-09-21 05:17:17,205 [INFO] Fold 3 - Epoch 1 - Train Loss: 0.750461 | Val MSE: 0.063240 | Val CE: 1.587558 | Val Pearson: 0.287273
+2025-09-21 05:17:17,206 [INFO] Fold 3 - Epoch 1 - New best model with Pearson 0.287273.
+2025-09-21 05:17:17,206 [INFO] Fold 3 - Epoch 2/5 started.
+2025-09-21 05:17:21,087 [INFO] Train step 50/274 - Loss: 0.638358 (MSE 0.061694, CE 1.570841, Corr 0.667233, Cons 0.062628) | LR: 1.888623e-04
+2025-09-21 05:17:24,780 [INFO] Train step 100/274 - Loss: 0.637080 (MSE 0.061434, CE 1.571072, Corr 0.653156, Cons 0.058146) | LR: 1.823151e-04
+2025-09-21 05:17:28,476 [INFO] Train step 150/274 - Loss: 0.630552 (MSE 0.060734, CE 1.557194, Corr 0.637117, Cons 0.058088) | LR: 1.744337e-04
+2025-09-21 05:17:32,130 [INFO] Train step 200/274 - Loss: 0.623227 (MSE 0.059905, CE 1.541903, Corr 0.619060, Cons 0.054421) | LR: 1.653459e-04
+2025-09-21 05:17:35,782 [INFO] Train step 250/274 - Loss: 0.616130 (MSE 0.058659, CE 1.526960, Corr 0.604719, Cons 0.052682) | LR: 1.551990e-04
+2025-09-21 05:17:37,624 [INFO] Epoch training completed in 20.42s with average loss 0.613293
+2025-09-21 05:17:38,773 [INFO] Fold 3 - Epoch 2 - Train Loss: 0.613293 | Val MSE: 0.059439 | Val CE: 1.501396 | Val Pearson: 0.443222
+2025-09-21 05:17:38,775 [INFO] Fold 3 - Epoch 2 - New best model with Pearson 0.443222.
+2025-09-21 05:17:38,775 [INFO] Fold 3 - Epoch 3/5 started.
+2025-09-21 05:17:42,681 [INFO] Train step 50/274 - Loss: 0.541552 (MSE 0.048215, CE 1.366852, Corr 0.447289, Cons 0.042618) | LR: 1.385918e-04
+2025-09-21 05:17:46,347 [INFO] Train step 100/274 - Loss: 0.536399 (MSE 0.046612, CE 1.357942, Corr 0.433675, Cons 0.039423) | LR: 1.265581e-04
+2025-09-21 05:17:50,002 [INFO] Train step 150/274 - Loss: 0.533232 (MSE 0.046107, CE 1.351354, Corr 0.426233, Cons 0.040049) | LR: 1.140939e-04
+2025-09-21 05:17:53,664 [INFO] Train step 200/274 - Loss: 0.527564 (MSE 0.045490, CE 1.337996, Corr 0.418325, Cons 0.039009) | LR: 1.014013e-04
+2025-09-21 05:17:57,340 [INFO] Train step 250/274 - Loss: 0.524874 (MSE 0.045183, CE 1.331810, Corr 0.414126, Cons 0.038003) | LR: 8.868601e-05
+2025-09-21 05:17:59,175 [INFO] Epoch training completed in 20.40s with average loss 0.523369
+2025-09-21 05:18:00,340 [INFO] Fold 3 - Epoch 3 - Train Loss: 0.523369 | Val MSE: 0.059481 | Val CE: 1.489528 | Val Pearson: 0.517694
+2025-09-21 05:18:00,341 [INFO] Fold 3 - Epoch 3 - New best model with Pearson 0.517694.
+2025-09-21 05:18:00,342 [INFO] Fold 3 - Epoch 4/5 started.
+2025-09-21 05:18:04,174 [INFO] Train step 50/274 - Loss: 0.467838 (MSE 0.036783, CE 1.203674, Corr 0.321096, Cons 0.031686) | LR: 7.026373e-05
+2025-09-21 05:18:07,829 [INFO] Train step 100/274 - Loss: 0.465851 (MSE 0.037301, CE 1.196895, Corr 0.322592, Cons 0.030715) | LR: 5.837424e-05
+2025-09-21 05:18:11,493 [INFO] Train step 150/274 - Loss: 0.465832 (MSE 0.037087, CE 1.196953, Corr 0.323553, Cons 0.030831) | LR: 4.715941e-05
+2025-09-21 05:18:15,225 [INFO] Train step 200/274 - Loss: 0.465289 (MSE 0.036993, CE 1.195542, Corr 0.323784, Cons 0.030020) | LR: 3.680102e-05
+2025-09-21 05:18:18,967 [INFO] Train step 250/274 - Loss: 0.464329 (MSE 0.036885, CE 1.193131, Corr 0.323104, Cons 0.029897) | LR: 2.746695e-05
+2025-09-21 05:18:20,808 [INFO] Epoch training completed in 20.47s with average loss 0.463768
+2025-09-21 05:18:21,961 [INFO] Fold 3 - Epoch 4 - Train Loss: 0.463768 | Val MSE: 0.062062 | Val CE: 1.493421 | Val Pearson: 0.534874
+2025-09-21 05:18:21,962 [INFO] Fold 3 - Epoch 4 - New best model with Pearson 0.534874.
+2025-09-21 05:18:21,963 [INFO] Fold 3 - Epoch 5/5 started.
+2025-09-21 05:18:25,887 [INFO] Train step 50/274 - Loss: 0.442438 (MSE 0.033836, CE 1.141867, Corr 0.295026, Cons 0.028630) | LR: 1.584961e-05
+2025-09-21 05:18:29,632 [INFO] Train step 100/274 - Loss: 0.443064 (MSE 0.034066, CE 1.142830, Corr 0.297207, Cons 0.028057) | LR: 9.667564e-06
+2025-09-21 05:18:33,377 [INFO] Train step 150/274 - Loss: 0.442688 (MSE 0.033926, CE 1.142221, Corr 0.296166, Cons 0.027881) | LR: 4.949614e-06
+2025-09-21 05:18:37,117 [INFO] Train step 200/274 - Loss: 0.441056 (MSE 0.033997, CE 1.137882, Corr 0.294292, Cons 0.027773) | LR: 1.772230e-06
+2025-09-21 05:18:40,844 [INFO] Train step 250/274 - Loss: 0.441065 (MSE 0.033848, CE 1.138439, Corr 0.293008, Cons 0.027706) | LR: 1.869092e-07
+2025-09-21 05:18:42,711 [INFO] Epoch training completed in 20.75s with average loss 0.440503
+2025-09-21 05:18:43,865 [INFO] Fold 3 - Epoch 5 - Train Loss: 0.440503 | Val MSE: 0.061925 | Val CE: 1.500117 | Val Pearson: 0.537520
+2025-09-21 05:18:43,867 [INFO] Fold 3 - Epoch 5 - New best model with Pearson 0.537520.
+2025-09-21 05:18:44,989 [INFO] Fold 3 - Final Val Pearson: 0.537520 | Final Val MSE: 0.061925 | Final Val CE: 1.500117
+2025-09-21 05:18:45,641 [INFO] ========== Fold 5/5 ==========
+2025-09-21 05:18:49,244 [INFO] Applied swap augmentation. New train size: 52526
+2025-09-21 05:18:49,249 [INFO] Train split: 52526 samples; Val split: 6562 samples.
+2025-09-21 05:18:49,249 [INFO] Initializing PatentDataset with 52526 samples.
+2025-09-21 05:18:49,249 [INFO] Initializing PatentDataset with 6562 samples.
+2025-09-21 05:18:49,250 [INFO] Initializing TransformerRegressor++ with vocab_size=9042, embed_dim=224, heads=8, layers=4, max_len=64, ctxs=106
+2025-09-21 05:18:49,400 [INFO] Creating Warmup+Cosine scheduler: warmup_steps=137, total_steps=1370.
+2025-09-21 05:18:49,401 [INFO] Fold 4 - Epoch 1/5 started.
+2025-09-21 05:18:53,312 [INFO] Train step 50/274 - Loss: 0.954526 (MSE 0.098087, CE 2.338895, Corr 0.982134, Cons 0.169730) | LR: 7.299270e-05
+2025-09-21 05:18:57,054 [INFO] Train step 100/274 - Loss: 0.868828 (MSE 0.085829, CE 2.125041, Corr 0.938861, Cons 0.137429) | LR: 1.459854e-04
+2025-09-21 05:19:00,801 [INFO] Train step 150/274 - Loss: 0.820632 (MSE 0.080811, CE 2.003087, Corr 0.908041, Cons 0.123109) | LR: 1.999451e-04
+2025-09-21 05:19:04,534 [INFO] Train step 200/274 - Loss: 0.790685 (MSE 0.078250, CE 1.926374, Corr 0.889548, Cons 0.112652) | LR: 1.987144e-04
+2025-09-21 05:19:08,258 [INFO] Train step 250/274 - Loss: 0.770706 (MSE 0.076182, CE 1.877203, Corr 0.871400, Cons 0.103658) | LR: 1.958838e-04
+2025-09-21 05:19:10,094 [INFO] Epoch training completed in 20.69s with average loss 0.762313
+2025-09-21 05:19:11,218 [INFO] Fold 4 - Epoch 1 - Train Loss: 0.762313 | Val MSE: 0.072470 | Val CE: 1.646115 | Val Pearson: 0.286627
+2025-09-21 05:19:11,220 [INFO] Fold 4 - Epoch 1 - New best model with Pearson 0.286627.
+2025-09-21 05:19:11,220 [INFO] Fold 4 - Epoch 2/5 started.
+2025-09-21 05:19:15,065 [INFO] Train step 50/274 - Loss: 0.649111 (MSE 0.062663, CE 1.596058, Corr 0.684702, Cons 0.062501) | LR: 1.888623e-04
+2025-09-21 05:19:18,736 [INFO] Train step 100/274 - Loss: 0.641842 (MSE 0.061694, CE 1.580385, Corr 0.670145, Cons 0.058211) | LR: 1.823151e-04
+2025-09-21 05:19:22,429 [INFO] Train step 150/274 - Loss: 0.633419 (MSE 0.060869, CE 1.561962, Corr 0.651288, Cons 0.057561) | LR: 1.744337e-04
+2025-09-21 05:19:26,105 [INFO] Train step 200/274 - Loss: 0.626989 (MSE 0.059979, CE 1.548360, Corr 0.636708, Cons 0.056904) | LR: 1.653459e-04
+2025-09-21 05:19:29,838 [INFO] Train step 250/274 - Loss: 0.621103 (MSE 0.059035, CE 1.537122, Corr 0.619376, Cons 0.054561) | LR: 1.551990e-04
+2025-09-21 05:19:31,719 [INFO] Epoch training completed in 20.50s with average loss 0.617582
+2025-09-21 05:19:32,881 [INFO] Fold 4 - Epoch 2 - Train Loss: 0.617582 | Val MSE: 0.062724 | Val CE: 1.555398 | Val Pearson: 0.454339
+2025-09-21 05:19:32,882 [INFO] Fold 4 - Epoch 2 - New best model with Pearson 0.454339.
+2025-09-21 05:19:32,882 [INFO] Fold 4 - Epoch 3/5 started.
+2025-09-21 05:19:36,759 [INFO] Train step 50/274 - Loss: 0.540225 (MSE 0.047483, CE 1.364009, Corr 0.448049, Cons 0.043077) | LR: 1.385918e-04
+2025-09-21 05:19:40,456 [INFO] Train step 100/274 - Loss: 0.537246 (MSE 0.047172, CE 1.358123, Corr 0.439092, Cons 0.041527) | LR: 1.265581e-04
+2025-09-21 05:19:44,190 [INFO] Train step 150/274 - Loss: 0.532503 (MSE 0.046434, CE 1.348095, Corr 0.428932, Cons 0.040808) | LR: 1.140939e-04
+2025-09-21 05:19:47,927 [INFO] Train step 200/274 - Loss: 0.529284 (MSE 0.045793, CE 1.341140, Corr 0.423882, Cons 0.039405) | LR: 1.014013e-04
+2025-09-21 05:19:51,648 [INFO] Train step 250/274 - Loss: 0.525317 (MSE 0.045290, CE 1.332212, Corr 0.417042, Cons 0.038482) | LR: 8.868601e-05
+2025-09-21 05:19:53,484 [INFO] Epoch training completed in 20.60s with average loss 0.524135
+2025-09-21 05:19:54,645 [INFO] Fold 4 - Epoch 3 - Train Loss: 0.524135 | Val MSE: 0.057628 | Val CE: 1.472374 | Val Pearson: 0.525829
+2025-09-21 05:19:54,647 [INFO] Fold 4 - Epoch 3 - New best model with Pearson 0.525829.
+2025-09-21 05:19:54,647 [INFO] Fold 4 - Epoch 4/5 started.
+2025-09-21 05:19:58,553 [INFO] Train step 50/274 - Loss: 0.468710 (MSE 0.038256, CE 1.200452, Corr 0.335256, Cons 0.034557) | LR: 7.026373e-05
+2025-09-21 05:20:02,286 [INFO] Train step 100/274 - Loss: 0.467126 (MSE 0.037004, CE 1.200179, Corr 0.325922, Cons 0.031871) | LR: 5.837424e-05
+2025-09-21 05:20:05,967 [INFO] Train step 150/274 - Loss: 0.468024 (MSE 0.037091, CE 1.202368, Corr 0.327300, Cons 0.030540) | LR: 4.715941e-05
+2025-09-21 05:20:09,628 [INFO] Train step 200/274 - Loss: 0.468002 (MSE 0.037210, CE 1.201756, Corr 0.328896, Cons 0.030504) | LR: 3.680102e-05
+2025-09-21 05:20:13,292 [INFO] Train step 250/274 - Loss: 0.466488 (MSE 0.037177, CE 1.197541, Corr 0.328678, Cons 0.030360) | LR: 2.746695e-05
+2025-09-21 05:20:15,122 [INFO] Epoch training completed in 20.47s with average loss 0.465324
+2025-09-21 05:20:16,254 [INFO] Fold 4 - Epoch 4 - Train Loss: 0.465324 | Val MSE: 0.062558 | Val CE: 1.519192 | Val Pearson: 0.537878
+2025-09-21 05:20:16,256 [INFO] Fold 4 - Epoch 4 - New best model with Pearson 0.537878.
+2025-09-21 05:20:16,256 [INFO] Fold 4 - Epoch 5/5 started.
+2025-09-21 05:20:20,090 [INFO] Train step 50/274 - Loss: 0.433976 (MSE 0.033835, CE 1.119121, Corr 0.288898, Cons 0.028121) | LR: 1.584961e-05
+2025-09-21 05:20:23,815 [INFO] Train step 100/274 - Loss: 0.437775 (MSE 0.034507, CE 1.127148, Corr 0.296752, Cons 0.027714) | LR: 9.667564e-06
+2025-09-21 05:20:27,538 [INFO] Train step 150/274 - Loss: 0.440210 (MSE 0.034488, CE 1.133884, Corr 0.297918, Cons 0.027416) | LR: 4.949614e-06
+2025-09-21 05:20:31,276 [INFO] Train step 200/274 - Loss: 0.439111 (MSE 0.034388, CE 1.131050, Corr 0.297283, Cons 0.027354) | LR: 1.772230e-06
+2025-09-21 05:20:35,022 [INFO] Train step 250/274 - Loss: 0.438901 (MSE 0.034248, CE 1.130659, Corr 0.297396, Cons 0.027107) | LR: 1.869092e-07
+2025-09-21 05:20:36,863 [INFO] Epoch training completed in 20.61s with average loss 0.438325
+2025-09-21 05:20:38,017 [INFO] Fold 4 - Epoch 5 - Train Loss: 0.438325 | Val MSE: 0.062738 | Val CE: 1.519442 | Val Pearson: 0.540441
+2025-09-21 05:20:38,019 [INFO] Fold 4 - Epoch 5 - New best model with Pearson 0.540441.
+2025-09-21 05:20:39,185 [INFO] Fold 4 - Final Val Pearson: 0.540441 | Final Val MSE: 0.062738 | Final Val CE: 1.519442
+2025-09-21 05:20:39,865 [INFO] OOF Pearson correlation across all folds (pre-rule): 0.534737
+2025-09-21 05:20:39,865 [INFO] OOF MSE across all folds (pre-rule): 0.061530
+2025-09-21 05:20:39,865 [INFO] Ensembling test predictions from all folds by averaging.
+2025-09-21 05:20:39,866 [INFO] Applying rule-based post-processing for anchor == target -> score = 1.0
+2025-09-21 05:20:39,867 [INFO] Found 24 exact anchor==target pairs in test set.
+2025-09-21 05:20:39,869 [INFO] Found 255 exact anchor==target pairs in train (OOF) set; applying same rule to OOF predictions.
+2025-09-21 05:20:39,869 [INFO] OOF Pearson after rule: 0.541492
+2025-09-21 05:20:39,869 [INFO] OOF MSE after rule: 0.061307
+2025-09-21 05:20:39,869 [INFO] Logging final validation results (OOF, post-rule):
+2025-09-21 05:20:39,869 [INFO] Final Validation Pearson: 0.541492 | Final Validation MSE: 0.061307
+2025-09-21 05:20:39,872 [INFO] Writing submission to task/us-patent-phrase-to-phrase-matching/outputs/1/submission_4.csv
+2025-09-21 05:20:39,880 [INFO] Submission file created successfully.
+2025-09-21 05:20:39,880 [INFO] All done (v4).
