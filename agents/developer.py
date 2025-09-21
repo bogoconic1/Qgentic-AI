@@ -1,7 +1,7 @@
-import json
 import logging
 import os
 import re
+import subprocess
 from pathlib import Path
 from typing import Optional
 
@@ -49,9 +49,9 @@ class DeveloperAgent:
         self._configure_logger()
 
         # File targets
-        self.submission_path = self.outputs_dir / "submission.csv"
         self.plan_path = self.outputs_dir / "plan.md"
         self.messages = []
+        self.latest_submission_path: Optional[Path] = None
 
         # OpenRouter client
         self.client = OpenAI(api_key=os.environ.get("OPENROUTER_API_KEY"), base_url="https://openrouter.ai/api/v1")
@@ -81,18 +81,16 @@ class DeveloperAgent:
         description = _safe_read(str(self.base_dir / "description.md"))
         logger.debug("Description length: %s characters", len(description))
         return f"""
-You are a expert Python developer with 10 years of experience. Produce a single, self-contained Python script that reads data only from task/{self.slug} and writes a submission to task/{self.slug}/outputs/{self.iteration}/submission.csv.
+You are a expert Python developer with 10 years of experience. Produce a single, self-contained Python script.
 
 Hard constraints:
 - Single file script.
-- No network access; do not download anything.
 - Use CUDA everywhere where possible.
 - Write logging.info statements everywhere where possible in your code. 
 - Always train with fp16 if using PyTorch/transformers or deep learning.
 - Do not code any fallback methods.
 - Do not try to bypass any potential exceptions by writing your code in try/except blocks.
 - Make sure you log the final validation results.
-- Always write the final CSV to the exact path above.
 
 Environment context:
 {description}
@@ -110,9 +108,14 @@ Project structure:
 - Base data dir: task/{self.slug}
 - Outputs dir: task/{self.slug}/outputs/{self.iteration}
 - The logs should be written to a file named task/{self.slug}/outputs/{self.iteration}/code_{self.iteration}_v{version}.txt
-- Required output: task/{self.slug}/outputs/{self.iteration}/submission.csv
+- Required output: task/{self.slug}/outputs/{self.iteration}/submission_{version}.csv
 """
-        base += "\nReturn the complete Python script that, when run, writes the submission.csv."
+        base += (
+            "\nReturn the complete Python script that, when run, writes logs to "
+            f"task/{self.slug}/outputs/{self.iteration}/code_{self.iteration}_v{version}.txt "
+            "and produces a submission CSV at "
+            f"task/{self.slug}/outputs/{self.iteration}/submission_{version}.csv."
+        )
         return base
 
     def _extract_code(self, content: str) -> str:
@@ -190,6 +193,13 @@ Project structure:
 
             self.messages.append({'role': 'assistant', 'content': code})
 
+            try:
+                with open(self.outputs_dir / f"run_v{version}.log", "w") as f:
+                    f.write(output or "")
+                logger.debug("Run log written for version v%s", version)
+            except Exception:
+                logger.exception("Failed to write run log for version v%s", version)
+
             log_path = self.outputs_dir / f"code_{self.iteration}_v{version}.txt"
             log_content = ""
             try:
@@ -203,21 +213,62 @@ Project structure:
             except Exception:
                 logger.exception("Failed to read execution log at %s", log_path)
 
-            if self.submission_path.exists():
+            submission_path = self.outputs_dir / f"submission_{version}.csv"
+            feedback_parts = []
+            if log_content:
+                feedback_parts.append("Execution log:\n" + log_content.strip())
+            if output:
+                feedback_parts.append("Program stdout/stderr:\n" + output.strip())
+
+            if submission_path.exists():
+                self.latest_submission_path = submission_path
                 logger.info(
-                    "Submission detected at %s after attempt %s", self.submission_path, attempt
+                    "Submission detected at %s after attempt %s", submission_path, attempt
                 )
-                feedback = log_content or "Submission generated successfully."
-                self.messages.append({'role': 'assistant', 'content': code})
-                self.messages.append({'role': 'user', 
-                                      'content': feedback + f"\nAbove are the logs. Please study them and try to think of ways to improve the validation score. In your new code - The logs should be written to a file named task/{self.slug}/outputs/{self.iteration}/code_{self.iteration}_v{version+1}.txt"})
+                grade_feedback = ""
+                try:
+                    grade_cmd = [
+                        "mlebench",
+                        "grade-sample",
+                        str(submission_path),
+                        self.slug,
+                    ]
+                    grade_result = subprocess.run(
+                        grade_cmd,
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                    grade_feedback = (grade_result.stdout or "").strip()
+                    if grade_result.stderr:
+                        if grade_feedback:
+                            grade_feedback += "\n"
+                        grade_feedback += grade_result.stderr.strip()
+                    logger.info("mlebench grade-sample output:\n%s", grade_feedback)
+                except Exception as exc:
+                    grade_feedback = f"Failed to run grading tool: {exc}"
+                    logger.exception("Grading command failed for version %s", version)
+
+                if grade_feedback:
+                    feedback_parts.append("Grader report:\n" + grade_feedback)
+
+                feedback = "\n\n".join(part for part in feedback_parts if part) or "Submission generated successfully."
+                next_instr = (
+                    f"\nIn your refined solution, continue writing logs to "
+                    f"task/{self.slug}/outputs/{self.iteration}/code_{self.iteration}_v{version+1}.txt "
+                    f"and produce the next submission at task/{self.slug}/outputs/{self.iteration}/submission_{version+1}.csv."
+                )
+                self.messages.append({'role': 'user', 'content': feedback + next_instr})
             else:
-                feedback = log_content + output
-                self.messages.append({'role': 'assistant', 'content': code})
-                self.messages.append({'role': 'user', 'content': feedback + f"In your new code - The logs should be written to a file named task/{self.slug}/outputs/{self.iteration}/code_{self.iteration}_v{version+1}.txt"})
+                feedback = "\n\n".join(part for part in feedback_parts if part) or "Run did not produce a submission."
+                next_instr = (
+                    f"\nIn your revised script, ensure logs write to task/{self.slug}/outputs/{self.iteration}/code_{self.iteration}_v{version+1}.txt "
+                    f"and output submission_{version+1}.csv in the same directory."
+                )
+                self.messages.append({'role': 'user', 'content': feedback + next_instr})
 
         logger.warning(
             "Developer run exhausted all attempts without creating submission: %s",
-            self.submission_path,
+            self.outputs_dir / f"submission_{max_tries}.csv",
         )
-        return True
+        return False

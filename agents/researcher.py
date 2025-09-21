@@ -99,7 +99,7 @@ Supporting baseline notes:
 IMPORTANT: DO NOT OPTIMIZE FOR THE EFFICIENCY PRIZE
 """
 
-    def build_plan(self, max_steps: int = 16) -> str:
+    def build_plan(self, max_steps: int = 32) -> str:
         system_prompt = self._compose_system()
         self.messages = [
             {"role": "system", "content": system_prompt},
@@ -130,7 +130,7 @@ IMPORTANT: DO NOT OPTIMIZE FOR THE EFFICIENCY PRIZE
 
             msg_content = "<tool_call>"
 
-            while "<tool_call>" in msg_content or msg_content == "":
+            while "<tool_call>" in msg_content or msg_content == "" or """{"name":""" in msg_content:
                 completion = call_llm_with_retry(self.client, **llm_params)
                 msg = completion.choices[0].message
                 msg_content = msg.content
