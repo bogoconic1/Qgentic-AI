@@ -83,7 +83,7 @@ IMPORTANT: DO NOT OPTIMIZE FOR THE EFFICIENCY PRIZE
                 self.messages.append({"role": "user", "content": "This is your FINAL step. Output the final plan now!"})
 
             llm_params = {
-                "model": "qwen/qwen3-next-80b-a3b-instruct",
+                "model": "qwen/qwen3-next-80b-a3b-thinking",
                 "messages": self.messages,
                 "tools": tools,
                 "tool_choice": "auto",
@@ -91,7 +91,7 @@ IMPORTANT: DO NOT OPTIMIZE FOR THE EFFICIENCY PRIZE
 
             msg_content = "<tool_call>"
 
-            while "<tool_call>" in msg_content:
+            while "<tool_call>" in msg_content or msg_content == "":
                 completion = call_llm_with_retry(self.client, **llm_params)
                 msg = completion.choices[0].message
                 msg_content = msg.content

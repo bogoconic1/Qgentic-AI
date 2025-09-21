@@ -16,5 +16,5 @@ def call_llm_with_retry(llm_client, max_retries=3, **kwargs):
                 raise
         except Exception as e:
             print(f"Error calling LLM: {e}")
-            raise
+            continue
     raise RuntimeError(f"Failed after {max_retries} attempts")

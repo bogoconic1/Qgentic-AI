@@ -72,10 +72,14 @@ class DeveloperAgent:
 You are a expert Python developer with 10 years of experience. Produce a single, self-contained Python script that reads data only from task/{self.slug} and writes a submission to task/{self.slug}/outputs/{self.iteration}/submission.csv.
 
 Hard constraints:
-- Single file script. Name must be code_{self.iteration}_v{{version}}.py
+- Single file script.
 - No network access; do not download anything.
 - Use CUDA everywhere where possible.
-- Write logging.info statements everywhere where possible in your code.
+- Write logging.info statements everywhere where possible in your code. 
+- Always train with fp16 if using PyTorch/transformers or deep learning.
+- Do not code any fallback methods.
+- Do not try to bypass any potential exceptions by writing your code in try/except blocks.
+- Make sure you log the final validation results.
 - Always write the final CSV to the exact path above.
 
 Environment context:
@@ -84,12 +88,8 @@ Environment context:
 Deliver only Python. If using code fences, use ```python.
 """
 
-    def _build_user_prompt(self, plan_markdown: str, prior_error: Optional[str] = None, prior_code: Optional[str] = None) -> str:
-        logger.debug(
-            "Building user prompt. prior_error_present=%s, prior_code_present=%s",
-            bool(prior_error),
-            bool(prior_code),
-        )
+    def _build_user_prompt(self, plan_markdown: str, version: int) -> str:
+        logger.debug("Building user prompt")
         base = f"""
 Researcher Technical Plan (Markdown):
 {plan_markdown}
@@ -97,12 +97,9 @@ Researcher Technical Plan (Markdown):
 Project structure:
 - Base data dir: task/{self.slug}
 - Outputs dir: task/{self.slug}/outputs/{self.iteration}
+- The logs should be written to a file named task/{self.slug}/outputs/{self.iteration}/code_{self.iteration}_v{version}.txt
 - Required output: task/{self.slug}/outputs/{self.iteration}/submission.csv
 """
-        if prior_error:
-            base += "\nPrevious run failed. Here is the traceback and analysis to fix:\n" + prior_error[:8000]
-        if prior_code:
-            base += "\nPrevious script (for reference):\n" + prior_code[:8000]
         base += "\nReturn the complete Python script that, when run, writes the submission.csv."
         return base
 
@@ -145,7 +142,7 @@ Project structure:
         logger.debug("Written code size: %s characters", len(code))
         return code_path
 
-    def run(self, plan_markdown: str, max_tries: int = 3) -> bool:
+    def run(self, plan_markdown: str, max_tries: int = 20) -> bool:
         logger.info(
             "Starting developer run for slug=%s iteration=%s with max_tries=%s",
             self.slug,
@@ -160,11 +157,15 @@ Project structure:
             logger.exception("Failed to persist plan markdown to %s", self.plan_path)
 
         system_prompt = self._compose_system()
-        user_prompt = self._build_user_prompt(plan_markdown)
+        user_prompt = self._build_user_prompt(plan_markdown, version=1)
         self.messages.append({"role": "system", "content": system_prompt})
         self.messages.append({"role": "user", "content": user_prompt})
 
         for attempt in range(1, max_tries + 1):
+            # keep at most 3 assistant/user messages
+            if len(self.messages) > 8:
+                self.messages = self.messages[:2] + self.messages[-6:]
+
             logger.info("Attempt %s/%s for developer run", attempt, max_tries)
             version = attempt
             code = self._generate_code(self.messages)
@@ -175,26 +176,36 @@ Project structure:
             logger.info("Execution output captured for version v%s", version)
             logger.debug("Execution output: %s", output)
 
-            # Save run log
-            try:
-                with open(self.outputs_dir / f"run_v{version}.log", "w") as f:
-                    f.write(output or "")
-                logger.debug("Run log written for version v%s", version)
-            except Exception:
-                logger.exception("Failed to write run log for version v%s", version)
+            self.messages.append({'role': 'assistant', 'content': code})
 
-            # Success condition
+            log_path = self.outputs_dir / f"code_{self.iteration}_v{version}.txt"
+            log_content = ""
+            try:
+                if log_path.exists():
+                    log_content = log_path.read_text()
+                    logger.debug(
+                        "Loaded execution log from %s (length=%s)",
+                        log_path,
+                        len(log_content),
+                    )
+            except Exception:
+                logger.exception("Failed to read execution log at %s", log_path)
+
             if self.submission_path.exists():
                 logger.info(
                     "Submission detected at %s after attempt %s", self.submission_path, attempt
                 )
-                return True
-
-            self.messages.append({'role': 'assistant', 'content': code})
-            self.messages.append({'role': 'user', 'content': output})
+                feedback = log_content or "Submission generated successfully."
+                self.messages.append({'role': 'assistant', 'content': code})
+                self.messages.append({'role': 'user', 
+                                      'content': feedback + f"\nAbove are the logs. Please study them and try to think of ways to improve the validation score. In your new code - The logs should be written to a file named task/{self.slug}/outputs/{self.iteration}/code_{self.iteration}_v{version+1}.txt"})
+            else:
+                feedback = log_content + output
+                self.messages.append({'role': 'assistant', 'content': code})
+                self.messages.append({'role': 'user', 'content': feedback + f"In your new code - The logs should be written to a file named task/{self.slug}/outputs/{self.iteration}/code_{self.iteration}_v{version+1}.txt"})
 
         logger.warning(
             "Developer run exhausted all attempts without creating submission: %s",
             self.submission_path,
         )
-        return False
+        return True
