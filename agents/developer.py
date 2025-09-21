@@ -12,10 +12,6 @@ from tools.developer import execute_code
 from tools.helpers import call_llm_with_retry
 
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
-)
 logger = logging.getLogger(__name__)
 
 
@@ -49,6 +45,8 @@ class DeveloperAgent:
         self.base_dir = Path("task") / slug
         self.outputs_dir = self.base_dir / "outputs" / str(iteration)
         self.outputs_dir.mkdir(parents=True, exist_ok=True)
+        self.developer_log_path = self.outputs_dir / "developer.txt"
+        self._configure_logger()
 
         # File targets
         self.submission_path = self.outputs_dir / "submission.csv"
@@ -63,6 +61,20 @@ class DeveloperAgent:
             "Initialized DeveloperAgent for slug=%s iteration=%s", self.slug, self.iteration
         )
         logger.debug("Outputs directory resolved to: %s", self.outputs_dir)
+
+    def _configure_logger(self) -> None:
+        # Avoid duplicate handlers pointing to same file
+        existing_paths = {
+            getattr(handler, "baseFilename", None)
+            for handler in logger.handlers
+        }
+        if str(self.developer_log_path) not in existing_paths:
+            file_handler = logging.FileHandler(self.developer_log_path)
+            file_handler.setFormatter(
+                logging.Formatter("%(asctime)s %(levelname)s [%(name)s] %(message)s")
+            )
+            logger.addHandler(file_handler)
+        logger.setLevel(logging.DEBUG)
 
     def _compose_system(self) -> str:
         logger.debug("Composing system prompt for slug=%s", self.slug)

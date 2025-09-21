@@ -9,7 +9,7 @@ class Orchestrator:
     def __init__(self, slug: str, iteration: int):
         self.slug = slug
         self.iteration = iteration
-        self.researcher = ResearcherAgent(slug)
+        self.researcher = ResearcherAgent(slug, iteration)
         self.developer = DeveloperAgent(slug, iteration)
 
     def run(self, max_code_tries: int = 20) -> Tuple[bool, str]:
@@ -32,4 +32,3 @@ class Orchestrator:
   
         return success, plan
     
-
