@@ -7,7 +7,7 @@ from typing import List
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from tools.researcher import ask_eda, get_tools
+from tools.researcher import ask_eda, download_external_datasets, get_tools
 from tools.helpers import call_llm_with_retry
 
 
@@ -78,6 +78,7 @@ Primary mandate:
 
 Tooling:
 - `ask_eda(question)` executes Python against the local dataset. Use it to quantify distributions, check data quality, look for leakage, and validate every key assumption.
+- `download_external_datasets(query)` downloads relevant external datasets in task/{self.slug} for further analysis and usefulness in aiding model improvements. You can call ask_eda on these downloaded datasets as well.
 
 Operating principles (competition-agnostic):
 1. Start by clarifying the target variable(s), feature space(s), and evaluation metric(s) from the competition description.
@@ -86,6 +87,7 @@ Operating principles (competition-agnostic):
 4. Probe for potential leakage, ordering effects (temporal, spatial, or otherwise), or train/test distribution shifts.
 5. Only stop calling tools once each major recommendation in your final plan cites concrete evidence from tool outputs.
 6. Keep each tool call focused on one hypothesis at a time and follow up if results are inconclusive.
+7. List all paths to the external datasets which you want the developer to consider, and also tell how to use them.
 
 Deliverable:
 - A step-by-step technical plan for the Developer. For every recommendation, reference the dataset insight that motivated it (e.g., “Class distribution is skewed toward label 6 per Tool Run #2; therefore we…”) and highlight remaining risks or unanswered questions.
@@ -93,7 +95,7 @@ Deliverable:
 Competition Description:
 {self.description}
 
-Supporting baseline notes:
+Supporting baseline notes (may be useful to see what other competitors are trying):
 {_safe_read(os.path.join(base_dir, "public_insights.md"))}
 
 IMPORTANT: DO NOT OPTIMIZE FOR THE EFFICIENCY PRIZE
@@ -106,7 +108,7 @@ IMPORTANT: DO NOT OPTIMIZE FOR THE EFFICIENCY PRIZE
             {
                 "role": "user",
                 "content": (
-                    "Kick off the investigation. Form hypotheses about the dataset and validate each one with ask_eda. Do not produce the final plan until you have evidence-backed insights covering distribution, data quality, and any potential leakage or shift."
+                    "Remember: If you feel that external data is useful, use download_external_datasets and use ask_eda to analyze these as well. Form hypotheses about the available data and validate each one with ask_eda. Do not produce the final plan until you have evidence-backed insights covering distribution, data quality, and any potential leakage or shift."
                 ),
             },
         ]
@@ -159,6 +161,22 @@ IMPORTANT: DO NOT OPTIMIZE FOR THE EFFICIENCY PRIZE
                                 "role": "tool",
                                 "tool_call_id": tool_call.id,
                                 "content": tool_output or "Your question cannot be answered based on the competition discussion threads.",
+                            }
+                        )
+                    elif function_name == "download_external_datasets":
+                        query = arguments.get("query", "")
+                        if not query:
+                            tool_output = "Search query missing; please provide a specific data need."
+                        else:
+                            tool_output = download_external_datasets(query, self.slug)
+
+                        logger.info("External search response length=%s", len(tool_output or ""))
+
+                        self.messages.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": tool_call.id,
+                                "content": tool_output or "No relevant datasets found.",
                             }
                         )
                 continue

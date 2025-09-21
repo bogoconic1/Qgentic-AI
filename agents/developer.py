@@ -76,10 +76,27 @@ class DeveloperAgent:
             logger.addHandler(file_handler)
         logger.setLevel(logging.DEBUG)
 
+    def _build_directory_listing(self) -> str:
+        lines: list[str] = []
+        for current_root, dirs, files in os.walk(self.base_dir):
+            dirs[:] = sorted(d for d in dirs if d != "outputs")
+            rel_root = os.path.relpath(current_root, self.base_dir)
+            depth = 0 if rel_root in (".", "") else rel_root.count(os.sep) + 1
+            indent = "    " * depth
+            folder_display = "." if rel_root in (".", "") else rel_root
+            lines.append(f"{indent}{folder_display}/")
+            for name in sorted(files):
+                lines.append(f"{indent}    {name}")
+        return "\n".join(lines)
+
     def _compose_system(self) -> str:
         logger.debug("Composing system prompt for slug=%s", self.slug)
         description = _safe_read(str(self.base_dir / "description.md"))
         logger.debug("Description length: %s characters", len(description))
+        directory_listing = self._build_directory_listing()
+        logger.debug(
+            "Directory listing prepared for %s (length=%s)", self.base_dir, len(directory_listing)
+        )
         return f"""
 You are a expert Python developer with 10 years of experience. Produce a single, self-contained Python script.
 
@@ -91,9 +108,13 @@ Hard constraints:
 - Do not code any fallback methods.
 - Do not try to bypass any potential exceptions by writing your code in try/except blocks.
 - Make sure you log the final validation results.
+- If possible, DO NOT train from scratch. Use pretrained models.
 
 Environment context:
 {description}
+
+Directory structure for task/{self.slug}:
+{directory_listing}
 
 Deliver only Python. If using code fences, use ```python.
 """
