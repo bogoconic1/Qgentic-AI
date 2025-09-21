@@ -46,3 +46,6 @@ transformers[torch]
 accelerate
 peft
 bitsandbytes
+tf-keras
+sentencepiece
+vllm

@@ -1,61 +1,82 @@
-2025-09-21 09:42:57,705 | INFO | Initialized logging for v2 script.
-2025-09-21 09:42:57,705 | INFO | Base directory: task/us-patent-phrase-to-phrase-matching
-2025-09-21 09:42:57,705 | INFO | Output directory: task/us-patent-phrase-to-phrase-matching/outputs/2
-2025-09-21 09:42:57,705 | INFO | Log path: task/us-patent-phrase-to-phrase-matching/outputs/2/code_2_v2.txt
-2025-09-21 09:42:57,705 | INFO | Submission path: task/us-patent-phrase-to-phrase-matching/outputs/2/submission_2.csv
-2025-09-21 09:42:57,743 | INFO | Using device: cuda
-2025-09-21 09:42:57,774 | INFO | CUDA device count: 2
-2025-09-21 09:42:57,781 | INFO | Current CUDA device: 0
-2025-09-21 09:42:57,781 | INFO | GPU name: NVIDIA L4
-2025-09-21 09:42:57,781 | INFO | PyTorch version: 2.8.0+cu128
-2025-09-21 09:42:57,781 | INFO | Transformers version: 4.56.2
-2025-09-21 09:42:57,781 | INFO | Loading train data from task/us-patent-phrase-to-phrase-matching/train.csv
-2025-09-21 09:42:57,837 | INFO | Train shape: (32825, 5)
-2025-09-21 09:42:57,837 | INFO | Loading test data from task/us-patent-phrase-to-phrase-matching/test.csv
-2025-09-21 09:42:57,842 | INFO | Test shape: (3648, 5)
-2025-09-21 09:42:57,842 | INFO | Loading CPC titles from task/us-patent-phrase-to-phrase-matching/titles.csv
-2025-09-21 09:42:58,685 | INFO | Titles shape: (260476, 7)
-2025-09-21 09:42:58,685 | INFO | Titles columns: ['code', 'title', 'section', 'class', 'subclass', 'group', 'main_group']
-2025-09-21 09:42:58,704 | INFO | Merging CPC titles into train and test on 'context'
-2025-09-21 09:42:58,837 | INFO | Missing titles in train after merge: 0
-2025-09-21 09:42:58,837 | INFO | Missing titles in test after merge: 0
-2025-09-21 09:42:58,837 | INFO | Lowercasing text fields.
-2025-09-21 09:42:58,857 | INFO | Unique contexts in train: 106
-2025-09-21 09:42:58,858 | INFO | Unique contexts in test: 106
-2025-09-21 09:42:58,858 | INFO | Loading tokenizer: microsoft/deberta-v3-large
-2025-09-21 09:43:00,003 | INFO | Tokenizer SEP token: [SEP]
-2025-09-21 09:43:00,003 | INFO | Constructing concatenated input text with tokenizer sep_token.
-2025-09-21 09:43:00,016 | INFO | Creating binned labels for stratification.
-2025-09-21 09:43:00,032 | INFO | Bin 0 (score 0.00) count: 6774
-2025-09-21 09:43:00,032 | INFO | Bin 1 (score 0.25) count: 10306
-2025-09-21 09:43:00,032 | INFO | Bin 2 (score 0.50) count: 11068
-2025-09-21 09:43:00,032 | INFO | Bin 3 (score 0.75) count: 3634
-2025-09-21 09:43:00,032 | INFO | Bin 4 (score 1.00) count: 1043
-2025-09-21 09:43:00,032 | INFO | Computing per-context, per-bin sample weights to handle imbalance.
-2025-09-21 09:43:01,155 | INFO | Mean raw weight before normalization: 1.888743
-2025-09-21 09:43:01,156 | INFO | Mean normalized weight: 1.000000, std: 1.380317
-2025-09-21 09:43:01,156 | INFO | Sample weights (context,bin) mapping snapshot (first 10):
-2025-09-21 09:43:01,156 | INFO |   ('B60', 0): 1.9560
-2025-09-21 09:43:01,156 | INFO |   ('B60', 1): 1.0000
-2025-09-21 09:43:01,156 | INFO |   ('B60', 2): 1.3761
-2025-09-21 09:43:01,156 | INFO |   ('B60', 3): 3.7024
-2025-09-21 09:43:01,156 | INFO |   ('B60', 4): 7.4048
-2025-09-21 09:43:01,156 | INFO |   ('G06', 0): 2.3118
-2025-09-21 09:43:01,156 | INFO |   ('G06', 1): 1.6797
-2025-09-21 09:43:01,156 | INFO |   ('G06', 2): 1.0000
-2025-09-21 09:43:01,156 | INFO |   ('G06', 3): 5.6579
-2025-09-21 09:43:01,156 | INFO |   ('G06', 4): 26.8750
-2025-09-21 09:43:01,163 | INFO | Prepared StratifiedKFold with 4 splits. Fold sizes:
-2025-09-21 09:43:01,163 | INFO | Fold 0: train=24618, valid=8207
-2025-09-21 09:43:01,163 | INFO | Fold 1: train=24619, valid=8206
-2025-09-21 09:43:01,163 | INFO | Fold 2: train=24619, valid=8206
-2025-09-21 09:43:01,163 | INFO | Fold 3: train=24619, valid=8206
-2025-09-21 09:43:01,163 | INFO | ========== Fold 1/4 ==========
-2025-09-21 09:43:01,174 | INFO | Tokenizing train fold 0...
-2025-09-21 09:43:01,176 | INFO | Initializing PatentDataset with 24618 samples; encode now (labels present: True).
-2025-09-21 09:43:06,153 | INFO | Tokenizing valid fold 0...
-2025-09-21 09:43:06,164 | INFO | Initializing PatentDataset with 8207 samples; encode now (labels present: True).
-2025-09-21 09:43:07,778 | INFO | Loading pretrained model: microsoft/deberta-v3-large
-2025-09-21 09:43:09,900 | INFO | Model loaded and moved to CUDA with fp16; enabled gradient checkpointing.
-2025-09-21 09:43:09,900 | INFO | Training configuration: epochs=3, lr=2e-05, batch_size=8, grad_accum=2, steps/epoch=1539, total_steps_estimate=4617
-2025-09-21 09:43:09,948 | INFO | Starting training...
+2025-09-21 12:37:28,158 | INFO | Starting refined script execution (v2).
+2025-09-21 12:37:28,158 | INFO | Base directory: task/us-patent-phrase-to-phrase-matching
+2025-09-21 12:37:28,159 | INFO | Output directory: task/us-patent-phrase-to-phrase-matching/outputs/2
+2025-09-21 12:37:28,159 | INFO | Log file: task/us-patent-phrase-to-phrase-matching/outputs/2/code_2_v2.txt
+2025-09-21 12:37:28,159 | INFO | Submission path: task/us-patent-phrase-to-phrase-matching/outputs/2/submission_2.csv
+2025-09-21 12:37:28,159 | INFO | Set random seed to 42 and enabled cudnn.benchmark=True
+2025-09-21 12:37:28,323 | INFO | Using CUDA device: NVIDIA L4
+2025-09-21 12:37:28,324 | INFO | Hyperparameters: {
+  "max_word_len": 72,
+  "max_char_len": 128,
+  "vocab_min_freq": 1,
+  "char_vocab_min_freq": 1,
+  "d_model": 384,
+  "nhead": 8,
+  "dim_ff": 1024,
+  "num_layers": 6,
+  "dropout": 0.15,
+  "char_dim": 64,
+  "char_num_filters": 128,
+  "char_kernel_sizes": [
+    3,
+    4,
+    5
+  ],
+  "fusion_hidden": 512,
+  "lr": 0.0015,
+  "weight_decay": 0.01,
+  "epochs": 5,
+  "batch_size": 192,
+  "num_folds": 4,
+  "grad_clip_norm": 1.0,
+  "warmup_ratio": 0.06,
+  "fp16": true,
+  "swap_prob": 0.5,
+  "oversample_bins": [
+    0,
+    4
+  ],
+  "oversample_factor": 1.0
+}
+2025-09-21 12:37:28,324 | INFO | Reading train from task/us-patent-phrase-to-phrase-matching/train.csv
+2025-09-21 12:37:28,362 | INFO | Reading test from task/us-patent-phrase-to-phrase-matching/test.csv
+2025-09-21 12:37:28,369 | INFO | Read datasets: train=(32825, 5), test=(3648, 5)
+2025-09-21 12:37:28,369 | INFO | Constructing dual-branch texts: (anchor + context_enriched), (target + context_enriched).
+2025-09-21 12:37:28,473 | INFO | Constructing dual-branch texts: (anchor + context_enriched), (target + context_enriched).
+2025-09-21 12:37:28,486 | INFO | Assigned score bins for stratification.
+2025-09-21 12:37:28,489 | INFO | Building word vocabulary from train+test branch texts.
+2025-09-21 12:37:28,892 | INFO | Word vocabulary size: 9054 (min_freq=1)
+2025-09-21 12:37:28,893 | INFO | Building char vocabulary from train+test branch texts.
+2025-09-21 12:37:29,165 | INFO | Char vocabulary size: 44 (min_freq=1)
+2025-09-21 12:37:29,166 | INFO | Creating stratified 4-fold indices.
+2025-09-21 12:37:29,174 | INFO | Completed stratified fold construction.
+2025-09-21 12:37:29,175 | INFO | Starting training for fold 0
+2025-09-21 12:37:29,175 | INFO | ===== Fold 0 | train size: 24617, val size: 8208 =====
+2025-09-21 12:37:29,175 | INFO | Computing per-sample weights: inverse frequency of (context, bin) with oversample of extremes.
+2025-09-21 12:37:29,192 | INFO | Computed weights: mean=1.000000, std=2.717758, min=0.060300, max=68.380556
+2025-09-21 12:37:29,470 | INFO | Fold 0 model initialized. Total params: 13,607,427
+2025-09-21 12:37:30,353 | INFO | Creating linear warmup scheduler: warmup=38, total=645
+2025-09-21 12:37:47,449 | INFO | Fold 0 | Epoch 1/5 | Train loss: 0.166496 | Time: 17.09s
+2025-09-21 12:37:49,098 | INFO | Fold 0 | Epoch 1 | Val Pearson: 0.005704
+2025-09-21 12:37:49,100 | INFO | Fold 0 | Epoch 1 | New best model saved with Pearson 0.005704
+2025-09-21 12:38:05,302 | INFO | Fold 0 | Epoch 2/5 | Train loss: 0.159361 | Time: 16.20s
+2025-09-21 12:38:06,912 | INFO | Fold 0 | Epoch 2 | Val Pearson: 0.000000
+2025-09-21 12:38:23,105 | INFO | Fold 0 | Epoch 3/5 | Train loss: 0.159935 | Time: 16.19s
+2025-09-21 12:38:24,698 | INFO | Fold 0 | Epoch 3 | Val Pearson: 0.000000
+2025-09-21 12:38:40,916 | INFO | Fold 0 | Epoch 4/5 | Train loss: 0.159221 | Time: 16.22s
+2025-09-21 12:38:42,538 | INFO | Fold 0 | Epoch 4 | Val Pearson: 0.006448
+2025-09-21 12:38:42,541 | INFO | Fold 0 | Epoch 4 | New best model saved with Pearson 0.006448
+2025-09-21 12:38:58,732 | INFO | Fold 0 | Epoch 5/5 | Train loss: 0.158273 | Time: 16.19s
+2025-09-21 12:39:00,355 | INFO | Fold 0 | Epoch 5 | Val Pearson: 0.000000
+2025-09-21 12:39:00,358 | INFO | Fold 0 | Loaded best model state with Pearson 0.006448
+2025-09-21 12:39:01,977 | INFO | Fold 0 | Final Val Pearson: 0.006448
+2025-09-21 12:39:02,933 | INFO | Completed fold 0: Val Pearson=0.006448, Test preds shape=(3648,)
+2025-09-21 12:39:02,934 | INFO | Starting training for fold 1
+2025-09-21 12:39:02,934 | INFO | ===== Fold 1 | train size: 24617, val size: 8208 =====
+2025-09-21 12:39:02,934 | INFO | Computing per-sample weights: inverse frequency of (context, bin) with oversample of extremes.
+2025-09-21 12:39:02,954 | INFO | Computed weights: mean=1.000000, std=2.696473, min=0.062854, max=68.762570
+2025-09-21 12:39:03,061 | INFO | Fold 1 model initialized. Total params: 13,607,427
+2025-09-21 12:39:03,061 | INFO | Creating linear warmup scheduler: warmup=38, total=645
+2025-09-21 12:39:19,290 | INFO | Fold 1 | Epoch 1/5 | Train loss: 0.164179 | Time: 16.23s
+2025-09-21 12:39:20,891 | INFO | Fold 1 | Epoch 1 | Val Pearson: 0.000526
+2025-09-21 12:39:20,894 | INFO | Fold 1 | Epoch 1 | New best model saved with Pearson 0.000526

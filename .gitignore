@@ -5,6 +5,7 @@ __pycache__/
 files/
 mle-bench/
 cache/
+task/
 # C extensions
 *.so
 

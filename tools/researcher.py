@@ -137,7 +137,7 @@ def download_external_datasets(query: str, slug: str) -> str:
     messages = [
         {
             "role": "user",
-            "content": f"""Search for Kaggle datasets relevant to the following query: {query}. Provide up till 3 dataset URLs.
+            "content": f"""Search for Kaggle datasets which are relevant to the following query: {query}. Provide up till 5 dataset URLs.
 At the end of your reasoning/explanation, your response should be in strict JSON format within backticks:
 ```json
 {{"datasets": ["https://www.kaggle.com/datasets/<user1>/<dataset1>", "https://www.kaggle.com/datasets/<user2>/<dataset2>", ...]}}

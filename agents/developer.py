@@ -108,6 +108,7 @@ Hard constraints:
 - Do not code any fallback methods.
 - Do not try to bypass any potential exceptions by writing your code in try/except blocks.
 - Make sure you log the final validation results.
+- You should make your pipeline as customizable as possible (i.e. easy to add new techniques, models, etc).
 - If possible, DO NOT train from scratch. Use pretrained models.
 
 Environment context:
@@ -116,7 +117,12 @@ Environment context:
 Directory structure for task/{self.slug}:
 {directory_listing}
 
-Deliver only Python. If using code fences, use ```python.
+Deliver only Python. Your code should be between ```python backticks, like this:
+```python 
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "0" 
+<YOUR CODE>
+```
 """
 
     def _build_user_prompt(self, plan_markdown: str, version: int) -> str:
@@ -275,7 +281,7 @@ Project structure:
 
                 feedback = "\n\n".join(part for part in feedback_parts if part) or "Submission generated successfully."
                 next_instr = (
-                    f"\nIn your refined solution, continue writing logs to "
+                    f"\nAbove are the logs. Please study them and try to think of ways to improve the validation score. In your refined solution, continue writing logs to "
                     f"task/{self.slug}/outputs/{self.iteration}/code_{self.iteration}_v{version+1}.txt "
                     f"and produce the next submission at task/{self.slug}/outputs/{self.iteration}/submission_{version+1}.csv."
                 )
