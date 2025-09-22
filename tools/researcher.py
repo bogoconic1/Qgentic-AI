@@ -16,7 +16,7 @@ load_dotenv()
 
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
 logger = logging.getLogger(__name__)
@@ -174,6 +174,7 @@ At the end of your reasoning/explanation, your response should be in strict JSON
         logger.info("No datasets found in web search JSON response.")
         return "No relevant datasets found."
     logger.info("Found %s relevant datasets from web search.", len(datasets))
+    dest_path = f"task/{slug}"
     for dataset in datasets:
         try:
             kaggle_url = "/".join(dataset.split("/")[-2:])
@@ -187,7 +188,6 @@ At the end of your reasoning/explanation, your response should be in strict JSON
             path = kagglehub.dataset_download(kaggle_url)
             logger.info("Dataset downloaded to temporary path: %s", path)
             # os cp -r to task/{slug}
-            dest_path = f"task/{slug}"
             os.system(f"cp -r {path}/* {dest_path}")
             logger.info("Dataset downloaded to: %s", dest_path)
         except:

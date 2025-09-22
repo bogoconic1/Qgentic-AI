@@ -109,7 +109,7 @@ Hard constraints:
 - Do not try to bypass any potential exceptions by writing your code in try/except blocks.
 - Make sure you log the final validation results.
 - You should make your pipeline as customizable as possible (i.e. easy to add new techniques, models, etc).
-- If possible, DO NOT train from scratch. Use pretrained models.
+- If possible, DO NOT train from scratch. Use pretrained models. For fastest experimentation, you should use smaller models in initial iterations.
 
 Environment context:
 {self.description}
@@ -120,7 +120,7 @@ Directory structure for task/{self.slug}:
 Deliver only Python. Your code should be between ```python backticks, like this:
 ```python 
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "0" 
+os.environ["CUDA_VISIBLE_DEVICES"] = "1" 
 <YOUR CODE>
 ```
 """
@@ -295,7 +295,6 @@ Project structure:
                     f"and produce the next submission at task/{self.slug}/outputs/{self.iteration}/submission_{version+1}.csv."
                 )
                 self.messages.append({'role': 'user', 'content': feedback + next_instr})
-                return True
             else:
                 feedback = "\n\n".join(part for part in feedback_parts if part) or "Run did not produce a submission."
                 next_instr = (
@@ -308,4 +307,4 @@ Project structure:
             "Developer run exhausted all attempts without creating submission: %s",
             self.outputs_dir / f"submission_{max_tries}.csv",
         )
-        return False
+        return True

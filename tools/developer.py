@@ -86,8 +86,6 @@ If you cannot find any relevant suggestions, return an empty list for both secti
         }
     ]
 
-    logger.debug("SOTA search messages: %s", messages)
-
     try:
         response = client.responses.create(
             model="gpt-5",

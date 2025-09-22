@@ -45,7 +45,7 @@ class ResearcherAgent:
     def _configure_logger(self) -> None:
         if not logging.getLogger().handlers:
             logging.basicConfig(
-                level=logging.INFO,
+                level=logging.DEBUG,
                 format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
             )
 
@@ -117,7 +117,7 @@ IMPORTANT: DO NOT OPTIMIZE FOR THE EFFICIENCY PRIZE
         tools = get_tools()
 
         for step in range(max_steps):
-            logger.debug("Current conversation tail: %s", self.messages[-2:])
+            # logger.debug("Current conversation tail: %s", self.messages[-2:])
             logger.info("[Researcher] Step %s/%s", step + 1, max_steps)
             if step == max_steps - 1:
                 self.messages.append({"role": "user", "content": "This is your FINAL step. Output the final plan now!"})
