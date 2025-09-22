@@ -11,7 +11,7 @@ import json
 import kaggle
 import yaml
 import pandas as pd
-
+from tools.helpers import call_llm_with_retry
 load_dotenv()
 
 
@@ -82,7 +82,7 @@ IMPORTANT: Always provide descriptive answers. Instead of just printing a number
 
         matches = re.findall(pattern, response_text, re.DOTALL)
         code = "\n\n".join(matches).strip()
-        logger.debug("ask_eda generated code (truncated): %s", code[:500])
+        logger.debug("ask_eda generated code (truncated): %s", code)
 
         if not code:
             last_error = "No python code block found in the model response."
@@ -128,7 +128,7 @@ IMPORTANT: Always provide descriptive answers. Instead of just printing a number
 
 def download_external_datasets(query: str, slug: str) -> str:
     """Downloads external datasets"""
-    client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+    client = OpenAI(api_key=os.environ.get("OPENROUTER_API_KEY"), base_url="https://openrouter.ai/api/v1")
     logger.debug("Dataset query: %s", query)
 
     with open(f"task/{slug}/comp_metadata.yaml", "r") as f:
@@ -148,19 +148,23 @@ At the end of your reasoning/explanation, your response should be in strict JSON
     logger.debug("Web search messages: %s", messages)
 
     try:
-        response = client.responses.create(
-            model="gpt-5",
-            input=messages,
-            tools=[{"type": "web_search"}],
-        )
+        content = ""
+        while content == "":
+            completion = call_llm_with_retry(
+                client,
+                model="openai/gpt-5:online",
+                messages=messages,
+            )
+            msg = completion.choices[0].message
+            content = msg.content or ""
 
         logger.info("Received web search response for dataset query.")
-        logger.debug("Web search raw response: %s", response)
+        logger.debug("Web search raw response: %s", content)
     except Exception:
         logger.exception("Web search request for dataset failed.")
-        raise
+        return "No relevant datasets found."
 
-    completion = response.output[-1].content[0].text
+    completion = content
     logger.debug("Web search completion text: %s", completion)
     pattern = r'```json\s*(\{.*?\})\s*```'
     matches = re.findall(pattern, completion, re.DOTALL)

@@ -103,6 +103,7 @@ Hard constraints:
 - Single file script.
 - Use CUDA everywhere where possible.
 - Write logging.info statements everywhere where possible in your code. 
+- MAKE SURE you call logging.basicConfig() at the beginning of your code before any other logging statements.
 - Always train with fp16 if using PyTorch/transformers or deep learning.
 - Do not code any fallback methods.
 - Do not try to bypass any potential exceptions by writing your code in try/except blocks.
@@ -162,7 +163,7 @@ Project structure:
         while content == "":
             completion = call_llm_with_retry(
                 self.client,
-                model="openai/gpt-5",
+                model="openai/gpt-5:online",
                 messages=messages,
             )
             msg = completion.choices[0].message

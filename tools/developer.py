@@ -9,6 +9,7 @@ import traceback
 
 from dotenv import load_dotenv
 from openai import OpenAI
+from tools.helpers import call_llm_with_retry
 
 load_dotenv()
 
@@ -20,7 +21,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+client = OpenAI(api_key=os.environ.get("OPENROUTER_API_KEY"), base_url="https://openrouter.ai/api/v1")
 
 
 def web_search_stack_trace(query: str) -> str:
@@ -37,20 +38,23 @@ def web_search_stack_trace(query: str) -> str:
     logger.debug("Web search messages: %s", messages)
 
     try:
-        response = client.responses.create(
-            model="gpt-5",
-            input=messages,
-            tools=[{"type": "web_search"}],
-        )
-        with open("web_search_response.pkl", "wb") as f:
-            pickle.dump(response, f)
+        content = ""
+        while content == "":
+            completion = call_llm_with_retry(
+                client,
+                model="openai/gpt-5:online",
+                messages=messages,
+            )
+            msg = completion.choices[0].message
+            content = msg.content or ""
+            logger.debug("Web search raw response: %s", completion)
         logger.info("Received web search response for stack trace query.")
-        logger.debug("Web search raw response: %s", response)
+        logger.debug("Web search raw response: %s", content)
     except Exception:
         logger.exception("Web search request for stack trace failed.")
-        raise
+        return "Please try to fix the bug yourself."
 
-    return response.output[-1].content[0].text
+    return content
 
 
 def search_sota_suggestions(description: str, context: str) -> str:
@@ -78,14 +82,19 @@ You advices in you answer should strictly following the following format:
     ]
 
     try:
-        response = client.responses.create(
-            model="gpt-5",
-            input=messages,
-            tools=[{"type": "web_search"}],
-        )
-        logger.debug("SOTA search raw response: %s", response)
+        content = ""
+        while content == "":
+            completion = call_llm_with_retry(
+                client,
+                model="openai/gpt-5:online",
+                messages=messages,
+            )
+            msg = completion.choices[0].message
+            logger.debug("SOTA search raw response: %s", completion)
+            content = msg.content or ""
+        logger.debug("SOTA search raw response: %s", content)
 
-        return response.output[-1].content[0].text
+        return content
 
     except Exception:
         logger.exception("SOTA suggestions web search failed")
@@ -123,8 +132,3 @@ def execute_code(filepath: str) -> str:
         search_result = web_search_stack_trace(trace)
         return trace + "\n" + search_result
 
-
-if __name__ == "__main__":
-    logger.info("Running tools.developer as a script for manual execution test.")
-    output = execute_code("code.py")
-    logger.info("Execution output: %s", output)
