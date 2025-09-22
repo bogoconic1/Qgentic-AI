@@ -137,6 +137,8 @@ IMPORTANT: DO NOT OPTIMIZE FOR THE EFFICIENCY PRIZE
                 msg = completion.choices[0].message
                 msg_content = msg.content
                 logger.debug("Model response content length: %s", len(msg_content or ""))
+                if msg.tool_calls:
+                    break
                 
             self.messages.append(msg.model_dump())
 

@@ -75,7 +75,7 @@ IMPORTANT: Always provide descriptive answers. Instead of just printing a number
         logger.info("ask_eda attempt %s/%s", attempt, max_attempts)
         completion = client.chat.completions.create(
             extra_body={},
-            model="qwen/qwen3-coder",
+            model="openai/gpt-5",
             messages=all_messages
         )
         response_text = completion.choices[0].message.content or ""

@@ -33,7 +33,6 @@ class DeveloperAgent:
     - Executes it and iterates on failures up to max_tries
     - Success condition: writes submission.csv at
       task/<slug>/outputs/<iteration>/submission.csv
-    - Uses OpenRouter (qwen/qwen3-coder) for code generation
     - Ensures Torch MPS fallback flags for Apple Silicon
     """
 
@@ -110,6 +109,7 @@ Hard constraints:
 - Make sure you log the final validation results.
 - You should make your pipeline as customizable as possible (i.e. easy to add new techniques, models, etc).
 - If possible, DO NOT train from scratch. Use pretrained models.
+- NOTE: your code will be run on an A100 SXM4 80GB GPU.
 
 Environment context:
 {self.description}
@@ -120,7 +120,7 @@ Directory structure for task/{self.slug}:
 Deliver only Python. Your code should be between ```python backticks, like this:
 ```python 
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "1" 
+os.environ["CUDA_VISIBLE_DEVICES"] = "0" 
 <YOUR CODE>
 ```
 """
@@ -197,7 +197,7 @@ Project structure:
         system_prompt = self._compose_system()
         user_prompt = self._build_user_prompt(plan_markdown, version=1)
         self.messages.append({"role": "system", "content": system_prompt})
-        self.messages.append({"role": "user", "content": user_prompt + "\n" + "This is an early iteration, you should use smaller models for faster experimentation. For example, 'deberta-v3-xsmall' instead of 'deberta-v3-large'"})
+        self.messages.append({"role": "user", "content": user_prompt + "\n" + "This is an early iteration, you should only use a single fold for validation."})
 
         for attempt in range(1, max_tries + 1):
             # keep at most 3 assistant/user messages
@@ -275,25 +275,22 @@ Project structure:
                 if grade_feedback:
                     feedback_parts.append("Grader report:\n" + grade_feedback)
 
-                if attempt >= 4:
-                    sota_context = code + "\n\n".join(part for part in feedback_parts if part)
-                    try:
-                        sota_suggestions = search_sota_suggestions(self.description, sota_context)
-                    except Exception:
-                        logger.exception("Failed to fetch SOTA suggestions for attempt %s", attempt)
-                        sota_suggestions = ""
-                    if sota_suggestions:
-                        feedback_parts.append("Web search suggestions:\n" + sota_suggestions)
+                sota_context = code + "\n\n".join(part for part in feedback_parts if part)
+                try:
+                    sota_suggestions = search_sota_suggestions(self.description, sota_context)
+                except Exception:
+                    logger.exception("Failed to fetch SOTA suggestions for attempt %s", attempt)
+                    sota_suggestions = ""
+                if sota_suggestions:
+                    feedback_parts.append("Improvment advices:\n" + sota_suggestions)
 
                 feedback = "\n\n".join(part for part in feedback_parts if part) or "Submission generated successfully."
                 next_instr = (
-                    f"\nAbove are the logs and suggestions. Please study them and try to think of ways to improve the validation score. In your refined solution, continue writing logs to "
+                    f"\nAbove are the logs and advices. You must incorporate the advices in your refined solution. Remember you must make the test metric as high as possible. You want to cross the gold threshold in as few iterations as possible. In the refined solution, write logs to "
                     f"task/{self.slug}/outputs/{self.iteration}/code_{self.iteration}_v{version+1}.txt "
                     f"and produce the next submission at task/{self.slug}/outputs/{self.iteration}/submission_{version+1}.csv."
                 )
                 self.messages.append({'role': 'user', 'content': feedback + next_instr})
-                if attempt < 4:
-                    self.messages[-1]['content'] += "\nThis is an early iteration, you should use smaller models for faster experimentation. For example, 'deberta-v3-xsmall' instead of 'deberta-v3-large'"
             else:
                 feedback = "\n\n".join(part for part in feedback_parts if part) or "Run did not produce a submission."
                 next_instr = (
@@ -301,8 +298,6 @@ Project structure:
                     f"and output submission_{version+1}.csv in the same directory."
                 )
                 self.messages.append({'role': 'user', 'content': feedback + next_instr})
-                if attempt < 4:
-                    self.messages[-1]['content'] += "\nThis is an early iteration, you should use smaller models for faster experimentation. For example, 'deberta-v3-xsmall' instead of 'deberta-v3-large'"
 
         logger.warning(
             "Developer run exhausted all attempts without creating submission: %s",

@@ -59,29 +59,20 @@ def search_sota_suggestions(description: str, context: str) -> str:
     messages = [
         {
             "role": "user",
-            "content": f"""You are assisting with improvements for a Kaggle competition.
-Competition Description: 
+            "content": f"""You are given a machine learning task and an initial script on the task.
+
+The machine learning task description is:
 {description}
 
-Refer to the experiment code and notes below and suggest up to three state-of-the-art models or architectures that could meaningfully improve the score.
-If you are listing a huggingface model, include the model in the format <author>/<model>.
-
-Experiment code and notes:
+The initial script and logs are:
 {context}
 
-Output it in valid YAML format as:
-```yaml
-models:
-    - <author>/<model>
-    - <author>/<model>
-    - <author>/<model>
+You should give 3 advices (potentially state-of-the-art models or architectures) that may potentially improve the metric performance(e.g. accuracy) of the script on this machine learning task.
 
-techniques:
-    - <technique 1>
-    - <technique 2>
-    - <technique 3>
-```
-If you cannot find any relevant suggestions, return an empty list for both sections.
+You advices in you answer should strictly following the following format:
+<advice> [YOUR ADVICE] </advice>
+<advice> [YOUR ADVICE] </advice>    
+<advice> [YOUR ADVICE] </advice>
 """
         }
     ]
@@ -94,14 +85,8 @@ If you cannot find any relevant suggestions, return an empty list for both secti
         )
         logger.debug("SOTA search raw response: %s", response)
 
-        raw_output = response.output[-1].content[0].text
-        # parse yaml
-        if "```yaml" in raw_output:
-            yaml_content = raw_output.split("```yaml")[1].split("```")[0]
-        else:
-            yaml_content = raw_output
-        logger.debug("SOTA search YAML content: %s", yaml_content)
-        return yaml_content
+        return response.output[-1].content[0].text
+
     except Exception:
         logger.exception("SOTA suggestions web search failed")
         return ""
