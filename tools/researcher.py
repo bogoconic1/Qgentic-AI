@@ -98,7 +98,10 @@ IMPORTANT: Always provide descriptive answers. Instead of just printing a number
                 old_stdout = sys.stdout
                 sys.stdout = captured_output = StringIO()
 
-                exec(code)
+                with open(f"code_{question.lower().replace(' ', '_')[:32]}.py", "w") as f:
+                    f.write(code)
+
+                exec(open(f"code_{question.lower().replace(' ', '_')[:32]}.py").read(), globals())
                 output = captured_output.getvalue()
 
                 sys.stdout = old_stdout
@@ -197,8 +200,8 @@ At the end of your reasoning/explanation, your response should be in strict JSON
         except:
             logger.exception("Failed to download dataset: %s", dataset)
             continue
-    dest_files = "\n- ".join(os.listdir(dest_path))
-    logger.info(f"Current files in task/{slug}:\n- %s", dest_files)
+    dest_files = _build_directory_listing(dest_path)
+    logger.info(f"Current files in task/{slug}:\n{dest_files}")
     return f'Relevant Datasets are downloaded: now task/{slug} contains: \n{dest_files}'
     
 

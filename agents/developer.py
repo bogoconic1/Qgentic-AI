@@ -4,11 +4,19 @@ import re
 import subprocess
 from pathlib import Path
 from typing import Optional
+import json
 
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from tools.developer import execute_code, search_sota_suggestions
+from tools.developer import (
+    execute_code,
+    search_sota_suggestions,
+)
+from guardrails.developer import (
+    check_logging_basicconfig_order,
+    llm_leakage_review,
+)
 from tools.helpers import call_llm_with_retry
 
 
@@ -209,6 +217,93 @@ Project structure:
             version = attempt
             code = self._generate_code(self.messages)
             code_path = self._write_code(code, version)
+
+            # ---------------------------
+            # Pre-exec guardrail checks
+            # ---------------------------
+            guard_report = {"logging_check": {}, "leakage_check": {}, "decision": "proceed"}
+
+            # 1 AST logging.basicConfig order
+            try:
+                log_check = check_logging_basicconfig_order(str(code_path))
+            except Exception:
+                logger.exception("Logging AST check failed")
+                log_check = {"status": "error", "error": "exception in logging check"}
+            guard_report["logging_check"] = log_check
+            try:
+                logger.info(
+                    "Guardrail[logging] v%s: status=%s, violations=%s, basic_line=%s",
+                    version,
+                    log_check.get("status"),
+                    len(log_check.get("violations", [])),
+                    log_check.get("basicConfig_line"),
+                )
+            except Exception:
+                logger.debug("Failed to log logging guardrail status for v%s", version)
+            if log_check.get("status") == "fail":
+                guard_report["decision"] = "block"
+
+            # 2 LLM-based leakage review (only if not already blocked)
+            if guard_report["decision"] != "block":
+                try:
+                    leakage_json_text = llm_leakage_review(self.description, _safe_read(str(code_path)))
+                except Exception:
+                    logger.exception("LLM leakage review call failed")
+                    leakage_json_text = '{"severity":"warn","findings":[{"rule_id":"llm_error","snippet":"N/A","rationale":"LLM call failed","suggestion":"Proceed with caution"}]}'
+                guard_report["leakage_check"] = leakage_json_text
+                try:
+                    parsed = json.loads(leakage_json_text)
+                    try:
+                        logger.info(
+                            "Guardrail[leakage] v%s: severity=%s, findings=%s",
+                            version,
+                            parsed.get("severity"),
+                            len(parsed.get("findings", [])),
+                        )
+                    except Exception:
+                        logger.debug("Failed to log leakage guardrail status for v%s", version)
+                    if parsed.get("severity") == "block":
+                        guard_report["decision"] = "block"
+                except Exception:
+                    # If JSON malformed, treat as warn but proceed
+                    logger.warning("Guardrail[leakage] v%s: malformed JSON from reviewer; proceeding as warn", version)
+
+            # Persist guard report
+            try:
+                with open(self.outputs_dir / f"guardrail_v{version}.json", "w") as f:
+                    if isinstance(guard_report.get("leakage_check"), str):
+                        # Keep raw string for leakage_check if not JSON parsed
+                        json.dump({**guard_report, "_note": "leakage_check is raw string if model returned non-JSON"}, f)
+                    else:
+                        json.dump(guard_report, f)
+            except Exception:
+                logger.exception("Failed to write guardrail report for v%s", version)
+
+            try:
+                logger.info("Guardrail decision v%s: %s", version, guard_report.get("decision"))
+            except Exception:
+                logger.debug("Failed to log final guardrail decision for v%s", version)
+
+            if guard_report.get("decision") == "block":
+                # Build feedback and ask for a corrected script without executing
+                summary = ["Guardrail checks failed:"]
+                if log_check.get("status") == "fail":
+                    summary.append("- logging.basicConfig must be called before any top-level logging usage.")
+                try:
+                    parsed = json.loads(guard_report.get("leakage_check", "{}")) if isinstance(guard_report.get("leakage_check"), str) else guard_report.get("leakage_check", {})
+                    sev = parsed.get("severity")
+                    if sev == "block":
+                        summary.append("- Potential data leakage risks detected. Please fix as suggested.")
+                except Exception:
+                    pass
+                fix_instr = (
+                    "\nPlease regenerate the script addressing the above guardrail issues. "
+                    f"Write logs to task/{self.slug}/outputs/{self.iteration}/code_{self.iteration}_v{version+1}.txt "
+                    f"and produce submission_{version+1}.csv."
+                )
+                self.messages.append({"role": "user", "content": "\n".join(summary) + fix_instr})
+                # continue to next attempt without execution
+                continue
 
             # Execute the code (inherits current env with MPS flags)
             output = execute_code(str(code_path))

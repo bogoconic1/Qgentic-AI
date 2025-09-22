@@ -6,6 +6,8 @@ files/
 mle-bench/
 cache/
 task/
+catboost_info/
+code_*.py
 # C extensions
 *.so
 
