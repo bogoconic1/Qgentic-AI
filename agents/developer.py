@@ -109,7 +109,7 @@ Hard constraints:
 - Do not try to bypass any potential exceptions by writing your code in try/except blocks.
 - Make sure you log the final validation results.
 - You should make your pipeline as customizable as possible (i.e. easy to add new techniques, models, etc).
-- If possible, DO NOT train from scratch. Use pretrained models. For fastest experimentation, you should use smaller models in initial iterations.
+- If possible, DO NOT train from scratch. Use pretrained models.
 
 Environment context:
 {self.description}
@@ -157,10 +157,6 @@ Project structure:
 
     def _generate_code(self, messages: list[dict[str, str]]) -> str:
         logger.info("Requesting code generation from model for iteration %s", self.iteration)
-        for msg in messages:
-            logger.debug("============================")
-            logger.debug("Message role: %s, content length: %s start: %s", msg['role'], len(msg['content']), msg['content'])
-            logger.debug("============================")
         
         content = ""
         while content == "":
@@ -201,7 +197,7 @@ Project structure:
         system_prompt = self._compose_system()
         user_prompt = self._build_user_prompt(plan_markdown, version=1)
         self.messages.append({"role": "system", "content": system_prompt})
-        self.messages.append({"role": "user", "content": user_prompt})
+        self.messages.append({"role": "user", "content": user_prompt + "\n" + "This is an early iteration, you should use smaller models for faster experimentation. For example, 'deberta-v3-xsmall' instead of 'deberta-v3-large'"})
 
         for attempt in range(1, max_tries + 1):
             # keep at most 3 assistant/user messages
@@ -279,14 +275,15 @@ Project structure:
                 if grade_feedback:
                     feedback_parts.append("Grader report:\n" + grade_feedback)
 
-                sota_context = code + "\n\n".join(part for part in feedback_parts if part)
-                try:
-                    sota_suggestions = search_sota_suggestions(self.description, sota_context)
-                except Exception:
-                    logger.exception("Failed to fetch SOTA suggestions for attempt %s", attempt)
-                    sota_suggestions = ""
-                if sota_suggestions:
-                    feedback_parts.append("Web search suggestions:\n" + sota_suggestions)
+                if attempt >= 4:
+                    sota_context = code + "\n\n".join(part for part in feedback_parts if part)
+                    try:
+                        sota_suggestions = search_sota_suggestions(self.description, sota_context)
+                    except Exception:
+                        logger.exception("Failed to fetch SOTA suggestions for attempt %s", attempt)
+                        sota_suggestions = ""
+                    if sota_suggestions:
+                        feedback_parts.append("Web search suggestions:\n" + sota_suggestions)
 
                 feedback = "\n\n".join(part for part in feedback_parts if part) or "Submission generated successfully."
                 next_instr = (
@@ -295,6 +292,8 @@ Project structure:
                     f"and produce the next submission at task/{self.slug}/outputs/{self.iteration}/submission_{version+1}.csv."
                 )
                 self.messages.append({'role': 'user', 'content': feedback + next_instr})
+                if attempt < 4:
+                    self.messages[-1]['content'] += "\nThis is an early iteration, you should use smaller models for faster experimentation. For example, 'deberta-v3-xsmall' instead of 'deberta-v3-large'"
             else:
                 feedback = "\n\n".join(part for part in feedback_parts if part) or "Run did not produce a submission."
                 next_instr = (
@@ -302,6 +301,8 @@ Project structure:
                     f"and output submission_{version+1}.csv in the same directory."
                 )
                 self.messages.append({'role': 'user', 'content': feedback + next_instr})
+                if attempt < 4:
+                    self.messages[-1]['content'] += "\nThis is an early iteration, you should use smaller models for faster experimentation. For example, 'deberta-v3-xsmall' instead of 'deberta-v3-large'"
 
         logger.warning(
             "Developer run exhausted all attempts without creating submission: %s",
