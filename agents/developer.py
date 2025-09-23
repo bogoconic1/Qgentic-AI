@@ -149,6 +149,7 @@ class DeveloperAgent:
 
         self.benchmark_info = info
         median = info.get("median_threshold")
+        self.gold_threshold = info.get("gold_threshold")
         is_lower_better = info.get("is_lower_better")
 
         if median is None or is_lower_better is None:
@@ -158,10 +159,8 @@ class DeveloperAgent:
             )
             return
 
-        comparator = "greater than" if is_lower_better else "less than"
         self.threshold_directive = (
-            "Remember: you must include this in your code. Performance baseline: After the first validation fold, if the score is "
-            f"{comparator} {median}, break out of the loop after fold 0 instead of completing all folds. For deep learning pipelines, if at the end of the 1st epoch of fold 0, the loss or metric is NaN, also break out of the loop. If you are using more than 1 model, the stopping condition should be computed based on the ensembled result, not the individual model result. Also add a logging message which says CRITICAL: the performance is too weak and you need to investigate."
+            "Remember: you must include this in your code. For deep learning pipelines, if at the end of the 1st epoch of fold 0, the loss or metric is NaN, break out of the training loop. Also add a logging message which says CRITICAL: the loss/metric is NaN and you need to investigate."
         )
         logger.info(
             "Baseline grading info cached: median=%s, is_lower_better=%s",
@@ -203,6 +202,11 @@ Environment context:
 
 Directory structure for task/{self.slug}:
 {directory_listing}
+
+Score to beat:
+{self.gold_threshold}
+
+Remember: Implement what you believe is the best solution for this task. You want to make the test metric as high as possible. You want to cross the gold threshold in as few iterations as possible.
 
 Deliver only Python. Your code should be between ```python backticks, like this:
 ```python 
@@ -291,8 +295,8 @@ Project structure:
 
         for attempt in range(1, max_tries + 1):
             # keep at most 3 assistant/user messages
-            if len(self.messages) > 8:
-                self.messages = self.messages[:2] + self.messages[-6:]
+            if len(self.messages) > 6:
+                self.messages = self.messages[:2] + self.messages[-4:]
 
             logger.info("Attempt %s/%s for developer run", attempt, max_tries)
             version = attempt
