@@ -1,0 +1,337 @@
+2025-09-22 13:49:20,081 | INFO | Initialized logging to task/learning-agency-lab-automated-essay-scoring-2/outputs/7/code_7_v2.txt
+2025-09-22 13:49:20,082 | INFO | Configuration loaded: {
+  "base_dir": "task/learning-agency-lab-automated-essay-scoring-2",
+  "train_file": "train.csv",
+  "test_file": "test.csv",
+  "persuade_file": "persuade_corpus_2.0.csv",
+  "outputs_dir": "task/learning-agency-lab-automated-essay-scoring-2/outputs/7",
+  "submission_path": "task/learning-agency-lab-automated-essay-scoring-2/outputs/7/submission_2.csv",
+  "save_model_path": "task/learning-agency-lab-automated-essay-scoring-2/outputs/7/deberta_v3_large_fold0.bin",
+  "seed": 42,
+  "model_name": "microsoft/deberta-v3-large",
+  "max_length": 1024,
+  "train_batch_size": 8,
+  "valid_batch_size": 16,
+  "num_labels": 6,
+  "lr": 5e-05,
+  "weight_decay": 0.01,
+  "epochs": 3,
+  "warmup_ratio": 0.1,
+  "grad_accum_steps": 1,
+  "early_stopping_patience": 2,
+  "n_splits": 5,
+  "fold_index": 0,
+  "target_col": "score",
+  "text_col": "full_text",
+  "persuade_group_id_col": "essay_id_comp",
+  "persuade_text_col": "discourse_text",
+  "persuade_target_col": "holistic_essay_score",
+  "persuade_max_samples_per_class": null,
+  "lowercase": true
+}
+2025-09-22 13:49:20,083 | INFO | Starting AES 2.0 training script (v2).
+2025-09-22 13:49:20,083 | INFO | Setting random seed: 42
+2025-09-22 13:49:20,084 | INFO | Seeds set and cuDNN benchmark enabled.
+2025-09-22 13:49:20,111 | INFO | Using device: cuda
+2025-09-22 13:49:20,129 | INFO | CUDA device count: 1
+2025-09-22 13:49:20,133 | INFO | CUDA device name: NVIDIA A100-SXM4-80GB
+2025-09-22 13:49:20,133 | INFO | Loading competition and Persuade datasets from base dir: task/learning-agency-lab-automated-essay-scoring-2
+2025-09-22 13:49:25,673 | INFO | Loaded train: (15576, 3), test: (1731, 2), persuade: (285383, 27)
+2025-09-22 13:49:25,732 | INFO | Competition train class distribution:
+score
+1    1124
+2    4249
+3    5629
+4    3563
+5     876
+6     135
+2025-09-22 13:49:25,733 | INFO | Aggregating Persuade 2.0 by 'essay_id_comp' -> concatenating 'discourse_text'.
+2025-09-22 13:49:25,750 | INFO | Rows with non-null targets in Persuade: 285383
+2025-09-22 13:49:25,777 | INFO | Found 0 groups with multiple unique targets; these will be dropped for consistency.
+2025-09-22 13:49:26,131 | INFO | Aggregated Persuade 2.0 shape: (25996, 3)
+2025-09-22 13:49:26,139 | INFO | Merged dataset shape before dedup: (41572, 3)
+2025-09-22 13:49:26,139 | INFO | Cleaning text for merged train and test datasets.
+2025-09-22 13:49:29,892 | INFO | Checking for duplicate full_text entries with conflicting labels.
+2025-09-22 13:49:30,099 | INFO | Number of conflicting duplicate texts: 0
+2025-09-22 13:49:30,121 | INFO | Dropped 3261 duplicate rows (keeping first occurrence).
+2025-09-22 13:49:30,121 | INFO | Final merged dataset shape: (38311, 3)
+2025-09-22 13:49:30,122 | INFO | Merged dataset class distribution:
+score
+1     1663
+2     8901
+3    12990
+4     9781
+5     4001
+6      975
+2025-09-22 13:49:30,170 | INFO | Preparing single-fold stratified train/validation split.
+2025-09-22 13:49:30,192 | INFO | Fold 0 | Train size: 30648 | Val size: 7663
+2025-09-22 13:49:30,193 | INFO | Train class distribution:
+score
+1     1331
+2     7120
+3    10392
+4     7825
+5     3200
+6      780
+2025-09-22 13:49:30,193 | INFO | Val class distribution:
+score
+1     332
+2    1781
+3    2598
+4    1956
+5     801
+6     195
+2025-09-22 13:49:30,193 | INFO | Loading tokenizer and model: microsoft/deberta-v3-large
+2025-09-22 13:49:36,054 | INFO | Model loaded and moved to CUDA.
+2025-09-22 13:49:36,059 | INFO | Initializing EssayDataset with 30648 samples. Has labels: yes
+2025-09-22 13:49:36,060 | INFO | Initializing EssayDataset with 7663 samples. Has labels: yes
+2025-09-22 13:49:36,060 | INFO | Initializing EssayDataset with 1731 samples. Has labels: no
+2025-09-22 13:49:36,060 | INFO | DataLoaders constructed.
+2025-09-22 13:49:36,060 | INFO | Setting up optimizer, scheduler, scaler, and loss function with training-only class weights.
+2025-09-22 13:49:36,062 | INFO | Computing class weights from training split only, labels shape: (30648,)
+2025-09-22 13:49:36,062 | INFO | Training class counts: [1331.0, 7120.0, 10392.0, 7825.0, 3200.0, 780.0]
+2025-09-22 13:49:36,063 | INFO | Computed class weights (mean ~ 2.307402): [3.8377161026000977, 0.7174157500267029, 0.49153193831443787, 0.6527795791625977, 1.596250057220459, 6.548717975616455]
+2025-09-22 13:49:36,064 | INFO | Beginning training with early stopping (patience=2).
+2025-09-22 13:49:36,064 | INFO | Starting training epoch 1.
+2025-09-22 13:50:28,527 | INFO | Epoch 1 | Step 50/3831 | Loss: 1.771297
+2025-09-22 13:51:18,714 | INFO | Epoch 1 | Step 100/3831 | Loss: 1.580146
+2025-09-22 13:52:07,071 | INFO | Epoch 1 | Step 150/3831 | Loss: 1.435014
+2025-09-22 13:52:58,636 | INFO | Epoch 1 | Step 200/3831 | Loss: 1.434623
+2025-09-22 13:53:47,122 | INFO | Epoch 1 | Step 250/3831 | Loss: 1.427767
+2025-09-22 13:54:36,870 | INFO | Epoch 1 | Step 300/3831 | Loss: 1.254106
+2025-09-22 13:55:25,771 | INFO | Epoch 1 | Step 350/3831 | Loss: 1.272425
+2025-09-22 13:56:14,069 | INFO | Epoch 1 | Step 400/3831 | Loss: 1.022965
+2025-09-22 13:57:03,856 | INFO | Epoch 1 | Step 450/3831 | Loss: 0.987288
+2025-09-22 13:57:58,135 | INFO | Epoch 1 | Step 500/3831 | Loss: 0.971696
+2025-09-22 13:58:48,590 | INFO | Epoch 1 | Step 550/3831 | Loss: 0.907386
+2025-09-22 13:59:39,080 | INFO | Epoch 1 | Step 600/3831 | Loss: 0.919915
+2025-09-22 14:00:31,431 | INFO | Epoch 1 | Step 650/3831 | Loss: 1.052362
+2025-09-22 14:01:19,200 | INFO | Epoch 1 | Step 700/3831 | Loss: 0.634152
+2025-09-22 14:02:12,588 | INFO | Epoch 1 | Step 750/3831 | Loss: 0.878514
+2025-09-22 14:03:03,648 | INFO | Epoch 1 | Step 800/3831 | Loss: 0.632341
+2025-09-22 14:03:54,165 | INFO | Epoch 1 | Step 850/3831 | Loss: 1.638551
+2025-09-22 14:04:43,208 | INFO | Epoch 1 | Step 900/3831 | Loss: 1.103821
+2025-09-22 14:05:32,875 | INFO | Epoch 1 | Step 950/3831 | Loss: 0.766191
+2025-09-22 14:06:24,330 | INFO | Epoch 1 | Step 1000/3831 | Loss: 1.531514
+2025-09-22 14:07:14,165 | INFO | Epoch 1 | Step 1050/3831 | Loss: 1.007051
+2025-09-22 14:08:03,723 | INFO | Epoch 1 | Step 1100/3831 | Loss: 1.137903
+2025-09-22 14:08:51,928 | INFO | Epoch 1 | Step 1150/3831 | Loss: 0.866270
+2025-09-22 14:09:43,458 | INFO | Epoch 1 | Step 1200/3831 | Loss: 1.451138
+2025-09-22 14:10:35,307 | INFO | Epoch 1 | Step 1250/3831 | Loss: 0.739748
+2025-09-22 14:11:24,556 | INFO | Epoch 1 | Step 1300/3831 | Loss: 0.789084
+2025-09-22 14:12:19,209 | INFO | Epoch 1 | Step 1350/3831 | Loss: 0.903047
+2025-09-22 14:13:11,855 | INFO | Epoch 1 | Step 1400/3831 | Loss: 2.034153
+2025-09-22 14:13:57,854 | INFO | Epoch 1 | Step 1450/3831 | Loss: 2.018279
+2025-09-22 14:14:46,595 | INFO | Epoch 1 | Step 1500/3831 | Loss: 2.295953
+2025-09-22 14:15:36,432 | INFO | Epoch 1 | Step 1550/3831 | Loss: 2.035591
+2025-09-22 14:16:27,702 | INFO | Epoch 1 | Step 1600/3831 | Loss: 1.994159
+2025-09-22 14:17:20,960 | INFO | Epoch 1 | Step 1650/3831 | Loss: 1.705068
+2025-09-22 14:18:11,080 | INFO | Epoch 1 | Step 1700/3831 | Loss: 1.647264
+2025-09-22 14:19:02,167 | INFO | Epoch 1 | Step 1750/3831 | Loss: 1.693888
+2025-09-22 14:19:52,011 | INFO | Epoch 1 | Step 1800/3831 | Loss: 1.792225
+2025-09-22 14:20:43,543 | INFO | Epoch 1 | Step 1850/3831 | Loss: 1.681989
+2025-09-22 14:21:35,111 | INFO | Epoch 1 | Step 1900/3831 | Loss: 1.796005
+2025-09-22 14:22:25,838 | INFO | Epoch 1 | Step 1950/3831 | Loss: 2.143167
+2025-09-22 14:23:21,638 | INFO | Epoch 1 | Step 2000/3831 | Loss: 1.628264
+2025-09-22 14:24:13,869 | INFO | Epoch 1 | Step 2050/3831 | Loss: 1.885107
+2025-09-22 14:25:05,557 | INFO | Epoch 1 | Step 2100/3831 | Loss: 1.627815
+2025-09-22 14:25:57,163 | INFO | Epoch 1 | Step 2150/3831 | Loss: 1.601258
+2025-09-22 14:26:47,073 | INFO | Epoch 1 | Step 2200/3831 | Loss: 1.542223
+2025-09-22 14:27:37,663 | INFO | Epoch 1 | Step 2250/3831 | Loss: 2.086885
+2025-09-22 14:28:29,505 | INFO | Epoch 1 | Step 2300/3831 | Loss: 1.693014
+2025-09-22 14:29:20,638 | INFO | Epoch 1 | Step 2350/3831 | Loss: 1.644894
+2025-09-22 14:30:10,098 | INFO | Epoch 1 | Step 2400/3831 | Loss: 1.799047
+2025-09-22 14:30:59,865 | INFO | Epoch 1 | Step 2450/3831 | Loss: 1.604871
+2025-09-22 14:31:51,340 | INFO | Epoch 1 | Step 2500/3831 | Loss: 1.745770
+2025-09-22 14:32:43,572 | INFO | Epoch 1 | Step 2550/3831 | Loss: 1.630227
+2025-09-22 14:33:35,327 | INFO | Epoch 1 | Step 2600/3831 | Loss: 1.857419
+2025-09-22 14:34:26,453 | INFO | Epoch 1 | Step 2650/3831 | Loss: 1.770697
+2025-09-22 14:35:21,262 | INFO | Epoch 1 | Step 2700/3831 | Loss: 1.911146
+2025-09-22 14:36:13,572 | INFO | Epoch 1 | Step 2750/3831 | Loss: 1.706390
+2025-09-22 14:37:06,086 | INFO | Epoch 1 | Step 2800/3831 | Loss: 1.754253
+2025-09-22 14:37:56,690 | INFO | Epoch 1 | Step 2850/3831 | Loss: 1.662554
+2025-09-22 14:38:48,294 | INFO | Epoch 1 | Step 2900/3831 | Loss: 1.680057
+2025-09-22 14:39:40,231 | INFO | Epoch 1 | Step 2950/3831 | Loss: 1.849737
+2025-09-22 14:40:28,448 | INFO | Epoch 1 | Step 3000/3831 | Loss: 1.534987
+2025-09-22 14:41:19,402 | INFO | Epoch 1 | Step 3050/3831 | Loss: 1.637952
+2025-09-22 14:42:12,309 | INFO | Epoch 1 | Step 3100/3831 | Loss: 1.782995
+2025-09-22 14:43:04,742 | INFO | Epoch 1 | Step 3150/3831 | Loss: 1.678713
+2025-09-22 14:43:56,778 | INFO | Epoch 1 | Step 3200/3831 | Loss: 2.060771
+2025-09-22 14:44:45,611 | INFO | Epoch 1 | Step 3250/3831 | Loss: 1.783514
+2025-09-22 14:45:39,250 | INFO | Epoch 1 | Step 3300/3831 | Loss: 1.690049
+2025-09-22 14:46:33,721 | INFO | Epoch 1 | Step 3350/3831 | Loss: 1.899316
+2025-09-22 14:47:24,446 | INFO | Epoch 1 | Step 3400/3831 | Loss: 1.615502
+2025-09-22 14:48:13,980 | INFO | Epoch 1 | Step 3450/3831 | Loss: 1.665317
+2025-09-22 14:49:06,202 | INFO | Epoch 1 | Step 3500/3831 | Loss: 1.652073
+2025-09-22 14:50:01,078 | INFO | Epoch 1 | Step 3550/3831 | Loss: 2.080514
+2025-09-22 14:50:49,061 | INFO | Epoch 1 | Step 3600/3831 | Loss: 1.685033
+2025-09-22 14:51:41,177 | INFO | Epoch 1 | Step 3650/3831 | Loss: 1.687480
+2025-09-22 14:52:34,629 | INFO | Epoch 1 | Step 3700/3831 | Loss: 1.754804
+2025-09-22 14:53:26,742 | INFO | Epoch 1 | Step 3750/3831 | Loss: 2.048035
+2025-09-22 14:54:17,819 | INFO | Epoch 1 | Step 3800/3831 | Loss: 1.732195
+2025-09-22 14:54:50,960 | INFO | Finished epoch 1 | Avg train loss: 1.581687
+2025-09-22 14:54:50,962 | INFO | Running validation.
+2025-09-22 15:01:34,526 | INFO | Computing Quadratic Weighted Kappa (QWK).
+2025-09-22 15:01:34,530 | INFO | QWK computed: 0.000000
+2025-09-22 15:01:34,531 | INFO | Validation QWK: 0.000000
+2025-09-22 15:01:34,531 | INFO | Epoch 1 completed | Train loss: 1.581687 | Val QWK: 0.000000
+2025-09-22 15:01:36,266 | INFO | New best model saved at epoch 1 with QWK 0.000000 to task/learning-agency-lab-automated-essay-scoring-2/outputs/7/deberta_v3_large_fold0.bin
+2025-09-22 15:01:36,266 | INFO | Starting training epoch 2.
+2025-09-22 15:02:25,120 | INFO | Epoch 2 | Step 50/3831 | Loss: 2.238879
+2025-09-22 15:03:18,922 | INFO | Epoch 2 | Step 100/3831 | Loss: 2.024167
+2025-09-22 15:04:08,028 | INFO | Epoch 2 | Step 150/3831 | Loss: 1.917291
+2025-09-22 15:04:58,818 | INFO | Epoch 2 | Step 200/3831 | Loss: 1.542921
+2025-09-22 15:05:50,734 | INFO | Epoch 2 | Step 250/3831 | Loss: 1.670497
+2025-09-22 15:06:40,694 | INFO | Epoch 2 | Step 300/3831 | Loss: 1.614999
+2025-09-22 15:07:34,155 | INFO | Epoch 2 | Step 350/3831 | Loss: 1.573797
+2025-09-22 15:08:22,664 | INFO | Epoch 2 | Step 400/3831 | Loss: 1.685132
+2025-09-22 15:08:58,054 | INFO | Epoch 2 | Step 450/3831 | Loss: 1.872952
+2025-09-22 15:09:26,617 | INFO | Epoch 2 | Step 500/3831 | Loss: 2.219265
+2025-09-22 15:09:55,973 | INFO | Epoch 2 | Step 550/3831 | Loss: 1.827380
+2025-09-22 15:10:26,512 | INFO | Epoch 2 | Step 600/3831 | Loss: 1.647068
+2025-09-22 15:10:53,832 | INFO | Epoch 2 | Step 650/3831 | Loss: 1.700646
+2025-09-22 15:11:23,449 | INFO | Epoch 2 | Step 700/3831 | Loss: 1.699932
+2025-09-22 15:11:51,552 | INFO | Epoch 2 | Step 750/3831 | Loss: 1.895634
+2025-09-22 15:12:21,550 | INFO | Epoch 2 | Step 800/3831 | Loss: 1.805525
+2025-09-22 15:12:52,539 | INFO | Epoch 2 | Step 850/3831 | Loss: 2.056155
+2025-09-22 15:13:22,718 | INFO | Epoch 2 | Step 900/3831 | Loss: 1.769572
+2025-09-22 15:13:53,088 | INFO | Epoch 2 | Step 950/3831 | Loss: 1.690248
+2025-09-22 15:14:22,160 | INFO | Epoch 2 | Step 1000/3831 | Loss: 1.784015
+2025-09-22 15:14:50,783 | INFO | Epoch 2 | Step 1050/3831 | Loss: 1.645141
+2025-09-22 15:15:23,157 | INFO | Epoch 2 | Step 1100/3831 | Loss: 1.895755
+2025-09-22 15:15:51,201 | INFO | Epoch 2 | Step 1150/3831 | Loss: 1.904309
+2025-09-22 15:16:21,456 | INFO | Epoch 2 | Step 1200/3831 | Loss: 1.668267
+2025-09-22 15:16:52,028 | INFO | Epoch 2 | Step 1250/3831 | Loss: 1.820933
+2025-09-22 15:17:20,994 | INFO | Epoch 2 | Step 1300/3831 | Loss: 1.659953
+2025-09-22 15:17:53,245 | INFO | Epoch 2 | Step 1350/3831 | Loss: 1.649004
+2025-09-22 15:18:22,870 | INFO | Epoch 2 | Step 1400/3831 | Loss: 1.652083
+2025-09-22 15:18:51,560 | INFO | Epoch 2 | Step 1450/3831 | Loss: 1.673918
+2025-09-22 15:19:21,056 | INFO | Epoch 2 | Step 1500/3831 | Loss: 1.867151
+2025-09-22 15:19:52,523 | INFO | Epoch 2 | Step 1550/3831 | Loss: 1.926756
+2025-09-22 15:20:22,372 | INFO | Epoch 2 | Step 1600/3831 | Loss: 1.888851
+2025-09-22 15:20:52,944 | INFO | Epoch 2 | Step 1650/3831 | Loss: 1.883288
+2025-09-22 15:21:22,028 | INFO | Epoch 2 | Step 1700/3831 | Loss: 1.844519
+2025-09-22 15:21:53,383 | INFO | Epoch 2 | Step 1750/3831 | Loss: 1.833972
+2025-09-22 15:22:23,335 | INFO | Epoch 2 | Step 1800/3831 | Loss: 2.189308
+2025-09-22 15:22:55,344 | INFO | Epoch 2 | Step 1850/3831 | Loss: 1.697368
+2025-09-22 15:23:24,617 | INFO | Epoch 2 | Step 1900/3831 | Loss: 1.859009
+2025-09-22 15:23:55,289 | INFO | Epoch 2 | Step 1950/3831 | Loss: 1.652652
+2025-09-22 15:24:25,136 | INFO | Epoch 2 | Step 2000/3831 | Loss: 2.025633
+2025-09-22 15:24:55,144 | INFO | Epoch 2 | Step 2050/3831 | Loss: 1.682860
+2025-09-22 15:25:25,131 | INFO | Epoch 2 | Step 2100/3831 | Loss: 1.647504
+2025-09-22 15:25:57,429 | INFO | Epoch 2 | Step 2150/3831 | Loss: 1.679986
+2025-09-22 15:26:27,311 | INFO | Epoch 2 | Step 2200/3831 | Loss: 1.729392
+2025-09-22 15:26:57,556 | INFO | Epoch 2 | Step 2250/3831 | Loss: 1.724743
+2025-09-22 15:27:26,041 | INFO | Epoch 2 | Step 2300/3831 | Loss: 1.650469
+2025-09-22 15:27:55,302 | INFO | Epoch 2 | Step 2350/3831 | Loss: 1.587817
+2025-09-22 15:28:23,271 | INFO | Epoch 2 | Step 2400/3831 | Loss: 1.787266
+2025-09-22 15:28:51,963 | INFO | Epoch 2 | Step 2450/3831 | Loss: 1.644459
+2025-09-22 15:29:24,382 | INFO | Epoch 2 | Step 2500/3831 | Loss: 1.750841
+2025-09-22 15:29:52,451 | INFO | Epoch 2 | Step 2550/3831 | Loss: 1.955520
+2025-09-22 15:30:22,484 | INFO | Epoch 2 | Step 2600/3831 | Loss: 1.664821
+2025-09-22 15:30:52,010 | INFO | Epoch 2 | Step 2650/3831 | Loss: 1.621349
+2025-09-22 15:31:21,576 | INFO | Epoch 2 | Step 2700/3831 | Loss: 1.538208
+2025-09-22 15:31:48,290 | INFO | Epoch 2 | Step 2750/3831 | Loss: 1.833429
+2025-09-22 15:32:15,171 | INFO | Epoch 2 | Step 2800/3831 | Loss: 1.752429
+2025-09-22 15:32:46,820 | INFO | Epoch 2 | Step 2850/3831 | Loss: 1.743219
+2025-09-22 15:33:17,873 | INFO | Epoch 2 | Step 2900/3831 | Loss: 1.864025
+2025-09-22 15:33:45,932 | INFO | Epoch 2 | Step 2950/3831 | Loss: 1.664864
+2025-09-22 15:34:17,855 | INFO | Epoch 2 | Step 3000/3831 | Loss: 1.692273
+2025-09-22 15:34:49,236 | INFO | Epoch 2 | Step 3050/3831 | Loss: 1.661540
+2025-09-22 15:35:17,282 | INFO | Epoch 2 | Step 3100/3831 | Loss: 1.616321
+2025-09-22 15:35:45,436 | INFO | Epoch 2 | Step 3150/3831 | Loss: 1.778198
+2025-09-22 15:36:15,844 | INFO | Epoch 2 | Step 3200/3831 | Loss: 1.714032
+2025-09-22 15:36:44,696 | INFO | Epoch 2 | Step 3250/3831 | Loss: 1.675612
+2025-09-22 15:37:13,556 | INFO | Epoch 2 | Step 3300/3831 | Loss: 1.683346
+2025-09-22 15:37:43,605 | INFO | Epoch 2 | Step 3350/3831 | Loss: 1.783785
+2025-09-22 15:38:14,153 | INFO | Epoch 2 | Step 3400/3831 | Loss: 1.673350
+2025-09-22 15:38:45,500 | INFO | Epoch 2 | Step 3450/3831 | Loss: 1.678113
+2025-09-22 15:39:15,712 | INFO | Epoch 2 | Step 3500/3831 | Loss: 1.614249
+2025-09-22 15:39:47,559 | INFO | Epoch 2 | Step 3550/3831 | Loss: 1.796287
+2025-09-22 15:40:15,850 | INFO | Epoch 2 | Step 3600/3831 | Loss: 1.707001
+2025-09-22 15:40:45,214 | INFO | Epoch 2 | Step 3650/3831 | Loss: 1.829064
+2025-09-22 15:41:13,930 | INFO | Epoch 2 | Step 3700/3831 | Loss: 1.646971
+2025-09-22 15:41:45,274 | INFO | Epoch 2 | Step 3750/3831 | Loss: 2.048354
+2025-09-22 15:42:14,841 | INFO | Epoch 2 | Step 3800/3831 | Loss: 1.896363
+2025-09-22 15:42:32,113 | INFO | Finished epoch 2 | Avg train loss: 1.772030
+2025-09-22 15:42:32,115 | INFO | Running validation.
+2025-09-22 15:46:23,837 | INFO | Computing Quadratic Weighted Kappa (QWK).
+2025-09-22 15:46:23,841 | INFO | QWK computed: 0.000000
+2025-09-22 15:46:23,841 | INFO | Validation QWK: 0.000000
+2025-09-22 15:46:23,841 | INFO | Epoch 2 completed | Train loss: 1.772030 | Val QWK: 0.000000
+2025-09-22 15:46:23,841 | INFO | No improvement this epoch. Patience: 1/2
+2025-09-22 15:46:23,841 | INFO | Starting training epoch 3.
+2025-09-22 15:46:53,510 | INFO | Epoch 3 | Step 50/3831 | Loss: 1.660276
+2025-09-22 15:47:23,134 | INFO | Epoch 3 | Step 100/3831 | Loss: 1.933754
+2025-09-22 15:47:54,110 | INFO | Epoch 3 | Step 150/3831 | Loss: 1.743738
+2025-09-22 15:48:23,326 | INFO | Epoch 3 | Step 200/3831 | Loss: 1.311901
+2025-09-22 15:48:49,638 | INFO | Epoch 3 | Step 250/3831 | Loss: 1.943896
+2025-09-22 15:49:19,905 | INFO | Epoch 3 | Step 300/3831 | Loss: 1.160976
+2025-09-22 15:49:48,998 | INFO | Epoch 3 | Step 350/3831 | Loss: 1.463250
+2025-09-22 15:50:19,060 | INFO | Epoch 3 | Step 400/3831 | Loss: 1.162728
+2025-09-22 15:50:46,979 | INFO | Epoch 3 | Step 450/3831 | Loss: 1.255327
+2025-09-22 15:51:14,111 | INFO | Epoch 3 | Step 500/3831 | Loss: 1.488657
+2025-09-22 15:51:42,841 | INFO | Epoch 3 | Step 550/3831 | Loss: 1.242382
+2025-09-22 15:52:11,947 | INFO | Epoch 3 | Step 600/3831 | Loss: 1.255053
+2025-09-22 15:52:42,310 | INFO | Epoch 3 | Step 650/3831 | Loss: 1.308908
+2025-09-22 15:53:14,669 | INFO | Epoch 3 | Step 700/3831 | Loss: 1.345304
+2025-09-22 15:53:42,805 | INFO | Epoch 3 | Step 750/3831 | Loss: 1.360504
+2025-09-22 15:54:13,587 | INFO | Epoch 3 | Step 800/3831 | Loss: 1.425373
+2025-09-22 15:54:43,955 | INFO | Epoch 3 | Step 850/3831 | Loss: 1.415644
+2025-09-22 15:55:13,970 | INFO | Epoch 3 | Step 900/3831 | Loss: 1.252442
+2025-09-22 15:55:42,377 | INFO | Epoch 3 | Step 950/3831 | Loss: 1.389246
+2025-09-22 15:56:14,003 | INFO | Epoch 3 | Step 1000/3831 | Loss: 1.138280
+2025-09-22 15:56:43,919 | INFO | Epoch 3 | Step 1050/3831 | Loss: 1.301142
+2025-09-22 15:57:13,657 | INFO | Epoch 3 | Step 1100/3831 | Loss: 1.125564
+2025-09-22 15:57:44,124 | INFO | Epoch 3 | Step 1150/3831 | Loss: 1.381113
+2025-09-22 15:58:12,804 | INFO | Epoch 3 | Step 1200/3831 | Loss: 1.484248
+2025-09-22 15:58:43,421 | INFO | Epoch 3 | Step 1250/3831 | Loss: 1.264374
+2025-09-22 15:59:13,626 | INFO | Epoch 3 | Step 1300/3831 | Loss: 1.575785
+2025-09-22 15:59:43,671 | INFO | Epoch 3 | Step 1350/3831 | Loss: 1.277711
+2025-09-22 16:00:11,179 | INFO | Epoch 3 | Step 1400/3831 | Loss: 1.215951
+2025-09-22 16:00:40,142 | INFO | Epoch 3 | Step 1450/3831 | Loss: 1.324590
+2025-09-22 16:01:10,085 | INFO | Epoch 3 | Step 1500/3831 | Loss: 0.938888
+2025-09-22 16:01:38,270 | INFO | Epoch 3 | Step 1550/3831 | Loss: 1.353508
+2025-09-22 16:02:06,255 | INFO | Epoch 3 | Step 1600/3831 | Loss: 1.274534
+2025-09-22 16:02:38,263 | INFO | Epoch 3 | Step 1650/3831 | Loss: 1.350827
+2025-09-22 16:03:08,109 | INFO | Epoch 3 | Step 1700/3831 | Loss: 1.236375
+2025-09-22 16:03:39,051 | INFO | Epoch 3 | Step 1750/3831 | Loss: 1.384171
+2025-09-22 16:04:10,779 | INFO | Epoch 3 | Step 1800/3831 | Loss: 2.007520
+2025-09-22 16:04:41,611 | INFO | Epoch 3 | Step 1850/3831 | Loss: 1.144878
+2025-09-22 16:05:13,433 | INFO | Epoch 3 | Step 1900/3831 | Loss: 1.197217
+2025-09-22 16:05:41,875 | INFO | Epoch 3 | Step 1950/3831 | Loss: 1.361241
+2025-09-22 16:06:10,853 | INFO | Epoch 3 | Step 2000/3831 | Loss: 1.595428
+2025-09-22 16:06:40,724 | INFO | Epoch 3 | Step 2050/3831 | Loss: 1.116468
+2025-09-22 16:07:09,348 | INFO | Epoch 3 | Step 2100/3831 | Loss: 1.336121
+2025-09-22 16:07:38,379 | INFO | Epoch 3 | Step 2150/3831 | Loss: 1.267176
+2025-09-22 16:08:08,505 | INFO | Epoch 3 | Step 2200/3831 | Loss: 1.107532
+2025-09-22 16:08:40,113 | INFO | Epoch 3 | Step 2250/3831 | Loss: 0.922020
+2025-09-22 16:09:09,465 | INFO | Epoch 3 | Step 2300/3831 | Loss: 1.763131
+2025-09-22 16:09:41,310 | INFO | Epoch 3 | Step 2350/3831 | Loss: 1.424955
+2025-09-22 16:10:09,898 | INFO | Epoch 3 | Step 2400/3831 | Loss: 0.889102
+2025-09-22 16:10:38,163 | INFO | Epoch 3 | Step 2450/3831 | Loss: 1.258783
+2025-09-22 16:11:09,005 | INFO | Epoch 3 | Step 2500/3831 | Loss: 1.191076
+2025-09-22 16:11:37,234 | INFO | Epoch 3 | Step 2550/3831 | Loss: 1.051580
+2025-09-22 16:12:05,992 | INFO | Epoch 3 | Step 2600/3831 | Loss: 1.224039
+2025-09-22 16:12:35,705 | INFO | Epoch 3 | Step 2650/3831 | Loss: 0.990568
+2025-09-22 16:13:07,485 | INFO | Epoch 3 | Step 2700/3831 | Loss: 1.067894
+2025-09-22 16:13:38,297 | INFO | Epoch 3 | Step 2750/3831 | Loss: 1.176550
+2025-09-22 16:14:08,142 | INFO | Epoch 3 | Step 2800/3831 | Loss: 1.083493
+2025-09-22 16:14:35,369 | INFO | Epoch 3 | Step 2850/3831 | Loss: 1.205326
+2025-09-22 16:15:05,368 | INFO | Epoch 3 | Step 2900/3831 | Loss: 1.171507
+2025-09-22 16:15:33,989 | INFO | Epoch 3 | Step 2950/3831 | Loss: 0.999522
+2025-09-22 16:16:04,235 | INFO | Epoch 3 | Step 3000/3831 | Loss: 1.279809
+2025-09-22 16:16:34,353 | INFO | Epoch 3 | Step 3050/3831 | Loss: 0.980771
+2025-09-22 16:17:06,295 | INFO | Epoch 3 | Step 3100/3831 | Loss: 0.904609
+2025-09-22 16:17:36,234 | INFO | Epoch 3 | Step 3150/3831 | Loss: 2.156467
+2025-09-22 16:18:03,776 | INFO | Epoch 3 | Step 3200/3831 | Loss: 1.323581
+2025-09-22 16:18:31,127 | INFO | Epoch 3 | Step 3250/3831 | Loss: 1.177932
+2025-09-22 16:18:59,483 | INFO | Epoch 3 | Step 3300/3831 | Loss: 0.945959
+2025-09-22 16:19:29,740 | INFO | Epoch 3 | Step 3350/3831 | Loss: 0.978185
+2025-09-22 16:19:59,850 | INFO | Epoch 3 | Step 3400/3831 | Loss: 1.631291
+2025-09-22 16:20:27,960 | INFO | Epoch 3 | Step 3450/3831 | Loss: 1.069963
+2025-09-22 16:20:59,547 | INFO | Epoch 3 | Step 3500/3831 | Loss: 1.141327
+2025-09-22 16:21:30,111 | INFO | Epoch 3 | Step 3550/3831 | Loss: 1.308873
+2025-09-22 16:21:59,636 | INFO | Epoch 3 | Step 3600/3831 | Loss: 1.101368
+2025-09-22 16:22:28,398 | INFO | Epoch 3 | Step 3650/3831 | Loss: 1.197265
+2025-09-22 16:22:58,948 | INFO | Epoch 3 | Step 3700/3831 | Loss: 1.096170

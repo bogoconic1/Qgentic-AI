@@ -1,0 +1,1499 @@
+2025-09-22 10:01:41,546 | INFO | Initialized logging system.
+2025-09-22 10:01:41,546 | INFO | Logs will be written to: task/us-patent-phrase-to-phrase-matching/outputs/4/code_4_v6.txt
+2025-09-22 10:01:41,548 | INFO | Config: {'seed': 42, 'n_splits': 5, 'num_workers': 4, 'fp16': True, 'model_name': 'microsoft/deberta-v3-large', 'max_length': 256, 'train_bs': 16, 'valid_bs': 32, 'epochs': 3, 'lr': 3e-05, 'weight_decay': 0.01, 'optimizer_eps': 1e-08, 'warmup_ratio': 0.1, 'max_grad_norm': 1.0, 'dropout': 0.2, 'n_msd': 5, 'last_n_layers': 4, 'layer_decay': 0.95, 'gradient_checkpointing': False, 'lambda_reg': 0.5, 'lambda_exp': 0.25, 'lambda_cls': 0.25, 'rdrop_coef': 0.3, 'lambda_np': 0.05, 'blend_alpha_init': 0.5, 'adv_epsilon': 0.01, 'adv_weight': 0.5, 'adv_start_ratio': 0.1, 'ema_decay': 0.999, 'dapt_enable': True, 'dapt_steps': 1200, 'dapt_bs': 64, 'dapt_lr': 5e-05, 'dapt_wd': 0.01, 'dapt_warmup_ratio': 0.06, 'dapt_mask_prob': 0.15, 'dapt_corpus_cap': 100000, 'model_variants': 2, 'variant_seeds': [42, 2025], 'train_file': 'task/us-patent-phrase-to-phrase-matching/train.csv', 'test_file': 'task/us-patent-phrase-to-phrase-matching/test.csv', 'titles_file': 'task/us-patent-phrase-to-phrase-matching/titles.csv', 'submission_file': 'task/us-patent-phrase-to-phrase-matching/outputs/4/submission_6.csv', 'log_interval': 100}
+2025-09-22 10:01:41,727 | INFO | Using device: cuda, CUDA device count: 1
+2025-09-22 10:01:41,731 | INFO | CUDA device name: NVIDIA A100-SXM4-80GB
+2025-09-22 10:01:41,732 | INFO | Seeding all RNGs with seed=42
+2025-09-22 10:01:41,733 | INFO | Loading CSV files.
+2025-09-22 10:01:42,086 | INFO | Train shape: (32825, 5), columns: ['id', 'anchor', 'target', 'context', 'score']
+2025-09-22 10:01:42,087 | INFO | Test shape: (3648, 5), columns: ['id', 'anchor', 'target', 'context', 'score']
+2025-09-22 10:01:42,087 | INFO | Titles shape: (260476, 7), columns: ['code', 'title', 'section', 'class', 'subclass', 'group', 'main_group']
+2025-09-22 10:01:42,087 | INFO | Column 'subgroup' not found in titles; creating empty column.
+2025-09-22 10:01:42,088 | INFO | Merging CPC titles into train and test on context->code.
+2025-09-22 10:01:42,193 | INFO | Post-merge train shape: (32825, 12), columns now: ['id', 'anchor', 'target', 'context', 'score', 'code', 'title', 'section', 'class', 'subclass', 'group', 'subgroup']
+2025-09-22 10:01:42,193 | INFO | Post-merge test shape: (3648, 12), columns now: ['id', 'anchor', 'target', 'context', 'score', 'code', 'title', 'section', 'class', 'subclass', 'group', 'subgroup']
+2025-09-22 10:01:42,193 | INFO | Checking for train-test leakage (overlap of (anchor, target, context)).
+2025-09-22 10:01:42,234 | INFO | Number of overlapping (anchor, target, context) triplets: 0
+2025-09-22 10:01:42,234 | INFO | Computing test context distribution (top 10).
+2025-09-22 10:01:42,235 | INFO | Test context H01: count=230, pct=6.30%
+2025-09-22 10:01:42,235 | INFO | Test context H04: count=215, pct=5.89%
+2025-09-22 10:01:42,235 | INFO | Test context G01: count=179, pct=4.91%
+2025-09-22 10:01:42,235 | INFO | Test context A61: count=165, pct=4.52%
+2025-09-22 10:01:42,235 | INFO | Test context F16: count=121, pct=3.32%
+2025-09-22 10:01:42,235 | INFO | Test context C07: count=115, pct=3.15%
+2025-09-22 10:01:42,235 | INFO | Test context G06: count=99, pct=2.71%
+2025-09-22 10:01:42,235 | INFO | Test context B60: count=94, pct=2.58%
+2025-09-22 10:01:42,235 | INFO | Test context G02: count=89, pct=2.44%
+2025-09-22 10:01:42,235 | INFO | Test context H03: count=83, pct=2.28%
+2025-09-22 10:01:42,235 | INFO | Score distribution per context for H04, G01, A61.
+2025-09-22 10:01:42,237 | INFO | Context H04: total=1962
+2025-09-22 10:01:42,238 | INFO |   score=0.0: count=478
+2025-09-22 10:01:42,238 | INFO |   score=0.25: count=617
+2025-09-22 10:01:42,238 | INFO |   score=0.5: count=562
+2025-09-22 10:01:42,238 | INFO |   score=0.75: count=251
+2025-09-22 10:01:42,238 | INFO |   score=1.0: count=54
+2025-09-22 10:01:42,240 | INFO | Context G01: total=1633
+2025-09-22 10:01:42,240 | INFO |   score=0.0: count=355
+2025-09-22 10:01:42,240 | INFO |   score=0.25: count=399
+2025-09-22 10:01:42,240 | INFO |   score=0.5: count=655
+2025-09-22 10:01:42,240 | INFO |   score=0.75: count=183
+2025-09-22 10:01:42,240 | INFO |   score=1.0: count=41
+2025-09-22 10:01:42,242 | INFO | Context A61: total=1312
+2025-09-22 10:01:42,242 | INFO |   score=0.0: count=298
+2025-09-22 10:01:42,242 | INFO |   score=0.25: count=376
+2025-09-22 10:01:42,242 | INFO |   score=0.5: count=512
+2025-09-22 10:01:42,242 | INFO |   score=0.75: count=102
+2025-09-22 10:01:42,242 | INFO |   score=1.0: count=24
+2025-09-22 10:01:42,243 | INFO | Maximum target character length in test.csv: 47
+2025-09-22 10:01:42,243 | INFO | Checking mapping coverage of contexts to titles codes.
+2025-09-22 10:01:42,277 | INFO | All train contexts covered by titles: True
+2025-09-22 10:01:42,278 | INFO | All test contexts covered by titles: True
+2025-09-22 10:01:42,278 | INFO | Building sentence pairs for both variants.
+2025-09-22 10:01:43,260 | INFO | Sample Variant 0 pairs:
+2025-09-22 10:01:43,261 | INFO | V0 FIRST: context: code: B60 | title: VEHICLES IN GENERAL | section: B | class: 60.0 | subclass:  [CTX] anchor: obstacle course
+2025-09-22 10:01:43,261 | INFO | V0 SECOND: target: obstacle position trajectory
+2025-09-22 10:01:43,261 | INFO | V0 FIRST: context: code: G06 | title: COMPUTING; CALCULATING; COUNTING | section: G | class: 6.0 | subclass:  [CTX] anchor: hardware blocks
+2025-09-22 10:01:43,261 | INFO | V0 SECOND: target: housing
+2025-09-22 10:01:43,261 | INFO | Sample Variant 1 pairs:
+2025-09-22 10:01:43,261 | INFO | V1 FIRST: anchor: obstacle course
+2025-09-22 10:01:43,261 | INFO | V1 SECOND: target: obstacle position trajectory [DOMAIN B60: VEHICLES IN GENERAL]
+2025-09-22 10:01:43,261 | INFO | V1 FIRST: anchor: hardware blocks
+2025-09-22 10:01:43,261 | INFO | V1 SECOND: target: housing [DOMAIN G06: COMPUTING; CALCULATING; COUNTING]
+2025-09-22 10:01:43,261 | INFO | Preparing stratified K-Fold splits.
+2025-09-22 10:01:43,268 | INFO | Total folds: 5
+2025-09-22 10:01:43,268 | INFO | Loading tokenizer.
+2025-09-22 10:01:44,106 | INFO | Starting Domain-Adaptive Pretraining (MLM).
+2025-09-22 10:01:44,106 | INFO | Seeding all RNGs with seed=52
+2025-09-22 10:01:44,107 | INFO | Building DAPT corpus from CPC titles and pair templates.
+2025-09-22 10:01:44,396 | INFO | DAPT corpus size: 100000
+2025-09-22 10:01:59,611 | INFO | DAPT step 50/1200 | MLM loss: 3.895684 | LR: 0.00003472
+2025-09-22 10:02:12,253 | INFO | DAPT step 100/1200 | MLM loss: 2.443677 | LR: 0.00004992
+2025-09-22 10:02:23,901 | INFO | DAPT step 150/1200 | MLM loss: 2.863746 | LR: 0.00004941
+2025-09-22 10:02:35,773 | INFO | DAPT step 200/1200 | MLM loss: 2.386481 | LR: 0.00004843
+2025-09-22 10:02:47,659 | INFO | DAPT step 250/1200 | MLM loss: 2.382886 | LR: 0.00004699
+2025-09-22 10:03:00,358 | INFO | DAPT step 300/1200 | MLM loss: 2.169622 | LR: 0.00004513
+2025-09-22 10:03:12,781 | INFO | DAPT step 350/1200 | MLM loss: 2.109972 | LR: 0.00004287
+2025-09-22 10:03:24,386 | INFO | DAPT step 400/1200 | MLM loss: 1.838601 | LR: 0.00004027
+2025-09-22 10:03:36,220 | INFO | DAPT step 450/1200 | MLM loss: 1.768657 | LR: 0.00003738
+2025-09-22 10:03:48,634 | INFO | DAPT step 500/1200 | MLM loss: 1.693417 | LR: 0.00003424
+2025-09-22 10:03:59,913 | INFO | DAPT step 550/1200 | MLM loss: 1.997494 | LR: 0.00003093
+2025-09-22 10:04:12,815 | INFO | DAPT step 600/1200 | MLM loss: 1.541251 | LR: 0.00002750
+2025-09-22 10:04:25,090 | INFO | DAPT step 650/1200 | MLM loss: 2.009121 | LR: 0.00002403
+2025-09-22 10:04:36,606 | INFO | DAPT step 700/1200 | MLM loss: 1.569800 | LR: 0.00002057
+2025-09-22 10:04:48,443 | INFO | DAPT step 750/1200 | MLM loss: 1.621933 | LR: 0.00001720
+2025-09-22 10:05:00,247 | INFO | DAPT step 800/1200 | MLM loss: 1.433539 | LR: 0.00001397
+2025-09-22 10:05:12,251 | INFO | DAPT step 850/1200 | MLM loss: 1.680925 | LR: 0.00001097
+2025-09-22 10:05:23,894 | INFO | DAPT step 900/1200 | MLM loss: 1.481575 | LR: 0.00000823
+2025-09-22 10:05:36,683 | INFO | DAPT step 950/1200 | MLM loss: 1.620201 | LR: 0.00000582
+2025-09-22 10:05:48,245 | INFO | DAPT step 1000/1200 | MLM loss: 1.521350 | LR: 0.00000378
+2025-09-22 10:06:00,015 | INFO | DAPT step 1050/1200 | MLM loss: 1.088048 | LR: 0.00000215
+2025-09-22 10:06:11,604 | INFO | DAPT step 1100/1200 | MLM loss: 1.919218 | LR: 0.00000096
+2025-09-22 10:06:24,125 | INFO | DAPT step 1150/1200 | MLM loss: 1.864269 | LR: 0.00000024
+2025-09-22 10:06:36,249 | INFO | DAPT step 1200/1200 | MLM loss: 1.721019 | LR: 0.00000000
+2025-09-22 10:06:36,249 | INFO | DAPT completed in 4.83 min. Extracting backbone state dict.
+2025-09-22 10:06:37,252 | INFO | Starting supervised training for variant with seed=42.
+2025-09-22 10:06:37,252 | INFO | Seeding all RNGs with seed=42
+2025-09-22 10:06:37,255 | INFO | Test batches (normal/swapped): 114/114
+2025-09-22 10:06:37,256 | INFO | ===== Fold 1/5 (seed=42) =====
+2025-09-22 10:06:37,283 | INFO | Fold 0 -> Train batches: 1642, Valid batches: 206
+2025-09-22 10:06:39,371 | INFO | Loading DAPT backbone weights into cross-encoder backbone.
+2025-09-22 10:06:39,516 | INFO | Creating optimizer parameter groups with layer-wise LR decay.
+2025-09-22 10:06:39,517 | INFO | Group 0: params=1, lr=0.00000832, wd=0.01
+2025-09-22 10:06:39,517 | INFO | Group 1: params=2, lr=0.00000832, wd=0.0
+2025-09-22 10:06:39,517 | INFO | Group 2: params=6, lr=0.00000876, wd=0.01
+2025-09-22 10:06:39,518 | INFO | Group 3: params=10, lr=0.00000876, wd=0.0
+2025-09-22 10:06:39,518 | INFO | Group 4: params=6, lr=0.00000922, wd=0.01
+2025-09-22 10:06:39,518 | INFO | Group 5: params=10, lr=0.00000922, wd=0.0
+2025-09-22 10:06:39,518 | INFO | Group 6: params=6, lr=0.00000971, wd=0.01
+2025-09-22 10:06:39,518 | INFO | Group 7: params=10, lr=0.00000971, wd=0.0
+2025-09-22 10:06:39,518 | INFO | Group 8: params=6, lr=0.00001022, wd=0.01
+2025-09-22 10:06:39,518 | INFO | Group 9: params=10, lr=0.00001022, wd=0.0
+2025-09-22 10:06:39,518 | INFO | Group 10: params=6, lr=0.00001075, wd=0.01
+2025-09-22 10:06:39,518 | INFO | Group 11: params=10, lr=0.00001075, wd=0.0
+2025-09-22 10:06:39,518 | INFO | Group 12: params=6, lr=0.00001132, wd=0.01
+2025-09-22 10:06:39,518 | INFO | Group 13: params=10, lr=0.00001132, wd=0.0
+2025-09-22 10:06:39,518 | INFO | Group 14: params=6, lr=0.00001192, wd=0.01
+2025-09-22 10:06:39,518 | INFO | Group 15: params=10, lr=0.00001192, wd=0.0
+2025-09-22 10:06:39,518 | INFO | Group 16: params=6, lr=0.00001254, wd=0.01
+2025-09-22 10:06:39,518 | INFO | Group 17: params=10, lr=0.00001254, wd=0.0
+2025-09-22 10:06:39,518 | INFO | Group 18: params=6, lr=0.00001320, wd=0.01
+2025-09-22 10:06:39,518 | INFO | Group 19: params=10, lr=0.00001320, wd=0.0
+2025-09-22 10:06:39,518 | INFO | Group 20: params=6, lr=0.00001390, wd=0.01
+2025-09-22 10:06:39,518 | INFO | Group 21: params=10, lr=0.00001390, wd=0.0
+2025-09-22 10:06:39,518 | INFO | Group 22: params=6, lr=0.00001463, wd=0.01
+2025-09-22 10:06:39,518 | INFO | Group 23: params=10, lr=0.00001463, wd=0.0
+2025-09-22 10:06:39,518 | INFO | Group 24: params=6, lr=0.00001540, wd=0.01
+2025-09-22 10:06:39,518 | INFO | Group 25: params=10, lr=0.00001540, wd=0.0
+2025-09-22 10:06:39,518 | INFO | Group 26: params=6, lr=0.00001621, wd=0.01
+2025-09-22 10:06:39,518 | INFO | Group 27: params=10, lr=0.00001621, wd=0.0
+2025-09-22 10:06:39,518 | INFO | Group 28: params=6, lr=0.00001706, wd=0.01
+2025-09-22 10:06:39,518 | INFO | Group 29: params=10, lr=0.00001706, wd=0.0
+2025-09-22 10:06:39,518 | INFO | Group 30: params=6, lr=0.00001796, wd=0.01
+2025-09-22 10:06:39,518 | INFO | Group 31: params=10, lr=0.00001796, wd=0.0
+2025-09-22 10:06:39,518 | INFO | Group 32: params=6, lr=0.00001891, wd=0.01
+2025-09-22 10:06:39,518 | INFO | Group 33: params=10, lr=0.00001891, wd=0.0
+2025-09-22 10:06:39,518 | INFO | Group 34: params=6, lr=0.00001990, wd=0.01
+2025-09-22 10:06:39,518 | INFO | Group 35: params=10, lr=0.00001990, wd=0.0
+2025-09-22 10:06:39,518 | INFO | Group 36: params=6, lr=0.00002095, wd=0.01
+2025-09-22 10:06:39,518 | INFO | Group 37: params=10, lr=0.00002095, wd=0.0
+2025-09-22 10:06:39,518 | INFO | Group 38: params=6, lr=0.00002205, wd=0.01
+2025-09-22 10:06:39,518 | INFO | Group 39: params=10, lr=0.00002205, wd=0.0
+2025-09-22 10:06:39,519 | INFO | Group 40: params=6, lr=0.00002321, wd=0.01
+2025-09-22 10:06:39,519 | INFO | Group 41: params=10, lr=0.00002321, wd=0.0
+2025-09-22 10:06:39,519 | INFO | Group 42: params=6, lr=0.00002444, wd=0.01
+2025-09-22 10:06:39,519 | INFO | Group 43: params=10, lr=0.00002444, wd=0.0
+2025-09-22 10:06:39,519 | INFO | Group 44: params=6, lr=0.00002572, wd=0.01
+2025-09-22 10:06:39,519 | INFO | Group 45: params=10, lr=0.00002572, wd=0.0
+2025-09-22 10:06:39,519 | INFO | Group 46: params=6, lr=0.00002708, wd=0.01
+2025-09-22 10:06:39,519 | INFO | Group 47: params=10, lr=0.00002708, wd=0.0
+2025-09-22 10:06:39,519 | INFO | Group 48: params=6, lr=0.00002850, wd=0.01
+2025-09-22 10:06:39,519 | INFO | Group 49: params=10, lr=0.00002850, wd=0.0
+2025-09-22 10:06:39,519 | INFO | Group 50: params=4, lr=0.00003000, wd=0.01
+2025-09-22 10:06:39,519 | INFO | Group 51: params=4, lr=0.00003000, wd=0.0
+2025-09-22 10:06:39,520 | INFO | Fold 0 -> Training steps: 4926, Warmup steps: 492, Adv start step: 492
+2025-09-22 10:06:39,521 | INFO | Registering EMA shadow parameters.
+2025-09-22 10:06:39,536 | INFO | Starting epoch 1/3 for fold 0.
+2025-09-22 10:07:02,399 | INFO | Fold 0 | Epoch 1/3 | Step 100/1642 | Loss: 0.445772 | LR: 0.00000169 | Adv:False
+2025-09-22 10:07:24,571 | INFO | Fold 0 | Epoch 1/3 | Step 200/1642 | Loss: 0.413835 | LR: 0.00000338 | Adv:False
+2025-09-22 10:07:47,654 | INFO | Fold 0 | Epoch 1/3 | Step 300/1642 | Loss: 0.315799 | LR: 0.00000507 | Adv:False
+2025-09-22 10:08:10,275 | INFO | Fold 0 | Epoch 1/3 | Step 400/1642 | Loss: 0.194926 | LR: 0.00000677 | Adv:False
+2025-09-22 10:08:33,619 | INFO | Fold 0 | Epoch 1/3 | Step 500/1642 | Loss: 0.217091 | LR: 0.00000832 | Adv:True
+2025-09-22 10:09:05,736 | INFO | Fold 0 | Epoch 1/3 | Step 600/1642 | Loss: 0.241524 | LR: 0.00000831 | Adv:True
+2025-09-22 10:09:37,819 | INFO | Fold 0 | Epoch 1/3 | Step 700/1642 | Loss: 0.217119 | LR: 0.00000828 | Adv:True
+2025-09-22 10:10:10,639 | INFO | Fold 0 | Epoch 1/3 | Step 800/1642 | Loss: 0.306397 | LR: 0.00000822 | Adv:True
+2025-09-22 10:10:43,021 | INFO | Fold 0 | Epoch 1/3 | Step 900/1642 | Loss: 0.213541 | LR: 0.00000815 | Adv:True
+2025-09-22 10:11:15,211 | INFO | Fold 0 | Epoch 1/3 | Step 1000/1642 | Loss: 0.174898 | LR: 0.00000806 | Adv:True
+2025-09-22 10:11:47,463 | INFO | Fold 0 | Epoch 1/3 | Step 1100/1642 | Loss: 0.322635 | LR: 0.00000794 | Adv:True
+2025-09-22 10:12:19,693 | INFO | Fold 0 | Epoch 1/3 | Step 1200/1642 | Loss: 0.188499 | LR: 0.00000781 | Adv:True
+2025-09-22 10:12:51,749 | INFO | Fold 0 | Epoch 1/3 | Step 1300/1642 | Loss: 0.233994 | LR: 0.00000766 | Adv:True
+2025-09-22 10:13:23,749 | INFO | Fold 0 | Epoch 1/3 | Step 1400/1642 | Loss: 0.176314 | LR: 0.00000749 | Adv:True
+2025-09-22 10:13:56,114 | INFO | Fold 0 | Epoch 1/3 | Step 1500/1642 | Loss: 0.194128 | LR: 0.00000730 | Adv:True
+2025-09-22 10:14:28,272 | INFO | Fold 0 | Epoch 1/3 | Step 1600/1642 | Loss: 0.188065 | LR: 0.00000710 | Adv:True
+2025-09-22 10:14:41,811 | INFO | Fold 0 | Epoch 1 done. Avg train loss: 0.283180 | Time: 482.27s
+2025-09-22 10:14:41,811 | INFO | Applying EMA weights for evaluation.
+2025-09-22 10:14:41,818 | INFO | Running validation inference (EMA-applied).
+2025-09-22 10:14:49,974 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 10:14:49,982 | INFO | Fold 0 | Validation epoch 1: MSE(reg)=0.021546, MSE(exp)=0.024171, MSE(blend)=0.020758 | Pearson(reg)=0.834474, Pearson(exp)=0.830132, Pearson(blend)=0.834536
+2025-09-22 10:14:49,982 | INFO | Fold 0 | New best validation Pearson (blend): 0.834536 at epoch 1
+2025-09-22 10:14:49,982 | INFO | Applying EMA weights for evaluation.
+2025-09-22 10:14:50,837 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 10:14:50,841 | INFO | Starting epoch 2/3 for fold 0.
+2025-09-22 10:15:22,712 | INFO | Fold 0 | Epoch 2/3 | Step 100/1642 | Loss: 0.159258 | LR: 0.00000679 | Adv:True
+2025-09-22 10:15:54,954 | INFO | Fold 0 | Epoch 2/3 | Step 200/1642 | Loss: 0.197388 | LR: 0.00000656 | Adv:True
+2025-09-22 10:16:26,993 | INFO | Fold 0 | Epoch 2/3 | Step 300/1642 | Loss: 0.158590 | LR: 0.00000631 | Adv:True
+2025-09-22 10:16:58,924 | INFO | Fold 0 | Epoch 2/3 | Step 400/1642 | Loss: 0.164877 | LR: 0.00000605 | Adv:True
+2025-09-22 10:17:30,973 | INFO | Fold 0 | Epoch 2/3 | Step 500/1642 | Loss: 0.227669 | LR: 0.00000579 | Adv:True
+2025-09-22 10:18:03,296 | INFO | Fold 0 | Epoch 2/3 | Step 600/1642 | Loss: 0.144435 | LR: 0.00000551 | Adv:True
+2025-09-22 10:18:35,415 | INFO | Fold 0 | Epoch 2/3 | Step 700/1642 | Loss: 0.158694 | LR: 0.00000523 | Adv:True
+2025-09-22 10:19:07,514 | INFO | Fold 0 | Epoch 2/3 | Step 800/1642 | Loss: 0.095747 | LR: 0.00000494 | Adv:True
+2025-09-22 10:19:39,786 | INFO | Fold 0 | Epoch 2/3 | Step 900/1642 | Loss: 0.090503 | LR: 0.00000465 | Adv:True
+2025-09-22 10:20:12,120 | INFO | Fold 0 | Epoch 2/3 | Step 1000/1642 | Loss: 0.141590 | LR: 0.00000436 | Adv:True
+2025-09-22 10:20:44,274 | INFO | Fold 0 | Epoch 2/3 | Step 1100/1642 | Loss: 0.175326 | LR: 0.00000406 | Adv:True
+2025-09-22 10:21:16,428 | INFO | Fold 0 | Epoch 2/3 | Step 1200/1642 | Loss: 0.157114 | LR: 0.00000377 | Adv:True
+2025-09-22 10:21:48,550 | INFO | Fold 0 | Epoch 2/3 | Step 1300/1642 | Loss: 0.225850 | LR: 0.00000348 | Adv:True
+2025-09-22 10:22:20,807 | INFO | Fold 0 | Epoch 2/3 | Step 1400/1642 | Loss: 0.106078 | LR: 0.00000319 | Adv:True
+2025-09-22 10:22:53,091 | INFO | Fold 0 | Epoch 2/3 | Step 1500/1642 | Loss: 0.085186 | LR: 0.00000290 | Adv:True
+2025-09-22 10:23:25,362 | INFO | Fold 0 | Epoch 2/3 | Step 1600/1642 | Loss: 0.149764 | LR: 0.00000263 | Adv:True
+2025-09-22 10:23:38,814 | INFO | Fold 0 | Epoch 2 done. Avg train loss: 0.164869 | Time: 527.97s
+2025-09-22 10:23:38,814 | INFO | Applying EMA weights for evaluation.
+2025-09-22 10:23:38,821 | INFO | Running validation inference (EMA-applied).
+2025-09-22 10:23:46,473 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 10:23:46,478 | INFO | Fold 0 | Validation epoch 2: MSE(reg)=0.018550, MSE(exp)=0.017032, MSE(blend)=0.017372 | Pearson(reg)=0.863383, Pearson(exp)=0.864057, Pearson(blend)=0.864460
+2025-09-22 10:23:46,478 | INFO | Fold 0 | New best validation Pearson (blend): 0.864460 at epoch 2
+2025-09-22 10:23:46,478 | INFO | Applying EMA weights for evaluation.
+2025-09-22 10:23:47,353 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 10:23:47,357 | INFO | Starting epoch 3/3 for fold 0.
+2025-09-22 10:24:19,475 | INFO | Fold 0 | Epoch 3/3 | Step 100/1642 | Loss: 0.112701 | LR: 0.00000225 | Adv:True
+2025-09-22 10:24:51,399 | INFO | Fold 0 | Epoch 3/3 | Step 200/1642 | Loss: 0.141091 | LR: 0.00000199 | Adv:True
+2025-09-22 10:25:24,799 | INFO | Fold 0 | Epoch 3/3 | Step 300/1642 | Loss: 0.151236 | LR: 0.00000174 | Adv:True
+2025-09-22 10:25:57,751 | INFO | Fold 0 | Epoch 3/3 | Step 400/1642 | Loss: 0.121713 | LR: 0.00000151 | Adv:True
+2025-09-22 10:26:30,718 | INFO | Fold 0 | Epoch 3/3 | Step 500/1642 | Loss: 0.107925 | LR: 0.00000129 | Adv:True
+2025-09-22 10:27:03,711 | INFO | Fold 0 | Epoch 3/3 | Step 600/1642 | Loss: 0.051003 | LR: 0.00000108 | Adv:True
+2025-09-22 10:27:36,710 | INFO | Fold 0 | Epoch 3/3 | Step 700/1642 | Loss: 0.060511 | LR: 0.00000089 | Adv:True
+2025-09-22 10:28:09,669 | INFO | Fold 0 | Epoch 3/3 | Step 800/1642 | Loss: 0.185780 | LR: 0.00000072 | Adv:True
+2025-09-22 10:28:42,368 | INFO | Fold 0 | Epoch 3/3 | Step 900/1642 | Loss: 0.230941 | LR: 0.00000056 | Adv:True
+2025-09-22 10:29:14,456 | INFO | Fold 0 | Epoch 3/3 | Step 1000/1642 | Loss: 0.047126 | LR: 0.00000042 | Adv:True
+2025-09-22 10:29:47,207 | INFO | Fold 0 | Epoch 3/3 | Step 1100/1642 | Loss: 0.213667 | LR: 0.00000030 | Adv:True
+2025-09-22 10:30:20,442 | INFO | Fold 0 | Epoch 3/3 | Step 1200/1642 | Loss: 0.098662 | LR: 0.00000020 | Adv:True
+2025-09-22 10:30:53,615 | INFO | Fold 0 | Epoch 3/3 | Step 1300/1642 | Loss: 0.214741 | LR: 0.00000012 | Adv:True
+2025-09-22 10:31:27,042 | INFO | Fold 0 | Epoch 3/3 | Step 1400/1642 | Loss: 0.072993 | LR: 0.00000006 | Adv:True
+2025-09-22 10:32:00,016 | INFO | Fold 0 | Epoch 3/3 | Step 1500/1642 | Loss: 0.115493 | LR: 0.00000002 | Adv:True
+2025-09-22 10:32:33,254 | INFO | Fold 0 | Epoch 3/3 | Step 1600/1642 | Loss: 0.132180 | LR: 0.00000000 | Adv:True
+2025-09-22 10:32:47,555 | INFO | Fold 0 | Epoch 3 done. Avg train loss: 0.105005 | Time: 540.20s
+2025-09-22 10:32:47,555 | INFO | Applying EMA weights for evaluation.
+2025-09-22 10:32:47,561 | INFO | Running validation inference (EMA-applied).
+2025-09-22 10:32:55,384 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 10:32:55,389 | INFO | Fold 0 | Validation epoch 3: MSE(reg)=0.018164, MSE(exp)=0.017161, MSE(blend)=0.017452 | Pearson(reg)=0.864967, Pearson(exp)=0.864797, Pearson(blend)=0.865715
+2025-09-22 10:32:55,389 | INFO | Fold 0 | New best validation Pearson (blend): 0.865715 at epoch 3
+2025-09-22 10:32:55,389 | INFO | Applying EMA weights for evaluation.
+2025-09-22 10:32:56,032 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 10:32:56,191 | INFO | Fold 0 | Generating OOF predictions with best EMA weights.
+2025-09-22 10:32:56,191 | INFO | Running validation inference (EMA-applied).
+2025-09-22 10:33:04,313 | INFO | Fold 0 | OOF Pearson reg=0.864967, exp=0.864797
+2025-09-22 10:33:04,313 | INFO | Running test inference (TTA with swapped pairs).
+2025-09-22 10:33:13,954 | INFO | Running test inference (TTA with swapped pairs).
+2025-09-22 10:33:22,918 | INFO | ===== Fold 2/5 (seed=42) =====
+2025-09-22 10:33:23,167 | INFO | Fold 1 -> Train batches: 1642, Valid batches: 206
+2025-09-22 10:33:26,298 | INFO | Loading DAPT backbone weights into cross-encoder backbone.
+2025-09-22 10:33:26,447 | INFO | Creating optimizer parameter groups with layer-wise LR decay.
+2025-09-22 10:33:26,449 | INFO | Group 0: params=1, lr=0.00000832, wd=0.01
+2025-09-22 10:33:26,449 | INFO | Group 1: params=2, lr=0.00000832, wd=0.0
+2025-09-22 10:33:26,450 | INFO | Group 2: params=6, lr=0.00000876, wd=0.01
+2025-09-22 10:33:26,450 | INFO | Group 3: params=10, lr=0.00000876, wd=0.0
+2025-09-22 10:33:26,450 | INFO | Group 4: params=6, lr=0.00000922, wd=0.01
+2025-09-22 10:33:26,450 | INFO | Group 5: params=10, lr=0.00000922, wd=0.0
+2025-09-22 10:33:26,450 | INFO | Group 6: params=6, lr=0.00000971, wd=0.01
+2025-09-22 10:33:26,450 | INFO | Group 7: params=10, lr=0.00000971, wd=0.0
+2025-09-22 10:33:26,450 | INFO | Group 8: params=6, lr=0.00001022, wd=0.01
+2025-09-22 10:33:26,450 | INFO | Group 9: params=10, lr=0.00001022, wd=0.0
+2025-09-22 10:33:26,450 | INFO | Group 10: params=6, lr=0.00001075, wd=0.01
+2025-09-22 10:33:26,450 | INFO | Group 11: params=10, lr=0.00001075, wd=0.0
+2025-09-22 10:33:26,450 | INFO | Group 12: params=6, lr=0.00001132, wd=0.01
+2025-09-22 10:33:26,450 | INFO | Group 13: params=10, lr=0.00001132, wd=0.0
+2025-09-22 10:33:26,450 | INFO | Group 14: params=6, lr=0.00001192, wd=0.01
+2025-09-22 10:33:26,450 | INFO | Group 15: params=10, lr=0.00001192, wd=0.0
+2025-09-22 10:33:26,450 | INFO | Group 16: params=6, lr=0.00001254, wd=0.01
+2025-09-22 10:33:26,450 | INFO | Group 17: params=10, lr=0.00001254, wd=0.0
+2025-09-22 10:33:26,450 | INFO | Group 18: params=6, lr=0.00001320, wd=0.01
+2025-09-22 10:33:26,450 | INFO | Group 19: params=10, lr=0.00001320, wd=0.0
+2025-09-22 10:33:26,450 | INFO | Group 20: params=6, lr=0.00001390, wd=0.01
+2025-09-22 10:33:26,450 | INFO | Group 21: params=10, lr=0.00001390, wd=0.0
+2025-09-22 10:33:26,450 | INFO | Group 22: params=6, lr=0.00001463, wd=0.01
+2025-09-22 10:33:26,450 | INFO | Group 23: params=10, lr=0.00001463, wd=0.0
+2025-09-22 10:33:26,450 | INFO | Group 24: params=6, lr=0.00001540, wd=0.01
+2025-09-22 10:33:26,450 | INFO | Group 25: params=10, lr=0.00001540, wd=0.0
+2025-09-22 10:33:26,450 | INFO | Group 26: params=6, lr=0.00001621, wd=0.01
+2025-09-22 10:33:26,450 | INFO | Group 27: params=10, lr=0.00001621, wd=0.0
+2025-09-22 10:33:26,450 | INFO | Group 28: params=6, lr=0.00001706, wd=0.01
+2025-09-22 10:33:26,450 | INFO | Group 29: params=10, lr=0.00001706, wd=0.0
+2025-09-22 10:33:26,450 | INFO | Group 30: params=6, lr=0.00001796, wd=0.01
+2025-09-22 10:33:26,450 | INFO | Group 31: params=10, lr=0.00001796, wd=0.0
+2025-09-22 10:33:26,450 | INFO | Group 32: params=6, lr=0.00001891, wd=0.01
+2025-09-22 10:33:26,450 | INFO | Group 33: params=10, lr=0.00001891, wd=0.0
+2025-09-22 10:33:26,450 | INFO | Group 34: params=6, lr=0.00001990, wd=0.01
+2025-09-22 10:33:26,450 | INFO | Group 35: params=10, lr=0.00001990, wd=0.0
+2025-09-22 10:33:26,450 | INFO | Group 36: params=6, lr=0.00002095, wd=0.01
+2025-09-22 10:33:26,450 | INFO | Group 37: params=10, lr=0.00002095, wd=0.0
+2025-09-22 10:33:26,450 | INFO | Group 38: params=6, lr=0.00002205, wd=0.01
+2025-09-22 10:33:26,450 | INFO | Group 39: params=10, lr=0.00002205, wd=0.0
+2025-09-22 10:33:26,451 | INFO | Group 40: params=6, lr=0.00002321, wd=0.01
+2025-09-22 10:33:26,451 | INFO | Group 41: params=10, lr=0.00002321, wd=0.0
+2025-09-22 10:33:26,451 | INFO | Group 42: params=6, lr=0.00002444, wd=0.01
+2025-09-22 10:33:26,451 | INFO | Group 43: params=10, lr=0.00002444, wd=0.0
+2025-09-22 10:33:26,451 | INFO | Group 44: params=6, lr=0.00002572, wd=0.01
+2025-09-22 10:33:26,451 | INFO | Group 45: params=10, lr=0.00002572, wd=0.0
+2025-09-22 10:33:26,451 | INFO | Group 46: params=6, lr=0.00002708, wd=0.01
+2025-09-22 10:33:26,451 | INFO | Group 47: params=10, lr=0.00002708, wd=0.0
+2025-09-22 10:33:26,451 | INFO | Group 48: params=6, lr=0.00002850, wd=0.01
+2025-09-22 10:33:26,451 | INFO | Group 49: params=10, lr=0.00002850, wd=0.0
+2025-09-22 10:33:26,451 | INFO | Group 50: params=4, lr=0.00003000, wd=0.01
+2025-09-22 10:33:26,451 | INFO | Group 51: params=4, lr=0.00003000, wd=0.0
+2025-09-22 10:33:26,453 | INFO | Fold 1 -> Training steps: 4926, Warmup steps: 492, Adv start step: 492
+2025-09-22 10:33:26,457 | INFO | Registering EMA shadow parameters.
+2025-09-22 10:33:26,474 | INFO | Starting epoch 1/3 for fold 1.
+2025-09-22 10:33:50,556 | INFO | Fold 1 | Epoch 1/3 | Step 100/1642 | Loss: 0.465662 | LR: 0.00000169 | Adv:False
+2025-09-22 10:34:13,986 | INFO | Fold 1 | Epoch 1/3 | Step 200/1642 | Loss: 0.336304 | LR: 0.00000338 | Adv:False
+2025-09-22 10:34:36,845 | INFO | Fold 1 | Epoch 1/3 | Step 300/1642 | Loss: 0.289874 | LR: 0.00000507 | Adv:False
+2025-09-22 10:35:00,172 | INFO | Fold 1 | Epoch 1/3 | Step 400/1642 | Loss: 0.278319 | LR: 0.00000677 | Adv:False
+2025-09-22 10:35:24,019 | INFO | Fold 1 | Epoch 1/3 | Step 500/1642 | Loss: 0.283855 | LR: 0.00000832 | Adv:True
+2025-09-22 10:35:57,229 | INFO | Fold 1 | Epoch 1/3 | Step 600/1642 | Loss: 0.350885 | LR: 0.00000831 | Adv:True
+2025-09-22 10:36:30,591 | INFO | Fold 1 | Epoch 1/3 | Step 700/1642 | Loss: 0.248185 | LR: 0.00000828 | Adv:True
+2025-09-22 10:37:04,044 | INFO | Fold 1 | Epoch 1/3 | Step 800/1642 | Loss: 0.193905 | LR: 0.00000822 | Adv:True
+2025-09-22 10:37:37,093 | INFO | Fold 1 | Epoch 1/3 | Step 900/1642 | Loss: 0.260307 | LR: 0.00000815 | Adv:True
+2025-09-22 10:38:10,288 | INFO | Fold 1 | Epoch 1/3 | Step 1000/1642 | Loss: 0.327118 | LR: 0.00000806 | Adv:True
+2025-09-22 10:38:43,561 | INFO | Fold 1 | Epoch 1/3 | Step 1100/1642 | Loss: 0.289769 | LR: 0.00000794 | Adv:True
+2025-09-22 10:39:16,972 | INFO | Fold 1 | Epoch 1/3 | Step 1200/1642 | Loss: 0.198494 | LR: 0.00000781 | Adv:True
+2025-09-22 10:39:50,396 | INFO | Fold 1 | Epoch 1/3 | Step 1300/1642 | Loss: 0.202083 | LR: 0.00000766 | Adv:True
+2025-09-22 10:40:23,445 | INFO | Fold 1 | Epoch 1/3 | Step 1400/1642 | Loss: 0.304319 | LR: 0.00000749 | Adv:True
+2025-09-22 10:40:56,757 | INFO | Fold 1 | Epoch 1/3 | Step 1500/1642 | Loss: 0.268519 | LR: 0.00000730 | Adv:True
+2025-09-22 10:41:30,509 | INFO | Fold 1 | Epoch 1/3 | Step 1600/1642 | Loss: 0.281970 | LR: 0.00000710 | Adv:True
+2025-09-22 10:41:44,548 | INFO | Fold 1 | Epoch 1 done. Avg train loss: 0.283951 | Time: 498.07s
+2025-09-22 10:41:44,548 | INFO | Applying EMA weights for evaluation.
+2025-09-22 10:41:44,554 | INFO | Running validation inference (EMA-applied).
+2025-09-22 10:41:53,287 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 10:41:53,294 | INFO | Fold 1 | Validation epoch 1: MSE(reg)=0.021240, MSE(exp)=0.023865, MSE(blend)=0.021359 | Pearson(reg)=0.829892, Pearson(exp)=0.827247, Pearson(blend)=0.830498
+2025-09-22 10:41:53,294 | INFO | Fold 1 | New best validation Pearson (blend): 0.830498 at epoch 1
+2025-09-22 10:41:53,294 | INFO | Applying EMA weights for evaluation.
+2025-09-22 10:41:54,791 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 10:41:54,798 | INFO | Starting epoch 2/3 for fold 1.
+2025-09-22 10:42:28,655 | INFO | Fold 1 | Epoch 2/3 | Step 100/1642 | Loss: 0.140006 | LR: 0.00000679 | Adv:True
+2025-09-22 10:43:02,396 | INFO | Fold 1 | Epoch 2/3 | Step 200/1642 | Loss: 0.244608 | LR: 0.00000656 | Adv:True
+2025-09-22 10:43:36,131 | INFO | Fold 1 | Epoch 2/3 | Step 300/1642 | Loss: 0.101142 | LR: 0.00000631 | Adv:True
+2025-09-22 10:44:09,703 | INFO | Fold 1 | Epoch 2/3 | Step 400/1642 | Loss: 0.169810 | LR: 0.00000605 | Adv:True
+2025-09-22 10:44:43,306 | INFO | Fold 1 | Epoch 2/3 | Step 500/1642 | Loss: 0.199209 | LR: 0.00000579 | Adv:True
+2025-09-22 10:45:16,668 | INFO | Fold 1 | Epoch 2/3 | Step 600/1642 | Loss: 0.097508 | LR: 0.00000551 | Adv:True
+2025-09-22 10:45:50,595 | INFO | Fold 1 | Epoch 2/3 | Step 700/1642 | Loss: 0.137447 | LR: 0.00000523 | Adv:True
+2025-09-22 10:46:23,910 | INFO | Fold 1 | Epoch 2/3 | Step 800/1642 | Loss: 0.218929 | LR: 0.00000494 | Adv:True
+2025-09-22 10:46:57,449 | INFO | Fold 1 | Epoch 2/3 | Step 900/1642 | Loss: 0.133908 | LR: 0.00000465 | Adv:True
+2025-09-22 10:47:31,317 | INFO | Fold 1 | Epoch 2/3 | Step 1000/1642 | Loss: 0.078980 | LR: 0.00000436 | Adv:True
+2025-09-22 10:48:05,031 | INFO | Fold 1 | Epoch 2/3 | Step 1100/1642 | Loss: 0.142003 | LR: 0.00000406 | Adv:True
+2025-09-22 10:48:38,631 | INFO | Fold 1 | Epoch 2/3 | Step 1200/1642 | Loss: 0.226940 | LR: 0.00000377 | Adv:True
+2025-09-22 10:49:11,986 | INFO | Fold 1 | Epoch 2/3 | Step 1300/1642 | Loss: 0.133579 | LR: 0.00000348 | Adv:True
+2025-09-22 10:49:45,640 | INFO | Fold 1 | Epoch 2/3 | Step 1400/1642 | Loss: 0.141116 | LR: 0.00000319 | Adv:True
+2025-09-22 10:50:18,824 | INFO | Fold 1 | Epoch 2/3 | Step 1500/1642 | Loss: 0.084534 | LR: 0.00000290 | Adv:True
+2025-09-22 10:50:52,035 | INFO | Fold 1 | Epoch 2/3 | Step 1600/1642 | Loss: 0.216725 | LR: 0.00000263 | Adv:True
+2025-09-22 10:51:05,865 | INFO | Fold 1 | Epoch 2 done. Avg train loss: 0.165305 | Time: 551.06s
+2025-09-22 10:51:05,866 | INFO | Applying EMA weights for evaluation.
+2025-09-22 10:51:05,872 | INFO | Running validation inference (EMA-applied).
+2025-09-22 10:51:13,895 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 10:51:13,900 | INFO | Fold 1 | Validation epoch 2: MSE(reg)=0.018474, MSE(exp)=0.017388, MSE(blend)=0.017620 | Pearson(reg)=0.861173, Pearson(exp)=0.860831, Pearson(blend)=0.861655
+2025-09-22 10:51:13,901 | INFO | Fold 1 | New best validation Pearson (blend): 0.861655 at epoch 2
+2025-09-22 10:51:13,901 | INFO | Applying EMA weights for evaluation.
+2025-09-22 10:51:14,876 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 10:51:14,880 | INFO | Starting epoch 3/3 for fold 1.
+2025-09-22 10:51:49,024 | INFO | Fold 1 | Epoch 3/3 | Step 100/1642 | Loss: 0.094557 | LR: 0.00000225 | Adv:True
+2025-09-22 10:52:23,645 | INFO | Fold 1 | Epoch 3/3 | Step 200/1642 | Loss: 0.188624 | LR: 0.00000199 | Adv:True
+2025-09-22 10:52:58,118 | INFO | Fold 1 | Epoch 3/3 | Step 300/1642 | Loss: 0.188801 | LR: 0.00000174 | Adv:True
+2025-09-22 10:53:32,698 | INFO | Fold 1 | Epoch 3/3 | Step 400/1642 | Loss: 0.160632 | LR: 0.00000151 | Adv:True
+2025-09-22 10:54:07,551 | INFO | Fold 1 | Epoch 3/3 | Step 500/1642 | Loss: 0.140665 | LR: 0.00000129 | Adv:True
+2025-09-22 10:54:42,204 | INFO | Fold 1 | Epoch 3/3 | Step 600/1642 | Loss: 0.102306 | LR: 0.00000108 | Adv:True
+2025-09-22 10:55:17,080 | INFO | Fold 1 | Epoch 3/3 | Step 700/1642 | Loss: 0.103784 | LR: 0.00000089 | Adv:True
+2025-09-22 10:55:51,628 | INFO | Fold 1 | Epoch 3/3 | Step 800/1642 | Loss: 0.144389 | LR: 0.00000072 | Adv:True
+2025-09-22 10:56:26,282 | INFO | Fold 1 | Epoch 3/3 | Step 900/1642 | Loss: 0.084686 | LR: 0.00000056 | Adv:True
+2025-09-22 10:57:01,053 | INFO | Fold 1 | Epoch 3/3 | Step 1000/1642 | Loss: 0.073262 | LR: 0.00000042 | Adv:True
+2025-09-22 10:57:35,907 | INFO | Fold 1 | Epoch 3/3 | Step 1100/1642 | Loss: 0.096489 | LR: 0.00000030 | Adv:True
+2025-09-22 10:58:10,671 | INFO | Fold 1 | Epoch 3/3 | Step 1200/1642 | Loss: 0.093073 | LR: 0.00000020 | Adv:True
+2025-09-22 10:58:45,559 | INFO | Fold 1 | Epoch 3/3 | Step 1300/1642 | Loss: 0.078468 | LR: 0.00000012 | Adv:True
+2025-09-22 10:59:20,174 | INFO | Fold 1 | Epoch 3/3 | Step 1400/1642 | Loss: 0.100346 | LR: 0.00000006 | Adv:True
+2025-09-22 10:59:54,665 | INFO | Fold 1 | Epoch 3/3 | Step 1500/1642 | Loss: 0.128223 | LR: 0.00000002 | Adv:True
+2025-09-22 11:00:29,304 | INFO | Fold 1 | Epoch 3/3 | Step 1600/1642 | Loss: 0.080881 | LR: 0.00000000 | Adv:True
+2025-09-22 11:00:44,090 | INFO | Fold 1 | Epoch 3 done. Avg train loss: 0.106318 | Time: 569.21s
+2025-09-22 11:00:44,090 | INFO | Applying EMA weights for evaluation.
+2025-09-22 11:00:44,097 | INFO | Running validation inference (EMA-applied).
+2025-09-22 11:00:52,835 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 11:00:52,841 | INFO | Fold 1 | Validation epoch 3: MSE(reg)=0.018538, MSE(exp)=0.017568, MSE(blend)=0.017857 | Pearson(reg)=0.862219, Pearson(exp)=0.861522, Pearson(blend)=0.862591
+2025-09-22 11:00:52,841 | INFO | Fold 1 | New best validation Pearson (blend): 0.862591 at epoch 3
+2025-09-22 11:00:52,841 | INFO | Applying EMA weights for evaluation.
+2025-09-22 11:00:53,366 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 11:00:53,671 | INFO | Fold 1 | Generating OOF predictions with best EMA weights.
+2025-09-22 11:00:53,671 | INFO | Running validation inference (EMA-applied).
+2025-09-22 11:01:02,348 | INFO | Fold 1 | OOF Pearson reg=0.862219, exp=0.861522
+2025-09-22 11:01:02,348 | INFO | Running test inference (TTA with swapped pairs).
+2025-09-22 11:01:11,873 | INFO | Running test inference (TTA with swapped pairs).
+2025-09-22 11:01:21,512 | INFO | ===== Fold 3/5 (seed=42) =====
+2025-09-22 11:01:22,000 | INFO | Fold 2 -> Train batches: 1642, Valid batches: 206
+2025-09-22 11:01:23,557 | INFO | Loading DAPT backbone weights into cross-encoder backbone.
+2025-09-22 11:01:23,842 | INFO | Creating optimizer parameter groups with layer-wise LR decay.
+2025-09-22 11:01:23,844 | INFO | Group 0: params=1, lr=0.00000832, wd=0.01
+2025-09-22 11:01:23,844 | INFO | Group 1: params=2, lr=0.00000832, wd=0.0
+2025-09-22 11:01:23,844 | INFO | Group 2: params=6, lr=0.00000876, wd=0.01
+2025-09-22 11:01:23,844 | INFO | Group 3: params=10, lr=0.00000876, wd=0.0
+2025-09-22 11:01:23,844 | INFO | Group 4: params=6, lr=0.00000922, wd=0.01
+2025-09-22 11:01:23,844 | INFO | Group 5: params=10, lr=0.00000922, wd=0.0
+2025-09-22 11:01:23,844 | INFO | Group 6: params=6, lr=0.00000971, wd=0.01
+2025-09-22 11:01:23,844 | INFO | Group 7: params=10, lr=0.00000971, wd=0.0
+2025-09-22 11:01:23,844 | INFO | Group 8: params=6, lr=0.00001022, wd=0.01
+2025-09-22 11:01:23,844 | INFO | Group 9: params=10, lr=0.00001022, wd=0.0
+2025-09-22 11:01:23,844 | INFO | Group 10: params=6, lr=0.00001075, wd=0.01
+2025-09-22 11:01:23,844 | INFO | Group 11: params=10, lr=0.00001075, wd=0.0
+2025-09-22 11:01:23,844 | INFO | Group 12: params=6, lr=0.00001132, wd=0.01
+2025-09-22 11:01:23,844 | INFO | Group 13: params=10, lr=0.00001132, wd=0.0
+2025-09-22 11:01:23,844 | INFO | Group 14: params=6, lr=0.00001192, wd=0.01
+2025-09-22 11:01:23,844 | INFO | Group 15: params=10, lr=0.00001192, wd=0.0
+2025-09-22 11:01:23,844 | INFO | Group 16: params=6, lr=0.00001254, wd=0.01
+2025-09-22 11:01:23,844 | INFO | Group 17: params=10, lr=0.00001254, wd=0.0
+2025-09-22 11:01:23,844 | INFO | Group 18: params=6, lr=0.00001320, wd=0.01
+2025-09-22 11:01:23,844 | INFO | Group 19: params=10, lr=0.00001320, wd=0.0
+2025-09-22 11:01:23,844 | INFO | Group 20: params=6, lr=0.00001390, wd=0.01
+2025-09-22 11:01:23,844 | INFO | Group 21: params=10, lr=0.00001390, wd=0.0
+2025-09-22 11:01:23,845 | INFO | Group 22: params=6, lr=0.00001463, wd=0.01
+2025-09-22 11:01:23,845 | INFO | Group 23: params=10, lr=0.00001463, wd=0.0
+2025-09-22 11:01:23,845 | INFO | Group 24: params=6, lr=0.00001540, wd=0.01
+2025-09-22 11:01:23,845 | INFO | Group 25: params=10, lr=0.00001540, wd=0.0
+2025-09-22 11:01:23,845 | INFO | Group 26: params=6, lr=0.00001621, wd=0.01
+2025-09-22 11:01:23,845 | INFO | Group 27: params=10, lr=0.00001621, wd=0.0
+2025-09-22 11:01:23,845 | INFO | Group 28: params=6, lr=0.00001706, wd=0.01
+2025-09-22 11:01:23,845 | INFO | Group 29: params=10, lr=0.00001706, wd=0.0
+2025-09-22 11:01:23,845 | INFO | Group 30: params=6, lr=0.00001796, wd=0.01
+2025-09-22 11:01:23,845 | INFO | Group 31: params=10, lr=0.00001796, wd=0.0
+2025-09-22 11:01:23,845 | INFO | Group 32: params=6, lr=0.00001891, wd=0.01
+2025-09-22 11:01:23,845 | INFO | Group 33: params=10, lr=0.00001891, wd=0.0
+2025-09-22 11:01:23,845 | INFO | Group 34: params=6, lr=0.00001990, wd=0.01
+2025-09-22 11:01:23,845 | INFO | Group 35: params=10, lr=0.00001990, wd=0.0
+2025-09-22 11:01:23,845 | INFO | Group 36: params=6, lr=0.00002095, wd=0.01
+2025-09-22 11:01:23,845 | INFO | Group 37: params=10, lr=0.00002095, wd=0.0
+2025-09-22 11:01:23,845 | INFO | Group 38: params=6, lr=0.00002205, wd=0.01
+2025-09-22 11:01:23,845 | INFO | Group 39: params=10, lr=0.00002205, wd=0.0
+2025-09-22 11:01:23,845 | INFO | Group 40: params=6, lr=0.00002321, wd=0.01
+2025-09-22 11:01:23,845 | INFO | Group 41: params=10, lr=0.00002321, wd=0.0
+2025-09-22 11:01:23,845 | INFO | Group 42: params=6, lr=0.00002444, wd=0.01
+2025-09-22 11:01:23,845 | INFO | Group 43: params=10, lr=0.00002444, wd=0.0
+2025-09-22 11:01:23,845 | INFO | Group 44: params=6, lr=0.00002572, wd=0.01
+2025-09-22 11:01:23,845 | INFO | Group 45: params=10, lr=0.00002572, wd=0.0
+2025-09-22 11:01:23,845 | INFO | Group 46: params=6, lr=0.00002708, wd=0.01
+2025-09-22 11:01:23,845 | INFO | Group 47: params=10, lr=0.00002708, wd=0.0
+2025-09-22 11:01:23,845 | INFO | Group 48: params=6, lr=0.00002850, wd=0.01
+2025-09-22 11:01:23,845 | INFO | Group 49: params=10, lr=0.00002850, wd=0.0
+2025-09-22 11:01:23,845 | INFO | Group 50: params=4, lr=0.00003000, wd=0.01
+2025-09-22 11:01:23,845 | INFO | Group 51: params=4, lr=0.00003000, wd=0.0
+2025-09-22 11:01:23,847 | INFO | Fold 2 -> Training steps: 4926, Warmup steps: 492, Adv start step: 492
+2025-09-22 11:01:23,849 | INFO | Registering EMA shadow parameters.
+2025-09-22 11:01:23,856 | INFO | Starting epoch 1/3 for fold 2.
+2025-09-22 11:01:48,976 | INFO | Fold 2 | Epoch 1/3 | Step 100/1642 | Loss: 0.393696 | LR: 0.00000169 | Adv:False
+2025-09-22 11:02:13,195 | INFO | Fold 2 | Epoch 1/3 | Step 200/1642 | Loss: 0.371195 | LR: 0.00000338 | Adv:False
+2025-09-22 11:02:37,661 | INFO | Fold 2 | Epoch 1/3 | Step 300/1642 | Loss: 0.273937 | LR: 0.00000507 | Adv:False
+2025-09-22 11:03:01,831 | INFO | Fold 2 | Epoch 1/3 | Step 400/1642 | Loss: 0.317721 | LR: 0.00000677 | Adv:False
+2025-09-22 11:03:27,127 | INFO | Fold 2 | Epoch 1/3 | Step 500/1642 | Loss: 0.166296 | LR: 0.00000832 | Adv:True
+2025-09-22 11:04:01,755 | INFO | Fold 2 | Epoch 1/3 | Step 600/1642 | Loss: 0.207560 | LR: 0.00000831 | Adv:True
+2025-09-22 11:04:36,040 | INFO | Fold 2 | Epoch 1/3 | Step 700/1642 | Loss: 0.224657 | LR: 0.00000828 | Adv:True
+2025-09-22 11:05:09,985 | INFO | Fold 2 | Epoch 1/3 | Step 800/1642 | Loss: 0.184905 | LR: 0.00000822 | Adv:True
+2025-09-22 11:05:44,486 | INFO | Fold 2 | Epoch 1/3 | Step 900/1642 | Loss: 0.264376 | LR: 0.00000815 | Adv:True
+2025-09-22 11:06:19,111 | INFO | Fold 2 | Epoch 1/3 | Step 1000/1642 | Loss: 0.257589 | LR: 0.00000806 | Adv:True
+2025-09-22 11:06:53,467 | INFO | Fold 2 | Epoch 1/3 | Step 1100/1642 | Loss: 0.201615 | LR: 0.00000794 | Adv:True
+2025-09-22 11:07:28,448 | INFO | Fold 2 | Epoch 1/3 | Step 1200/1642 | Loss: 0.204165 | LR: 0.00000781 | Adv:True
+2025-09-22 11:08:03,076 | INFO | Fold 2 | Epoch 1/3 | Step 1300/1642 | Loss: 0.239942 | LR: 0.00000766 | Adv:True
+2025-09-22 11:08:37,338 | INFO | Fold 2 | Epoch 1/3 | Step 1400/1642 | Loss: 0.254273 | LR: 0.00000749 | Adv:True
+2025-09-22 11:09:11,613 | INFO | Fold 2 | Epoch 1/3 | Step 1500/1642 | Loss: 0.193071 | LR: 0.00000730 | Adv:True
+2025-09-22 11:09:46,109 | INFO | Fold 2 | Epoch 1/3 | Step 1600/1642 | Loss: 0.290418 | LR: 0.00000710 | Adv:True
+2025-09-22 11:10:00,630 | INFO | Fold 2 | Epoch 1 done. Avg train loss: 0.282107 | Time: 516.77s
+2025-09-22 11:10:00,630 | INFO | Applying EMA weights for evaluation.
+2025-09-22 11:10:00,636 | INFO | Running validation inference (EMA-applied).
+2025-09-22 11:10:09,743 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 11:10:09,750 | INFO | Fold 2 | Validation epoch 1: MSE(reg)=0.021650, MSE(exp)=0.024340, MSE(blend)=0.021799 | Pearson(reg)=0.835178, Pearson(exp)=0.830544, Pearson(blend)=0.835198
+2025-09-22 11:10:09,750 | INFO | Fold 2 | New best validation Pearson (blend): 0.835198 at epoch 1
+2025-09-22 11:10:09,750 | INFO | Applying EMA weights for evaluation.
+2025-09-22 11:10:11,293 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 11:10:11,298 | INFO | Starting epoch 2/3 for fold 2.
+2025-09-22 11:10:46,095 | INFO | Fold 2 | Epoch 2/3 | Step 100/1642 | Loss: 0.131498 | LR: 0.00000679 | Adv:True
+2025-09-22 11:11:20,297 | INFO | Fold 2 | Epoch 2/3 | Step 200/1642 | Loss: 0.100345 | LR: 0.00000656 | Adv:True
+2025-09-22 11:11:54,932 | INFO | Fold 2 | Epoch 2/3 | Step 300/1642 | Loss: 0.198508 | LR: 0.00000631 | Adv:True
+2025-09-22 11:12:27,884 | INFO | Fold 2 | Epoch 2/3 | Step 400/1642 | Loss: 0.226441 | LR: 0.00000605 | Adv:True
+2025-09-22 11:13:00,687 | INFO | Fold 2 | Epoch 2/3 | Step 500/1642 | Loss: 0.065626 | LR: 0.00000579 | Adv:True
+2025-09-22 11:13:33,525 | INFO | Fold 2 | Epoch 2/3 | Step 600/1642 | Loss: 0.180592 | LR: 0.00000551 | Adv:True
+2025-09-22 11:14:06,784 | INFO | Fold 2 | Epoch 2/3 | Step 700/1642 | Loss: 0.086102 | LR: 0.00000523 | Adv:True
+2025-09-22 11:14:39,718 | INFO | Fold 2 | Epoch 2/3 | Step 800/1642 | Loss: 0.175520 | LR: 0.00000494 | Adv:True
+2025-09-22 11:15:12,485 | INFO | Fold 2 | Epoch 2/3 | Step 900/1642 | Loss: 0.131955 | LR: 0.00000465 | Adv:True
+2025-09-22 11:15:45,459 | INFO | Fold 2 | Epoch 2/3 | Step 1000/1642 | Loss: 0.069566 | LR: 0.00000436 | Adv:True
+2025-09-22 11:16:18,725 | INFO | Fold 2 | Epoch 2/3 | Step 1100/1642 | Loss: 0.306303 | LR: 0.00000406 | Adv:True
+2025-09-22 11:16:51,530 | INFO | Fold 2 | Epoch 2/3 | Step 1200/1642 | Loss: 0.143168 | LR: 0.00000377 | Adv:True
+2025-09-22 11:17:24,636 | INFO | Fold 2 | Epoch 2/3 | Step 1300/1642 | Loss: 0.132159 | LR: 0.00000348 | Adv:True
+2025-09-22 11:17:57,451 | INFO | Fold 2 | Epoch 2/3 | Step 1400/1642 | Loss: 0.073052 | LR: 0.00000319 | Adv:True
+2025-09-22 11:18:30,468 | INFO | Fold 2 | Epoch 2/3 | Step 1500/1642 | Loss: 0.233502 | LR: 0.00000290 | Adv:True
+2025-09-22 11:19:03,956 | INFO | Fold 2 | Epoch 2/3 | Step 1600/1642 | Loss: 0.214203 | LR: 0.00000263 | Adv:True
+2025-09-22 11:19:17,784 | INFO | Fold 2 | Epoch 2 done. Avg train loss: 0.163645 | Time: 546.48s
+2025-09-22 11:19:17,784 | INFO | Applying EMA weights for evaluation.
+2025-09-22 11:19:17,791 | INFO | Running validation inference (EMA-applied).
+2025-09-22 11:19:25,880 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 11:19:25,885 | INFO | Fold 2 | Validation epoch 2: MSE(reg)=0.018531, MSE(exp)=0.017090, MSE(blend)=0.017445 | Pearson(reg)=0.863792, Pearson(exp)=0.863572, Pearson(blend)=0.864305
+2025-09-22 11:19:25,886 | INFO | Fold 2 | New best validation Pearson (blend): 0.864305 at epoch 2
+2025-09-22 11:19:25,886 | INFO | Applying EMA weights for evaluation.
+2025-09-22 11:19:27,248 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 11:19:27,253 | INFO | Starting epoch 3/3 for fold 2.
+2025-09-22 11:20:00,104 | INFO | Fold 2 | Epoch 3/3 | Step 100/1642 | Loss: 0.116827 | LR: 0.00000225 | Adv:True
+2025-09-22 11:20:33,113 | INFO | Fold 2 | Epoch 3/3 | Step 200/1642 | Loss: 0.150129 | LR: 0.00000199 | Adv:True
+2025-09-22 11:21:06,064 | INFO | Fold 2 | Epoch 3/3 | Step 300/1642 | Loss: 0.103199 | LR: 0.00000174 | Adv:True
+2025-09-22 11:21:38,957 | INFO | Fold 2 | Epoch 3/3 | Step 400/1642 | Loss: 0.132995 | LR: 0.00000151 | Adv:True
+2025-09-22 11:22:11,912 | INFO | Fold 2 | Epoch 3/3 | Step 500/1642 | Loss: 0.053427 | LR: 0.00000129 | Adv:True
+2025-09-22 11:22:45,081 | INFO | Fold 2 | Epoch 3/3 | Step 600/1642 | Loss: 0.107285 | LR: 0.00000108 | Adv:True
+2025-09-22 11:23:18,040 | INFO | Fold 2 | Epoch 3/3 | Step 700/1642 | Loss: 0.109764 | LR: 0.00000089 | Adv:True
+2025-09-22 11:23:50,722 | INFO | Fold 2 | Epoch 3/3 | Step 800/1642 | Loss: 0.126694 | LR: 0.00000072 | Adv:True
+2025-09-22 11:24:23,410 | INFO | Fold 2 | Epoch 3/3 | Step 900/1642 | Loss: 0.039006 | LR: 0.00000056 | Adv:True
+2025-09-22 11:24:55,931 | INFO | Fold 2 | Epoch 3/3 | Step 1000/1642 | Loss: 0.117921 | LR: 0.00000042 | Adv:True
+2025-09-22 11:25:28,400 | INFO | Fold 2 | Epoch 3/3 | Step 1100/1642 | Loss: 0.163025 | LR: 0.00000030 | Adv:True
+2025-09-22 11:26:00,609 | INFO | Fold 2 | Epoch 3/3 | Step 1200/1642 | Loss: 0.031215 | LR: 0.00000020 | Adv:True
+2025-09-22 11:26:33,254 | INFO | Fold 2 | Epoch 3/3 | Step 1300/1642 | Loss: 0.137928 | LR: 0.00000012 | Adv:True
+2025-09-22 11:27:05,783 | INFO | Fold 2 | Epoch 3/3 | Step 1400/1642 | Loss: 0.046564 | LR: 0.00000006 | Adv:True
+2025-09-22 11:27:38,371 | INFO | Fold 2 | Epoch 3/3 | Step 1500/1642 | Loss: 0.149595 | LR: 0.00000002 | Adv:True
+2025-09-22 11:28:10,948 | INFO | Fold 2 | Epoch 3/3 | Step 1600/1642 | Loss: 0.049943 | LR: 0.00000000 | Adv:True
+2025-09-22 11:28:24,743 | INFO | Fold 2 | Epoch 3 done. Avg train loss: 0.104697 | Time: 537.49s
+2025-09-22 11:28:24,743 | INFO | Applying EMA weights for evaluation.
+2025-09-22 11:28:24,750 | INFO | Running validation inference (EMA-applied).
+2025-09-22 11:28:32,548 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 11:28:32,554 | INFO | Fold 2 | Validation epoch 3: MSE(reg)=0.018555, MSE(exp)=0.017208, MSE(blend)=0.017657 | Pearson(reg)=0.864521, Pearson(exp)=0.864717, Pearson(blend)=0.865234
+2025-09-22 11:28:32,554 | INFO | Fold 2 | New best validation Pearson (blend): 0.865234 at epoch 3
+2025-09-22 11:28:32,554 | INFO | Applying EMA weights for evaluation.
+2025-09-22 11:28:33,044 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 11:28:33,202 | INFO | Fold 2 | Generating OOF predictions with best EMA weights.
+2025-09-22 11:28:33,202 | INFO | Running validation inference (EMA-applied).
+2025-09-22 11:28:40,942 | INFO | Fold 2 | OOF Pearson reg=0.864521, exp=0.864717
+2025-09-22 11:28:40,943 | INFO | Running test inference (TTA with swapped pairs).
+2025-09-22 11:28:49,707 | INFO | Running test inference (TTA with swapped pairs).
+2025-09-22 11:28:58,471 | INFO | ===== Fold 4/5 (seed=42) =====
+2025-09-22 11:28:59,102 | INFO | Fold 3 -> Train batches: 1642, Valid batches: 206
+2025-09-22 11:29:00,951 | INFO | Loading DAPT backbone weights into cross-encoder backbone.
+2025-09-22 11:29:01,104 | INFO | Creating optimizer parameter groups with layer-wise LR decay.
+2025-09-22 11:29:01,107 | INFO | Group 0: params=1, lr=0.00000832, wd=0.01
+2025-09-22 11:29:01,107 | INFO | Group 1: params=2, lr=0.00000832, wd=0.0
+2025-09-22 11:29:01,107 | INFO | Group 2: params=6, lr=0.00000876, wd=0.01
+2025-09-22 11:29:01,107 | INFO | Group 3: params=10, lr=0.00000876, wd=0.0
+2025-09-22 11:29:01,107 | INFO | Group 4: params=6, lr=0.00000922, wd=0.01
+2025-09-22 11:29:01,107 | INFO | Group 5: params=10, lr=0.00000922, wd=0.0
+2025-09-22 11:29:01,107 | INFO | Group 6: params=6, lr=0.00000971, wd=0.01
+2025-09-22 11:29:01,107 | INFO | Group 7: params=10, lr=0.00000971, wd=0.0
+2025-09-22 11:29:01,107 | INFO | Group 8: params=6, lr=0.00001022, wd=0.01
+2025-09-22 11:29:01,107 | INFO | Group 9: params=10, lr=0.00001022, wd=0.0
+2025-09-22 11:29:01,107 | INFO | Group 10: params=6, lr=0.00001075, wd=0.01
+2025-09-22 11:29:01,107 | INFO | Group 11: params=10, lr=0.00001075, wd=0.0
+2025-09-22 11:29:01,107 | INFO | Group 12: params=6, lr=0.00001132, wd=0.01
+2025-09-22 11:29:01,107 | INFO | Group 13: params=10, lr=0.00001132, wd=0.0
+2025-09-22 11:29:01,107 | INFO | Group 14: params=6, lr=0.00001192, wd=0.01
+2025-09-22 11:29:01,107 | INFO | Group 15: params=10, lr=0.00001192, wd=0.0
+2025-09-22 11:29:01,107 | INFO | Group 16: params=6, lr=0.00001254, wd=0.01
+2025-09-22 11:29:01,107 | INFO | Group 17: params=10, lr=0.00001254, wd=0.0
+2025-09-22 11:29:01,107 | INFO | Group 18: params=6, lr=0.00001320, wd=0.01
+2025-09-22 11:29:01,107 | INFO | Group 19: params=10, lr=0.00001320, wd=0.0
+2025-09-22 11:29:01,107 | INFO | Group 20: params=6, lr=0.00001390, wd=0.01
+2025-09-22 11:29:01,107 | INFO | Group 21: params=10, lr=0.00001390, wd=0.0
+2025-09-22 11:29:01,107 | INFO | Group 22: params=6, lr=0.00001463, wd=0.01
+2025-09-22 11:29:01,107 | INFO | Group 23: params=10, lr=0.00001463, wd=0.0
+2025-09-22 11:29:01,107 | INFO | Group 24: params=6, lr=0.00001540, wd=0.01
+2025-09-22 11:29:01,107 | INFO | Group 25: params=10, lr=0.00001540, wd=0.0
+2025-09-22 11:29:01,107 | INFO | Group 26: params=6, lr=0.00001621, wd=0.01
+2025-09-22 11:29:01,107 | INFO | Group 27: params=10, lr=0.00001621, wd=0.0
+2025-09-22 11:29:01,107 | INFO | Group 28: params=6, lr=0.00001706, wd=0.01
+2025-09-22 11:29:01,108 | INFO | Group 29: params=10, lr=0.00001706, wd=0.0
+2025-09-22 11:29:01,108 | INFO | Group 30: params=6, lr=0.00001796, wd=0.01
+2025-09-22 11:29:01,108 | INFO | Group 31: params=10, lr=0.00001796, wd=0.0
+2025-09-22 11:29:01,108 | INFO | Group 32: params=6, lr=0.00001891, wd=0.01
+2025-09-22 11:29:01,108 | INFO | Group 33: params=10, lr=0.00001891, wd=0.0
+2025-09-22 11:29:01,108 | INFO | Group 34: params=6, lr=0.00001990, wd=0.01
+2025-09-22 11:29:01,108 | INFO | Group 35: params=10, lr=0.00001990, wd=0.0
+2025-09-22 11:29:01,108 | INFO | Group 36: params=6, lr=0.00002095, wd=0.01
+2025-09-22 11:29:01,108 | INFO | Group 37: params=10, lr=0.00002095, wd=0.0
+2025-09-22 11:29:01,108 | INFO | Group 38: params=6, lr=0.00002205, wd=0.01
+2025-09-22 11:29:01,108 | INFO | Group 39: params=10, lr=0.00002205, wd=0.0
+2025-09-22 11:29:01,108 | INFO | Group 40: params=6, lr=0.00002321, wd=0.01
+2025-09-22 11:29:01,108 | INFO | Group 41: params=10, lr=0.00002321, wd=0.0
+2025-09-22 11:29:01,108 | INFO | Group 42: params=6, lr=0.00002444, wd=0.01
+2025-09-22 11:29:01,108 | INFO | Group 43: params=10, lr=0.00002444, wd=0.0
+2025-09-22 11:29:01,108 | INFO | Group 44: params=6, lr=0.00002572, wd=0.01
+2025-09-22 11:29:01,108 | INFO | Group 45: params=10, lr=0.00002572, wd=0.0
+2025-09-22 11:29:01,108 | INFO | Group 46: params=6, lr=0.00002708, wd=0.01
+2025-09-22 11:29:01,108 | INFO | Group 47: params=10, lr=0.00002708, wd=0.0
+2025-09-22 11:29:01,108 | INFO | Group 48: params=6, lr=0.00002850, wd=0.01
+2025-09-22 11:29:01,108 | INFO | Group 49: params=10, lr=0.00002850, wd=0.0
+2025-09-22 11:29:01,108 | INFO | Group 50: params=4, lr=0.00003000, wd=0.01
+2025-09-22 11:29:01,108 | INFO | Group 51: params=4, lr=0.00003000, wd=0.0
+2025-09-22 11:29:01,110 | INFO | Fold 3 -> Training steps: 4926, Warmup steps: 492, Adv start step: 492
+2025-09-22 11:29:01,113 | INFO | Registering EMA shadow parameters.
+2025-09-22 11:29:01,123 | INFO | Starting epoch 1/3 for fold 3.
+2025-09-22 11:29:25,519 | INFO | Fold 3 | Epoch 1/3 | Step 100/1642 | Loss: 0.424039 | LR: 0.00000169 | Adv:False
+2025-09-22 11:29:48,654 | INFO | Fold 3 | Epoch 1/3 | Step 200/1642 | Loss: 0.422769 | LR: 0.00000338 | Adv:False
+2025-09-22 11:30:11,727 | INFO | Fold 3 | Epoch 1/3 | Step 300/1642 | Loss: 0.412442 | LR: 0.00000507 | Adv:False
+2025-09-22 11:30:34,943 | INFO | Fold 3 | Epoch 1/3 | Step 400/1642 | Loss: 0.289788 | LR: 0.00000677 | Adv:False
+2025-09-22 11:30:58,964 | INFO | Fold 3 | Epoch 1/3 | Step 500/1642 | Loss: 0.385462 | LR: 0.00000832 | Adv:True
+2025-09-22 11:31:31,742 | INFO | Fold 3 | Epoch 1/3 | Step 600/1642 | Loss: 0.332909 | LR: 0.00000831 | Adv:True
+2025-09-22 11:32:04,446 | INFO | Fold 3 | Epoch 1/3 | Step 700/1642 | Loss: 0.285044 | LR: 0.00000828 | Adv:True
+2025-09-22 11:32:37,158 | INFO | Fold 3 | Epoch 1/3 | Step 800/1642 | Loss: 0.163298 | LR: 0.00000822 | Adv:True
+2025-09-22 11:33:10,018 | INFO | Fold 3 | Epoch 1/3 | Step 900/1642 | Loss: 0.174189 | LR: 0.00000815 | Adv:True
+2025-09-22 11:33:42,446 | INFO | Fold 3 | Epoch 1/3 | Step 1000/1642 | Loss: 0.243103 | LR: 0.00000806 | Adv:True
+2025-09-22 11:34:15,397 | INFO | Fold 3 | Epoch 1/3 | Step 1100/1642 | Loss: 0.177995 | LR: 0.00000794 | Adv:True
+2025-09-22 11:34:48,251 | INFO | Fold 3 | Epoch 1/3 | Step 1200/1642 | Loss: 0.166612 | LR: 0.00000781 | Adv:True
+2025-09-22 11:35:21,481 | INFO | Fold 3 | Epoch 1/3 | Step 1300/1642 | Loss: 0.210401 | LR: 0.00000766 | Adv:True
+2025-09-22 11:35:54,302 | INFO | Fold 3 | Epoch 1/3 | Step 1400/1642 | Loss: 0.252655 | LR: 0.00000749 | Adv:True
+2025-09-22 11:36:27,562 | INFO | Fold 3 | Epoch 1/3 | Step 1500/1642 | Loss: 0.282809 | LR: 0.00000730 | Adv:True
+2025-09-22 11:37:01,042 | INFO | Fold 3 | Epoch 1/3 | Step 1600/1642 | Loss: 0.348596 | LR: 0.00000710 | Adv:True
+2025-09-22 11:37:14,920 | INFO | Fold 3 | Epoch 1 done. Avg train loss: 0.286395 | Time: 493.80s
+2025-09-22 11:37:14,920 | INFO | Applying EMA weights for evaluation.
+2025-09-22 11:37:14,926 | INFO | Running validation inference (EMA-applied).
+2025-09-22 11:37:23,432 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 11:37:23,445 | INFO | Fold 3 | Validation epoch 1: MSE(reg)=0.023319, MSE(exp)=0.023724, MSE(blend)=0.021436 | Pearson(reg)=0.839156, Pearson(exp)=0.836565, Pearson(blend)=0.839728
+2025-09-22 11:37:23,445 | INFO | Fold 3 | New best validation Pearson (blend): 0.839728 at epoch 1
+2025-09-22 11:37:23,445 | INFO | Applying EMA weights for evaluation.
+2025-09-22 11:37:25,617 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 11:37:25,623 | INFO | Starting epoch 2/3 for fold 3.
+2025-09-22 11:38:01,283 | INFO | Fold 3 | Epoch 2/3 | Step 100/1642 | Loss: 0.199846 | LR: 0.00000679 | Adv:True
+2025-09-22 11:38:33,864 | INFO | Fold 3 | Epoch 2/3 | Step 200/1642 | Loss: 0.258363 | LR: 0.00000656 | Adv:True
+2025-09-22 11:39:06,344 | INFO | Fold 3 | Epoch 2/3 | Step 300/1642 | Loss: 0.081926 | LR: 0.00000631 | Adv:True
+2025-09-22 11:39:39,171 | INFO | Fold 3 | Epoch 2/3 | Step 400/1642 | Loss: 0.297803 | LR: 0.00000605 | Adv:True
+2025-09-22 11:40:11,487 | INFO | Fold 3 | Epoch 2/3 | Step 500/1642 | Loss: 0.174210 | LR: 0.00000579 | Adv:True
+2025-09-22 11:40:44,257 | INFO | Fold 3 | Epoch 2/3 | Step 600/1642 | Loss: 0.099540 | LR: 0.00000551 | Adv:True
+2025-09-22 11:41:16,952 | INFO | Fold 3 | Epoch 2/3 | Step 700/1642 | Loss: 0.298140 | LR: 0.00000523 | Adv:True
+2025-09-22 11:41:49,987 | INFO | Fold 3 | Epoch 2/3 | Step 800/1642 | Loss: 0.069851 | LR: 0.00000494 | Adv:True
+2025-09-22 11:42:22,934 | INFO | Fold 3 | Epoch 2/3 | Step 900/1642 | Loss: 0.195633 | LR: 0.00000465 | Adv:True
+2025-09-22 11:42:55,699 | INFO | Fold 3 | Epoch 2/3 | Step 1000/1642 | Loss: 0.199330 | LR: 0.00000436 | Adv:True
+2025-09-22 11:43:28,965 | INFO | Fold 3 | Epoch 2/3 | Step 1100/1642 | Loss: 0.121734 | LR: 0.00000406 | Adv:True
+2025-09-22 11:44:02,005 | INFO | Fold 3 | Epoch 2/3 | Step 1200/1642 | Loss: 0.091603 | LR: 0.00000377 | Adv:True
+2025-09-22 11:44:34,702 | INFO | Fold 3 | Epoch 2/3 | Step 1300/1642 | Loss: 0.151259 | LR: 0.00000348 | Adv:True
+2025-09-22 11:45:09,607 | INFO | Fold 3 | Epoch 2/3 | Step 1400/1642 | Loss: 0.136811 | LR: 0.00000319 | Adv:True
+2025-09-22 11:45:42,485 | INFO | Fold 3 | Epoch 2/3 | Step 1500/1642 | Loss: 0.092723 | LR: 0.00000290 | Adv:True
+2025-09-22 11:46:15,101 | INFO | Fold 3 | Epoch 2/3 | Step 1600/1642 | Loss: 0.220883 | LR: 0.00000263 | Adv:True
+2025-09-22 11:46:28,632 | INFO | Fold 3 | Epoch 2 done. Avg train loss: 0.168077 | Time: 543.01s
+2025-09-22 11:46:28,632 | INFO | Applying EMA weights for evaluation.
+2025-09-22 11:46:28,639 | INFO | Running validation inference (EMA-applied).
+2025-09-22 11:46:36,490 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 11:46:36,496 | INFO | Fold 3 | Validation epoch 2: MSE(reg)=0.018346, MSE(exp)=0.016898, MSE(blend)=0.017236 | Pearson(reg)=0.864521, Pearson(exp)=0.865120, Pearson(blend)=0.865469
+2025-09-22 11:46:36,496 | INFO | Fold 3 | New best validation Pearson (blend): 0.865469 at epoch 2
+2025-09-22 11:46:36,496 | INFO | Applying EMA weights for evaluation.
+2025-09-22 11:46:37,763 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 11:46:37,767 | INFO | Starting epoch 3/3 for fold 3.
+2025-09-22 11:47:10,305 | INFO | Fold 3 | Epoch 3/3 | Step 100/1642 | Loss: 0.066061 | LR: 0.00000225 | Adv:True
+2025-09-22 11:47:43,179 | INFO | Fold 3 | Epoch 3/3 | Step 200/1642 | Loss: 0.031909 | LR: 0.00000199 | Adv:True
+2025-09-22 11:48:15,847 | INFO | Fold 3 | Epoch 3/3 | Step 300/1642 | Loss: 0.107370 | LR: 0.00000174 | Adv:True
+2025-09-22 11:48:48,554 | INFO | Fold 3 | Epoch 3/3 | Step 400/1642 | Loss: 0.029163 | LR: 0.00000151 | Adv:True
+2025-09-22 11:49:21,000 | INFO | Fold 3 | Epoch 3/3 | Step 500/1642 | Loss: 0.089036 | LR: 0.00000129 | Adv:True
+2025-09-22 11:49:53,958 | INFO | Fold 3 | Epoch 3/3 | Step 600/1642 | Loss: 0.054563 | LR: 0.00000108 | Adv:True
+2025-09-22 11:50:26,582 | INFO | Fold 3 | Epoch 3/3 | Step 700/1642 | Loss: 0.078543 | LR: 0.00000089 | Adv:True
+2025-09-22 11:50:58,963 | INFO | Fold 3 | Epoch 3/3 | Step 800/1642 | Loss: 0.070971 | LR: 0.00000072 | Adv:True
+2025-09-22 11:51:31,585 | INFO | Fold 3 | Epoch 3/3 | Step 900/1642 | Loss: 0.145461 | LR: 0.00000056 | Adv:True
+2025-09-22 11:52:04,124 | INFO | Fold 3 | Epoch 3/3 | Step 1000/1642 | Loss: 0.160892 | LR: 0.00000042 | Adv:True
+2025-09-22 11:52:36,617 | INFO | Fold 3 | Epoch 3/3 | Step 1100/1642 | Loss: 0.209523 | LR: 0.00000030 | Adv:True
+2025-09-22 11:53:10,583 | INFO | Fold 3 | Epoch 3/3 | Step 1200/1642 | Loss: 0.090960 | LR: 0.00000020 | Adv:True
+2025-09-22 11:53:44,881 | INFO | Fold 3 | Epoch 3/3 | Step 1300/1642 | Loss: 0.027482 | LR: 0.00000012 | Adv:True
+2025-09-22 11:54:18,710 | INFO | Fold 3 | Epoch 3/3 | Step 1400/1642 | Loss: 0.168109 | LR: 0.00000006 | Adv:True
+2025-09-22 11:54:52,898 | INFO | Fold 3 | Epoch 3/3 | Step 1500/1642 | Loss: 0.096060 | LR: 0.00000002 | Adv:True
+2025-09-22 11:55:25,745 | INFO | Fold 3 | Epoch 3/3 | Step 1600/1642 | Loss: 0.062419 | LR: 0.00000000 | Adv:True
+2025-09-22 11:55:39,501 | INFO | Fold 3 | Epoch 3 done. Avg train loss: 0.107991 | Time: 541.73s
+2025-09-22 11:55:39,501 | INFO | Applying EMA weights for evaluation.
+2025-09-22 11:55:39,509 | INFO | Running validation inference (EMA-applied).
+2025-09-22 11:55:47,935 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 11:55:47,940 | INFO | Fold 3 | Validation epoch 3: MSE(reg)=0.018078, MSE(exp)=0.017109, MSE(blend)=0.017428 | Pearson(reg)=0.864991, Pearson(exp)=0.865913, Pearson(blend)=0.866112
+2025-09-22 11:55:47,940 | INFO | Fold 3 | New best validation Pearson (blend): 0.866112 at epoch 3
+2025-09-22 11:55:47,940 | INFO | Applying EMA weights for evaluation.
+2025-09-22 11:55:48,479 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 11:55:48,763 | INFO | Fold 3 | Generating OOF predictions with best EMA weights.
+2025-09-22 11:55:48,763 | INFO | Running validation inference (EMA-applied).
+2025-09-22 11:55:57,326 | INFO | Fold 3 | OOF Pearson reg=0.864991, exp=0.865913
+2025-09-22 11:55:57,327 | INFO | Running test inference (TTA with swapped pairs).
+2025-09-22 11:56:06,521 | INFO | Running test inference (TTA with swapped pairs).
+2025-09-22 11:56:15,910 | INFO | ===== Fold 5/5 (seed=42) =====
+2025-09-22 11:56:16,552 | INFO | Fold 4 -> Train batches: 1642, Valid batches: 206
+2025-09-22 11:56:18,782 | INFO | Loading DAPT backbone weights into cross-encoder backbone.
+2025-09-22 11:56:19,053 | INFO | Creating optimizer parameter groups with layer-wise LR decay.
+2025-09-22 11:56:19,054 | INFO | Group 0: params=1, lr=0.00000832, wd=0.01
+2025-09-22 11:56:19,055 | INFO | Group 1: params=2, lr=0.00000832, wd=0.0
+2025-09-22 11:56:19,055 | INFO | Group 2: params=6, lr=0.00000876, wd=0.01
+2025-09-22 11:56:19,055 | INFO | Group 3: params=10, lr=0.00000876, wd=0.0
+2025-09-22 11:56:19,055 | INFO | Group 4: params=6, lr=0.00000922, wd=0.01
+2025-09-22 11:56:19,055 | INFO | Group 5: params=10, lr=0.00000922, wd=0.0
+2025-09-22 11:56:19,055 | INFO | Group 6: params=6, lr=0.00000971, wd=0.01
+2025-09-22 11:56:19,055 | INFO | Group 7: params=10, lr=0.00000971, wd=0.0
+2025-09-22 11:56:19,055 | INFO | Group 8: params=6, lr=0.00001022, wd=0.01
+2025-09-22 11:56:19,055 | INFO | Group 9: params=10, lr=0.00001022, wd=0.0
+2025-09-22 11:56:19,055 | INFO | Group 10: params=6, lr=0.00001075, wd=0.01
+2025-09-22 11:56:19,055 | INFO | Group 11: params=10, lr=0.00001075, wd=0.0
+2025-09-22 11:56:19,055 | INFO | Group 12: params=6, lr=0.00001132, wd=0.01
+2025-09-22 11:56:19,055 | INFO | Group 13: params=10, lr=0.00001132, wd=0.0
+2025-09-22 11:56:19,055 | INFO | Group 14: params=6, lr=0.00001192, wd=0.01
+2025-09-22 11:56:19,055 | INFO | Group 15: params=10, lr=0.00001192, wd=0.0
+2025-09-22 11:56:19,055 | INFO | Group 16: params=6, lr=0.00001254, wd=0.01
+2025-09-22 11:56:19,055 | INFO | Group 17: params=10, lr=0.00001254, wd=0.0
+2025-09-22 11:56:19,055 | INFO | Group 18: params=6, lr=0.00001320, wd=0.01
+2025-09-22 11:56:19,055 | INFO | Group 19: params=10, lr=0.00001320, wd=0.0
+2025-09-22 11:56:19,055 | INFO | Group 20: params=6, lr=0.00001390, wd=0.01
+2025-09-22 11:56:19,055 | INFO | Group 21: params=10, lr=0.00001390, wd=0.0
+2025-09-22 11:56:19,055 | INFO | Group 22: params=6, lr=0.00001463, wd=0.01
+2025-09-22 11:56:19,055 | INFO | Group 23: params=10, lr=0.00001463, wd=0.0
+2025-09-22 11:56:19,055 | INFO | Group 24: params=6, lr=0.00001540, wd=0.01
+2025-09-22 11:56:19,055 | INFO | Group 25: params=10, lr=0.00001540, wd=0.0
+2025-09-22 11:56:19,055 | INFO | Group 26: params=6, lr=0.00001621, wd=0.01
+2025-09-22 11:56:19,055 | INFO | Group 27: params=10, lr=0.00001621, wd=0.0
+2025-09-22 11:56:19,055 | INFO | Group 28: params=6, lr=0.00001706, wd=0.01
+2025-09-22 11:56:19,055 | INFO | Group 29: params=10, lr=0.00001706, wd=0.0
+2025-09-22 11:56:19,055 | INFO | Group 30: params=6, lr=0.00001796, wd=0.01
+2025-09-22 11:56:19,055 | INFO | Group 31: params=10, lr=0.00001796, wd=0.0
+2025-09-22 11:56:19,055 | INFO | Group 32: params=6, lr=0.00001891, wd=0.01
+2025-09-22 11:56:19,055 | INFO | Group 33: params=10, lr=0.00001891, wd=0.0
+2025-09-22 11:56:19,055 | INFO | Group 34: params=6, lr=0.00001990, wd=0.01
+2025-09-22 11:56:19,055 | INFO | Group 35: params=10, lr=0.00001990, wd=0.0
+2025-09-22 11:56:19,055 | INFO | Group 36: params=6, lr=0.00002095, wd=0.01
+2025-09-22 11:56:19,056 | INFO | Group 37: params=10, lr=0.00002095, wd=0.0
+2025-09-22 11:56:19,056 | INFO | Group 38: params=6, lr=0.00002205, wd=0.01
+2025-09-22 11:56:19,056 | INFO | Group 39: params=10, lr=0.00002205, wd=0.0
+2025-09-22 11:56:19,056 | INFO | Group 40: params=6, lr=0.00002321, wd=0.01
+2025-09-22 11:56:19,056 | INFO | Group 41: params=10, lr=0.00002321, wd=0.0
+2025-09-22 11:56:19,056 | INFO | Group 42: params=6, lr=0.00002444, wd=0.01
+2025-09-22 11:56:19,056 | INFO | Group 43: params=10, lr=0.00002444, wd=0.0
+2025-09-22 11:56:19,056 | INFO | Group 44: params=6, lr=0.00002572, wd=0.01
+2025-09-22 11:56:19,056 | INFO | Group 45: params=10, lr=0.00002572, wd=0.0
+2025-09-22 11:56:19,056 | INFO | Group 46: params=6, lr=0.00002708, wd=0.01
+2025-09-22 11:56:19,056 | INFO | Group 47: params=10, lr=0.00002708, wd=0.0
+2025-09-22 11:56:19,056 | INFO | Group 48: params=6, lr=0.00002850, wd=0.01
+2025-09-22 11:56:19,056 | INFO | Group 49: params=10, lr=0.00002850, wd=0.0
+2025-09-22 11:56:19,056 | INFO | Group 50: params=4, lr=0.00003000, wd=0.01
+2025-09-22 11:56:19,056 | INFO | Group 51: params=4, lr=0.00003000, wd=0.0
+2025-09-22 11:56:19,058 | INFO | Fold 4 -> Training steps: 4926, Warmup steps: 492, Adv start step: 492
+2025-09-22 11:56:19,060 | INFO | Registering EMA shadow parameters.
+2025-09-22 11:56:19,066 | INFO | Starting epoch 1/3 for fold 4.
+2025-09-22 11:56:44,043 | INFO | Fold 4 | Epoch 1/3 | Step 100/1642 | Loss: 0.651808 | LR: 0.00000169 | Adv:False
+2025-09-22 11:57:08,034 | INFO | Fold 4 | Epoch 1/3 | Step 200/1642 | Loss: 0.429043 | LR: 0.00000338 | Adv:False
+2025-09-22 11:57:31,962 | INFO | Fold 4 | Epoch 1/3 | Step 300/1642 | Loss: 0.461745 | LR: 0.00000507 | Adv:False
+2025-09-22 11:57:55,945 | INFO | Fold 4 | Epoch 1/3 | Step 400/1642 | Loss: 0.283525 | LR: 0.00000677 | Adv:False
+2025-09-22 11:58:21,010 | INFO | Fold 4 | Epoch 1/3 | Step 500/1642 | Loss: 0.218886 | LR: 0.00000832 | Adv:True
+2025-09-22 11:58:55,031 | INFO | Fold 4 | Epoch 1/3 | Step 600/1642 | Loss: 0.175222 | LR: 0.00000831 | Adv:True
+2025-09-22 11:59:29,259 | INFO | Fold 4 | Epoch 1/3 | Step 700/1642 | Loss: 0.270047 | LR: 0.00000828 | Adv:True
+2025-09-22 12:00:01,856 | INFO | Fold 4 | Epoch 1/3 | Step 800/1642 | Loss: 0.221729 | LR: 0.00000822 | Adv:True
+2025-09-22 12:00:34,635 | INFO | Fold 4 | Epoch 1/3 | Step 900/1642 | Loss: 0.213053 | LR: 0.00000815 | Adv:True
+2025-09-22 12:01:07,224 | INFO | Fold 4 | Epoch 1/3 | Step 1000/1642 | Loss: 0.285878 | LR: 0.00000806 | Adv:True
+2025-09-22 12:01:39,597 | INFO | Fold 4 | Epoch 1/3 | Step 1100/1642 | Loss: 0.342328 | LR: 0.00000794 | Adv:True
+2025-09-22 12:02:12,326 | INFO | Fold 4 | Epoch 1/3 | Step 1200/1642 | Loss: 0.148236 | LR: 0.00000781 | Adv:True
+2025-09-22 12:02:45,053 | INFO | Fold 4 | Epoch 1/3 | Step 1300/1642 | Loss: 0.273800 | LR: 0.00000766 | Adv:True
+2025-09-22 12:03:17,324 | INFO | Fold 4 | Epoch 1/3 | Step 1400/1642 | Loss: 0.239253 | LR: 0.00000749 | Adv:True
+2025-09-22 12:03:49,468 | INFO | Fold 4 | Epoch 1/3 | Step 1500/1642 | Loss: 0.145716 | LR: 0.00000730 | Adv:True
+2025-09-22 12:04:21,963 | INFO | Fold 4 | Epoch 1/3 | Step 1600/1642 | Loss: 0.343851 | LR: 0.00000710 | Adv:True
+2025-09-22 12:04:36,152 | INFO | Fold 4 | Epoch 1 done. Avg train loss: 0.282112 | Time: 497.08s
+2025-09-22 12:04:36,152 | INFO | Applying EMA weights for evaluation.
+2025-09-22 12:04:36,159 | INFO | Running validation inference (EMA-applied).
+2025-09-22 12:04:44,563 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 12:04:44,571 | INFO | Fold 4 | Validation epoch 1: MSE(reg)=0.021004, MSE(exp)=0.023738, MSE(blend)=0.021307 | Pearson(reg)=0.834896, Pearson(exp)=0.834077, Pearson(blend)=0.836301
+2025-09-22 12:04:44,571 | INFO | Fold 4 | New best validation Pearson (blend): 0.836301 at epoch 1
+2025-09-22 12:04:44,571 | INFO | Applying EMA weights for evaluation.
+2025-09-22 12:04:45,855 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 12:04:45,859 | INFO | Starting epoch 2/3 for fold 4.
+2025-09-22 12:05:18,801 | INFO | Fold 4 | Epoch 2/3 | Step 100/1642 | Loss: 0.249331 | LR: 0.00000679 | Adv:True
+2025-09-22 12:05:51,100 | INFO | Fold 4 | Epoch 2/3 | Step 200/1642 | Loss: 0.211254 | LR: 0.00000656 | Adv:True
+2025-09-22 12:06:25,016 | INFO | Fold 4 | Epoch 2/3 | Step 300/1642 | Loss: 0.168180 | LR: 0.00000631 | Adv:True
+2025-09-22 12:06:59,103 | INFO | Fold 4 | Epoch 2/3 | Step 400/1642 | Loss: 0.132151 | LR: 0.00000605 | Adv:True
+2025-09-22 12:07:31,832 | INFO | Fold 4 | Epoch 2/3 | Step 500/1642 | Loss: 0.133723 | LR: 0.00000579 | Adv:True
+2025-09-22 12:08:04,785 | INFO | Fold 4 | Epoch 2/3 | Step 600/1642 | Loss: 0.141470 | LR: 0.00000551 | Adv:True
+2025-09-22 12:08:37,065 | INFO | Fold 4 | Epoch 2/3 | Step 700/1642 | Loss: 0.117319 | LR: 0.00000523 | Adv:True
+2025-09-22 12:09:09,840 | INFO | Fold 4 | Epoch 2/3 | Step 800/1642 | Loss: 0.178520 | LR: 0.00000494 | Adv:True
+2025-09-22 12:09:42,293 | INFO | Fold 4 | Epoch 2/3 | Step 900/1642 | Loss: 0.153408 | LR: 0.00000465 | Adv:True
+2025-09-22 12:10:15,214 | INFO | Fold 4 | Epoch 2/3 | Step 1000/1642 | Loss: 0.058479 | LR: 0.00000436 | Adv:True
+2025-09-22 12:10:48,030 | INFO | Fold 4 | Epoch 2/3 | Step 1100/1642 | Loss: 0.189421 | LR: 0.00000406 | Adv:True
+2025-09-22 12:11:20,875 | INFO | Fold 4 | Epoch 2/3 | Step 1200/1642 | Loss: 0.127143 | LR: 0.00000377 | Adv:True
+2025-09-22 12:11:53,609 | INFO | Fold 4 | Epoch 2/3 | Step 1300/1642 | Loss: 0.192585 | LR: 0.00000348 | Adv:True
+2025-09-22 12:12:26,040 | INFO | Fold 4 | Epoch 2/3 | Step 1400/1642 | Loss: 0.153961 | LR: 0.00000319 | Adv:True
+2025-09-22 12:12:59,365 | INFO | Fold 4 | Epoch 2/3 | Step 1500/1642 | Loss: 0.215112 | LR: 0.00000290 | Adv:True
+2025-09-22 12:13:34,624 | INFO | Fold 4 | Epoch 2/3 | Step 1600/1642 | Loss: 0.099785 | LR: 0.00000263 | Adv:True
+2025-09-22 12:13:49,437 | INFO | Fold 4 | Epoch 2 done. Avg train loss: 0.163188 | Time: 543.58s
+2025-09-22 12:13:49,437 | INFO | Applying EMA weights for evaluation.
+2025-09-22 12:13:49,443 | INFO | Running validation inference (EMA-applied).
+2025-09-22 12:13:58,152 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 12:13:58,157 | INFO | Fold 4 | Validation epoch 2: MSE(reg)=0.018846, MSE(exp)=0.017390, MSE(blend)=0.017756 | Pearson(reg)=0.862600, Pearson(exp)=0.861361, Pearson(blend)=0.862753
+2025-09-22 12:13:58,157 | INFO | Fold 4 | New best validation Pearson (blend): 0.862753 at epoch 2
+2025-09-22 12:13:58,157 | INFO | Applying EMA weights for evaluation.
+2025-09-22 12:13:59,547 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 12:13:59,551 | INFO | Starting epoch 3/3 for fold 4.
+2025-09-22 12:14:34,110 | INFO | Fold 4 | Epoch 3/3 | Step 100/1642 | Loss: 0.093967 | LR: 0.00000225 | Adv:True
+2025-09-22 12:15:08,560 | INFO | Fold 4 | Epoch 3/3 | Step 200/1642 | Loss: 0.058080 | LR: 0.00000199 | Adv:True
+2025-09-22 12:15:42,915 | INFO | Fold 4 | Epoch 3/3 | Step 300/1642 | Loss: 0.084547 | LR: 0.00000174 | Adv:True
+2025-09-22 12:16:17,393 | INFO | Fold 4 | Epoch 3/3 | Step 400/1642 | Loss: 0.026342 | LR: 0.00000151 | Adv:True
+2025-09-22 12:16:51,621 | INFO | Fold 4 | Epoch 3/3 | Step 500/1642 | Loss: 0.068430 | LR: 0.00000129 | Adv:True
+2025-09-22 12:17:25,634 | INFO | Fold 4 | Epoch 3/3 | Step 600/1642 | Loss: 0.071523 | LR: 0.00000108 | Adv:True
+2025-09-22 12:17:59,637 | INFO | Fold 4 | Epoch 3/3 | Step 700/1642 | Loss: 0.106093 | LR: 0.00000089 | Adv:True
+2025-09-22 12:18:33,933 | INFO | Fold 4 | Epoch 3/3 | Step 800/1642 | Loss: 0.145692 | LR: 0.00000072 | Adv:True
+2025-09-22 12:19:08,103 | INFO | Fold 4 | Epoch 3/3 | Step 900/1642 | Loss: 0.130004 | LR: 0.00000056 | Adv:True
+2025-09-22 12:19:42,545 | INFO | Fold 4 | Epoch 3/3 | Step 1000/1642 | Loss: 0.113647 | LR: 0.00000042 | Adv:True
+2025-09-22 12:20:16,848 | INFO | Fold 4 | Epoch 3/3 | Step 1100/1642 | Loss: 0.061486 | LR: 0.00000030 | Adv:True
+2025-09-22 12:20:51,265 | INFO | Fold 4 | Epoch 3/3 | Step 1200/1642 | Loss: 0.155272 | LR: 0.00000020 | Adv:True
+2025-09-22 12:21:25,768 | INFO | Fold 4 | Epoch 3/3 | Step 1300/1642 | Loss: 0.103380 | LR: 0.00000012 | Adv:True
+2025-09-22 12:22:00,423 | INFO | Fold 4 | Epoch 3/3 | Step 1400/1642 | Loss: 0.090263 | LR: 0.00000006 | Adv:True
+2025-09-22 12:22:35,567 | INFO | Fold 4 | Epoch 3/3 | Step 1500/1642 | Loss: 0.059323 | LR: 0.00000002 | Adv:True
+2025-09-22 12:23:10,579 | INFO | Fold 4 | Epoch 3/3 | Step 1600/1642 | Loss: 0.133846 | LR: 0.00000000 | Adv:True
+2025-09-22 12:23:25,283 | INFO | Fold 4 | Epoch 3 done. Avg train loss: 0.102261 | Time: 565.73s
+2025-09-22 12:23:25,284 | INFO | Applying EMA weights for evaluation.
+2025-09-22 12:23:25,290 | INFO | Running validation inference (EMA-applied).
+2025-09-22 12:23:33,998 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 12:23:34,004 | INFO | Fold 4 | Validation epoch 3: MSE(reg)=0.018598, MSE(exp)=0.017382, MSE(blend)=0.017745 | Pearson(reg)=0.865002, Pearson(exp)=0.864008, Pearson(blend)=0.865299
+2025-09-22 12:23:34,004 | INFO | Fold 4 | New best validation Pearson (blend): 0.865299 at epoch 3
+2025-09-22 12:23:34,004 | INFO | Applying EMA weights for evaluation.
+2025-09-22 12:23:34,501 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 12:23:34,829 | INFO | Fold 4 | Generating OOF predictions with best EMA weights.
+2025-09-22 12:23:34,830 | INFO | Running validation inference (EMA-applied).
+2025-09-22 12:23:43,414 | INFO | Fold 4 | OOF Pearson reg=0.865002, exp=0.864008
+2025-09-22 12:23:43,414 | INFO | Running test inference (TTA with swapped pairs).
+2025-09-22 12:23:52,738 | INFO | Running test inference (TTA with swapped pairs).
+2025-09-22 12:24:04,505 | INFO | Starting supervised training for variant with seed=2025.
+2025-09-22 12:24:04,505 | INFO | Seeding all RNGs with seed=2025
+2025-09-22 12:24:04,508 | INFO | Test batches (normal/swapped): 114/114
+2025-09-22 12:24:04,509 | INFO | ===== Fold 1/5 (seed=2025) =====
+2025-09-22 12:24:04,527 | INFO | Fold 0 -> Train batches: 1642, Valid batches: 206
+2025-09-22 12:24:06,137 | INFO | Loading DAPT backbone weights into cross-encoder backbone.
+2025-09-22 12:24:06,545 | INFO | Creating optimizer parameter groups with layer-wise LR decay.
+2025-09-22 12:24:06,547 | INFO | Group 0: params=1, lr=0.00000832, wd=0.01
+2025-09-22 12:24:06,547 | INFO | Group 1: params=2, lr=0.00000832, wd=0.0
+2025-09-22 12:24:06,547 | INFO | Group 2: params=6, lr=0.00000876, wd=0.01
+2025-09-22 12:24:06,547 | INFO | Group 3: params=10, lr=0.00000876, wd=0.0
+2025-09-22 12:24:06,547 | INFO | Group 4: params=6, lr=0.00000922, wd=0.01
+2025-09-22 12:24:06,547 | INFO | Group 5: params=10, lr=0.00000922, wd=0.0
+2025-09-22 12:24:06,547 | INFO | Group 6: params=6, lr=0.00000971, wd=0.01
+2025-09-22 12:24:06,547 | INFO | Group 7: params=10, lr=0.00000971, wd=0.0
+2025-09-22 12:24:06,547 | INFO | Group 8: params=6, lr=0.00001022, wd=0.01
+2025-09-22 12:24:06,547 | INFO | Group 9: params=10, lr=0.00001022, wd=0.0
+2025-09-22 12:24:06,547 | INFO | Group 10: params=6, lr=0.00001075, wd=0.01
+2025-09-22 12:24:06,547 | INFO | Group 11: params=10, lr=0.00001075, wd=0.0
+2025-09-22 12:24:06,547 | INFO | Group 12: params=6, lr=0.00001132, wd=0.01
+2025-09-22 12:24:06,547 | INFO | Group 13: params=10, lr=0.00001132, wd=0.0
+2025-09-22 12:24:06,547 | INFO | Group 14: params=6, lr=0.00001192, wd=0.01
+2025-09-22 12:24:06,547 | INFO | Group 15: params=10, lr=0.00001192, wd=0.0
+2025-09-22 12:24:06,547 | INFO | Group 16: params=6, lr=0.00001254, wd=0.01
+2025-09-22 12:24:06,547 | INFO | Group 17: params=10, lr=0.00001254, wd=0.0
+2025-09-22 12:24:06,547 | INFO | Group 18: params=6, lr=0.00001320, wd=0.01
+2025-09-22 12:24:06,547 | INFO | Group 19: params=10, lr=0.00001320, wd=0.0
+2025-09-22 12:24:06,547 | INFO | Group 20: params=6, lr=0.00001390, wd=0.01
+2025-09-22 12:24:06,547 | INFO | Group 21: params=10, lr=0.00001390, wd=0.0
+2025-09-22 12:24:06,547 | INFO | Group 22: params=6, lr=0.00001463, wd=0.01
+2025-09-22 12:24:06,547 | INFO | Group 23: params=10, lr=0.00001463, wd=0.0
+2025-09-22 12:24:06,547 | INFO | Group 24: params=6, lr=0.00001540, wd=0.01
+2025-09-22 12:24:06,547 | INFO | Group 25: params=10, lr=0.00001540, wd=0.0
+2025-09-22 12:24:06,547 | INFO | Group 26: params=6, lr=0.00001621, wd=0.01
+2025-09-22 12:24:06,547 | INFO | Group 27: params=10, lr=0.00001621, wd=0.0
+2025-09-22 12:24:06,547 | INFO | Group 28: params=6, lr=0.00001706, wd=0.01
+2025-09-22 12:24:06,547 | INFO | Group 29: params=10, lr=0.00001706, wd=0.0
+2025-09-22 12:24:06,547 | INFO | Group 30: params=6, lr=0.00001796, wd=0.01
+2025-09-22 12:24:06,548 | INFO | Group 31: params=10, lr=0.00001796, wd=0.0
+2025-09-22 12:24:06,548 | INFO | Group 32: params=6, lr=0.00001891, wd=0.01
+2025-09-22 12:24:06,548 | INFO | Group 33: params=10, lr=0.00001891, wd=0.0
+2025-09-22 12:24:06,548 | INFO | Group 34: params=6, lr=0.00001990, wd=0.01
+2025-09-22 12:24:06,548 | INFO | Group 35: params=10, lr=0.00001990, wd=0.0
+2025-09-22 12:24:06,548 | INFO | Group 36: params=6, lr=0.00002095, wd=0.01
+2025-09-22 12:24:06,548 | INFO | Group 37: params=10, lr=0.00002095, wd=0.0
+2025-09-22 12:24:06,548 | INFO | Group 38: params=6, lr=0.00002205, wd=0.01
+2025-09-22 12:24:06,548 | INFO | Group 39: params=10, lr=0.00002205, wd=0.0
+2025-09-22 12:24:06,548 | INFO | Group 40: params=6, lr=0.00002321, wd=0.01
+2025-09-22 12:24:06,548 | INFO | Group 41: params=10, lr=0.00002321, wd=0.0
+2025-09-22 12:24:06,548 | INFO | Group 42: params=6, lr=0.00002444, wd=0.01
+2025-09-22 12:24:06,548 | INFO | Group 43: params=10, lr=0.00002444, wd=0.0
+2025-09-22 12:24:06,548 | INFO | Group 44: params=6, lr=0.00002572, wd=0.01
+2025-09-22 12:24:06,548 | INFO | Group 45: params=10, lr=0.00002572, wd=0.0
+2025-09-22 12:24:06,548 | INFO | Group 46: params=6, lr=0.00002708, wd=0.01
+2025-09-22 12:24:06,548 | INFO | Group 47: params=10, lr=0.00002708, wd=0.0
+2025-09-22 12:24:06,548 | INFO | Group 48: params=6, lr=0.00002850, wd=0.01
+2025-09-22 12:24:06,548 | INFO | Group 49: params=10, lr=0.00002850, wd=0.0
+2025-09-22 12:24:06,548 | INFO | Group 50: params=4, lr=0.00003000, wd=0.01
+2025-09-22 12:24:06,548 | INFO | Group 51: params=4, lr=0.00003000, wd=0.0
+2025-09-22 12:24:06,550 | INFO | Fold 0 -> Training steps: 4926, Warmup steps: 492, Adv start step: 492
+2025-09-22 12:24:06,550 | INFO | Registering EMA shadow parameters.
+2025-09-22 12:24:06,554 | INFO | Starting epoch 1/3 for fold 0.
+2025-09-22 12:24:32,004 | INFO | Fold 0 | Epoch 1/3 | Step 100/1642 | Loss: 0.384084 | LR: 0.00000169 | Adv:False
+2025-09-22 12:24:56,036 | INFO | Fold 0 | Epoch 1/3 | Step 200/1642 | Loss: 0.381507 | LR: 0.00000338 | Adv:False
+2025-09-22 12:25:19,746 | INFO | Fold 0 | Epoch 1/3 | Step 300/1642 | Loss: 0.373680 | LR: 0.00000507 | Adv:False
+2025-09-22 12:25:43,942 | INFO | Fold 0 | Epoch 1/3 | Step 400/1642 | Loss: 0.265132 | LR: 0.00000677 | Adv:False
+2025-09-22 12:26:08,965 | INFO | Fold 0 | Epoch 1/3 | Step 500/1642 | Loss: 0.302362 | LR: 0.00000832 | Adv:True
+2025-09-22 12:26:43,295 | INFO | Fold 0 | Epoch 1/3 | Step 600/1642 | Loss: 0.200609 | LR: 0.00000831 | Adv:True
+2025-09-22 12:27:17,177 | INFO | Fold 0 | Epoch 1/3 | Step 700/1642 | Loss: 0.183895 | LR: 0.00000828 | Adv:True
+2025-09-22 12:27:51,098 | INFO | Fold 0 | Epoch 1/3 | Step 800/1642 | Loss: 0.302255 | LR: 0.00000822 | Adv:True
+2025-09-22 12:28:25,284 | INFO | Fold 0 | Epoch 1/3 | Step 900/1642 | Loss: 0.207504 | LR: 0.00000815 | Adv:True
+2025-09-22 12:28:59,487 | INFO | Fold 0 | Epoch 1/3 | Step 1000/1642 | Loss: 0.180386 | LR: 0.00000806 | Adv:True
+2025-09-22 12:29:33,953 | INFO | Fold 0 | Epoch 1/3 | Step 1100/1642 | Loss: 0.271596 | LR: 0.00000794 | Adv:True
+2025-09-22 12:30:08,332 | INFO | Fold 0 | Epoch 1/3 | Step 1200/1642 | Loss: 0.256028 | LR: 0.00000781 | Adv:True
+2025-09-22 12:30:42,813 | INFO | Fold 0 | Epoch 1/3 | Step 1300/1642 | Loss: 0.192555 | LR: 0.00000766 | Adv:True
+2025-09-22 12:31:17,046 | INFO | Fold 0 | Epoch 1/3 | Step 1400/1642 | Loss: 0.217541 | LR: 0.00000749 | Adv:True
+2025-09-22 12:31:51,234 | INFO | Fold 0 | Epoch 1/3 | Step 1500/1642 | Loss: 0.142641 | LR: 0.00000730 | Adv:True
+2025-09-22 12:32:25,306 | INFO | Fold 0 | Epoch 1/3 | Step 1600/1642 | Loss: 0.209581 | LR: 0.00000710 | Adv:True
+2025-09-22 12:32:39,388 | INFO | Fold 0 | Epoch 1 done. Avg train loss: 0.282592 | Time: 512.83s
+2025-09-22 12:32:39,388 | INFO | Applying EMA weights for evaluation.
+2025-09-22 12:32:39,394 | INFO | Running validation inference (EMA-applied).
+2025-09-22 12:32:47,869 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 12:32:47,875 | INFO | Fold 0 | Validation epoch 1: MSE(reg)=0.020916, MSE(exp)=0.022481, MSE(blend)=0.019912 | Pearson(reg)=0.837889, Pearson(exp)=0.839348, Pearson(blend)=0.840885
+2025-09-22 12:32:47,875 | INFO | Fold 0 | New best validation Pearson (blend): 0.840885 at epoch 1
+2025-09-22 12:32:47,875 | INFO | Applying EMA weights for evaluation.
+2025-09-22 12:32:49,568 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 12:32:49,572 | INFO | Starting epoch 2/3 for fold 0.
+2025-09-22 12:33:24,167 | INFO | Fold 0 | Epoch 2/3 | Step 100/1642 | Loss: 0.330021 | LR: 0.00000679 | Adv:True
+2025-09-22 12:33:57,890 | INFO | Fold 0 | Epoch 2/3 | Step 200/1642 | Loss: 0.338315 | LR: 0.00000656 | Adv:True
+2025-09-22 12:34:31,998 | INFO | Fold 0 | Epoch 2/3 | Step 300/1642 | Loss: 0.293623 | LR: 0.00000631 | Adv:True
+2025-09-22 12:35:06,451 | INFO | Fold 0 | Epoch 2/3 | Step 400/1642 | Loss: 0.196692 | LR: 0.00000605 | Adv:True
+2025-09-22 12:35:40,434 | INFO | Fold 0 | Epoch 2/3 | Step 500/1642 | Loss: 0.217859 | LR: 0.00000579 | Adv:True
+2025-09-22 12:36:14,317 | INFO | Fold 0 | Epoch 2/3 | Step 600/1642 | Loss: 0.388290 | LR: 0.00000551 | Adv:True
+2025-09-22 12:36:48,127 | INFO | Fold 0 | Epoch 2/3 | Step 700/1642 | Loss: 0.132195 | LR: 0.00000523 | Adv:True
+2025-09-22 12:37:22,367 | INFO | Fold 0 | Epoch 2/3 | Step 800/1642 | Loss: 0.124189 | LR: 0.00000494 | Adv:True
+2025-09-22 12:37:56,499 | INFO | Fold 0 | Epoch 2/3 | Step 900/1642 | Loss: 0.114522 | LR: 0.00000465 | Adv:True
+2025-09-22 12:38:30,672 | INFO | Fold 0 | Epoch 2/3 | Step 1000/1642 | Loss: 0.194233 | LR: 0.00000436 | Adv:True
+2025-09-22 12:39:04,757 | INFO | Fold 0 | Epoch 2/3 | Step 1100/1642 | Loss: 0.134012 | LR: 0.00000406 | Adv:True
+2025-09-22 12:39:39,125 | INFO | Fold 0 | Epoch 2/3 | Step 1200/1642 | Loss: 0.173721 | LR: 0.00000377 | Adv:True
+2025-09-22 12:40:13,279 | INFO | Fold 0 | Epoch 2/3 | Step 1300/1642 | Loss: 0.328910 | LR: 0.00000348 | Adv:True
+2025-09-22 12:40:47,185 | INFO | Fold 0 | Epoch 2/3 | Step 1400/1642 | Loss: 0.161025 | LR: 0.00000319 | Adv:True
+2025-09-22 12:41:21,357 | INFO | Fold 0 | Epoch 2/3 | Step 1500/1642 | Loss: 0.162834 | LR: 0.00000290 | Adv:True
+2025-09-22 12:41:56,190 | INFO | Fold 0 | Epoch 2/3 | Step 1600/1642 | Loss: 0.193444 | LR: 0.00000263 | Adv:True
+2025-09-22 12:42:10,573 | INFO | Fold 0 | Epoch 2 done. Avg train loss: 0.163776 | Time: 561.00s
+2025-09-22 12:42:10,573 | INFO | Applying EMA weights for evaluation.
+2025-09-22 12:42:10,580 | INFO | Running validation inference (EMA-applied).
+2025-09-22 12:42:18,650 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 12:42:18,655 | INFO | Fold 0 | Validation epoch 2: MSE(reg)=0.017483, MSE(exp)=0.016388, MSE(blend)=0.016570 | Pearson(reg)=0.869881, Pearson(exp)=0.869825, Pearson(blend)=0.870857
+2025-09-22 12:42:18,655 | INFO | Fold 0 | New best validation Pearson (blend): 0.870857 at epoch 2
+2025-09-22 12:42:18,655 | INFO | Applying EMA weights for evaluation.
+2025-09-22 12:42:19,705 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 12:42:19,710 | INFO | Starting epoch 3/3 for fold 0.
+2025-09-22 12:42:54,017 | INFO | Fold 0 | Epoch 3/3 | Step 100/1642 | Loss: 0.175102 | LR: 0.00000225 | Adv:True
+2025-09-22 12:43:28,131 | INFO | Fold 0 | Epoch 3/3 | Step 200/1642 | Loss: 0.100405 | LR: 0.00000199 | Adv:True
+2025-09-22 12:44:02,532 | INFO | Fold 0 | Epoch 3/3 | Step 300/1642 | Loss: 0.056940 | LR: 0.00000174 | Adv:True
+2025-09-22 12:44:36,452 | INFO | Fold 0 | Epoch 3/3 | Step 400/1642 | Loss: 0.106658 | LR: 0.00000151 | Adv:True
+2025-09-22 12:45:10,517 | INFO | Fold 0 | Epoch 3/3 | Step 500/1642 | Loss: 0.105928 | LR: 0.00000129 | Adv:True
+2025-09-22 12:45:44,642 | INFO | Fold 0 | Epoch 3/3 | Step 600/1642 | Loss: 0.066173 | LR: 0.00000108 | Adv:True
+2025-09-22 12:46:18,999 | INFO | Fold 0 | Epoch 3/3 | Step 700/1642 | Loss: 0.040344 | LR: 0.00000089 | Adv:True
+2025-09-22 12:46:53,155 | INFO | Fold 0 | Epoch 3/3 | Step 800/1642 | Loss: 0.066330 | LR: 0.00000072 | Adv:True
+2025-09-22 12:47:27,222 | INFO | Fold 0 | Epoch 3/3 | Step 900/1642 | Loss: 0.054393 | LR: 0.00000056 | Adv:True
+2025-09-22 12:48:01,099 | INFO | Fold 0 | Epoch 3/3 | Step 1000/1642 | Loss: 0.146056 | LR: 0.00000042 | Adv:True
+2025-09-22 12:48:35,202 | INFO | Fold 0 | Epoch 3/3 | Step 1100/1642 | Loss: 0.031725 | LR: 0.00000030 | Adv:True
+2025-09-22 12:49:09,045 | INFO | Fold 0 | Epoch 3/3 | Step 1200/1642 | Loss: 0.087484 | LR: 0.00000020 | Adv:True
+2025-09-22 12:49:43,001 | INFO | Fold 0 | Epoch 3/3 | Step 1300/1642 | Loss: 0.091941 | LR: 0.00000012 | Adv:True
+2025-09-22 12:50:17,676 | INFO | Fold 0 | Epoch 3/3 | Step 1400/1642 | Loss: 0.077445 | LR: 0.00000006 | Adv:True
+2025-09-22 12:50:51,602 | INFO | Fold 0 | Epoch 3/3 | Step 1500/1642 | Loss: 0.251232 | LR: 0.00000002 | Adv:True
+2025-09-22 12:51:25,648 | INFO | Fold 0 | Epoch 3/3 | Step 1600/1642 | Loss: 0.124121 | LR: 0.00000000 | Adv:True
+2025-09-22 12:51:39,842 | INFO | Fold 0 | Epoch 3 done. Avg train loss: 0.105819 | Time: 560.13s
+2025-09-22 12:51:39,842 | INFO | Applying EMA weights for evaluation.
+2025-09-22 12:51:39,848 | INFO | Running validation inference (EMA-applied).
+2025-09-22 12:51:47,703 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 12:51:47,708 | INFO | Fold 0 | Validation epoch 3: MSE(reg)=0.017349, MSE(exp)=0.016505, MSE(blend)=0.016702 | Pearson(reg)=0.871076, Pearson(exp)=0.870311, Pearson(blend)=0.871703
+2025-09-22 12:51:47,708 | INFO | Fold 0 | New best validation Pearson (blend): 0.871703 at epoch 3
+2025-09-22 12:51:47,708 | INFO | Applying EMA weights for evaluation.
+2025-09-22 12:51:48,188 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 12:51:48,472 | INFO | Fold 0 | Generating OOF predictions with best EMA weights.
+2025-09-22 12:51:48,472 | INFO | Running validation inference (EMA-applied).
+2025-09-22 12:51:56,254 | INFO | Fold 0 | OOF Pearson reg=0.871076, exp=0.870311
+2025-09-22 12:51:56,254 | INFO | Running test inference (TTA with swapped pairs).
+2025-09-22 12:52:05,999 | INFO | Running test inference (TTA with swapped pairs).
+2025-09-22 12:52:15,062 | INFO | ===== Fold 2/5 (seed=2025) =====
+2025-09-22 12:52:15,855 | INFO | Fold 1 -> Train batches: 1642, Valid batches: 206
+2025-09-22 12:52:19,498 | INFO | Loading DAPT backbone weights into cross-encoder backbone.
+2025-09-22 12:52:19,685 | INFO | Creating optimizer parameter groups with layer-wise LR decay.
+2025-09-22 12:52:19,686 | INFO | Group 0: params=1, lr=0.00000832, wd=0.01
+2025-09-22 12:52:19,686 | INFO | Group 1: params=2, lr=0.00000832, wd=0.0
+2025-09-22 12:52:19,686 | INFO | Group 2: params=6, lr=0.00000876, wd=0.01
+2025-09-22 12:52:19,686 | INFO | Group 3: params=10, lr=0.00000876, wd=0.0
+2025-09-22 12:52:19,686 | INFO | Group 4: params=6, lr=0.00000922, wd=0.01
+2025-09-22 12:52:19,686 | INFO | Group 5: params=10, lr=0.00000922, wd=0.0
+2025-09-22 12:52:19,687 | INFO | Group 6: params=6, lr=0.00000971, wd=0.01
+2025-09-22 12:52:19,687 | INFO | Group 7: params=10, lr=0.00000971, wd=0.0
+2025-09-22 12:52:19,687 | INFO | Group 8: params=6, lr=0.00001022, wd=0.01
+2025-09-22 12:52:19,687 | INFO | Group 9: params=10, lr=0.00001022, wd=0.0
+2025-09-22 12:52:19,687 | INFO | Group 10: params=6, lr=0.00001075, wd=0.01
+2025-09-22 12:52:19,687 | INFO | Group 11: params=10, lr=0.00001075, wd=0.0
+2025-09-22 12:52:19,687 | INFO | Group 12: params=6, lr=0.00001132, wd=0.01
+2025-09-22 12:52:19,687 | INFO | Group 13: params=10, lr=0.00001132, wd=0.0
+2025-09-22 12:52:19,687 | INFO | Group 14: params=6, lr=0.00001192, wd=0.01
+2025-09-22 12:52:19,687 | INFO | Group 15: params=10, lr=0.00001192, wd=0.0
+2025-09-22 12:52:19,687 | INFO | Group 16: params=6, lr=0.00001254, wd=0.01
+2025-09-22 12:52:19,687 | INFO | Group 17: params=10, lr=0.00001254, wd=0.0
+2025-09-22 12:52:19,687 | INFO | Group 18: params=6, lr=0.00001320, wd=0.01
+2025-09-22 12:52:19,687 | INFO | Group 19: params=10, lr=0.00001320, wd=0.0
+2025-09-22 12:52:19,687 | INFO | Group 20: params=6, lr=0.00001390, wd=0.01
+2025-09-22 12:52:19,687 | INFO | Group 21: params=10, lr=0.00001390, wd=0.0
+2025-09-22 12:52:19,687 | INFO | Group 22: params=6, lr=0.00001463, wd=0.01
+2025-09-22 12:52:19,687 | INFO | Group 23: params=10, lr=0.00001463, wd=0.0
+2025-09-22 12:52:19,687 | INFO | Group 24: params=6, lr=0.00001540, wd=0.01
+2025-09-22 12:52:19,687 | INFO | Group 25: params=10, lr=0.00001540, wd=0.0
+2025-09-22 12:52:19,687 | INFO | Group 26: params=6, lr=0.00001621, wd=0.01
+2025-09-22 12:52:19,687 | INFO | Group 27: params=10, lr=0.00001621, wd=0.0
+2025-09-22 12:52:19,687 | INFO | Group 28: params=6, lr=0.00001706, wd=0.01
+2025-09-22 12:52:19,687 | INFO | Group 29: params=10, lr=0.00001706, wd=0.0
+2025-09-22 12:52:19,687 | INFO | Group 30: params=6, lr=0.00001796, wd=0.01
+2025-09-22 12:52:19,687 | INFO | Group 31: params=10, lr=0.00001796, wd=0.0
+2025-09-22 12:52:19,687 | INFO | Group 32: params=6, lr=0.00001891, wd=0.01
+2025-09-22 12:52:19,687 | INFO | Group 33: params=10, lr=0.00001891, wd=0.0
+2025-09-22 12:52:19,687 | INFO | Group 34: params=6, lr=0.00001990, wd=0.01
+2025-09-22 12:52:19,687 | INFO | Group 35: params=10, lr=0.00001990, wd=0.0
+2025-09-22 12:52:19,687 | INFO | Group 36: params=6, lr=0.00002095, wd=0.01
+2025-09-22 12:52:19,687 | INFO | Group 37: params=10, lr=0.00002095, wd=0.0
+2025-09-22 12:52:19,687 | INFO | Group 38: params=6, lr=0.00002205, wd=0.01
+2025-09-22 12:52:19,687 | INFO | Group 39: params=10, lr=0.00002205, wd=0.0
+2025-09-22 12:52:19,687 | INFO | Group 40: params=6, lr=0.00002321, wd=0.01
+2025-09-22 12:52:19,687 | INFO | Group 41: params=10, lr=0.00002321, wd=0.0
+2025-09-22 12:52:19,687 | INFO | Group 42: params=6, lr=0.00002444, wd=0.01
+2025-09-22 12:52:19,688 | INFO | Group 43: params=10, lr=0.00002444, wd=0.0
+2025-09-22 12:52:19,688 | INFO | Group 44: params=6, lr=0.00002572, wd=0.01
+2025-09-22 12:52:19,688 | INFO | Group 45: params=10, lr=0.00002572, wd=0.0
+2025-09-22 12:52:19,688 | INFO | Group 46: params=6, lr=0.00002708, wd=0.01
+2025-09-22 12:52:19,688 | INFO | Group 47: params=10, lr=0.00002708, wd=0.0
+2025-09-22 12:52:19,688 | INFO | Group 48: params=6, lr=0.00002850, wd=0.01
+2025-09-22 12:52:19,688 | INFO | Group 49: params=10, lr=0.00002850, wd=0.0
+2025-09-22 12:52:19,688 | INFO | Group 50: params=4, lr=0.00003000, wd=0.01
+2025-09-22 12:52:19,688 | INFO | Group 51: params=4, lr=0.00003000, wd=0.0
+2025-09-22 12:52:19,690 | INFO | Fold 1 -> Training steps: 4926, Warmup steps: 492, Adv start step: 492
+2025-09-22 12:52:19,695 | INFO | Registering EMA shadow parameters.
+2025-09-22 12:52:19,703 | INFO | Starting epoch 1/3 for fold 1.
+2025-09-22 12:52:44,172 | INFO | Fold 1 | Epoch 1/3 | Step 100/1642 | Loss: 0.387739 | LR: 0.00000169 | Adv:False
+2025-09-22 12:53:08,301 | INFO | Fold 1 | Epoch 1/3 | Step 200/1642 | Loss: 0.402598 | LR: 0.00000338 | Adv:False
+2025-09-22 12:53:32,060 | INFO | Fold 1 | Epoch 1/3 | Step 300/1642 | Loss: 0.328425 | LR: 0.00000507 | Adv:False
+2025-09-22 12:53:55,905 | INFO | Fold 1 | Epoch 1/3 | Step 400/1642 | Loss: 0.228440 | LR: 0.00000677 | Adv:False
+2025-09-22 12:54:20,519 | INFO | Fold 1 | Epoch 1/3 | Step 500/1642 | Loss: 0.344967 | LR: 0.00000832 | Adv:True
+2025-09-22 12:54:54,820 | INFO | Fold 1 | Epoch 1/3 | Step 600/1642 | Loss: 0.292023 | LR: 0.00000831 | Adv:True
+2025-09-22 12:55:28,934 | INFO | Fold 1 | Epoch 1/3 | Step 700/1642 | Loss: 0.199235 | LR: 0.00000828 | Adv:True
+2025-09-22 12:56:02,949 | INFO | Fold 1 | Epoch 1/3 | Step 800/1642 | Loss: 0.189713 | LR: 0.00000822 | Adv:True
+2025-09-22 12:56:36,667 | INFO | Fold 1 | Epoch 1/3 | Step 900/1642 | Loss: 0.179590 | LR: 0.00000815 | Adv:True
+2025-09-22 12:57:10,525 | INFO | Fold 1 | Epoch 1/3 | Step 1000/1642 | Loss: 0.268719 | LR: 0.00000806 | Adv:True
+2025-09-22 12:57:44,297 | INFO | Fold 1 | Epoch 1/3 | Step 1100/1642 | Loss: 0.198698 | LR: 0.00000794 | Adv:True
+2025-09-22 12:58:18,069 | INFO | Fold 1 | Epoch 1/3 | Step 1200/1642 | Loss: 0.211438 | LR: 0.00000781 | Adv:True
+2025-09-22 12:58:52,233 | INFO | Fold 1 | Epoch 1/3 | Step 1300/1642 | Loss: 0.232891 | LR: 0.00000766 | Adv:True
+2025-09-22 12:59:25,847 | INFO | Fold 1 | Epoch 1/3 | Step 1400/1642 | Loss: 0.160502 | LR: 0.00000749 | Adv:True
+2025-09-22 12:59:59,243 | INFO | Fold 1 | Epoch 1/3 | Step 1500/1642 | Loss: 0.163752 | LR: 0.00000730 | Adv:True
+2025-09-22 13:00:32,617 | INFO | Fold 1 | Epoch 1/3 | Step 1600/1642 | Loss: 0.237455 | LR: 0.00000710 | Adv:True
+2025-09-22 13:00:46,577 | INFO | Fold 1 | Epoch 1 done. Avg train loss: 0.282594 | Time: 506.87s
+2025-09-22 13:00:46,577 | INFO | Applying EMA weights for evaluation.
+2025-09-22 13:00:46,584 | INFO | Running validation inference (EMA-applied).
+2025-09-22 13:00:55,143 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 13:00:55,150 | INFO | Fold 1 | Validation epoch 1: MSE(reg)=0.022179, MSE(exp)=0.023520, MSE(blend)=0.021439 | Pearson(reg)=0.832420, Pearson(exp)=0.831071, Pearson(blend)=0.834560
+2025-09-22 13:00:55,150 | INFO | Fold 1 | New best validation Pearson (blend): 0.834560 at epoch 1
+2025-09-22 13:00:55,150 | INFO | Applying EMA weights for evaluation.
+2025-09-22 13:00:56,572 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 13:00:56,576 | INFO | Starting epoch 2/3 for fold 1.
+2025-09-22 13:01:30,611 | INFO | Fold 1 | Epoch 2/3 | Step 100/1642 | Loss: 0.122167 | LR: 0.00000679 | Adv:True
+2025-09-22 13:02:04,035 | INFO | Fold 1 | Epoch 2/3 | Step 200/1642 | Loss: 0.298566 | LR: 0.00000656 | Adv:True
+2025-09-22 13:02:37,434 | INFO | Fold 1 | Epoch 2/3 | Step 300/1642 | Loss: 0.127604 | LR: 0.00000631 | Adv:True
+2025-09-22 13:03:10,744 | INFO | Fold 1 | Epoch 2/3 | Step 400/1642 | Loss: 0.086433 | LR: 0.00000605 | Adv:True
+2025-09-22 13:03:44,368 | INFO | Fold 1 | Epoch 2/3 | Step 500/1642 | Loss: 0.154140 | LR: 0.00000579 | Adv:True
+2025-09-22 13:04:17,983 | INFO | Fold 1 | Epoch 2/3 | Step 600/1642 | Loss: 0.144305 | LR: 0.00000551 | Adv:True
+2025-09-22 13:04:51,927 | INFO | Fold 1 | Epoch 2/3 | Step 700/1642 | Loss: 0.173817 | LR: 0.00000523 | Adv:True
+2025-09-22 13:05:25,576 | INFO | Fold 1 | Epoch 2/3 | Step 800/1642 | Loss: 0.177878 | LR: 0.00000494 | Adv:True
+2025-09-22 13:05:59,578 | INFO | Fold 1 | Epoch 2/3 | Step 900/1642 | Loss: 0.194792 | LR: 0.00000465 | Adv:True
+2025-09-22 13:06:33,405 | INFO | Fold 1 | Epoch 2/3 | Step 1000/1642 | Loss: 0.218372 | LR: 0.00000436 | Adv:True
+2025-09-22 13:07:07,458 | INFO | Fold 1 | Epoch 2/3 | Step 1100/1642 | Loss: 0.091117 | LR: 0.00000406 | Adv:True
+2025-09-22 13:07:41,673 | INFO | Fold 1 | Epoch 2/3 | Step 1200/1642 | Loss: 0.102103 | LR: 0.00000377 | Adv:True
+2025-09-22 13:08:15,668 | INFO | Fold 1 | Epoch 2/3 | Step 1300/1642 | Loss: 0.222041 | LR: 0.00000348 | Adv:True
+2025-09-22 13:08:49,396 | INFO | Fold 1 | Epoch 2/3 | Step 1400/1642 | Loss: 0.099685 | LR: 0.00000319 | Adv:True
+2025-09-22 13:09:23,012 | INFO | Fold 1 | Epoch 2/3 | Step 1500/1642 | Loss: 0.148798 | LR: 0.00000290 | Adv:True
+2025-09-22 13:09:56,816 | INFO | Fold 1 | Epoch 2/3 | Step 1600/1642 | Loss: 0.149388 | LR: 0.00000263 | Adv:True
+2025-09-22 13:10:10,867 | INFO | Fold 1 | Epoch 2 done. Avg train loss: 0.163675 | Time: 554.29s
+2025-09-22 13:10:10,867 | INFO | Applying EMA weights for evaluation.
+2025-09-22 13:10:10,873 | INFO | Running validation inference (EMA-applied).
+2025-09-22 13:10:19,071 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 13:10:19,076 | INFO | Fold 1 | Validation epoch 2: MSE(reg)=0.018635, MSE(exp)=0.017268, MSE(blend)=0.017576 | Pearson(reg)=0.862410, Pearson(exp)=0.862250, Pearson(blend)=0.863279
+2025-09-22 13:10:19,076 | INFO | Fold 1 | New best validation Pearson (blend): 0.863279 at epoch 2
+2025-09-22 13:10:19,076 | INFO | Applying EMA weights for evaluation.
+2025-09-22 13:10:20,204 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 13:10:20,208 | INFO | Starting epoch 3/3 for fold 1.
+2025-09-22 13:10:53,878 | INFO | Fold 1 | Epoch 3/3 | Step 100/1642 | Loss: 0.137990 | LR: 0.00000225 | Adv:True
+2025-09-22 13:11:28,410 | INFO | Fold 1 | Epoch 3/3 | Step 200/1642 | Loss: 0.162910 | LR: 0.00000199 | Adv:True
+2025-09-22 13:12:01,633 | INFO | Fold 1 | Epoch 3/3 | Step 300/1642 | Loss: 0.061089 | LR: 0.00000174 | Adv:True
+2025-09-22 13:12:35,371 | INFO | Fold 1 | Epoch 3/3 | Step 400/1642 | Loss: 0.043146 | LR: 0.00000151 | Adv:True
+2025-09-22 13:13:08,839 | INFO | Fold 1 | Epoch 3/3 | Step 500/1642 | Loss: 0.272649 | LR: 0.00000129 | Adv:True
+2025-09-22 13:13:42,332 | INFO | Fold 1 | Epoch 3/3 | Step 600/1642 | Loss: 0.143124 | LR: 0.00000108 | Adv:True
+2025-09-22 13:14:15,744 | INFO | Fold 1 | Epoch 3/3 | Step 700/1642 | Loss: 0.066609 | LR: 0.00000089 | Adv:True
+2025-09-22 13:14:48,975 | INFO | Fold 1 | Epoch 3/3 | Step 800/1642 | Loss: 0.069595 | LR: 0.00000072 | Adv:True
+2025-09-22 13:15:22,382 | INFO | Fold 1 | Epoch 3/3 | Step 900/1642 | Loss: 0.062873 | LR: 0.00000056 | Adv:True
+2025-09-22 13:15:55,850 | INFO | Fold 1 | Epoch 3/3 | Step 1000/1642 | Loss: 0.234540 | LR: 0.00000042 | Adv:True
+2025-09-22 13:16:29,412 | INFO | Fold 1 | Epoch 3/3 | Step 1100/1642 | Loss: 0.072362 | LR: 0.00000030 | Adv:True
+2025-09-22 13:17:02,735 | INFO | Fold 1 | Epoch 3/3 | Step 1200/1642 | Loss: 0.086598 | LR: 0.00000020 | Adv:True
+2025-09-22 13:17:36,331 | INFO | Fold 1 | Epoch 3/3 | Step 1300/1642 | Loss: 0.051550 | LR: 0.00000012 | Adv:True
+2025-09-22 13:18:09,735 | INFO | Fold 1 | Epoch 3/3 | Step 1400/1642 | Loss: 0.091358 | LR: 0.00000006 | Adv:True
+2025-09-22 13:18:43,327 | INFO | Fold 1 | Epoch 3/3 | Step 1500/1642 | Loss: 0.090322 | LR: 0.00000002 | Adv:True
+2025-09-22 13:19:16,735 | INFO | Fold 1 | Epoch 3/3 | Step 1600/1642 | Loss: 0.200356 | LR: 0.00000000 | Adv:True
+2025-09-22 13:19:30,694 | INFO | Fold 1 | Epoch 3 done. Avg train loss: 0.105530 | Time: 550.48s
+2025-09-22 13:19:30,694 | INFO | Applying EMA weights for evaluation.
+2025-09-22 13:19:30,700 | INFO | Running validation inference (EMA-applied).
+2025-09-22 13:19:38,600 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 13:19:38,605 | INFO | Fold 1 | Validation epoch 3: MSE(reg)=0.018268, MSE(exp)=0.017432, MSE(blend)=0.017648 | Pearson(reg)=0.863206, Pearson(exp)=0.862967, Pearson(blend)=0.864048
+2025-09-22 13:19:38,605 | INFO | Fold 1 | New best validation Pearson (blend): 0.864048 at epoch 3
+2025-09-22 13:19:38,605 | INFO | Applying EMA weights for evaluation.
+2025-09-22 13:19:39,126 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 13:19:39,411 | INFO | Fold 1 | Generating OOF predictions with best EMA weights.
+2025-09-22 13:19:39,411 | INFO | Running validation inference (EMA-applied).
+2025-09-22 13:19:47,292 | INFO | Fold 1 | OOF Pearson reg=0.863206, exp=0.862967
+2025-09-22 13:19:47,292 | INFO | Running test inference (TTA with swapped pairs).
+2025-09-22 13:19:56,149 | INFO | Running test inference (TTA with swapped pairs).
+2025-09-22 13:20:05,072 | INFO | ===== Fold 3/5 (seed=2025) =====
+2025-09-22 13:20:05,551 | INFO | Fold 2 -> Train batches: 1642, Valid batches: 206
+2025-09-22 13:20:07,193 | INFO | Loading DAPT backbone weights into cross-encoder backbone.
+2025-09-22 13:20:07,471 | INFO | Creating optimizer parameter groups with layer-wise LR decay.
+2025-09-22 13:20:07,473 | INFO | Group 0: params=1, lr=0.00000832, wd=0.01
+2025-09-22 13:20:07,473 | INFO | Group 1: params=2, lr=0.00000832, wd=0.0
+2025-09-22 13:20:07,473 | INFO | Group 2: params=6, lr=0.00000876, wd=0.01
+2025-09-22 13:20:07,473 | INFO | Group 3: params=10, lr=0.00000876, wd=0.0
+2025-09-22 13:20:07,473 | INFO | Group 4: params=6, lr=0.00000922, wd=0.01
+2025-09-22 13:20:07,473 | INFO | Group 5: params=10, lr=0.00000922, wd=0.0
+2025-09-22 13:20:07,473 | INFO | Group 6: params=6, lr=0.00000971, wd=0.01
+2025-09-22 13:20:07,473 | INFO | Group 7: params=10, lr=0.00000971, wd=0.0
+2025-09-22 13:20:07,473 | INFO | Group 8: params=6, lr=0.00001022, wd=0.01
+2025-09-22 13:20:07,473 | INFO | Group 9: params=10, lr=0.00001022, wd=0.0
+2025-09-22 13:20:07,473 | INFO | Group 10: params=6, lr=0.00001075, wd=0.01
+2025-09-22 13:20:07,473 | INFO | Group 11: params=10, lr=0.00001075, wd=0.0
+2025-09-22 13:20:07,474 | INFO | Group 12: params=6, lr=0.00001132, wd=0.01
+2025-09-22 13:20:07,474 | INFO | Group 13: params=10, lr=0.00001132, wd=0.0
+2025-09-22 13:20:07,474 | INFO | Group 14: params=6, lr=0.00001192, wd=0.01
+2025-09-22 13:20:07,474 | INFO | Group 15: params=10, lr=0.00001192, wd=0.0
+2025-09-22 13:20:07,474 | INFO | Group 16: params=6, lr=0.00001254, wd=0.01
+2025-09-22 13:20:07,474 | INFO | Group 17: params=10, lr=0.00001254, wd=0.0
+2025-09-22 13:20:07,474 | INFO | Group 18: params=6, lr=0.00001320, wd=0.01
+2025-09-22 13:20:07,474 | INFO | Group 19: params=10, lr=0.00001320, wd=0.0
+2025-09-22 13:20:07,474 | INFO | Group 20: params=6, lr=0.00001390, wd=0.01
+2025-09-22 13:20:07,474 | INFO | Group 21: params=10, lr=0.00001390, wd=0.0
+2025-09-22 13:20:07,474 | INFO | Group 22: params=6, lr=0.00001463, wd=0.01
+2025-09-22 13:20:07,474 | INFO | Group 23: params=10, lr=0.00001463, wd=0.0
+2025-09-22 13:20:07,474 | INFO | Group 24: params=6, lr=0.00001540, wd=0.01
+2025-09-22 13:20:07,474 | INFO | Group 25: params=10, lr=0.00001540, wd=0.0
+2025-09-22 13:20:07,474 | INFO | Group 26: params=6, lr=0.00001621, wd=0.01
+2025-09-22 13:20:07,474 | INFO | Group 27: params=10, lr=0.00001621, wd=0.0
+2025-09-22 13:20:07,474 | INFO | Group 28: params=6, lr=0.00001706, wd=0.01
+2025-09-22 13:20:07,474 | INFO | Group 29: params=10, lr=0.00001706, wd=0.0
+2025-09-22 13:20:07,474 | INFO | Group 30: params=6, lr=0.00001796, wd=0.01
+2025-09-22 13:20:07,474 | INFO | Group 31: params=10, lr=0.00001796, wd=0.0
+2025-09-22 13:20:07,474 | INFO | Group 32: params=6, lr=0.00001891, wd=0.01
+2025-09-22 13:20:07,474 | INFO | Group 33: params=10, lr=0.00001891, wd=0.0
+2025-09-22 13:20:07,474 | INFO | Group 34: params=6, lr=0.00001990, wd=0.01
+2025-09-22 13:20:07,474 | INFO | Group 35: params=10, lr=0.00001990, wd=0.0
+2025-09-22 13:20:07,474 | INFO | Group 36: params=6, lr=0.00002095, wd=0.01
+2025-09-22 13:20:07,474 | INFO | Group 37: params=10, lr=0.00002095, wd=0.0
+2025-09-22 13:20:07,474 | INFO | Group 38: params=6, lr=0.00002205, wd=0.01
+2025-09-22 13:20:07,474 | INFO | Group 39: params=10, lr=0.00002205, wd=0.0
+2025-09-22 13:20:07,474 | INFO | Group 40: params=6, lr=0.00002321, wd=0.01
+2025-09-22 13:20:07,474 | INFO | Group 41: params=10, lr=0.00002321, wd=0.0
+2025-09-22 13:20:07,474 | INFO | Group 42: params=6, lr=0.00002444, wd=0.01
+2025-09-22 13:20:07,474 | INFO | Group 43: params=10, lr=0.00002444, wd=0.0
+2025-09-22 13:20:07,474 | INFO | Group 44: params=6, lr=0.00002572, wd=0.01
+2025-09-22 13:20:07,474 | INFO | Group 45: params=10, lr=0.00002572, wd=0.0
+2025-09-22 13:20:07,474 | INFO | Group 46: params=6, lr=0.00002708, wd=0.01
+2025-09-22 13:20:07,474 | INFO | Group 47: params=10, lr=0.00002708, wd=0.0
+2025-09-22 13:20:07,474 | INFO | Group 48: params=6, lr=0.00002850, wd=0.01
+2025-09-22 13:20:07,474 | INFO | Group 49: params=10, lr=0.00002850, wd=0.0
+2025-09-22 13:20:07,475 | INFO | Group 50: params=4, lr=0.00003000, wd=0.01
+2025-09-22 13:20:07,475 | INFO | Group 51: params=4, lr=0.00003000, wd=0.0
+2025-09-22 13:20:07,476 | INFO | Fold 2 -> Training steps: 4926, Warmup steps: 492, Adv start step: 492
+2025-09-22 13:20:07,479 | INFO | Registering EMA shadow parameters.
+2025-09-22 13:20:07,484 | INFO | Starting epoch 1/3 for fold 2.
+2025-09-22 13:20:31,698 | INFO | Fold 2 | Epoch 1/3 | Step 100/1642 | Loss: 0.446482 | LR: 0.00000169 | Adv:False
+2025-09-22 13:20:55,534 | INFO | Fold 2 | Epoch 1/3 | Step 200/1642 | Loss: 0.376495 | LR: 0.00000338 | Adv:False
+2025-09-22 13:21:19,069 | INFO | Fold 2 | Epoch 1/3 | Step 300/1642 | Loss: 0.435293 | LR: 0.00000507 | Adv:False
+2025-09-22 13:21:42,586 | INFO | Fold 2 | Epoch 1/3 | Step 400/1642 | Loss: 0.255112 | LR: 0.00000677 | Adv:False
+2025-09-22 13:22:06,821 | INFO | Fold 2 | Epoch 1/3 | Step 500/1642 | Loss: 0.250458 | LR: 0.00000832 | Adv:True
+2025-09-22 13:22:40,490 | INFO | Fold 2 | Epoch 1/3 | Step 600/1642 | Loss: 0.183720 | LR: 0.00000831 | Adv:True
+2025-09-22 13:23:14,549 | INFO | Fold 2 | Epoch 1/3 | Step 700/1642 | Loss: 0.175129 | LR: 0.00000828 | Adv:True
+2025-09-22 13:23:48,555 | INFO | Fold 2 | Epoch 1/3 | Step 800/1642 | Loss: 0.241095 | LR: 0.00000822 | Adv:True
+2025-09-22 13:24:23,550 | INFO | Fold 2 | Epoch 1/3 | Step 900/1642 | Loss: 0.349247 | LR: 0.00000815 | Adv:True
+2025-09-22 13:24:57,429 | INFO | Fold 2 | Epoch 1/3 | Step 1000/1642 | Loss: 0.138666 | LR: 0.00000806 | Adv:True
+2025-09-22 13:25:31,237 | INFO | Fold 2 | Epoch 1/3 | Step 1100/1642 | Loss: 0.251467 | LR: 0.00000794 | Adv:True
+2025-09-22 13:26:04,985 | INFO | Fold 2 | Epoch 1/3 | Step 1200/1642 | Loss: 0.260431 | LR: 0.00000781 | Adv:True
+2025-09-22 13:26:38,586 | INFO | Fold 2 | Epoch 1/3 | Step 1300/1642 | Loss: 0.219678 | LR: 0.00000766 | Adv:True
+2025-09-22 13:27:12,526 | INFO | Fold 2 | Epoch 1/3 | Step 1400/1642 | Loss: 0.276346 | LR: 0.00000749 | Adv:True
+2025-09-22 13:27:45,979 | INFO | Fold 2 | Epoch 1/3 | Step 1500/1642 | Loss: 0.225323 | LR: 0.00000730 | Adv:True
+2025-09-22 13:28:19,418 | INFO | Fold 2 | Epoch 1/3 | Step 1600/1642 | Loss: 0.204183 | LR: 0.00000710 | Adv:True
+2025-09-22 13:28:33,393 | INFO | Fold 2 | Epoch 1 done. Avg train loss: 0.277908 | Time: 505.91s
+2025-09-22 13:28:33,393 | INFO | Applying EMA weights for evaluation.
+2025-09-22 13:28:33,400 | INFO | Running validation inference (EMA-applied).
+2025-09-22 13:28:42,002 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 13:28:42,008 | INFO | Fold 2 | Validation epoch 1: MSE(reg)=0.021547, MSE(exp)=0.023463, MSE(blend)=0.020978 | Pearson(reg)=0.832985, Pearson(exp)=0.833280, Pearson(blend)=0.835554
+2025-09-22 13:28:42,009 | INFO | Fold 2 | New best validation Pearson (blend): 0.835554 at epoch 1
+2025-09-22 13:28:42,009 | INFO | Applying EMA weights for evaluation.
+2025-09-22 13:28:43,505 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 13:28:43,509 | INFO | Starting epoch 2/3 for fold 2.
+2025-09-22 13:29:17,215 | INFO | Fold 2 | Epoch 2/3 | Step 100/1642 | Loss: 0.213303 | LR: 0.00000679 | Adv:True
+2025-09-22 13:29:51,210 | INFO | Fold 2 | Epoch 2/3 | Step 200/1642 | Loss: 0.155531 | LR: 0.00000656 | Adv:True
+2025-09-22 13:30:24,905 | INFO | Fold 2 | Epoch 2/3 | Step 300/1642 | Loss: 0.115421 | LR: 0.00000631 | Adv:True
+2025-09-22 13:30:58,869 | INFO | Fold 2 | Epoch 2/3 | Step 400/1642 | Loss: 0.202361 | LR: 0.00000605 | Adv:True
+2025-09-22 13:31:32,881 | INFO | Fold 2 | Epoch 2/3 | Step 500/1642 | Loss: 0.131294 | LR: 0.00000579 | Adv:True
+2025-09-22 13:32:06,980 | INFO | Fold 2 | Epoch 2/3 | Step 600/1642 | Loss: 0.161438 | LR: 0.00000551 | Adv:True
+2025-09-22 13:32:40,588 | INFO | Fold 2 | Epoch 2/3 | Step 700/1642 | Loss: 0.127703 | LR: 0.00000523 | Adv:True
+2025-09-22 13:33:14,509 | INFO | Fold 2 | Epoch 2/3 | Step 800/1642 | Loss: 0.241688 | LR: 0.00000494 | Adv:True
+2025-09-22 13:33:48,635 | INFO | Fold 2 | Epoch 2/3 | Step 900/1642 | Loss: 0.113106 | LR: 0.00000465 | Adv:True
+2025-09-22 13:34:22,556 | INFO | Fold 2 | Epoch 2/3 | Step 1000/1642 | Loss: 0.179294 | LR: 0.00000436 | Adv:True
+2025-09-22 13:34:56,226 | INFO | Fold 2 | Epoch 2/3 | Step 1100/1642 | Loss: 0.150765 | LR: 0.00000406 | Adv:True
+2025-09-22 13:35:30,153 | INFO | Fold 2 | Epoch 2/3 | Step 1200/1642 | Loss: 0.134081 | LR: 0.00000377 | Adv:True
+2025-09-22 13:36:04,825 | INFO | Fold 2 | Epoch 2/3 | Step 1300/1642 | Loss: 0.116987 | LR: 0.00000348 | Adv:True
+2025-09-22 13:36:39,411 | INFO | Fold 2 | Epoch 2/3 | Step 1400/1642 | Loss: 0.182218 | LR: 0.00000319 | Adv:True
+2025-09-22 13:37:13,333 | INFO | Fold 2 | Epoch 2/3 | Step 1500/1642 | Loss: 0.119863 | LR: 0.00000290 | Adv:True
+2025-09-22 13:37:47,596 | INFO | Fold 2 | Epoch 2/3 | Step 1600/1642 | Loss: 0.120511 | LR: 0.00000263 | Adv:True
+2025-09-22 13:38:01,871 | INFO | Fold 2 | Epoch 2 done. Avg train loss: 0.162174 | Time: 558.36s
+2025-09-22 13:38:01,871 | INFO | Applying EMA weights for evaluation.
+2025-09-22 13:38:01,877 | INFO | Running validation inference (EMA-applied).
+2025-09-22 13:38:10,117 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 13:38:10,123 | INFO | Fold 2 | Validation epoch 2: MSE(reg)=0.018203, MSE(exp)=0.016962, MSE(blend)=0.017214 | Pearson(reg)=0.865304, Pearson(exp)=0.864496, Pearson(blend)=0.865763
+2025-09-22 13:38:10,123 | INFO | Fold 2 | New best validation Pearson (blend): 0.865763 at epoch 2
+2025-09-22 13:38:10,123 | INFO | Applying EMA weights for evaluation.
+2025-09-22 13:38:11,418 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 13:38:11,423 | INFO | Starting epoch 3/3 for fold 2.
+2025-09-22 13:38:45,524 | INFO | Fold 2 | Epoch 3/3 | Step 100/1642 | Loss: 0.102700 | LR: 0.00000225 | Adv:True
+2025-09-22 13:39:19,452 | INFO | Fold 2 | Epoch 3/3 | Step 200/1642 | Loss: 0.185855 | LR: 0.00000199 | Adv:True
+2025-09-22 13:39:53,353 | INFO | Fold 2 | Epoch 3/3 | Step 300/1642 | Loss: 0.097349 | LR: 0.00000174 | Adv:True
+2025-09-22 13:40:27,554 | INFO | Fold 2 | Epoch 3/3 | Step 400/1642 | Loss: 0.060688 | LR: 0.00000151 | Adv:True
+2025-09-22 13:41:01,444 | INFO | Fold 2 | Epoch 3/3 | Step 500/1642 | Loss: 0.024979 | LR: 0.00000129 | Adv:True
+2025-09-22 13:41:35,380 | INFO | Fold 2 | Epoch 3/3 | Step 600/1642 | Loss: 0.066472 | LR: 0.00000108 | Adv:True
+2025-09-22 13:42:09,430 | INFO | Fold 2 | Epoch 3/3 | Step 700/1642 | Loss: 0.068435 | LR: 0.00000089 | Adv:True
+2025-09-22 13:42:43,724 | INFO | Fold 2 | Epoch 3/3 | Step 800/1642 | Loss: 0.019134 | LR: 0.00000072 | Adv:True
+2025-09-22 13:43:18,029 | INFO | Fold 2 | Epoch 3/3 | Step 900/1642 | Loss: 0.112018 | LR: 0.00000056 | Adv:True
+2025-09-22 13:43:52,035 | INFO | Fold 2 | Epoch 3/3 | Step 1000/1642 | Loss: 0.157932 | LR: 0.00000042 | Adv:True
+2025-09-22 13:44:26,010 | INFO | Fold 2 | Epoch 3/3 | Step 1100/1642 | Loss: 0.113341 | LR: 0.00000030 | Adv:True
+2025-09-22 13:45:00,149 | INFO | Fold 2 | Epoch 3/3 | Step 1200/1642 | Loss: 0.089960 | LR: 0.00000020 | Adv:True
+2025-09-22 13:45:34,031 | INFO | Fold 2 | Epoch 3/3 | Step 1300/1642 | Loss: 0.092850 | LR: 0.00000012 | Adv:True
+2025-09-22 13:46:08,069 | INFO | Fold 2 | Epoch 3/3 | Step 1400/1642 | Loss: 0.209442 | LR: 0.00000006 | Adv:True
+2025-09-22 13:46:42,092 | INFO | Fold 2 | Epoch 3/3 | Step 1500/1642 | Loss: 0.142790 | LR: 0.00000002 | Adv:True
+2025-09-22 13:47:16,236 | INFO | Fold 2 | Epoch 3/3 | Step 1600/1642 | Loss: 0.085125 | LR: 0.00000000 | Adv:True
+2025-09-22 13:47:30,497 | INFO | Fold 2 | Epoch 3 done. Avg train loss: 0.103553 | Time: 559.07s
+2025-09-22 13:47:30,498 | INFO | Applying EMA weights for evaluation.
+2025-09-22 13:47:30,504 | INFO | Running validation inference (EMA-applied).
+2025-09-22 13:47:38,785 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 13:47:38,790 | INFO | Fold 2 | Validation epoch 3: MSE(reg)=0.017798, MSE(exp)=0.017008, MSE(blend)=0.017183 | Pearson(reg)=0.866418, Pearson(exp)=0.865963, Pearson(blend)=0.867137
+2025-09-22 13:47:38,790 | INFO | Fold 2 | New best validation Pearson (blend): 0.867137 at epoch 3
+2025-09-22 13:47:38,790 | INFO | Applying EMA weights for evaluation.
+2025-09-22 13:47:39,320 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 13:47:39,515 | INFO | Fold 2 | Generating OOF predictions with best EMA weights.
+2025-09-22 13:47:39,516 | INFO | Running validation inference (EMA-applied).
+2025-09-22 13:47:47,790 | INFO | Fold 2 | OOF Pearson reg=0.866418, exp=0.865963
+2025-09-22 13:47:47,790 | INFO | Running test inference (TTA with swapped pairs).
+2025-09-22 13:47:56,685 | INFO | Running test inference (TTA with swapped pairs).
+2025-09-22 13:48:05,679 | INFO | ===== Fold 4/5 (seed=2025) =====
+2025-09-22 13:48:06,442 | INFO | Fold 3 -> Train batches: 1642, Valid batches: 206
+2025-09-22 13:48:08,188 | INFO | Loading DAPT backbone weights into cross-encoder backbone.
+2025-09-22 13:48:08,350 | INFO | Creating optimizer parameter groups with layer-wise LR decay.
+2025-09-22 13:48:08,352 | INFO | Group 0: params=1, lr=0.00000832, wd=0.01
+2025-09-22 13:48:08,352 | INFO | Group 1: params=2, lr=0.00000832, wd=0.0
+2025-09-22 13:48:08,352 | INFO | Group 2: params=6, lr=0.00000876, wd=0.01
+2025-09-22 13:48:08,352 | INFO | Group 3: params=10, lr=0.00000876, wd=0.0
+2025-09-22 13:48:08,352 | INFO | Group 4: params=6, lr=0.00000922, wd=0.01
+2025-09-22 13:48:08,352 | INFO | Group 5: params=10, lr=0.00000922, wd=0.0
+2025-09-22 13:48:08,352 | INFO | Group 6: params=6, lr=0.00000971, wd=0.01
+2025-09-22 13:48:08,352 | INFO | Group 7: params=10, lr=0.00000971, wd=0.0
+2025-09-22 13:48:08,352 | INFO | Group 8: params=6, lr=0.00001022, wd=0.01
+2025-09-22 13:48:08,352 | INFO | Group 9: params=10, lr=0.00001022, wd=0.0
+2025-09-22 13:48:08,352 | INFO | Group 10: params=6, lr=0.00001075, wd=0.01
+2025-09-22 13:48:08,352 | INFO | Group 11: params=10, lr=0.00001075, wd=0.0
+2025-09-22 13:48:08,352 | INFO | Group 12: params=6, lr=0.00001132, wd=0.01
+2025-09-22 13:48:08,353 | INFO | Group 13: params=10, lr=0.00001132, wd=0.0
+2025-09-22 13:48:08,353 | INFO | Group 14: params=6, lr=0.00001192, wd=0.01
+2025-09-22 13:48:08,353 | INFO | Group 15: params=10, lr=0.00001192, wd=0.0
+2025-09-22 13:48:08,353 | INFO | Group 16: params=6, lr=0.00001254, wd=0.01
+2025-09-22 13:48:08,353 | INFO | Group 17: params=10, lr=0.00001254, wd=0.0
+2025-09-22 13:48:08,353 | INFO | Group 18: params=6, lr=0.00001320, wd=0.01
+2025-09-22 13:48:08,353 | INFO | Group 19: params=10, lr=0.00001320, wd=0.0
+2025-09-22 13:48:08,353 | INFO | Group 20: params=6, lr=0.00001390, wd=0.01
+2025-09-22 13:48:08,353 | INFO | Group 21: params=10, lr=0.00001390, wd=0.0
+2025-09-22 13:48:08,353 | INFO | Group 22: params=6, lr=0.00001463, wd=0.01
+2025-09-22 13:48:08,353 | INFO | Group 23: params=10, lr=0.00001463, wd=0.0
+2025-09-22 13:48:08,353 | INFO | Group 24: params=6, lr=0.00001540, wd=0.01
+2025-09-22 13:48:08,353 | INFO | Group 25: params=10, lr=0.00001540, wd=0.0
+2025-09-22 13:48:08,353 | INFO | Group 26: params=6, lr=0.00001621, wd=0.01
+2025-09-22 13:48:08,353 | INFO | Group 27: params=10, lr=0.00001621, wd=0.0
+2025-09-22 13:48:08,353 | INFO | Group 28: params=6, lr=0.00001706, wd=0.01
+2025-09-22 13:48:08,353 | INFO | Group 29: params=10, lr=0.00001706, wd=0.0
+2025-09-22 13:48:08,353 | INFO | Group 30: params=6, lr=0.00001796, wd=0.01
+2025-09-22 13:48:08,353 | INFO | Group 31: params=10, lr=0.00001796, wd=0.0
+2025-09-22 13:48:08,353 | INFO | Group 32: params=6, lr=0.00001891, wd=0.01
+2025-09-22 13:48:08,353 | INFO | Group 33: params=10, lr=0.00001891, wd=0.0
+2025-09-22 13:48:08,353 | INFO | Group 34: params=6, lr=0.00001990, wd=0.01
+2025-09-22 13:48:08,353 | INFO | Group 35: params=10, lr=0.00001990, wd=0.0
+2025-09-22 13:48:08,353 | INFO | Group 36: params=6, lr=0.00002095, wd=0.01
+2025-09-22 13:48:08,353 | INFO | Group 37: params=10, lr=0.00002095, wd=0.0
+2025-09-22 13:48:08,353 | INFO | Group 38: params=6, lr=0.00002205, wd=0.01
+2025-09-22 13:48:08,353 | INFO | Group 39: params=10, lr=0.00002205, wd=0.0
+2025-09-22 13:48:08,353 | INFO | Group 40: params=6, lr=0.00002321, wd=0.01
+2025-09-22 13:48:08,353 | INFO | Group 41: params=10, lr=0.00002321, wd=0.0
+2025-09-22 13:48:08,353 | INFO | Group 42: params=6, lr=0.00002444, wd=0.01
+2025-09-22 13:48:08,353 | INFO | Group 43: params=10, lr=0.00002444, wd=0.0
+2025-09-22 13:48:08,353 | INFO | Group 44: params=6, lr=0.00002572, wd=0.01
+2025-09-22 13:48:08,353 | INFO | Group 45: params=10, lr=0.00002572, wd=0.0
+2025-09-22 13:48:08,353 | INFO | Group 46: params=6, lr=0.00002708, wd=0.01
+2025-09-22 13:48:08,353 | INFO | Group 47: params=10, lr=0.00002708, wd=0.0
+2025-09-22 13:48:08,353 | INFO | Group 48: params=6, lr=0.00002850, wd=0.01
+2025-09-22 13:48:08,353 | INFO | Group 49: params=10, lr=0.00002850, wd=0.0
+2025-09-22 13:48:08,353 | INFO | Group 50: params=4, lr=0.00003000, wd=0.01
+2025-09-22 13:48:08,354 | INFO | Group 51: params=4, lr=0.00003000, wd=0.0
+2025-09-22 13:48:08,355 | INFO | Fold 3 -> Training steps: 4926, Warmup steps: 492, Adv start step: 492
+2025-09-22 13:48:08,358 | INFO | Registering EMA shadow parameters.
+2025-09-22 13:48:08,365 | INFO | Starting epoch 1/3 for fold 3.
+2025-09-22 13:48:33,692 | INFO | Fold 3 | Epoch 1/3 | Step 100/1642 | Loss: 0.473152 | LR: 0.00000169 | Adv:False
+2025-09-22 13:48:57,279 | INFO | Fold 3 | Epoch 1/3 | Step 200/1642 | Loss: 0.356073 | LR: 0.00000338 | Adv:False
+2025-09-22 13:49:21,233 | INFO | Fold 3 | Epoch 1/3 | Step 300/1642 | Loss: 0.225687 | LR: 0.00000507 | Adv:False
+2025-09-22 13:49:48,398 | INFO | Fold 3 | Epoch 1/3 | Step 400/1642 | Loss: 0.240617 | LR: 0.00000677 | Adv:False
+2025-09-22 13:50:23,734 | INFO | Fold 3 | Epoch 1/3 | Step 500/1642 | Loss: 0.258076 | LR: 0.00000832 | Adv:True
+2025-09-22 13:51:12,669 | INFO | Fold 3 | Epoch 1/3 | Step 600/1642 | Loss: 0.310216 | LR: 0.00000831 | Adv:True
+2025-09-22 13:52:01,216 | INFO | Fold 3 | Epoch 1/3 | Step 700/1642 | Loss: 0.153627 | LR: 0.00000828 | Adv:True
+2025-09-22 13:52:49,963 | INFO | Fold 3 | Epoch 1/3 | Step 800/1642 | Loss: 0.269059 | LR: 0.00000822 | Adv:True
+2025-09-22 13:53:38,543 | INFO | Fold 3 | Epoch 1/3 | Step 900/1642 | Loss: 0.148576 | LR: 0.00000815 | Adv:True
+2025-09-22 13:54:27,391 | INFO | Fold 3 | Epoch 1/3 | Step 1000/1642 | Loss: 0.307048 | LR: 0.00000806 | Adv:True
+2025-09-22 13:55:15,966 | INFO | Fold 3 | Epoch 1/3 | Step 1100/1642 | Loss: 0.249383 | LR: 0.00000794 | Adv:True
+2025-09-22 13:56:04,666 | INFO | Fold 3 | Epoch 1/3 | Step 1200/1642 | Loss: 0.281295 | LR: 0.00000781 | Adv:True
+2025-09-22 13:56:52,974 | INFO | Fold 3 | Epoch 1/3 | Step 1300/1642 | Loss: 0.212444 | LR: 0.00000766 | Adv:True
+2025-09-22 13:57:41,411 | INFO | Fold 3 | Epoch 1/3 | Step 1400/1642 | Loss: 0.203490 | LR: 0.00000749 | Adv:True
+2025-09-22 13:58:29,917 | INFO | Fold 3 | Epoch 1/3 | Step 1500/1642 | Loss: 0.194114 | LR: 0.00000730 | Adv:True
+2025-09-22 13:59:17,811 | INFO | Fold 3 | Epoch 1/3 | Step 1600/1642 | Loss: 0.149384 | LR: 0.00000710 | Adv:True
+2025-09-22 13:59:38,134 | INFO | Fold 3 | Epoch 1 done. Avg train loss: 0.283091 | Time: 689.77s
+2025-09-22 13:59:38,134 | INFO | Applying EMA weights for evaluation.
+2025-09-22 13:59:38,141 | INFO | Running validation inference (EMA-applied).
+2025-09-22 13:59:52,302 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 13:59:52,309 | INFO | Fold 3 | Validation epoch 1: MSE(reg)=0.021970, MSE(exp)=0.023125, MSE(blend)=0.020353 | Pearson(reg)=0.839960, Pearson(exp)=0.838205, Pearson(blend)=0.841566
+2025-09-22 13:59:52,309 | INFO | Fold 3 | New best validation Pearson (blend): 0.841566 at epoch 1
+2025-09-22 13:59:52,309 | INFO | Applying EMA weights for evaluation.
+2025-09-22 13:59:53,738 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 13:59:53,742 | INFO | Starting epoch 2/3 for fold 3.
+2025-09-22 14:00:42,431 | INFO | Fold 3 | Epoch 2/3 | Step 100/1642 | Loss: 0.251798 | LR: 0.00000679 | Adv:True
+2025-09-22 14:01:31,036 | INFO | Fold 3 | Epoch 2/3 | Step 200/1642 | Loss: 0.130569 | LR: 0.00000656 | Adv:True
+2025-09-22 14:02:20,273 | INFO | Fold 3 | Epoch 2/3 | Step 300/1642 | Loss: 0.114623 | LR: 0.00000631 | Adv:True
+2025-09-22 14:03:08,994 | INFO | Fold 3 | Epoch 2/3 | Step 400/1642 | Loss: 0.143594 | LR: 0.00000605 | Adv:True
+2025-09-22 14:03:57,335 | INFO | Fold 3 | Epoch 2/3 | Step 500/1642 | Loss: 0.122539 | LR: 0.00000579 | Adv:True
+2025-09-22 14:04:46,358 | INFO | Fold 3 | Epoch 2/3 | Step 600/1642 | Loss: 0.282945 | LR: 0.00000551 | Adv:True
+2025-09-22 14:05:35,137 | INFO | Fold 3 | Epoch 2/3 | Step 700/1642 | Loss: 0.139047 | LR: 0.00000523 | Adv:True
+2025-09-22 14:06:23,714 | INFO | Fold 3 | Epoch 2/3 | Step 800/1642 | Loss: 0.229189 | LR: 0.00000494 | Adv:True
+2025-09-22 14:07:12,855 | INFO | Fold 3 | Epoch 2/3 | Step 900/1642 | Loss: 0.184863 | LR: 0.00000465 | Adv:True
+2025-09-22 14:08:01,879 | INFO | Fold 3 | Epoch 2/3 | Step 1000/1642 | Loss: 0.087265 | LR: 0.00000436 | Adv:True
+2025-09-22 14:08:50,443 | INFO | Fold 3 | Epoch 2/3 | Step 1100/1642 | Loss: 0.181714 | LR: 0.00000406 | Adv:True
+2025-09-22 14:09:39,034 | INFO | Fold 3 | Epoch 2/3 | Step 1200/1642 | Loss: 0.193691 | LR: 0.00000377 | Adv:True
+2025-09-22 14:10:27,693 | INFO | Fold 3 | Epoch 2/3 | Step 1300/1642 | Loss: 0.174657 | LR: 0.00000348 | Adv:True
+2025-09-22 14:11:16,886 | INFO | Fold 3 | Epoch 2/3 | Step 1400/1642 | Loss: 0.136567 | LR: 0.00000319 | Adv:True
+2025-09-22 14:12:05,792 | INFO | Fold 3 | Epoch 2/3 | Step 1500/1642 | Loss: 0.134258 | LR: 0.00000290 | Adv:True
+2025-09-22 14:12:55,034 | INFO | Fold 3 | Epoch 2/3 | Step 1600/1642 | Loss: 0.218875 | LR: 0.00000263 | Adv:True
+2025-09-22 14:13:15,631 | INFO | Fold 3 | Epoch 2 done. Avg train loss: 0.164156 | Time: 801.89s
+2025-09-22 14:13:15,631 | INFO | Applying EMA weights for evaluation.
+2025-09-22 14:13:15,637 | INFO | Running validation inference (EMA-applied).
+2025-09-22 14:13:29,379 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 14:13:29,384 | INFO | Fold 3 | Validation epoch 2: MSE(reg)=0.018034, MSE(exp)=0.016610, MSE(blend)=0.016925 | Pearson(reg)=0.868016, Pearson(exp)=0.867942, Pearson(blend)=0.868873
+2025-09-22 14:13:29,384 | INFO | Fold 3 | New best validation Pearson (blend): 0.868873 at epoch 2
+2025-09-22 14:13:29,384 | INFO | Applying EMA weights for evaluation.
+2025-09-22 14:13:30,625 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 14:13:30,631 | INFO | Starting epoch 3/3 for fold 3.
+2025-09-22 14:14:19,925 | INFO | Fold 3 | Epoch 3/3 | Step 100/1642 | Loss: 0.205961 | LR: 0.00000225 | Adv:True
+2025-09-22 14:15:07,937 | INFO | Fold 3 | Epoch 3/3 | Step 200/1642 | Loss: 0.079726 | LR: 0.00000199 | Adv:True
+2025-09-22 14:15:56,538 | INFO | Fold 3 | Epoch 3/3 | Step 300/1642 | Loss: 0.105505 | LR: 0.00000174 | Adv:True
+2025-09-22 14:16:45,658 | INFO | Fold 3 | Epoch 3/3 | Step 400/1642 | Loss: 0.126491 | LR: 0.00000151 | Adv:True
+2025-09-22 14:17:34,145 | INFO | Fold 3 | Epoch 3/3 | Step 500/1642 | Loss: 0.134817 | LR: 0.00000129 | Adv:True
+2025-09-22 14:18:23,126 | INFO | Fold 3 | Epoch 3/3 | Step 600/1642 | Loss: 0.140806 | LR: 0.00000108 | Adv:True
+2025-09-22 14:19:12,249 | INFO | Fold 3 | Epoch 3/3 | Step 700/1642 | Loss: 0.051134 | LR: 0.00000089 | Adv:True
+2025-09-22 14:20:00,956 | INFO | Fold 3 | Epoch 3/3 | Step 800/1642 | Loss: 0.091015 | LR: 0.00000072 | Adv:True
+2025-09-22 14:20:50,064 | INFO | Fold 3 | Epoch 3/3 | Step 900/1642 | Loss: 0.052344 | LR: 0.00000056 | Adv:True
+2025-09-22 14:21:38,825 | INFO | Fold 3 | Epoch 3/3 | Step 1000/1642 | Loss: 0.022431 | LR: 0.00000042 | Adv:True
+2025-09-22 14:22:27,586 | INFO | Fold 3 | Epoch 3/3 | Step 1100/1642 | Loss: 0.169100 | LR: 0.00000030 | Adv:True
+2025-09-22 14:23:16,760 | INFO | Fold 3 | Epoch 3/3 | Step 1200/1642 | Loss: 0.120233 | LR: 0.00000020 | Adv:True
+2025-09-22 14:24:05,450 | INFO | Fold 3 | Epoch 3/3 | Step 1300/1642 | Loss: 0.163357 | LR: 0.00000012 | Adv:True
+2025-09-22 14:24:54,176 | INFO | Fold 3 | Epoch 3/3 | Step 1400/1642 | Loss: 0.086877 | LR: 0.00000006 | Adv:True
+2025-09-22 14:25:42,986 | INFO | Fold 3 | Epoch 3/3 | Step 1500/1642 | Loss: 0.080724 | LR: 0.00000002 | Adv:True
+2025-09-22 14:26:32,613 | INFO | Fold 3 | Epoch 3/3 | Step 1600/1642 | Loss: 0.095559 | LR: 0.00000000 | Adv:True
+2025-09-22 14:26:53,047 | INFO | Fold 3 | Epoch 3 done. Avg train loss: 0.105227 | Time: 802.41s
+2025-09-22 14:26:53,047 | INFO | Applying EMA weights for evaluation.
+2025-09-22 14:26:53,053 | INFO | Running validation inference (EMA-applied).
+2025-09-22 14:27:06,852 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 14:27:06,857 | INFO | Fold 3 | Validation epoch 3: MSE(reg)=0.017774, MSE(exp)=0.016744, MSE(blend)=0.017050 | Pearson(reg)=0.868554, Pearson(exp)=0.869001, Pearson(blend)=0.869674
+2025-09-22 14:27:06,857 | INFO | Fold 3 | New best validation Pearson (blend): 0.869674 at epoch 3
+2025-09-22 14:27:06,857 | INFO | Applying EMA weights for evaluation.
+2025-09-22 14:27:07,404 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 14:27:08,175 | INFO | Fold 3 | Generating OOF predictions with best EMA weights.
+2025-09-22 14:27:08,175 | INFO | Running validation inference (EMA-applied).
+2025-09-22 14:27:21,975 | INFO | Fold 3 | OOF Pearson reg=0.868554, exp=0.869001
+2025-09-22 14:27:21,975 | INFO | Running test inference (TTA with swapped pairs).
+2025-09-22 14:27:37,115 | INFO | Running test inference (TTA with swapped pairs).
+2025-09-22 14:27:52,358 | INFO | ===== Fold 5/5 (seed=2025) =====
+2025-09-22 14:27:53,027 | INFO | Fold 4 -> Train batches: 1642, Valid batches: 206
+2025-09-22 14:27:54,951 | INFO | Loading DAPT backbone weights into cross-encoder backbone.
+2025-09-22 14:27:55,681 | INFO | Creating optimizer parameter groups with layer-wise LR decay.
+2025-09-22 14:27:55,683 | INFO | Group 0: params=1, lr=0.00000832, wd=0.01
+2025-09-22 14:27:55,683 | INFO | Group 1: params=2, lr=0.00000832, wd=0.0
+2025-09-22 14:27:55,683 | INFO | Group 2: params=6, lr=0.00000876, wd=0.01
+2025-09-22 14:27:55,683 | INFO | Group 3: params=10, lr=0.00000876, wd=0.0
+2025-09-22 14:27:55,683 | INFO | Group 4: params=6, lr=0.00000922, wd=0.01
+2025-09-22 14:27:55,683 | INFO | Group 5: params=10, lr=0.00000922, wd=0.0
+2025-09-22 14:27:55,683 | INFO | Group 6: params=6, lr=0.00000971, wd=0.01
+2025-09-22 14:27:55,683 | INFO | Group 7: params=10, lr=0.00000971, wd=0.0
+2025-09-22 14:27:55,683 | INFO | Group 8: params=6, lr=0.00001022, wd=0.01
+2025-09-22 14:27:55,683 | INFO | Group 9: params=10, lr=0.00001022, wd=0.0
+2025-09-22 14:27:55,683 | INFO | Group 10: params=6, lr=0.00001075, wd=0.01
+2025-09-22 14:27:55,683 | INFO | Group 11: params=10, lr=0.00001075, wd=0.0
+2025-09-22 14:27:55,683 | INFO | Group 12: params=6, lr=0.00001132, wd=0.01
+2025-09-22 14:27:55,683 | INFO | Group 13: params=10, lr=0.00001132, wd=0.0
+2025-09-22 14:27:55,683 | INFO | Group 14: params=6, lr=0.00001192, wd=0.01
+2025-09-22 14:27:55,683 | INFO | Group 15: params=10, lr=0.00001192, wd=0.0
+2025-09-22 14:27:55,683 | INFO | Group 16: params=6, lr=0.00001254, wd=0.01
+2025-09-22 14:27:55,683 | INFO | Group 17: params=10, lr=0.00001254, wd=0.0
+2025-09-22 14:27:55,683 | INFO | Group 18: params=6, lr=0.00001320, wd=0.01
+2025-09-22 14:27:55,683 | INFO | Group 19: params=10, lr=0.00001320, wd=0.0
+2025-09-22 14:27:55,683 | INFO | Group 20: params=6, lr=0.00001390, wd=0.01
+2025-09-22 14:27:55,683 | INFO | Group 21: params=10, lr=0.00001390, wd=0.0
+2025-09-22 14:27:55,683 | INFO | Group 22: params=6, lr=0.00001463, wd=0.01
+2025-09-22 14:27:55,683 | INFO | Group 23: params=10, lr=0.00001463, wd=0.0
+2025-09-22 14:27:55,683 | INFO | Group 24: params=6, lr=0.00001540, wd=0.01
+2025-09-22 14:27:55,683 | INFO | Group 25: params=10, lr=0.00001540, wd=0.0
+2025-09-22 14:27:55,683 | INFO | Group 26: params=6, lr=0.00001621, wd=0.01
+2025-09-22 14:27:55,683 | INFO | Group 27: params=10, lr=0.00001621, wd=0.0
+2025-09-22 14:27:55,683 | INFO | Group 28: params=6, lr=0.00001706, wd=0.01
+2025-09-22 14:27:55,683 | INFO | Group 29: params=10, lr=0.00001706, wd=0.0
+2025-09-22 14:27:55,684 | INFO | Group 30: params=6, lr=0.00001796, wd=0.01
+2025-09-22 14:27:55,684 | INFO | Group 31: params=10, lr=0.00001796, wd=0.0
+2025-09-22 14:27:55,684 | INFO | Group 32: params=6, lr=0.00001891, wd=0.01
+2025-09-22 14:27:55,684 | INFO | Group 33: params=10, lr=0.00001891, wd=0.0
+2025-09-22 14:27:55,684 | INFO | Group 34: params=6, lr=0.00001990, wd=0.01
+2025-09-22 14:27:55,684 | INFO | Group 35: params=10, lr=0.00001990, wd=0.0
+2025-09-22 14:27:55,684 | INFO | Group 36: params=6, lr=0.00002095, wd=0.01
+2025-09-22 14:27:55,684 | INFO | Group 37: params=10, lr=0.00002095, wd=0.0
+2025-09-22 14:27:55,684 | INFO | Group 38: params=6, lr=0.00002205, wd=0.01
+2025-09-22 14:27:55,684 | INFO | Group 39: params=10, lr=0.00002205, wd=0.0
+2025-09-22 14:27:55,684 | INFO | Group 40: params=6, lr=0.00002321, wd=0.01
+2025-09-22 14:27:55,684 | INFO | Group 41: params=10, lr=0.00002321, wd=0.0
+2025-09-22 14:27:55,684 | INFO | Group 42: params=6, lr=0.00002444, wd=0.01
+2025-09-22 14:27:55,684 | INFO | Group 43: params=10, lr=0.00002444, wd=0.0
+2025-09-22 14:27:55,684 | INFO | Group 44: params=6, lr=0.00002572, wd=0.01
+2025-09-22 14:27:55,684 | INFO | Group 45: params=10, lr=0.00002572, wd=0.0
+2025-09-22 14:27:55,684 | INFO | Group 46: params=6, lr=0.00002708, wd=0.01
+2025-09-22 14:27:55,684 | INFO | Group 47: params=10, lr=0.00002708, wd=0.0
+2025-09-22 14:27:55,684 | INFO | Group 48: params=6, lr=0.00002850, wd=0.01
+2025-09-22 14:27:55,684 | INFO | Group 49: params=10, lr=0.00002850, wd=0.0
+2025-09-22 14:27:55,684 | INFO | Group 50: params=4, lr=0.00003000, wd=0.01
+2025-09-22 14:27:55,684 | INFO | Group 51: params=4, lr=0.00003000, wd=0.0
+2025-09-22 14:27:55,686 | INFO | Fold 4 -> Training steps: 4926, Warmup steps: 492, Adv start step: 492
+2025-09-22 14:27:55,688 | INFO | Registering EMA shadow parameters.
+2025-09-22 14:27:55,695 | INFO | Starting epoch 1/3 for fold 4.
+2025-09-22 14:28:32,583 | INFO | Fold 4 | Epoch 1/3 | Step 100/1642 | Loss: 0.417414 | LR: 0.00000169 | Adv:False
+2025-09-22 14:29:07,066 | INFO | Fold 4 | Epoch 1/3 | Step 200/1642 | Loss: 0.349699 | LR: 0.00000338 | Adv:False
+2025-09-22 14:29:41,517 | INFO | Fold 4 | Epoch 1/3 | Step 300/1642 | Loss: 0.348655 | LR: 0.00000507 | Adv:False
+2025-09-22 14:30:16,280 | INFO | Fold 4 | Epoch 1/3 | Step 400/1642 | Loss: 0.262614 | LR: 0.00000677 | Adv:False
+2025-09-22 14:30:52,015 | INFO | Fold 4 | Epoch 1/3 | Step 500/1642 | Loss: 0.188879 | LR: 0.00000832 | Adv:True
+2025-09-22 14:31:41,014 | INFO | Fold 4 | Epoch 1/3 | Step 600/1642 | Loss: 0.238119 | LR: 0.00000831 | Adv:True
+2025-09-22 14:32:30,787 | INFO | Fold 4 | Epoch 1/3 | Step 700/1642 | Loss: 0.280210 | LR: 0.00000828 | Adv:True
+2025-09-22 14:33:20,090 | INFO | Fold 4 | Epoch 1/3 | Step 800/1642 | Loss: 0.252655 | LR: 0.00000822 | Adv:True
+2025-09-22 14:34:09,663 | INFO | Fold 4 | Epoch 1/3 | Step 900/1642 | Loss: 0.229824 | LR: 0.00000815 | Adv:True
+2025-09-22 14:34:59,107 | INFO | Fold 4 | Epoch 1/3 | Step 1000/1642 | Loss: 0.125556 | LR: 0.00000806 | Adv:True
+2025-09-22 14:35:48,159 | INFO | Fold 4 | Epoch 1/3 | Step 1100/1642 | Loss: 0.327285 | LR: 0.00000794 | Adv:True
+2025-09-22 14:36:37,560 | INFO | Fold 4 | Epoch 1/3 | Step 1200/1642 | Loss: 0.191885 | LR: 0.00000781 | Adv:True
+2025-09-22 14:37:26,861 | INFO | Fold 4 | Epoch 1/3 | Step 1300/1642 | Loss: 0.174702 | LR: 0.00000766 | Adv:True
+2025-09-22 14:38:16,346 | INFO | Fold 4 | Epoch 1/3 | Step 1400/1642 | Loss: 0.178663 | LR: 0.00000749 | Adv:True
+2025-09-22 14:39:05,826 | INFO | Fold 4 | Epoch 1/3 | Step 1500/1642 | Loss: 0.163945 | LR: 0.00000730 | Adv:True
+2025-09-22 14:39:55,236 | INFO | Fold 4 | Epoch 1/3 | Step 1600/1642 | Loss: 0.207183 | LR: 0.00000710 | Adv:True
+2025-09-22 14:40:15,807 | INFO | Fold 4 | Epoch 1 done. Avg train loss: 0.280736 | Time: 740.11s
+2025-09-22 14:40:15,807 | INFO | Applying EMA weights for evaluation.
+2025-09-22 14:40:15,813 | INFO | Running validation inference (EMA-applied).
+2025-09-22 14:40:30,192 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 14:40:30,200 | INFO | Fold 4 | Validation epoch 1: MSE(reg)=0.021126, MSE(exp)=0.022579, MSE(blend)=0.020168 | Pearson(reg)=0.834701, Pearson(exp)=0.835553, Pearson(blend)=0.837353
+2025-09-22 14:40:30,200 | INFO | Fold 4 | New best validation Pearson (blend): 0.837353 at epoch 1
+2025-09-22 14:40:30,200 | INFO | Applying EMA weights for evaluation.
+2025-09-22 14:40:31,679 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 14:40:31,684 | INFO | Starting epoch 2/3 for fold 4.
+2025-09-22 14:41:20,795 | INFO | Fold 4 | Epoch 2/3 | Step 100/1642 | Loss: 0.103938 | LR: 0.00000679 | Adv:True
+2025-09-22 14:42:09,853 | INFO | Fold 4 | Epoch 2/3 | Step 200/1642 | Loss: 0.169509 | LR: 0.00000656 | Adv:True
+2025-09-22 14:42:59,328 | INFO | Fold 4 | Epoch 2/3 | Step 300/1642 | Loss: 0.084587 | LR: 0.00000631 | Adv:True
+2025-09-22 14:43:48,658 | INFO | Fold 4 | Epoch 2/3 | Step 400/1642 | Loss: 0.237248 | LR: 0.00000605 | Adv:True
+2025-09-22 14:44:37,933 | INFO | Fold 4 | Epoch 2/3 | Step 500/1642 | Loss: 0.235515 | LR: 0.00000579 | Adv:True
+2025-09-22 14:45:26,849 | INFO | Fold 4 | Epoch 2/3 | Step 600/1642 | Loss: 0.187753 | LR: 0.00000551 | Adv:True
+2025-09-22 14:46:16,497 | INFO | Fold 4 | Epoch 2/3 | Step 700/1642 | Loss: 0.134867 | LR: 0.00000523 | Adv:True
+2025-09-22 14:47:05,257 | INFO | Fold 4 | Epoch 2/3 | Step 800/1642 | Loss: 0.231923 | LR: 0.00000494 | Adv:True
+2025-09-22 14:47:54,283 | INFO | Fold 4 | Epoch 2/3 | Step 900/1642 | Loss: 0.172283 | LR: 0.00000465 | Adv:True
+2025-09-22 14:48:43,686 | INFO | Fold 4 | Epoch 2/3 | Step 1000/1642 | Loss: 0.095860 | LR: 0.00000436 | Adv:True
+2025-09-22 14:49:32,812 | INFO | Fold 4 | Epoch 2/3 | Step 1100/1642 | Loss: 0.111997 | LR: 0.00000406 | Adv:True
+2025-09-22 14:50:21,766 | INFO | Fold 4 | Epoch 2/3 | Step 1200/1642 | Loss: 0.105169 | LR: 0.00000377 | Adv:True
+2025-09-22 14:51:10,963 | INFO | Fold 4 | Epoch 2/3 | Step 1300/1642 | Loss: 0.127996 | LR: 0.00000348 | Adv:True
+2025-09-22 14:52:00,452 | INFO | Fold 4 | Epoch 2/3 | Step 1400/1642 | Loss: 0.171771 | LR: 0.00000319 | Adv:True
+2025-09-22 14:52:49,747 | INFO | Fold 4 | Epoch 2/3 | Step 1500/1642 | Loss: 0.191063 | LR: 0.00000290 | Adv:True
+2025-09-22 14:53:38,914 | INFO | Fold 4 | Epoch 2/3 | Step 1600/1642 | Loss: 0.150765 | LR: 0.00000263 | Adv:True
+2025-09-22 14:53:59,503 | INFO | Fold 4 | Epoch 2 done. Avg train loss: 0.162394 | Time: 807.82s
+2025-09-22 14:53:59,503 | INFO | Applying EMA weights for evaluation.
+2025-09-22 14:53:59,509 | INFO | Running validation inference (EMA-applied).
+2025-09-22 14:54:13,376 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 14:54:13,382 | INFO | Fold 4 | Validation epoch 2: MSE(reg)=0.018762, MSE(exp)=0.017356, MSE(blend)=0.017712 | Pearson(reg)=0.861566, Pearson(exp)=0.861553, Pearson(blend)=0.862441
+2025-09-22 14:54:13,382 | INFO | Fold 4 | New best validation Pearson (blend): 0.862441 at epoch 2
+2025-09-22 14:54:13,382 | INFO | Applying EMA weights for evaluation.
+2025-09-22 14:54:14,620 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 14:54:14,625 | INFO | Starting epoch 3/3 for fold 4.
+2025-09-22 14:55:03,981 | INFO | Fold 4 | Epoch 3/3 | Step 100/1642 | Loss: 0.145917 | LR: 0.00000225 | Adv:True
+2025-09-22 14:55:52,652 | INFO | Fold 4 | Epoch 3/3 | Step 200/1642 | Loss: 0.145965 | LR: 0.00000199 | Adv:True
+2025-09-22 14:56:41,542 | INFO | Fold 4 | Epoch 3/3 | Step 300/1642 | Loss: 0.137245 | LR: 0.00000174 | Adv:True
+2025-09-22 14:57:30,644 | INFO | Fold 4 | Epoch 3/3 | Step 400/1642 | Loss: 0.032912 | LR: 0.00000151 | Adv:True
+2025-09-22 14:58:19,993 | INFO | Fold 4 | Epoch 3/3 | Step 500/1642 | Loss: 0.179520 | LR: 0.00000129 | Adv:True
+2025-09-22 14:59:09,663 | INFO | Fold 4 | Epoch 3/3 | Step 600/1642 | Loss: 0.058723 | LR: 0.00000108 | Adv:True
+2025-09-22 14:59:58,528 | INFO | Fold 4 | Epoch 3/3 | Step 700/1642 | Loss: 0.101818 | LR: 0.00000089 | Adv:True
+2025-09-22 15:00:47,492 | INFO | Fold 4 | Epoch 3/3 | Step 800/1642 | Loss: 0.056713 | LR: 0.00000072 | Adv:True
+2025-09-22 15:01:35,979 | INFO | Fold 4 | Epoch 3/3 | Step 900/1642 | Loss: 0.099136 | LR: 0.00000056 | Adv:True
+2025-09-22 15:02:25,010 | INFO | Fold 4 | Epoch 3/3 | Step 1000/1642 | Loss: 0.054444 | LR: 0.00000042 | Adv:True
+2025-09-22 15:03:14,734 | INFO | Fold 4 | Epoch 3/3 | Step 1100/1642 | Loss: 0.049307 | LR: 0.00000030 | Adv:True
+2025-09-22 15:04:03,818 | INFO | Fold 4 | Epoch 3/3 | Step 1200/1642 | Loss: 0.152799 | LR: 0.00000020 | Adv:True
+2025-09-22 15:04:52,854 | INFO | Fold 4 | Epoch 3/3 | Step 1300/1642 | Loss: 0.098850 | LR: 0.00000012 | Adv:True
+2025-09-22 15:05:41,796 | INFO | Fold 4 | Epoch 3/3 | Step 1400/1642 | Loss: 0.042167 | LR: 0.00000006 | Adv:True
+2025-09-22 15:06:30,996 | INFO | Fold 4 | Epoch 3/3 | Step 1500/1642 | Loss: 0.246880 | LR: 0.00000002 | Adv:True
+2025-09-22 15:07:20,161 | INFO | Fold 4 | Epoch 3/3 | Step 1600/1642 | Loss: 0.108387 | LR: 0.00000000 | Adv:True
+2025-09-22 15:07:41,055 | INFO | Fold 4 | Epoch 3 done. Avg train loss: 0.103634 | Time: 806.43s
+2025-09-22 15:07:41,055 | INFO | Applying EMA weights for evaluation.
+2025-09-22 15:07:41,061 | INFO | Running validation inference (EMA-applied).
+2025-09-22 15:07:54,951 | INFO | Restoring original weights after EMA evaluation.
+2025-09-22 15:07:54,955 | INFO | Fold 4 | Validation epoch 3: MSE(reg)=0.018565, MSE(exp)=0.017685, MSE(blend)=0.017922 | Pearson(reg)=0.860698, Pearson(exp)=0.861245, Pearson(blend)=0.861928
+2025-09-22 15:07:55,933 | INFO | Fold 4 | Generating OOF predictions with best EMA weights.
+2025-09-22 15:07:55,933 | INFO | Running validation inference (EMA-applied).
+2025-09-22 15:08:09,848 | INFO | Fold 4 | OOF Pearson reg=0.861566, exp=0.861553
+2025-09-22 15:08:09,849 | INFO | Running test inference (TTA with swapped pairs).
+2025-09-22 15:08:25,100 | INFO | Running test inference (TTA with swapped pairs).
+2025-09-22 15:08:42,243 | INFO | Post-processing: tuning internal blend alpha per model using OOF.
+2025-09-22 15:08:42,276 | INFO | Variant 0: best alpha=0.350 with OOF Pearson=0.864585
+2025-09-22 15:08:42,276 | INFO | Variant 0: applying per-fold isotonic calibration.
+2025-09-22 15:08:42,287 | INFO | Variant 0: Calibrated OOF Pearson=0.869734
+2025-09-22 15:08:42,318 | INFO | Variant 1: best alpha=0.410 with OOF Pearson=0.866567
+2025-09-22 15:08:42,318 | INFO | Variant 1: applying per-fold isotonic calibration.
+2025-09-22 15:08:42,327 | INFO | Variant 1: Calibrated OOF Pearson=0.870966
+2025-09-22 15:08:42,328 | INFO | Ensembling variants with non-negative weight search on OOF.
+2025-09-22 15:08:42,358 | INFO | Ensemble weight w (model0)=0.470, (model1)=0.530 with OOF Pearson=0.875036
+2025-09-22 15:08:42,359 | INFO | Variant 0: Final calibrated OOF Pearson=0.869734
+2025-09-22 15:08:42,359 | INFO | Variant 1: Final calibrated OOF Pearson=0.870966
+2025-09-22 15:08:42,359 | INFO | Final Ensemble Calibrated OOF -> MSE: 0.015705, Pearson: 0.875036
+2025-09-22 15:08:42,360 | INFO | Preparing and saving submission.
+2025-09-22 15:08:42,370 | INFO | Submission saved to: task/us-patent-phrase-to-phrase-matching/outputs/4/submission_6.csv
+2025-09-22 15:08:42,370 | INFO | Extra analytics and diagnostics.
+2025-09-22 15:08:42,372 | INFO | Train score=0.0: count=6774, pct=20.64%
+2025-09-22 15:08:42,372 | INFO | Train score=0.25: count=10306, pct=31.40%
+2025-09-22 15:08:42,372 | INFO | Train score=0.5: count=11068, pct=33.72%
+2025-09-22 15:08:42,372 | INFO | Train score=0.75: count=3634, pct=11.07%
+2025-09-22 15:08:42,372 | INFO | Train score=1.0: count=1043, pct=3.18%
+2025-09-22 15:08:42,372 | INFO | Token length diagnostics (first 100 train samples, variant 0).
+2025-09-22 15:08:42,390 | INFO | Token length stats -> mean=50.77, max=77, min=38
+2025-09-22 15:08:42,390 | INFO | Pipeline completed with CUDA fp16, DAPT-MLM, dual-variant 5-fold cross-encoders, MTL head, LLRD, cosine schedule, EMA, FGM, R-Drop, per-fold isotonic calibration, and OOF-tuned ensembling. Submission ready.

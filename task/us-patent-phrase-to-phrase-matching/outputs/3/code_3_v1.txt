@@ -1,0 +1,188 @@
+2025-09-22 04:46:46,362 | INFO | Initialized logging. All logs will be written to task/us-patent-phrase-to-phrase-matching/outputs/3/code_3_v1.txt
+2025-09-22 04:46:46,362 | INFO | Using device: cuda
+2025-09-22 04:46:46,515 | INFO | CUDA available: True
+2025-09-22 04:46:46,540 | INFO | CUDA device name: NVIDIA A100-SXM4-80GB
+2025-09-22 04:46:46,541 | INFO | Config: {'model_name': 'microsoft/deberta-v3-xsmall', 'max_len': 64, 'train_bs': 64, 'valid_bs': 128, 'lr': 5e-05, 'weight_decay': 0.01, 'epochs': 1, 'n_folds': 5, 'seed': 42, 'warmup_ratio': 0.1, 'grad_accum_steps': 1, 'scheduler': 'cosine', 'use_fp16': True, 'pooling': 'mean', 'max_grad_norm': 1.0, 'pad_to_multiple_of': 8, 'text_prefix_anchor': 'anchor:', 'text_prefix_target': 'target:', 'text_prefix_context': 'context:', 'text_prefix_title': 'title:', 'text_prefix_section': 'section:', 'text_prefix_subclass': 'subclass:', 'use_context_title': True, 'use_context_section': True, 'use_context_subclass': True, 'log_interval': 100}
+2025-09-22 04:46:46,541 | INFO | Setting random seeds: 42
+2025-09-22 04:46:46,542 | INFO | Loading train.csv from task/us-patent-phrase-to-phrase-matching/train.csv
+2025-09-22 04:46:46,576 | INFO | Loading test.csv from task/us-patent-phrase-to-phrase-matching/test.csv
+2025-09-22 04:46:46,580 | INFO | Loading titles.csv from task/us-patent-phrase-to-phrase-matching/titles.csv
+2025-09-22 04:46:46,886 | INFO | Loading sample_submission.csv from task/us-patent-phrase-to-phrase-matching/sample_submission.csv
+2025-09-22 04:46:46,891 | INFO | train_df shape: (32825, 5)
+2025-09-22 04:46:46,891 | INFO | test_df shape: (3648, 5)
+2025-09-22 04:46:46,891 | INFO | titles_df shape: (260476, 7)
+2025-09-22 04:46:46,891 | INFO | sample_submission shape: (3648, 2)
+2025-09-22 04:46:46,891 | INFO | train_df columns: ['id', 'anchor', 'target', 'context', 'score']
+2025-09-22 04:46:46,891 | INFO | test_df columns: ['id', 'anchor', 'target', 'context', 'score']
+2025-09-22 04:46:46,891 | INFO | titles_df columns: ['code', 'title', 'section', 'class', 'subclass', 'group', 'main_group']
+2025-09-22 04:46:46,894 | INFO | Head of titles_df:
+code                                                                                                                                                                                                                                                                                                              title section  class subclass  group  main_group
+   A                                                                                                                                                                                                                                                                                                  HUMAN NECESSITIES       A    NaN      NaN    NaN         NaN
+ A01                                                                                                                                                                                                                                                AGRICULTURE; FORESTRY; ANIMAL HUSBANDRY; HUNTING; TRAPPING; FISHING       A    1.0      NaN    NaN         NaN
+A01B SOIL WORKING IN AGRICULTURE OR FORESTRY; PARTS, DETAILS, OR ACCESSORIES OF AGRICULTURAL MACHINES OR IMPLEMENTS, IN GENERAL (making or covering furrows or holes for sowing, planting, or manuring A01C5/00; soil working for engineering purposes E01, E02, E21; {measuring areas for agricultural purposes G01B})       A    1.0        B    NaN         NaN
+2025-09-22 04:46:46,894 | INFO | Using title columns: ['code', 'title', 'section', 'subclass', 'class']
+2025-09-22 04:46:46,989 | INFO | train_merged shape: (32825, 10)
+2025-09-22 04:46:46,989 | INFO | test_merged shape: (3648, 10)
+2025-09-22 04:46:47,024 | INFO | Unique contexts in train: 106
+2025-09-22 04:46:47,024 | INFO | Unique contexts in test: 106
+2025-09-22 04:46:47,024 | INFO | Unique codes in titles: 260476
+2025-09-22 04:46:47,024 | INFO | Contexts in train not covered by titles codes: 0
+2025-09-22 04:46:47,024 | INFO | Contexts in test not covered by titles codes: 0
+2025-09-22 04:46:47,026 | INFO | Missing title count after merge (train): 0
+2025-09-22 04:46:47,026 | INFO | Missing title count after merge (test): 0
+2025-09-22 04:46:47,037 | INFO | EDA: Overlapping (anchor, target, context) triplets between train and test: 0
+2025-09-22 04:46:47,038 | INFO | EDA: Top 10 test context codes by count:
+2025-09-22 04:46:47,038 | INFO |   H01: count=230, pct=6.30%
+2025-09-22 04:46:47,038 | INFO |   H04: count=215, pct=5.89%
+2025-09-22 04:46:47,038 | INFO |   G01: count=179, pct=4.91%
+2025-09-22 04:46:47,038 | INFO |   A61: count=165, pct=4.52%
+2025-09-22 04:46:47,038 | INFO |   F16: count=121, pct=3.32%
+2025-09-22 04:46:47,038 | INFO |   C07: count=115, pct=3.15%
+2025-09-22 04:46:47,038 | INFO |   G06: count=99, pct=2.71%
+2025-09-22 04:46:47,038 | INFO |   B60: count=94, pct=2.58%
+2025-09-22 04:46:47,038 | INFO |   G02: count=89, pct=2.44%
+2025-09-22 04:46:47,038 | INFO |   H03: count=83, pct=2.28%
+2025-09-22 04:46:47,040 | INFO | EDA: Score distribution for context H04:
+2025-09-22 04:46:47,040 | INFO |   score=0.00 -> count=478
+2025-09-22 04:46:47,040 | INFO |   score=0.25 -> count=617
+2025-09-22 04:46:47,040 | INFO |   score=0.50 -> count=562
+2025-09-22 04:46:47,040 | INFO |   score=0.75 -> count=251
+2025-09-22 04:46:47,040 | INFO |   score=1.00 -> count=54
+2025-09-22 04:46:47,043 | INFO | EDA: Score distribution for context G01:
+2025-09-22 04:46:47,043 | INFO |   score=0.00 -> count=355
+2025-09-22 04:46:47,043 | INFO |   score=0.25 -> count=399
+2025-09-22 04:46:47,043 | INFO |   score=0.50 -> count=655
+2025-09-22 04:46:47,043 | INFO |   score=0.75 -> count=183
+2025-09-22 04:46:47,043 | INFO |   score=1.00 -> count=41
+2025-09-22 04:46:47,051 | INFO | EDA: Score distribution for context A61:
+2025-09-22 04:46:47,051 | INFO |   score=0.00 -> count=298
+2025-09-22 04:46:47,051 | INFO |   score=0.25 -> count=376
+2025-09-22 04:46:47,051 | INFO |   score=0.50 -> count=512
+2025-09-22 04:46:47,051 | INFO |   score=0.75 -> count=102
+2025-09-22 04:46:47,051 | INFO |   score=1.00 -> count=24
+2025-09-22 04:46:47,052 | INFO | EDA: Maximum target character count in test.csv: 47
+2025-09-22 04:46:47,058 | INFO | EDA: Maximum target character count in train.csv: 98
+2025-09-22 04:46:47,071 | INFO | EDA: Average anchor char len (train): 15.99
+2025-09-22 04:46:47,071 | INFO | EDA: Average target char len (train): 15.76
+2025-09-22 04:46:47,071 | INFO | Building text inputs with context enrichment...
+2025-09-22 04:46:47,071 | INFO | Context enrichment columns used: ['title', 'section', 'subclass']
+2025-09-22 04:46:47,071 | INFO | Sample built text_a[0]: anchor: obstacle course | context: B60 | title: VEHICLES IN GENERAL | section: B | subclass: nan
+2025-09-22 04:46:47,071 | INFO | Sample built text_b[0]: target: obstacle position trajectory
+2025-09-22 04:46:47,072 | INFO | Sample built text_a[1]: anchor: hardware blocks | context: G06 | title: COMPUTING; CALCULATING; COUNTING | section: G | subclass: nan
+2025-09-22 04:46:47,072 | INFO | Sample built text_b[1]: target: housing
+2025-09-22 04:46:48,216 | INFO | Completed building 32825 input text pairs.
+2025-09-22 04:46:48,216 | INFO | Building text inputs with context enrichment...
+2025-09-22 04:46:48,217 | INFO | Context enrichment columns used: ['title', 'section', 'subclass']
+2025-09-22 04:46:48,217 | INFO | Sample built text_a[0]: anchor: project onto surface | context: G03 | title: PHOTOGRAPHY; CINEMATOGRAPHY; ANALOGOUS TECHNIQUES USING WAVES OTHER THAN OPTICAL WAVES; ELECTROGRAPHY; HOLOGRAPHY | section: G | subclass: nan
+2025-09-22 04:46:48,217 | INFO | Sample built text_b[0]: target: disposing
+2025-09-22 04:46:48,217 | INFO | Sample built text_a[1]: anchor: rotate on its longitudinal axis | context: B24 | title: GRINDING; POLISHING | section: B | subclass: nan
+2025-09-22 04:46:48,217 | INFO | Sample built text_b[1]: target: gear grinding device
+2025-09-22 04:46:48,342 | INFO | Completed building 3648 input text pairs.
+2025-09-22 04:46:48,342 | INFO | Loading tokenizer from microsoft/deberta-v3-xsmall
+2025-09-22 04:46:49,566 | INFO | Tokenizer loaded: DebertaV2TokenizerFast
+2025-09-22 04:46:49,566 | INFO | Tokenizing train texts with max_length=64
+2025-09-22 04:46:51,686 | INFO | Tokenizing test texts with max_length=64
+2025-09-22 04:46:51,900 | INFO | Prepared StratifiedKFold with 5 folds.
+2025-09-22 04:46:51,905 | INFO | ================================================================================
+2025-09-22 04:46:51,905 | INFO | Starting Fold 1/5
+2025-09-22 04:46:51,905 | INFO | Fold train size: 26260 | Fold valid size: 6565
+2025-09-22 04:46:51,905 | INFO | Preparing DataLoaders: 26260 train samples, 6565 valid samples
+2025-09-22 04:46:51,906 | INFO | Initializing PatentRegressor with backbone: microsoft/deberta-v3-xsmall
+2025-09-22 04:46:52,893 | INFO | Backbone hidden size: 384
+2025-09-22 04:46:52,893 | INFO | Pooling: mean
+2025-09-22 04:46:53,163 | INFO | Preparing optimizer (AdamW) with weight decay=0.010000 and lr=0.000050
+2025-09-22 04:46:53,164 | INFO | Preparing cosine scheduler: total steps=411, warmup steps=41
+2025-09-22 04:46:53,165 | INFO | Fold 1 | Epoch 1/1 - Training start
+2025-09-22 04:46:58,961 | INFO | Fold 1 | Epoch 1 | Step 100/411 | Loss: 0.102612 | LR: 0.00004693
+2025-09-22 04:47:03,897 | INFO | Fold 1 | Epoch 1 | Step 200/411 | Loss: 0.046624 | LR: 0.00003047
+2025-09-22 04:47:08,824 | INFO | Fold 1 | Epoch 1 | Step 300/411 | Loss: 0.034296 | LR: 0.00001031
+2025-09-22 04:47:13,753 | INFO | Fold 1 | Epoch 1 | Step 400/411 | Loss: 0.042791 | LR: 0.00000011
+2025-09-22 04:47:14,484 | INFO | Fold 1 | Epoch 1 completed in 21.32s | Avg Train Loss: 0.056849
+2025-09-22 04:47:14,484 | INFO | Fold 1 | Validation start
+2025-09-22 04:47:15,733 | INFO | Fold 1 | Validation Pearson: 0.709367
+2025-09-22 04:47:15,733 | INFO | Fold 1 | Test inference start
+2025-09-22 04:47:16,512 | INFO | Fold 1 | Test inference completed
+2025-09-22 04:47:16,513 | INFO | ================================================================================
+2025-09-22 04:47:16,513 | INFO | Starting Fold 2/5
+2025-09-22 04:47:16,513 | INFO | Fold train size: 26260 | Fold valid size: 6565
+2025-09-22 04:47:16,513 | INFO | Preparing DataLoaders: 26260 train samples, 6565 valid samples
+2025-09-22 04:47:16,513 | INFO | Initializing PatentRegressor with backbone: microsoft/deberta-v3-xsmall
+2025-09-22 04:47:17,024 | INFO | Backbone hidden size: 384
+2025-09-22 04:47:17,024 | INFO | Pooling: mean
+2025-09-22 04:47:17,079 | INFO | Preparing optimizer (AdamW) with weight decay=0.010000 and lr=0.000050
+2025-09-22 04:47:17,081 | INFO | Preparing cosine scheduler: total steps=411, warmup steps=41
+2025-09-22 04:47:17,082 | INFO | Fold 2 | Epoch 1/1 - Training start
+2025-09-22 04:47:22,240 | INFO | Fold 2 | Epoch 1 | Step 100/411 | Loss: 0.054628 | LR: 0.00004693
+2025-09-22 04:47:27,208 | INFO | Fold 2 | Epoch 1 | Step 200/411 | Loss: 0.050004 | LR: 0.00003047
+2025-09-22 04:47:32,242 | INFO | Fold 2 | Epoch 1 | Step 300/411 | Loss: 0.038130 | LR: 0.00001031
+2025-09-22 04:47:37,211 | INFO | Fold 2 | Epoch 1 | Step 400/411 | Loss: 0.034758 | LR: 0.00000011
+2025-09-22 04:47:37,833 | INFO | Fold 2 | Epoch 1 completed in 20.75s | Avg Train Loss: 0.075652
+2025-09-22 04:47:37,833 | INFO | Fold 2 | Validation start
+2025-09-22 04:47:39,074 | INFO | Fold 2 | Validation Pearson: 0.742092
+2025-09-22 04:47:39,074 | INFO | Fold 2 | Test inference start
+2025-09-22 04:47:39,918 | INFO | Fold 2 | Test inference completed
+2025-09-22 04:47:39,919 | INFO | ================================================================================
+2025-09-22 04:47:39,919 | INFO | Starting Fold 3/5
+2025-09-22 04:47:39,919 | INFO | Fold train size: 26260 | Fold valid size: 6565
+2025-09-22 04:47:39,919 | INFO | Preparing DataLoaders: 26260 train samples, 6565 valid samples
+2025-09-22 04:47:39,919 | INFO | Initializing PatentRegressor with backbone: microsoft/deberta-v3-xsmall
+2025-09-22 04:47:40,434 | INFO | Backbone hidden size: 384
+2025-09-22 04:47:40,435 | INFO | Pooling: mean
+2025-09-22 04:47:40,489 | INFO | Preparing optimizer (AdamW) with weight decay=0.010000 and lr=0.000050
+2025-09-22 04:47:40,491 | INFO | Preparing cosine scheduler: total steps=411, warmup steps=41
+2025-09-22 04:47:40,492 | INFO | Fold 3 | Epoch 1/1 - Training start
+2025-09-22 04:47:45,651 | INFO | Fold 3 | Epoch 1 | Step 100/411 | Loss: 0.039476 | LR: 0.00004693
+2025-09-22 04:47:50,631 | INFO | Fold 3 | Epoch 1 | Step 200/411 | Loss: 0.038677 | LR: 0.00003047
+2025-09-22 04:47:55,618 | INFO | Fold 3 | Epoch 1 | Step 300/411 | Loss: 0.039711 | LR: 0.00001031
+2025-09-22 04:48:00,604 | INFO | Fold 3 | Epoch 1 | Step 400/411 | Loss: 0.037163 | LR: 0.00000011
+2025-09-22 04:48:01,225 | INFO | Fold 3 | Epoch 1 completed in 20.73s | Avg Train Loss: 0.063364
+2025-09-22 04:48:01,225 | INFO | Fold 3 | Validation start
+2025-09-22 04:48:02,455 | INFO | Fold 3 | Validation Pearson: 0.745087
+2025-09-22 04:48:02,455 | INFO | Fold 3 | Test inference start
+2025-09-22 04:48:03,287 | INFO | Fold 3 | Test inference completed
+2025-09-22 04:48:03,287 | INFO | ================================================================================
+2025-09-22 04:48:03,287 | INFO | Starting Fold 4/5
+2025-09-22 04:48:03,287 | INFO | Fold train size: 26260 | Fold valid size: 6565
+2025-09-22 04:48:03,287 | INFO | Preparing DataLoaders: 26260 train samples, 6565 valid samples
+2025-09-22 04:48:03,288 | INFO | Initializing PatentRegressor with backbone: microsoft/deberta-v3-xsmall
+2025-09-22 04:48:03,790 | INFO | Backbone hidden size: 384
+2025-09-22 04:48:03,790 | INFO | Pooling: mean
+2025-09-22 04:48:03,840 | INFO | Preparing optimizer (AdamW) with weight decay=0.010000 and lr=0.000050
+2025-09-22 04:48:03,841 | INFO | Preparing cosine scheduler: total steps=411, warmup steps=41
+2025-09-22 04:48:03,842 | INFO | Fold 4 | Epoch 1/1 - Training start
+2025-09-22 04:48:08,994 | INFO | Fold 4 | Epoch 1 | Step 100/411 | Loss: 0.057980 | LR: 0.00004693
+2025-09-22 04:48:13,987 | INFO | Fold 4 | Epoch 1 | Step 200/411 | Loss: 0.038100 | LR: 0.00003047
+2025-09-22 04:48:18,914 | INFO | Fold 4 | Epoch 1 | Step 300/411 | Loss: 0.047971 | LR: 0.00001031
+2025-09-22 04:48:23,843 | INFO | Fold 4 | Epoch 1 | Step 400/411 | Loss: 0.034485 | LR: 0.00000011
+2025-09-22 04:48:24,464 | INFO | Fold 4 | Epoch 1 completed in 20.62s | Avg Train Loss: 0.054448
+2025-09-22 04:48:24,464 | INFO | Fold 4 | Validation start
+2025-09-22 04:48:25,673 | INFO | Fold 4 | Validation Pearson: 0.745052
+2025-09-22 04:48:25,673 | INFO | Fold 4 | Test inference start
+2025-09-22 04:48:26,480 | INFO | Fold 4 | Test inference completed
+2025-09-22 04:48:26,481 | INFO | ================================================================================
+2025-09-22 04:48:26,481 | INFO | Starting Fold 5/5
+2025-09-22 04:48:26,481 | INFO | Fold train size: 26260 | Fold valid size: 6565
+2025-09-22 04:48:26,481 | INFO | Preparing DataLoaders: 26260 train samples, 6565 valid samples
+2025-09-22 04:48:26,481 | INFO | Initializing PatentRegressor with backbone: microsoft/deberta-v3-xsmall
+2025-09-22 04:48:26,997 | INFO | Backbone hidden size: 384
+2025-09-22 04:48:26,997 | INFO | Pooling: mean
+2025-09-22 04:48:27,052 | INFO | Preparing optimizer (AdamW) with weight decay=0.010000 and lr=0.000050
+2025-09-22 04:48:27,053 | INFO | Preparing cosine scheduler: total steps=411, warmup steps=41
+2025-09-22 04:48:27,054 | INFO | Fold 5 | Epoch 1/1 - Training start
+2025-09-22 04:48:32,257 | INFO | Fold 5 | Epoch 1 | Step 100/411 | Loss: 0.047647 | LR: 0.00004693
+2025-09-22 04:48:37,430 | INFO | Fold 5 | Epoch 1 | Step 200/411 | Loss: 0.045910 | LR: 0.00003047
+2025-09-22 04:48:42,572 | INFO | Fold 5 | Epoch 1 | Step 300/411 | Loss: 0.044252 | LR: 0.00001031
+2025-09-22 04:48:47,723 | INFO | Fold 5 | Epoch 1 | Step 400/411 | Loss: 0.046576 | LR: 0.00000011
+2025-09-22 04:48:48,361 | INFO | Fold 5 | Epoch 1 completed in 21.31s | Avg Train Loss: 0.063789
+2025-09-22 04:48:48,362 | INFO | Fold 5 | Validation start
+2025-09-22 04:48:49,575 | INFO | Fold 5 | Validation Pearson: 0.745835
+2025-09-22 04:48:49,575 | INFO | Fold 5 | Test inference start
+2025-09-22 04:48:50,356 | INFO | Fold 5 | Test inference completed
+2025-09-22 04:48:50,357 | INFO | FINAL OOF PEARSON: 0.737004
+2025-09-22 04:48:50,358 | INFO | Logging final validation results complete.
+2025-09-22 04:48:50,358 | INFO | Preparing submission by averaging 5 folds
+2025-09-22 04:48:50,369 | INFO | Saved submission to task/us-patent-phrase-to-phrase-matching/outputs/3/submission_1.csv with shape (3648, 2)
+2025-09-22 04:48:50,369 | INFO | Sample submission row 0: id=2a988c7d98568627, score=0.23855
+2025-09-22 04:48:50,370 | INFO | Sample submission row 1: id=75a3ae03b26e2f7e, score=0.16045
+2025-09-22 04:48:50,370 | INFO | Sample submission row 2: id=0126c870aede9858, score=0.07214
+2025-09-22 04:48:50,370 | INFO | Script completed successfully.

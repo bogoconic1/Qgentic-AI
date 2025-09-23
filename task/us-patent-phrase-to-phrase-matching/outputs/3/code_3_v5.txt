@@ -1,0 +1,141 @@
+2025-09-22 05:15:45,474 | INFO | Initialized logging. All logs will be written to task/us-patent-phrase-to-phrase-matching/outputs/3/code_3_v5.txt
+2025-09-22 05:15:45,474 | INFO | Using device: cuda
+2025-09-22 05:15:45,630 | INFO | CUDA available: True
+2025-09-22 05:15:45,653 | INFO | CUDA device name: NVIDIA A100-SXM4-80GB
+2025-09-22 05:15:45,655 | INFO | Config: {'model_name': 'microsoft/deberta-v3-xsmall', 'use_fast_tokenizer': True, 'max_len': 96, 'epochs': 2, 'train_bs': 64, 'valid_bs': 128, 'base_lr': 2e-05, 'head_lr': 0.001, 'weight_decay': 0.01, 'warmup_ratio': 0.1, 'grad_accum_steps': 1, 'max_grad_norm': 1.0, 'scheduler': 'cosine', 'use_fp16': True, 'pooling': 'mean_last_n', 'last_n_layers': 4, 'mlp_hidden': 256, 'dropout': 0.2, 'msd_num': 5, 'llrd': True, 'llrd_decay': 0.9, 'use_smooth_l1': True, 'smooth_l1_beta': 0.1, 'use_class_weights': True, 'use_class_head': True, 'num_classes': 5, 'ord_sigma': 0.5, 'loss_w_reg': 1.0, 'loss_w_cls': 0.5, 'loss_w_emd': 0.5, 'pred_blend_alpha': 0.5, 'augment_swap': True, 'tta_swap': True, 'pad_to_multiple_of': 8, 'text_prefix_anchor': 'anchor:', 'text_prefix_target': 'target:', 'text_prefix_context': 'context:', 'text_prefix_title': 'title:', 'text_prefix_section': 'section:', 'text_prefix_class': 'class:', 'text_prefix_subclass': 'subclass:', 'use_context_title': True, 'use_context_section': True, 'use_context_class': True, 'use_context_subclass': True, 'grad_checkpointing': False, 'fgm': True, 'fgm_epsilon': 1.0, 'fgm_alpha': 0.5, 'ema': True, 'ema_decay': 0.999, 'n_folds': 5, 'seed': 42, 'log_interval': 100}
+2025-09-22 05:15:45,656 | INFO | Setting random seeds: 42
+2025-09-22 05:15:45,657 | INFO | Loading train.csv from task/us-patent-phrase-to-phrase-matching/train.csv
+2025-09-22 05:15:45,690 | INFO | Loading test.csv from task/us-patent-phrase-to-phrase-matching/test.csv
+2025-09-22 05:15:45,694 | INFO | Loading titles.csv from task/us-patent-phrase-to-phrase-matching/titles.csv
+2025-09-22 05:15:46,041 | INFO | Loading sample_submission.csv from task/us-patent-phrase-to-phrase-matching/sample_submission.csv
+2025-09-22 05:15:46,047 | INFO | train_df shape: (32825, 5)
+2025-09-22 05:15:46,049 | INFO | test_df shape: (3648, 5)
+2025-09-22 05:15:46,049 | INFO | titles_df shape: (260476, 7)
+2025-09-22 05:15:46,049 | INFO | sample_submission shape: (3648, 2)
+2025-09-22 05:15:46,049 | INFO | train_df columns: ['id', 'anchor', 'target', 'context', 'score']
+2025-09-22 05:15:46,049 | INFO | test_df columns: ['id', 'anchor', 'target', 'context', 'score']
+2025-09-22 05:15:46,049 | INFO | titles_df columns: ['code', 'title', 'section', 'class', 'subclass', 'group', 'main_group']
+2025-09-22 05:15:46,054 | INFO | Head of titles_df:
+code                                                                                                                                                                                                                                                                                                              title section  class subclass  group  main_group
+   A                                                                                                                                                                                                                                                                                                  HUMAN NECESSITIES       A    NaN      NaN    NaN         NaN
+ A01                                                                                                                                                                                                                                                AGRICULTURE; FORESTRY; ANIMAL HUSBANDRY; HUNTING; TRAPPING; FISHING       A    1.0      NaN    NaN         NaN
+A01B SOIL WORKING IN AGRICULTURE OR FORESTRY; PARTS, DETAILS, OR ACCESSORIES OF AGRICULTURAL MACHINES OR IMPLEMENTS, IN GENERAL (making or covering furrows or holes for sowing, planting, or manuring A01C5/00; soil working for engineering purposes E01, E02, E21; {measuring areas for agricultural purposes G01B})       A    1.0        B    NaN         NaN
+2025-09-22 05:15:46,054 | INFO | Using title columns: ['code', 'title', 'section', 'subclass', 'class']
+2025-09-22 05:15:46,150 | INFO | train_merged shape: (32825, 10)
+2025-09-22 05:15:46,150 | INFO | test_merged shape: (3648, 10)
+2025-09-22 05:15:46,176 | INFO | Unique contexts in train: 106
+2025-09-22 05:15:46,176 | INFO | Unique contexts in test: 106
+2025-09-22 05:15:46,176 | INFO | Unique codes in titles: 260476
+2025-09-22 05:15:46,176 | INFO | Contexts in train not covered by titles codes: 0
+2025-09-22 05:15:46,176 | INFO | Contexts in test not covered by titles codes: 0
+2025-09-22 05:15:46,178 | INFO | Missing title count after merge (train): 0
+2025-09-22 05:15:46,178 | INFO | Missing title count after merge (test): 0
+2025-09-22 05:15:46,190 | INFO | EDA: Overlapping (anchor, target, context) triplets between train and test: 0
+2025-09-22 05:15:46,191 | INFO | EDA: Top 10 test context codes by count:
+2025-09-22 05:15:46,191 | INFO |   H01: count=230, pct=6.30%
+2025-09-22 05:15:46,191 | INFO |   H04: count=215, pct=5.89%
+2025-09-22 05:15:46,191 | INFO |   G01: count=179, pct=4.91%
+2025-09-22 05:15:46,191 | INFO |   A61: count=165, pct=4.52%
+2025-09-22 05:15:46,191 | INFO |   F16: count=121, pct=3.32%
+2025-09-22 05:15:46,191 | INFO |   C07: count=115, pct=3.15%
+2025-09-22 05:15:46,191 | INFO |   G06: count=99, pct=2.71%
+2025-09-22 05:15:46,191 | INFO |   B60: count=94, pct=2.58%
+2025-09-22 05:15:46,191 | INFO |   G02: count=89, pct=2.44%
+2025-09-22 05:15:46,191 | INFO |   H03: count=83, pct=2.28%
+2025-09-22 05:15:46,194 | INFO | EDA: Score distribution for context H04:
+2025-09-22 05:15:46,194 | INFO |   score=0.00 -> count=478
+2025-09-22 05:15:46,194 | INFO |   score=0.25 -> count=617
+2025-09-22 05:15:46,194 | INFO |   score=0.50 -> count=562
+2025-09-22 05:15:46,194 | INFO |   score=0.75 -> count=251
+2025-09-22 05:15:46,194 | INFO |   score=1.00 -> count=54
+2025-09-22 05:15:46,196 | INFO | EDA: Score distribution for context G01:
+2025-09-22 05:15:46,196 | INFO |   score=0.00 -> count=355
+2025-09-22 05:15:46,196 | INFO |   score=0.25 -> count=399
+2025-09-22 05:15:46,196 | INFO |   score=0.50 -> count=655
+2025-09-22 05:15:46,196 | INFO |   score=0.75 -> count=183
+2025-09-22 05:15:46,196 | INFO |   score=1.00 -> count=41
+2025-09-22 05:15:46,205 | INFO | EDA: Score distribution for context A61:
+2025-09-22 05:15:46,205 | INFO |   score=0.00 -> count=298
+2025-09-22 05:15:46,205 | INFO |   score=0.25 -> count=376
+2025-09-22 05:15:46,205 | INFO |   score=0.50 -> count=512
+2025-09-22 05:15:46,205 | INFO |   score=0.75 -> count=102
+2025-09-22 05:15:46,205 | INFO |   score=1.00 -> count=24
+2025-09-22 05:15:46,206 | INFO | EDA: Maximum target character count in test.csv: 47
+2025-09-22 05:15:46,213 | INFO | EDA: Maximum target character count in train.csv: 98
+2025-09-22 05:15:46,226 | INFO | EDA: Average anchor char len (train): 15.99
+2025-09-22 05:15:46,226 | INFO | EDA: Average target char len (train): 15.76
+2025-09-22 05:15:46,227 | INFO | Loading tokenizer from microsoft/deberta-v3-xsmall (use_fast=True)
+2025-09-22 05:15:47,685 | INFO | Tokenizer loaded: DebertaV2TokenizerFast
+2025-09-22 05:15:47,685 | INFO | Building text inputs with context enrichment...
+2025-09-22 05:15:47,686 | INFO | Context enrichment columns used: ['title', 'section', 'class', 'subclass']
+2025-09-22 05:15:47,686 | INFO | Sample built text_a[0]: anchor: project onto surface | context: G03 | title: PHOTOGRAPHY; CINEMATOGRAPHY; ANALOGOUS TECHNIQUES USING WAVES OTHER THAN OPTICAL WAVES; ELECTROGRAPHY; HOLOGRAPHY | section: G | class: 3.0 | subclass: nan
+2025-09-22 05:15:47,686 | INFO | Sample built text_b[0]: target: disposing
+2025-09-22 05:15:47,686 | INFO | Sample built text_a[1]: anchor: rotate on its longitudinal axis | context: B24 | title: GRINDING; POLISHING | section: B | class: 24.0 | subclass: nan
+2025-09-22 05:15:47,686 | INFO | Sample built text_b[1]: target: gear grinding device
+2025-09-22 05:15:47,824 | INFO | Completed building 3648 input text pairs.
+2025-09-22 05:15:47,824 | INFO | Building SWAPPED text inputs for augmentation/inference...
+2025-09-22 05:15:47,825 | INFO | Building text inputs with context enrichment...
+2025-09-22 05:15:47,825 | INFO | Context enrichment columns used: ['title', 'section', 'class', 'subclass']
+2025-09-22 05:15:47,825 | INFO | Sample built text_a[0]: anchor: disposing | context: G03 | title: PHOTOGRAPHY; CINEMATOGRAPHY; ANALOGOUS TECHNIQUES USING WAVES OTHER THAN OPTICAL WAVES; ELECTROGRAPHY; HOLOGRAPHY | section: G | class: 3.0 | subclass: nan
+2025-09-22 05:15:47,825 | INFO | Sample built text_b[0]: target: project onto surface
+2025-09-22 05:15:47,825 | INFO | Sample built text_a[1]: anchor: gear grinding device | context: B24 | title: GRINDING; POLISHING | section: B | class: 24.0 | subclass: nan
+2025-09-22 05:15:47,825 | INFO | Sample built text_b[1]: target: rotate on its longitudinal axis
+2025-09-22 05:15:47,966 | INFO | Completed building 3648 input text pairs.
+2025-09-22 05:15:47,966 | INFO | Prepared StratifiedKFold with 5 folds.
+2025-09-22 05:15:47,970 | INFO | ================================================================================
+2025-09-22 05:15:47,970 | INFO | Starting Fold 1/5
+2025-09-22 05:15:47,970 | INFO | Fold train size: 26260 | Fold valid size: 6565
+2025-09-22 05:15:47,970 | INFO | Building fold texts and labels with augmentation=True
+2025-09-22 05:15:47,977 | INFO | Building text inputs with context enrichment...
+2025-09-22 05:15:47,977 | INFO | Context enrichment columns used: ['title', 'section', 'class', 'subclass']
+2025-09-22 05:15:47,978 | INFO | Sample built text_a[0]: anchor: obstacle course | context: B60 | title: VEHICLES IN GENERAL | section: B | class: 60.0 | subclass: nan
+2025-09-22 05:15:47,978 | INFO | Sample built text_b[0]: target: obstacle position trajectory
+2025-09-22 05:15:47,978 | INFO | Sample built text_a[1]: anchor: hardware blocks | context: G06 | title: COMPUTING; CALCULATING; COUNTING | section: G | class: 6.0 | subclass: nan
+2025-09-22 05:15:47,978 | INFO | Sample built text_b[1]: target: housing
+2025-09-22 05:15:48,967 | INFO | Completed building 26260 input text pairs.
+2025-09-22 05:15:48,967 | INFO | Building soft class targets using Gaussian sigma=0.500 over 5 classes.
+2025-09-22 05:15:49,363 | INFO | Building SWAPPED text inputs for augmentation/inference...
+2025-09-22 05:15:49,365 | INFO | Building text inputs with context enrichment...
+2025-09-22 05:15:49,365 | INFO | Context enrichment columns used: ['title', 'section', 'class', 'subclass']
+2025-09-22 05:15:49,366 | INFO | Sample built text_a[0]: anchor: obstacle position trajectory | context: B60 | title: VEHICLES IN GENERAL | section: B | class: 60.0 | subclass: nan
+2025-09-22 05:15:49,366 | INFO | Sample built text_b[0]: target: obstacle course
+2025-09-22 05:15:49,366 | INFO | Sample built text_a[1]: anchor: housing | context: G06 | title: COMPUTING; CALCULATING; COUNTING | section: G | class: 6.0 | subclass: nan
+2025-09-22 05:15:49,366 | INFO | Sample built text_b[1]: target: hardware blocks
+2025-09-22 05:15:50,364 | INFO | Completed building 26260 input text pairs.
+2025-09-22 05:15:50,366 | INFO | Train augmentation doubled samples: 26260 -> 52520
+2025-09-22 05:15:50,366 | INFO | Building text inputs with context enrichment...
+2025-09-22 05:15:50,366 | INFO | Context enrichment columns used: ['title', 'section', 'class', 'subclass']
+2025-09-22 05:15:50,366 | INFO | Sample built text_a[0]: anchor: vertical chute | context: C21 | title: METALLURGY OF IRON | section: C | class: 21.0 | subclass: nan
+2025-09-22 05:15:50,366 | INFO | Sample built text_b[0]: target: horizontal cooling chamber
+2025-09-22 05:15:50,366 | INFO | Sample built text_a[1]: anchor: offset table | context: H04 | title: ELECTRIC COMMUNICATION TECHNIQUE | section: H | class: 4.0 | subclass: nan
+2025-09-22 05:15:50,366 | INFO | Sample built text_b[1]: target: gain matrix
+2025-09-22 05:15:50,618 | INFO | Completed building 6565 input text pairs.
+2025-09-22 05:15:50,619 | INFO | Building soft class targets using Gaussian sigma=0.500 over 5 classes.
+2025-09-22 05:15:50,723 | INFO | Tokenizing train/valid for fold 1 with max_length=96
+2025-09-22 05:15:55,283 | INFO | Computing sample weights for training loss balancing.
+2025-09-22 05:15:55,284 | INFO | Class counts per bin [0,0.25,0.5,0.75,1.0]: [10838.0, 16490.0, 17708.0, 5814.0, 1670.0]
+2025-09-22 05:15:55,284 | INFO | Weights per bin: [9.2267946456559e-05, 6.064281478757039e-05, 5.6471650168532506e-05, 0.0001719986175885424, 0.0005988024058751762]
+2025-09-22 05:15:55,285 | INFO | Initializing PatentRegressor with backbone: microsoft/deberta-v3-xsmall
+2025-09-22 05:15:56,175 | INFO | Gradient checkpointing disabled by config.
+2025-09-22 05:15:56,176 | INFO | Backbone hidden size: 384
+2025-09-22 05:15:56,176 | INFO | Pooling: mean_last_n over last 4 layers | MSD=5 | Class head=True
+2025-09-22 05:15:56,465 | INFO | Preparing LLRD optimizer (AdamW) with base_lr=0.000020, head_lr=0.001000, decay=0.900, weight_decay=0.010000
+2025-09-22 05:15:56,465 | INFO | Backbone num_hidden_layers: 12
+2025-09-22 05:15:56,465 | INFO | Embeddings lr: 0.00000508
+2025-09-22 05:15:56,466 | INFO | Layer 0 lr: 0.00000628 (params=16)
+2025-09-22 05:15:56,466 | INFO | Layer 1 lr: 0.00000697 (params=16)
+2025-09-22 05:15:56,467 | INFO | Layer 2 lr: 0.00000775 (params=16)
+2025-09-22 05:15:56,467 | INFO | Layer 3 lr: 0.00000861 (params=16)
+2025-09-22 05:15:56,467 | INFO | Layer 4 lr: 0.00000957 (params=16)
+2025-09-22 05:15:56,468 | INFO | Layer 5 lr: 0.00001063 (params=16)
+2025-09-22 05:15:56,468 | INFO | Layer 6 lr: 0.00001181 (params=16)
+2025-09-22 05:15:56,468 | INFO | Layer 7 lr: 0.00001312 (params=16)
+2025-09-22 05:15:56,469 | INFO | Layer 8 lr: 0.00001458 (params=16)
+2025-09-22 05:15:56,469 | INFO | Layer 9 lr: 0.00001620 (params=16)
+2025-09-22 05:15:56,469 | INFO | Layer 10 lr: 0.00001800 (params=16)
+2025-09-22 05:15:56,470 | INFO | Layer 11 lr: 0.00002000 (params=16)
+2025-09-22 05:15:56,470 | INFO | Other backbone no-decay params: 2, lr: 0.00002000
+2025-09-22 05:15:56,470 | INFO | Head params: 8 | head_lr: 0.00100000
+2025-09-22 05:15:56,471 | INFO | Preparing cosine scheduler: total steps=1642, warmup steps=164
+2025-09-22 05:15:56,471 | INFO | Using SmoothL1Loss with beta=0.1000
+2025-09-22 05:15:56,478 | INFO | Fold 1 | Epoch 1/2 - Training start

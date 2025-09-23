@@ -1,0 +1,692 @@
+2025-09-22 06:09:48,993 | INFO | Initialized logging. All logs will be written to task/us-patent-phrase-to-phrase-matching/outputs/3/code_3_v9.txt
+2025-09-22 06:09:48,993 | INFO | Using device: cuda
+2025-09-22 06:09:49,148 | INFO | CUDA available: True
+2025-09-22 06:09:49,171 | INFO | CUDA device name: NVIDIA A100-SXM4-80GB
+2025-09-22 06:09:49,173 | INFO | Config: {'model_name': 'microsoft/deberta-v3-xsmall', 'use_fast_tokenizer': True, 'max_len': 128, 'epochs': 3, 'train_bs': 64, 'valid_bs': 128, 'base_lr': 2e-05, 'head_lr': 0.001, 'weight_decay': 0.01, 'warmup_ratio': 0.1, 'grad_accum_steps': 1, 'max_grad_norm': 1.0, 'scheduler': 'cosine', 'use_fp16': True, 'pooling': 'wlp_attn', 'last_n_layers': 4, 'wlp_use_last_n': -1, 'mlp_hidden': 256, 'dropout': 0.2, 'msd_num': 5, 'llrd': True, 'llrd_decay': 0.9, 'use_smooth_l1': True, 'smooth_l1_beta': 0.1, 'use_class_weights': True, 'use_class_head': True, 'num_classes': 5, 'ord_sigma': 0.75, 'loss_w_reg': 1.0, 'loss_w_cls': 0.2, 'loss_w_emd': 0.2, 'rdrop_alpha': 0.5, 'pred_blend_alpha': 0.85, 'augment_swap': True, 'tta_swap': True, 'pad_to_multiple_of': 8, 'text_prefix_anchor': 'anchor:', 'text_prefix_target': 'target:', 'text_prefix_context': 'context:', 'text_prefix_title': 'title:', 'text_prefix_section': 'section:', 'text_prefix_class': 'class:', 'text_prefix_subclass': 'subclass:', 'use_context_title': True, 'use_context_section': True, 'use_context_class': True, 'use_context_subclass': True, 'grad_checkpointing': False, 'fgm': False, 'ema': True, 'ema_decay': 0.999, 'n_folds': 5, 'seed': 42, 'log_interval': 100}
+2025-09-22 06:09:49,173 | INFO | Setting random seeds: 42
+2025-09-22 06:09:49,174 | INFO | Loading train.csv from task/us-patent-phrase-to-phrase-matching/train.csv
+2025-09-22 06:09:49,207 | INFO | Loading test.csv from task/us-patent-phrase-to-phrase-matching/test.csv
+2025-09-22 06:09:49,211 | INFO | Loading titles.csv from task/us-patent-phrase-to-phrase-matching/titles.csv
+2025-09-22 06:09:49,504 | INFO | Loading sample_submission.csv from task/us-patent-phrase-to-phrase-matching/sample_submission.csv
+2025-09-22 06:09:49,506 | INFO | train_df shape: (32825, 5)
+2025-09-22 06:09:49,507 | INFO | test_df shape: (3648, 5)
+2025-09-22 06:09:49,507 | INFO | titles_df shape: (260476, 7)
+2025-09-22 06:09:49,507 | INFO | sample_submission shape: (3648, 2)
+2025-09-22 06:09:49,507 | INFO | train_df columns: ['id', 'anchor', 'target', 'context', 'score']
+2025-09-22 06:09:49,507 | INFO | test_df columns: ['id', 'anchor', 'target', 'context', 'score']
+2025-09-22 06:09:49,507 | INFO | titles_df columns: ['code', 'title', 'section', 'class', 'subclass', 'group', 'main_group']
+2025-09-22 06:09:49,510 | INFO | Head of titles_df:
+code                                                                                                                                                                                                                                                                                                              title section  class subclass  group  main_group
+   A                                                                                                                                                                                                                                                                                                  HUMAN NECESSITIES       A    NaN      NaN    NaN         NaN
+ A01                                                                                                                                                                                                                                                AGRICULTURE; FORESTRY; ANIMAL HUSBANDRY; HUNTING; TRAPPING; FISHING       A    1.0      NaN    NaN         NaN
+A01B SOIL WORKING IN AGRICULTURE OR FORESTRY; PARTS, DETAILS, OR ACCESSORIES OF AGRICULTURAL MACHINES OR IMPLEMENTS, IN GENERAL (making or covering furrows or holes for sowing, planting, or manuring A01C5/00; soil working for engineering purposes E01, E02, E21; {measuring areas for agricultural purposes G01B})       A    1.0        B    NaN         NaN
+2025-09-22 06:09:49,510 | INFO | Using title columns: ['code', 'title', 'section', 'subclass', 'class']
+2025-09-22 06:09:49,596 | INFO | train_merged shape: (32825, 10)
+2025-09-22 06:09:49,596 | INFO | test_merged shape: (3648, 10)
+2025-09-22 06:09:49,623 | INFO | Unique contexts in train: 106
+2025-09-22 06:09:49,623 | INFO | Unique contexts in test: 106
+2025-09-22 06:09:49,623 | INFO | Unique codes in titles: 260476
+2025-09-22 06:09:49,623 | INFO | Contexts in train not covered by titles codes: 0
+2025-09-22 06:09:49,623 | INFO | Contexts in test not covered by titles codes: 0
+2025-09-22 06:09:49,624 | INFO | Missing title count after merge (train): 0
+2025-09-22 06:09:49,625 | INFO | Missing title count after merge (test): 0
+2025-09-22 06:09:49,635 | INFO | EDA: Overlapping (anchor, target, context) triplets between train and test: 0
+2025-09-22 06:09:49,636 | INFO | EDA: Top 10 test context codes by count:
+2025-09-22 06:09:49,636 | INFO |   H01: count=230, pct=6.30%
+2025-09-22 06:09:49,636 | INFO |   H04: count=215, pct=5.89%
+2025-09-22 06:09:49,636 | INFO |   G01: count=179, pct=4.91%
+2025-09-22 06:09:49,636 | INFO |   A61: count=165, pct=4.52%
+2025-09-22 06:09:49,636 | INFO |   F16: count=121, pct=3.32%
+2025-09-22 06:09:49,636 | INFO |   C07: count=115, pct=3.15%
+2025-09-22 06:09:49,636 | INFO |   G06: count=99, pct=2.71%
+2025-09-22 06:09:49,636 | INFO |   B60: count=94, pct=2.58%
+2025-09-22 06:09:49,636 | INFO |   G02: count=89, pct=2.44%
+2025-09-22 06:09:49,636 | INFO |   H03: count=83, pct=2.28%
+2025-09-22 06:09:49,639 | INFO | EDA: Score distribution for context H04:
+2025-09-22 06:09:49,639 | INFO |   score=0.00 -> count=478
+2025-09-22 06:09:49,639 | INFO |   score=0.25 -> count=617
+2025-09-22 06:09:49,639 | INFO |   score=0.50 -> count=562
+2025-09-22 06:09:49,639 | INFO |   score=0.75 -> count=251
+2025-09-22 06:09:49,639 | INFO |   score=1.00 -> count=54
+2025-09-22 06:09:49,641 | INFO | EDA: Score distribution for context G01:
+2025-09-22 06:09:49,641 | INFO |   score=0.00 -> count=355
+2025-09-22 06:09:49,641 | INFO |   score=0.25 -> count=399
+2025-09-22 06:09:49,641 | INFO |   score=0.50 -> count=655
+2025-09-22 06:09:49,641 | INFO |   score=0.75 -> count=183
+2025-09-22 06:09:49,641 | INFO |   score=1.00 -> count=41
+2025-09-22 06:09:49,650 | INFO | EDA: Score distribution for context A61:
+2025-09-22 06:09:49,650 | INFO |   score=0.00 -> count=298
+2025-09-22 06:09:49,650 | INFO |   score=0.25 -> count=376
+2025-09-22 06:09:49,650 | INFO |   score=0.50 -> count=512
+2025-09-22 06:09:49,650 | INFO |   score=0.75 -> count=102
+2025-09-22 06:09:49,650 | INFO |   score=1.00 -> count=24
+2025-09-22 06:09:49,651 | INFO | EDA: Maximum target character count in test.csv: 47
+2025-09-22 06:09:49,657 | INFO | EDA: Maximum target character count in train.csv: 98
+2025-09-22 06:09:49,669 | INFO | EDA: Average anchor char len (train): 15.99
+2025-09-22 06:09:49,670 | INFO | EDA: Average target char len (train): 15.76
+2025-09-22 06:09:49,670 | INFO | Loading tokenizer from microsoft/deberta-v3-xsmall (use_fast=True)
+2025-09-22 06:09:51,214 | INFO | Tokenizer loaded: DebertaV2TokenizerFast
+2025-09-22 06:09:51,216 | INFO | Building text inputs with context enrichment...
+2025-09-22 06:09:51,216 | INFO | Context enrichment columns used: ['title', 'section', 'class', 'subclass']
+2025-09-22 06:09:51,218 | INFO | Sample built text_a[0]: anchor: project onto surface | context: G03 | title: PHOTOGRAPHY; CINEMATOGRAPHY; ANALOGOUS TECHNIQUES USING WAVES OTHER THAN OPTICAL WAVES; ELECTROGRAPHY; HOLOGRAPHY | section: G | class: 3.0 | subclass: nan
+2025-09-22 06:09:51,218 | INFO | Sample built text_b[0]: target: disposing
+2025-09-22 06:09:51,219 | INFO | Sample built text_a[1]: anchor: rotate on its longitudinal axis | context: B24 | title: GRINDING; POLISHING | section: B | class: 24.0 | subclass: nan
+2025-09-22 06:09:51,219 | INFO | Sample built text_b[1]: target: gear grinding device
+2025-09-22 06:09:51,357 | INFO | Completed building 3648 input text pairs.
+2025-09-22 06:09:51,357 | INFO | Building SWAPPED text inputs for augmentation/inference...
+2025-09-22 06:09:51,359 | INFO | Building text inputs with context enrichment...
+2025-09-22 06:09:51,359 | INFO | Context enrichment columns used: ['title', 'section', 'class', 'subclass']
+2025-09-22 06:09:51,359 | INFO | Sample built text_a[0]: anchor: disposing | context: G03 | title: PHOTOGRAPHY; CINEMATOGRAPHY; ANALOGOUS TECHNIQUES USING WAVES OTHER THAN OPTICAL WAVES; ELECTROGRAPHY; HOLOGRAPHY | section: G | class: 3.0 | subclass: nan
+2025-09-22 06:09:51,359 | INFO | Sample built text_b[0]: target: project onto surface
+2025-09-22 06:09:51,359 | INFO | Sample built text_a[1]: anchor: gear grinding device | context: B24 | title: GRINDING; POLISHING | section: B | class: 24.0 | subclass: nan
+2025-09-22 06:09:51,360 | INFO | Sample built text_b[1]: target: rotate on its longitudinal axis
+2025-09-22 06:09:51,495 | INFO | Completed building 3648 input text pairs.
+2025-09-22 06:09:51,497 | INFO | Prepared StratifiedKFold with 5 folds.
+2025-09-22 06:09:51,503 | INFO | ================================================================================
+2025-09-22 06:09:51,504 | INFO | Starting Fold 1/5
+2025-09-22 06:09:51,504 | INFO | Fold train size: 26260 | Fold valid size: 6565
+2025-09-22 06:09:51,504 | INFO | Building fold texts and labels with augmentation=True
+2025-09-22 06:09:51,519 | INFO | Building text inputs with context enrichment...
+2025-09-22 06:09:51,519 | INFO | Context enrichment columns used: ['title', 'section', 'class', 'subclass']
+2025-09-22 06:09:51,519 | INFO | Sample built text_a[0]: anchor: obstacle course | context: B60 | title: VEHICLES IN GENERAL | section: B | class: 60.0 | subclass: nan
+2025-09-22 06:09:51,519 | INFO | Sample built text_b[0]: target: obstacle position trajectory
+2025-09-22 06:09:51,519 | INFO | Sample built text_a[1]: anchor: hardware blocks | context: G06 | title: COMPUTING; CALCULATING; COUNTING | section: G | class: 6.0 | subclass: nan
+2025-09-22 06:09:51,519 | INFO | Sample built text_b[1]: target: housing
+2025-09-22 06:09:52,466 | INFO | Completed building 26260 input text pairs.
+2025-09-22 06:09:52,466 | INFO | Building soft class targets using Gaussian sigma=0.750 over 5 classes.
+2025-09-22 06:09:52,871 | INFO | Building SWAPPED text inputs for augmentation/inference...
+2025-09-22 06:09:52,873 | INFO | Building text inputs with context enrichment...
+2025-09-22 06:09:52,873 | INFO | Context enrichment columns used: ['title', 'section', 'class', 'subclass']
+2025-09-22 06:09:52,873 | INFO | Sample built text_a[0]: anchor: obstacle position trajectory | context: B60 | title: VEHICLES IN GENERAL | section: B | class: 60.0 | subclass: nan
+2025-09-22 06:09:52,873 | INFO | Sample built text_b[0]: target: obstacle course
+2025-09-22 06:09:52,874 | INFO | Sample built text_a[1]: anchor: housing | context: G06 | title: COMPUTING; CALCULATING; COUNTING | section: G | class: 6.0 | subclass: nan
+2025-09-22 06:09:52,874 | INFO | Sample built text_b[1]: target: hardware blocks
+2025-09-22 06:09:53,839 | INFO | Completed building 26260 input text pairs.
+2025-09-22 06:09:53,841 | INFO | Train augmentation doubled samples: 26260 -> 52520
+2025-09-22 06:09:53,841 | INFO | Building text inputs with context enrichment...
+2025-09-22 06:09:53,841 | INFO | Context enrichment columns used: ['title', 'section', 'class', 'subclass']
+2025-09-22 06:09:53,841 | INFO | Sample built text_a[0]: anchor: vertical chute | context: C21 | title: METALLURGY OF IRON | section: C | class: 21.0 | subclass: nan
+2025-09-22 06:09:53,842 | INFO | Sample built text_b[0]: target: horizontal cooling chamber
+2025-09-22 06:09:53,842 | INFO | Sample built text_a[1]: anchor: offset table | context: H04 | title: ELECTRIC COMMUNICATION TECHNIQUE | section: H | class: 4.0 | subclass: nan
+2025-09-22 06:09:53,842 | INFO | Sample built text_b[1]: target: gain matrix
+2025-09-22 06:09:54,082 | INFO | Completed building 6565 input text pairs.
+2025-09-22 06:09:54,083 | INFO | Building soft class targets using Gaussian sigma=0.750 over 5 classes.
+2025-09-22 06:09:54,184 | INFO | Tokenizing train/valid for fold 1 with max_length=128
+2025-09-22 06:09:58,909 | INFO | Computing sample weights for training loss balancing.
+2025-09-22 06:09:58,910 | INFO | Class counts per bin [0,0.25,0.5,0.75,1.0]: [10838.0, 16490.0, 17708.0, 5814.0, 1670.0]
+2025-09-22 06:09:58,910 | INFO | Weights per bin: [9.2267946456559e-05, 6.064281478757039e-05, 5.6471650168532506e-05, 0.0001719986175885424, 0.0005988024058751762]
+2025-09-22 06:09:59,047 | INFO | Initializing PatentRegressor with backbone: microsoft/deberta-v3-xsmall
+2025-09-22 06:10:00,119 | INFO | Gradient checkpointing disabled by config.
+2025-09-22 06:10:00,119 | INFO | Initialized WeightedLayerPooling over last 12 layers (of 13 total).
+2025-09-22 06:10:00,156 | INFO | Initialized TokenAttentionPooling with hidden_size=384
+2025-09-22 06:10:00,158 | INFO | Backbone hidden size: 384
+2025-09-22 06:10:00,158 | INFO | Pooling: wlp_attn | last_n=4 | wlp_use_last_n=12 | MSD=5 | Class head=True
+2025-09-22 06:10:00,473 | INFO | Preparing LLRD optimizer (AdamW) with base_lr=0.000020, head_lr=0.001000, decay=0.900, weight_decay=0.010000
+2025-09-22 06:10:00,473 | INFO | Backbone num_hidden_layers: 12
+2025-09-22 06:10:00,473 | INFO | Embeddings lr: 0.00000508
+2025-09-22 06:10:00,474 | INFO | Layer 0 lr: 0.00000628 (params=16)
+2025-09-22 06:10:00,475 | INFO | Layer 1 lr: 0.00000697 (params=16)
+2025-09-22 06:10:00,475 | INFO | Layer 2 lr: 0.00000775 (params=16)
+2025-09-22 06:10:00,475 | INFO | Layer 3 lr: 0.00000861 (params=16)
+2025-09-22 06:10:00,476 | INFO | Layer 4 lr: 0.00000957 (params=16)
+2025-09-22 06:10:00,476 | INFO | Layer 5 lr: 0.00001063 (params=16)
+2025-09-22 06:10:00,476 | INFO | Layer 6 lr: 0.00001181 (params=16)
+2025-09-22 06:10:00,477 | INFO | Layer 7 lr: 0.00001312 (params=16)
+2025-09-22 06:10:00,477 | INFO | Layer 8 lr: 0.00001458 (params=16)
+2025-09-22 06:10:00,477 | INFO | Layer 9 lr: 0.00001620 (params=16)
+2025-09-22 06:10:00,478 | INFO | Layer 10 lr: 0.00001800 (params=16)
+2025-09-22 06:10:00,478 | INFO | Layer 11 lr: 0.00002000 (params=16)
+2025-09-22 06:10:00,478 | INFO | Other backbone no-decay params: 2, lr: 0.00002000
+2025-09-22 06:10:00,479 | INFO | Head params: 13 | head_lr: 0.00100000
+2025-09-22 06:10:00,479 | INFO | Preparing cosine scheduler: total steps=2463, warmup steps=246
+2025-09-22 06:10:00,480 | INFO | Using SmoothL1Loss with beta=0.1000
+2025-09-22 06:10:00,487 | INFO | Fold 1 | Epoch 1/3 - Training start
+2025-09-22 06:10:13,263 | INFO | Fold 1 | Epoch 1 | Step 100/821 | Loss: 0.417377 | LR(head/base): 0.00040650 / 0.00000207
+2025-09-22 06:10:24,695 | INFO | Fold 1 | Epoch 1 | Step 200/821 | Loss: 0.258507 | LR(head/base): 0.00081301 / 0.00000413
+2025-09-22 06:10:36,048 | INFO | Fold 1 | Epoch 1 | Step 300/821 | Loss: 0.203804 | LR(head/base): 0.00099854 / 0.00000508
+2025-09-22 06:10:47,656 | INFO | Fold 1 | Epoch 1 | Step 400/821 | Loss: 0.200435 | LR(head/base): 0.00098814 / 0.00000502
+2025-09-22 06:10:59,171 | INFO | Fold 1 | Epoch 1 | Step 500/821 | Loss: 0.199118 | LR(head/base): 0.00096796 / 0.00000492
+2025-09-22 06:11:10,543 | INFO | Fold 1 | Epoch 1 | Step 600/821 | Loss: 0.179702 | LR(head/base): 0.00093840 / 0.00000477
+2025-09-22 06:11:21,966 | INFO | Fold 1 | Epoch 1 | Step 700/821 | Loss: 0.145126 | LR(head/base): 0.00090005 / 0.00000458
+2025-09-22 06:11:33,308 | INFO | Fold 1 | Epoch 1 | Step 800/821 | Loss: 0.184770 | LR(head/base): 0.00085368 / 0.00000434
+2025-09-22 06:11:35,769 | INFO | Fold 1 | Epoch 1 completed in 95.28s | Avg Train Loss: 0.240930
+2025-09-22 06:11:35,769 | INFO | Fold 1 | Epoch 1 | Validation (in-epoch) start
+2025-09-22 06:11:35,769 | INFO | Evaluation start (use_ema=True)
+2025-09-22 06:11:35,770 | INFO | Applying EMA shadow weights for evaluation.
+2025-09-22 06:11:37,177 | INFO | Restoring original (non-EMA) weights after evaluation.
+2025-09-22 06:11:37,181 | INFO | Evaluation done. Pearson=0.684997
+2025-09-22 06:11:37,375 | INFO | Fold 1 | Epoch 1 | New best Pearson: 0.684997 -> saved model state.
+2025-09-22 06:11:37,375 | INFO | Fold 1 | Epoch 2/3 - Training start
+2025-09-22 06:11:49,172 | INFO | Fold 1 | Epoch 2 | Step 100/821 | Loss: 0.165198 | LR(head/base): 0.00078819 / 0.00000401
+2025-09-22 06:12:01,466 | INFO | Fold 1 | Epoch 2 | Step 200/821 | Loss: 0.153026 | LR(head/base): 0.00072759 / 0.00000370
+2025-09-22 06:12:13,049 | INFO | Fold 1 | Epoch 2 | Step 300/821 | Loss: 0.155736 | LR(head/base): 0.00066244 / 0.00000337
+2025-09-22 06:12:24,575 | INFO | Fold 1 | Epoch 2 | Step 400/821 | Loss: 0.136094 | LR(head/base): 0.00059402 / 0.00000302
+2025-09-22 06:12:36,018 | INFO | Fold 1 | Epoch 2 | Step 500/821 | Loss: 0.168093 | LR(head/base): 0.00052373 / 0.00000266
+2025-09-22 06:12:47,501 | INFO | Fold 1 | Epoch 2 | Step 600/821 | Loss: 0.134421 | LR(head/base): 0.00045295 / 0.00000230
+2025-09-22 06:12:58,925 | INFO | Fold 1 | Epoch 2 | Step 700/821 | Loss: 0.176571 | LR(head/base): 0.00038312 / 0.00000195
+2025-09-22 06:13:10,416 | INFO | Fold 1 | Epoch 2 | Step 800/821 | Loss: 0.144050 | LR(head/base): 0.00031563 / 0.00000160
+2025-09-22 06:13:12,962 | INFO | Fold 1 | Epoch 2 completed in 95.59s | Avg Train Loss: 0.162967
+2025-09-22 06:13:12,963 | INFO | Fold 1 | Epoch 2 | Validation (in-epoch) start
+2025-09-22 06:13:12,963 | INFO | Evaluation start (use_ema=True)
+2025-09-22 06:13:12,963 | INFO | Applying EMA shadow weights for evaluation.
+2025-09-22 06:13:14,503 | INFO | Restoring original (non-EMA) weights after evaluation.
+2025-09-22 06:13:14,507 | INFO | Evaluation done. Pearson=0.742614
+2025-09-22 06:13:14,715 | INFO | Fold 1 | Epoch 2 | New best Pearson: 0.742614 -> saved model state.
+2025-09-22 06:13:14,715 | INFO | Fold 1 | Epoch 3/3 - Training start
+2025-09-22 06:13:26,297 | INFO | Fold 1 | Epoch 3 | Step 100/821 | Loss: 0.112807 | LR(head/base): 0.00023904 / 0.00000122
+2025-09-22 06:13:37,580 | INFO | Fold 1 | Epoch 3 | Step 200/821 | Loss: 0.129919 | LR(head/base): 0.00018142 / 0.00000092
+2025-09-22 06:13:48,937 | INFO | Fold 1 | Epoch 3 | Step 300/821 | Loss: 0.138491 | LR(head/base): 0.00013019 / 0.00000066
+2025-09-22 06:14:00,380 | INFO | Fold 1 | Epoch 3 | Step 400/821 | Loss: 0.195323 | LR(head/base): 0.00008637 / 0.00000044
+2025-09-22 06:14:11,833 | INFO | Fold 1 | Epoch 3 | Step 500/821 | Loss: 0.165908 | LR(head/base): 0.00005084 / 0.00000026
+2025-09-22 06:14:23,441 | INFO | Fold 1 | Epoch 3 | Step 600/821 | Loss: 0.113542 | LR(head/base): 0.00002432 / 0.00000012
+2025-09-22 06:14:34,851 | INFO | Fold 1 | Epoch 3 | Step 700/821 | Loss: 0.140932 | LR(head/base): 0.00000733 / 0.00000004
+2025-09-22 06:14:46,099 | INFO | Fold 1 | Epoch 3 | Step 800/821 | Loss: 0.131297 | LR(head/base): 0.00000022 / 0.00000000
+2025-09-22 06:14:48,569 | INFO | Fold 1 | Epoch 3 completed in 93.85s | Avg Train Loss: 0.149024
+2025-09-22 06:14:48,570 | INFO | Fold 1 | Epoch 3 | Validation (in-epoch) start
+2025-09-22 06:14:48,570 | INFO | Evaluation start (use_ema=True)
+2025-09-22 06:14:48,570 | INFO | Applying EMA shadow weights for evaluation.
+2025-09-22 06:14:49,994 | INFO | Restoring original (non-EMA) weights after evaluation.
+2025-09-22 06:14:49,998 | INFO | Evaluation done. Pearson=0.761508
+2025-09-22 06:14:50,166 | INFO | Fold 1 | Epoch 3 | New best Pearson: 0.761508 -> saved model state.
+2025-09-22 06:14:50,167 | INFO | Fold 1 | Loading best model state with Pearson=0.761508
+2025-09-22 06:14:50,199 | INFO | Fold 1 | Final Validation with best model
+2025-09-22 06:14:50,199 | INFO | Evaluation start (use_ema=True)
+2025-09-22 06:14:50,200 | INFO | Applying EMA shadow weights for evaluation.
+2025-09-22 06:14:51,641 | INFO | Restoring original (non-EMA) weights after evaluation.
+2025-09-22 06:14:51,645 | INFO | Evaluation done. Pearson=0.761508
+2025-09-22 06:14:51,645 | INFO | Fold 1 | Validation Pearson: 0.761508
+2025-09-22 06:14:51,645 | INFO | Applying EMA weights for test inference.
+2025-09-22 06:14:51,650 | INFO | Fold 1 | Tokenizing test set
+2025-09-22 06:14:51,882 | INFO | Fold 1 | Test inference start
+2025-09-22 06:14:52,845 | INFO | Fold 1 | TTA swap enabled: running swapped test inference
+2025-09-22 06:14:54,066 | INFO | Fold 1 | TTA averaging completed
+2025-09-22 06:14:54,066 | INFO | Restoring original weights after EMA test inference.
+2025-09-22 06:14:54,071 | INFO | Fold 1 | Test inference completed
+2025-09-22 06:14:54,672 | INFO | ================================================================================
+2025-09-22 06:14:54,672 | INFO | Starting Fold 2/5
+2025-09-22 06:14:54,672 | INFO | Fold train size: 26260 | Fold valid size: 6565
+2025-09-22 06:14:54,672 | INFO | Building fold texts and labels with augmentation=True
+2025-09-22 06:14:54,684 | INFO | Building text inputs with context enrichment...
+2025-09-22 06:14:54,684 | INFO | Context enrichment columns used: ['title', 'section', 'class', 'subclass']
+2025-09-22 06:14:54,684 | INFO | Sample built text_a[0]: anchor: obstacle course | context: B60 | title: VEHICLES IN GENERAL | section: B | class: 60.0 | subclass: nan
+2025-09-22 06:14:54,684 | INFO | Sample built text_b[0]: target: obstacle position trajectory
+2025-09-22 06:14:54,684 | INFO | Sample built text_a[1]: anchor: hardware blocks | context: G06 | title: COMPUTING; CALCULATING; COUNTING | section: G | class: 6.0 | subclass: nan
+2025-09-22 06:14:54,684 | INFO | Sample built text_b[1]: target: housing
+2025-09-22 06:14:55,644 | INFO | Completed building 26260 input text pairs.
+2025-09-22 06:14:55,644 | INFO | Building soft class targets using Gaussian sigma=0.750 over 5 classes.
+2025-09-22 06:14:56,063 | INFO | Building SWAPPED text inputs for augmentation/inference...
+2025-09-22 06:14:56,067 | INFO | Building text inputs with context enrichment...
+2025-09-22 06:14:56,067 | INFO | Context enrichment columns used: ['title', 'section', 'class', 'subclass']
+2025-09-22 06:14:56,067 | INFO | Sample built text_a[0]: anchor: obstacle position trajectory | context: B60 | title: VEHICLES IN GENERAL | section: B | class: 60.0 | subclass: nan
+2025-09-22 06:14:56,067 | INFO | Sample built text_b[0]: target: obstacle course
+2025-09-22 06:14:56,067 | INFO | Sample built text_a[1]: anchor: housing | context: G06 | title: COMPUTING; CALCULATING; COUNTING | section: G | class: 6.0 | subclass: nan
+2025-09-22 06:14:56,067 | INFO | Sample built text_b[1]: target: hardware blocks
+2025-09-22 06:14:57,009 | INFO | Completed building 26260 input text pairs.
+2025-09-22 06:14:57,011 | INFO | Train augmentation doubled samples: 26260 -> 52520
+2025-09-22 06:14:57,011 | INFO | Building text inputs with context enrichment...
+2025-09-22 06:14:57,011 | INFO | Context enrichment columns used: ['title', 'section', 'class', 'subclass']
+2025-09-22 06:14:57,011 | INFO | Sample built text_a[0]: anchor: application messaging | context: G06 | title: COMPUTING; CALCULATING; COUNTING | section: G | class: 6.0 | subclass: nan
+2025-09-22 06:14:57,011 | INFO | Sample built text_b[0]: target: various functionality
+2025-09-22 06:14:57,011 | INFO | Sample built text_a[1]: anchor: alpha gypsum | context: B32 | title: LAYERED PRODUCTS | section: B | class: 32.0 | subclass: nan
+2025-09-22 06:14:57,011 | INFO | Sample built text_b[1]: target: alpha beta sulfate
+2025-09-22 06:14:57,248 | INFO | Completed building 6565 input text pairs.
+2025-09-22 06:14:57,249 | INFO | Building soft class targets using Gaussian sigma=0.750 over 5 classes.
+2025-09-22 06:14:57,357 | INFO | Tokenizing train/valid for fold 2 with max_length=128
+2025-09-22 06:15:01,747 | INFO | Computing sample weights for training loss balancing.
+2025-09-22 06:15:01,748 | INFO | Class counts per bin [0,0.25,0.5,0.75,1.0]: [10838.0, 16490.0, 17708.0, 5814.0, 1670.0]
+2025-09-22 06:15:01,748 | INFO | Weights per bin: [9.2267946456559e-05, 6.064281478757039e-05, 5.6471650168532506e-05, 0.0001719986175885424, 0.0005988024058751762]
+2025-09-22 06:15:01,935 | INFO | Initializing PatentRegressor with backbone: microsoft/deberta-v3-xsmall
+2025-09-22 06:15:02,464 | INFO | Gradient checkpointing disabled by config.
+2025-09-22 06:15:02,464 | INFO | Initialized WeightedLayerPooling over last 12 layers (of 13 total).
+2025-09-22 06:15:02,465 | INFO | Initialized TokenAttentionPooling with hidden_size=384
+2025-09-22 06:15:02,466 | INFO | Backbone hidden size: 384
+2025-09-22 06:15:02,466 | INFO | Pooling: wlp_attn | last_n=4 | wlp_use_last_n=12 | MSD=5 | Class head=True
+2025-09-22 06:15:02,524 | INFO | Preparing LLRD optimizer (AdamW) with base_lr=0.000020, head_lr=0.001000, decay=0.900, weight_decay=0.010000
+2025-09-22 06:15:02,524 | INFO | Backbone num_hidden_layers: 12
+2025-09-22 06:15:02,525 | INFO | Embeddings lr: 0.00000508
+2025-09-22 06:15:02,525 | INFO | Layer 0 lr: 0.00000628 (params=16)
+2025-09-22 06:15:02,525 | INFO | Layer 1 lr: 0.00000697 (params=16)
+2025-09-22 06:15:02,526 | INFO | Layer 2 lr: 0.00000775 (params=16)
+2025-09-22 06:15:02,526 | INFO | Layer 3 lr: 0.00000861 (params=16)
+2025-09-22 06:15:02,526 | INFO | Layer 4 lr: 0.00000957 (params=16)
+2025-09-22 06:15:02,526 | INFO | Layer 5 lr: 0.00001063 (params=16)
+2025-09-22 06:15:02,527 | INFO | Layer 6 lr: 0.00001181 (params=16)
+2025-09-22 06:15:02,527 | INFO | Layer 7 lr: 0.00001312 (params=16)
+2025-09-22 06:15:02,527 | INFO | Layer 8 lr: 0.00001458 (params=16)
+2025-09-22 06:15:02,528 | INFO | Layer 9 lr: 0.00001620 (params=16)
+2025-09-22 06:15:02,528 | INFO | Layer 10 lr: 0.00001800 (params=16)
+2025-09-22 06:15:02,528 | INFO | Layer 11 lr: 0.00002000 (params=16)
+2025-09-22 06:15:02,529 | INFO | Other backbone no-decay params: 2, lr: 0.00002000
+2025-09-22 06:15:02,529 | INFO | Head params: 13 | head_lr: 0.00100000
+2025-09-22 06:15:02,530 | INFO | Preparing cosine scheduler: total steps=2463, warmup steps=246
+2025-09-22 06:15:02,530 | INFO | Using SmoothL1Loss with beta=0.1000
+2025-09-22 06:15:02,534 | INFO | Fold 2 | Epoch 1/3 - Training start
+2025-09-22 06:15:13,949 | INFO | Fold 2 | Epoch 1 | Step 100/821 | Loss: 0.428021 | LR(head/base): 0.00040650 / 0.00000207
+2025-09-22 06:15:25,187 | INFO | Fold 2 | Epoch 1 | Step 200/821 | Loss: 0.191185 | LR(head/base): 0.00081301 / 0.00000413
+2025-09-22 06:15:36,557 | INFO | Fold 2 | Epoch 1 | Step 300/821 | Loss: 0.205023 | LR(head/base): 0.00099854 / 0.00000508
+2025-09-22 06:15:47,940 | INFO | Fold 2 | Epoch 1 | Step 400/821 | Loss: 0.220006 | LR(head/base): 0.00098814 / 0.00000502
+2025-09-22 06:15:59,174 | INFO | Fold 2 | Epoch 1 | Step 500/821 | Loss: 0.186995 | LR(head/base): 0.00096796 / 0.00000492
+2025-09-22 06:16:10,431 | INFO | Fold 2 | Epoch 1 | Step 600/821 | Loss: 0.200079 | LR(head/base): 0.00093840 / 0.00000477
+2025-09-22 06:16:21,660 | INFO | Fold 2 | Epoch 1 | Step 700/821 | Loss: 0.203833 | LR(head/base): 0.00090005 / 0.00000458
+2025-09-22 06:16:32,829 | INFO | Fold 2 | Epoch 1 | Step 800/821 | Loss: 0.141274 | LR(head/base): 0.00085368 / 0.00000434
+2025-09-22 06:16:35,261 | INFO | Fold 2 | Epoch 1 completed in 92.73s | Avg Train Loss: 0.235707
+2025-09-22 06:16:35,261 | INFO | Fold 2 | Epoch 1 | Validation (in-epoch) start
+2025-09-22 06:16:35,261 | INFO | Evaluation start (use_ema=True)
+2025-09-22 06:16:35,262 | INFO | Applying EMA shadow weights for evaluation.
+2025-09-22 06:16:36,884 | INFO | Restoring original (non-EMA) weights after evaluation.
+2025-09-22 06:16:36,888 | INFO | Evaluation done. Pearson=0.683416
+2025-09-22 06:16:37,069 | INFO | Fold 2 | Epoch 1 | New best Pearson: 0.683416 -> saved model state.
+2025-09-22 06:16:37,069 | INFO | Fold 2 | Epoch 2/3 - Training start
+2025-09-22 06:16:48,644 | INFO | Fold 2 | Epoch 2 | Step 100/821 | Loss: 0.139898 | LR(head/base): 0.00078819 / 0.00000401
+2025-09-22 06:16:59,962 | INFO | Fold 2 | Epoch 2 | Step 200/821 | Loss: 0.199272 | LR(head/base): 0.00072759 / 0.00000370
+2025-09-22 06:17:11,306 | INFO | Fold 2 | Epoch 2 | Step 300/821 | Loss: 0.165675 | LR(head/base): 0.00066244 / 0.00000337
+2025-09-22 06:17:22,535 | INFO | Fold 2 | Epoch 2 | Step 400/821 | Loss: 0.179859 | LR(head/base): 0.00059402 / 0.00000302
+2025-09-22 06:17:33,725 | INFO | Fold 2 | Epoch 2 | Step 500/821 | Loss: 0.145181 | LR(head/base): 0.00052373 / 0.00000266
+2025-09-22 06:17:45,117 | INFO | Fold 2 | Epoch 2 | Step 600/821 | Loss: 0.132660 | LR(head/base): 0.00045295 / 0.00000230
+2025-09-22 06:17:56,474 | INFO | Fold 2 | Epoch 2 | Step 700/821 | Loss: 0.128428 | LR(head/base): 0.00038312 / 0.00000195
+2025-09-22 06:18:07,918 | INFO | Fold 2 | Epoch 2 | Step 800/821 | Loss: 0.171213 | LR(head/base): 0.00031563 / 0.00000160
+2025-09-22 06:18:10,404 | INFO | Fold 2 | Epoch 2 completed in 93.33s | Avg Train Loss: 0.159597
+2025-09-22 06:18:10,405 | INFO | Fold 2 | Epoch 2 | Validation (in-epoch) start
+2025-09-22 06:18:10,405 | INFO | Evaluation start (use_ema=True)
+2025-09-22 06:18:10,405 | INFO | Applying EMA shadow weights for evaluation.
+2025-09-22 06:18:11,895 | INFO | Restoring original (non-EMA) weights after evaluation.
+2025-09-22 06:18:11,899 | INFO | Evaluation done. Pearson=0.745679
+2025-09-22 06:18:12,108 | INFO | Fold 2 | Epoch 2 | New best Pearson: 0.745679 -> saved model state.
+2025-09-22 06:18:12,108 | INFO | Fold 2 | Epoch 3/3 - Training start
+2025-09-22 06:18:23,751 | INFO | Fold 2 | Epoch 3 | Step 100/821 | Loss: 0.196242 | LR(head/base): 0.00023904 / 0.00000122
+2025-09-22 06:18:35,553 | INFO | Fold 2 | Epoch 3 | Step 200/821 | Loss: 0.143214 | LR(head/base): 0.00018142 / 0.00000092
+2025-09-22 06:18:46,889 | INFO | Fold 2 | Epoch 3 | Step 300/821 | Loss: 0.118533 | LR(head/base): 0.00013019 / 0.00000066
+2025-09-22 06:18:58,357 | INFO | Fold 2 | Epoch 3 | Step 400/821 | Loss: 0.130747 | LR(head/base): 0.00008637 / 0.00000044
+2025-09-22 06:19:09,791 | INFO | Fold 2 | Epoch 3 | Step 500/821 | Loss: 0.136443 | LR(head/base): 0.00005084 / 0.00000026
+2025-09-22 06:19:21,246 | INFO | Fold 2 | Epoch 3 | Step 600/821 | Loss: 0.117486 | LR(head/base): 0.00002432 / 0.00000012
+2025-09-22 06:19:32,627 | INFO | Fold 2 | Epoch 3 | Step 700/821 | Loss: 0.116840 | LR(head/base): 0.00000733 / 0.00000004
+2025-09-22 06:19:43,915 | INFO | Fold 2 | Epoch 3 | Step 800/821 | Loss: 0.107700 | LR(head/base): 0.00000022 / 0.00000000
+2025-09-22 06:19:46,405 | INFO | Fold 2 | Epoch 3 completed in 94.30s | Avg Train Loss: 0.145843
+2025-09-22 06:19:46,405 | INFO | Fold 2 | Epoch 3 | Validation (in-epoch) start
+2025-09-22 06:19:46,405 | INFO | Evaluation start (use_ema=True)
+2025-09-22 06:19:46,406 | INFO | Applying EMA shadow weights for evaluation.
+2025-09-22 06:19:47,907 | INFO | Restoring original (non-EMA) weights after evaluation.
+2025-09-22 06:19:47,911 | INFO | Evaluation done. Pearson=0.762019
+2025-09-22 06:19:48,090 | INFO | Fold 2 | Epoch 3 | New best Pearson: 0.762019 -> saved model state.
+2025-09-22 06:19:48,090 | INFO | Fold 2 | Loading best model state with Pearson=0.762019
+2025-09-22 06:19:48,140 | INFO | Fold 2 | Final Validation with best model
+2025-09-22 06:19:48,140 | INFO | Evaluation start (use_ema=True)
+2025-09-22 06:19:48,141 | INFO | Applying EMA shadow weights for evaluation.
+2025-09-22 06:19:49,776 | INFO | Restoring original (non-EMA) weights after evaluation.
+2025-09-22 06:19:49,780 | INFO | Evaluation done. Pearson=0.762019
+2025-09-22 06:19:49,780 | INFO | Fold 2 | Validation Pearson: 0.762019
+2025-09-22 06:19:49,780 | INFO | Applying EMA weights for test inference.
+2025-09-22 06:19:49,785 | INFO | Fold 2 | Tokenizing test set
+2025-09-22 06:19:50,014 | INFO | Fold 2 | Test inference start
+2025-09-22 06:19:51,090 | INFO | Fold 2 | TTA swap enabled: running swapped test inference
+2025-09-22 06:19:52,297 | INFO | Fold 2 | TTA averaging completed
+2025-09-22 06:19:52,297 | INFO | Restoring original weights after EMA test inference.
+2025-09-22 06:19:52,302 | INFO | Fold 2 | Test inference completed
+2025-09-22 06:19:52,840 | INFO | ================================================================================
+2025-09-22 06:19:52,841 | INFO | Starting Fold 3/5
+2025-09-22 06:19:52,841 | INFO | Fold train size: 26260 | Fold valid size: 6565
+2025-09-22 06:19:52,841 | INFO | Building fold texts and labels with augmentation=True
+2025-09-22 06:19:52,851 | INFO | Building text inputs with context enrichment...
+2025-09-22 06:19:52,851 | INFO | Context enrichment columns used: ['title', 'section', 'class', 'subclass']
+2025-09-22 06:19:52,851 | INFO | Sample built text_a[0]: anchor: hardware blocks | context: G06 | title: COMPUTING; CALCULATING; COUNTING | section: G | class: 6.0 | subclass: nan
+2025-09-22 06:19:52,851 | INFO | Sample built text_b[0]: target: housing
+2025-09-22 06:19:52,851 | INFO | Sample built text_a[1]: anchor: collator | context: H04 | title: ELECTRIC COMMUNICATION TECHNIQUE | section: H | class: 4.0 | subclass: nan
+2025-09-22 06:19:52,851 | INFO | Sample built text_b[1]: target: collation apparatus
+2025-09-22 06:19:53,818 | INFO | Completed building 26260 input text pairs.
+2025-09-22 06:19:53,818 | INFO | Building soft class targets using Gaussian sigma=0.750 over 5 classes.
+2025-09-22 06:19:54,213 | INFO | Building SWAPPED text inputs for augmentation/inference...
+2025-09-22 06:19:54,216 | INFO | Building text inputs with context enrichment...
+2025-09-22 06:19:54,217 | INFO | Context enrichment columns used: ['title', 'section', 'class', 'subclass']
+2025-09-22 06:19:54,217 | INFO | Sample built text_a[0]: anchor: housing | context: G06 | title: COMPUTING; CALCULATING; COUNTING | section: G | class: 6.0 | subclass: nan
+2025-09-22 06:19:54,217 | INFO | Sample built text_b[0]: target: hardware blocks
+2025-09-22 06:19:54,217 | INFO | Sample built text_a[1]: anchor: collation apparatus | context: H04 | title: ELECTRIC COMMUNICATION TECHNIQUE | section: H | class: 4.0 | subclass: nan
+2025-09-22 06:19:54,217 | INFO | Sample built text_b[1]: target: collator
+2025-09-22 06:19:55,172 | INFO | Completed building 26260 input text pairs.
+2025-09-22 06:19:55,174 | INFO | Train augmentation doubled samples: 26260 -> 52520
+2025-09-22 06:19:55,174 | INFO | Building text inputs with context enrichment...
+2025-09-22 06:19:55,174 | INFO | Context enrichment columns used: ['title', 'section', 'class', 'subclass']
+2025-09-22 06:19:55,174 | INFO | Sample built text_a[0]: anchor: obstacle course | context: B60 | title: VEHICLES IN GENERAL | section: B | class: 60.0 | subclass: nan
+2025-09-22 06:19:55,174 | INFO | Sample built text_b[0]: target: obstacle position trajectory
+2025-09-22 06:19:55,174 | INFO | Sample built text_a[1]: anchor: engage clamp | context: H01 | title: BASIC ELECTRIC ELEMENTS | section: H | class: 1.0 | subclass: nan
+2025-09-22 06:19:55,174 | INFO | Sample built text_b[1]: target: disconnect clamp
+2025-09-22 06:19:55,419 | INFO | Completed building 6565 input text pairs.
+2025-09-22 06:19:55,419 | INFO | Building soft class targets using Gaussian sigma=0.750 over 5 classes.
+2025-09-22 06:19:55,523 | INFO | Tokenizing train/valid for fold 3 with max_length=128
+2025-09-22 06:19:59,469 | INFO | Computing sample weights for training loss balancing.
+2025-09-22 06:19:59,469 | INFO | Class counts per bin [0,0.25,0.5,0.75,1.0]: [10840.0, 16490.0, 17708.0, 5814.0, 1668.0]
+2025-09-22 06:19:59,469 | INFO | Weights per bin: [9.225092071574181e-05, 6.064281478757039e-05, 5.6471650168532506e-05, 0.0001719986175885424, 0.0005995203973725438]
+2025-09-22 06:19:59,637 | INFO | Initializing PatentRegressor with backbone: microsoft/deberta-v3-xsmall
+2025-09-22 06:20:00,114 | INFO | Gradient checkpointing disabled by config.
+2025-09-22 06:20:00,114 | INFO | Initialized WeightedLayerPooling over last 12 layers (of 13 total).
+2025-09-22 06:20:00,115 | INFO | Initialized TokenAttentionPooling with hidden_size=384
+2025-09-22 06:20:00,116 | INFO | Backbone hidden size: 384
+2025-09-22 06:20:00,116 | INFO | Pooling: wlp_attn | last_n=4 | wlp_use_last_n=12 | MSD=5 | Class head=True
+2025-09-22 06:20:00,218 | INFO | Preparing LLRD optimizer (AdamW) with base_lr=0.000020, head_lr=0.001000, decay=0.900, weight_decay=0.010000
+2025-09-22 06:20:00,218 | INFO | Backbone num_hidden_layers: 12
+2025-09-22 06:20:00,219 | INFO | Embeddings lr: 0.00000508
+2025-09-22 06:20:00,219 | INFO | Layer 0 lr: 0.00000628 (params=16)
+2025-09-22 06:20:00,220 | INFO | Layer 1 lr: 0.00000697 (params=16)
+2025-09-22 06:20:00,220 | INFO | Layer 2 lr: 0.00000775 (params=16)
+2025-09-22 06:20:00,220 | INFO | Layer 3 lr: 0.00000861 (params=16)
+2025-09-22 06:20:00,221 | INFO | Layer 4 lr: 0.00000957 (params=16)
+2025-09-22 06:20:00,221 | INFO | Layer 5 lr: 0.00001063 (params=16)
+2025-09-22 06:20:00,221 | INFO | Layer 6 lr: 0.00001181 (params=16)
+2025-09-22 06:20:00,221 | INFO | Layer 7 lr: 0.00001312 (params=16)
+2025-09-22 06:20:00,222 | INFO | Layer 8 lr: 0.00001458 (params=16)
+2025-09-22 06:20:00,222 | INFO | Layer 9 lr: 0.00001620 (params=16)
+2025-09-22 06:20:00,222 | INFO | Layer 10 lr: 0.00001800 (params=16)
+2025-09-22 06:20:00,223 | INFO | Layer 11 lr: 0.00002000 (params=16)
+2025-09-22 06:20:00,223 | INFO | Other backbone no-decay params: 2, lr: 0.00002000
+2025-09-22 06:20:00,223 | INFO | Head params: 13 | head_lr: 0.00100000
+2025-09-22 06:20:00,224 | INFO | Preparing cosine scheduler: total steps=2463, warmup steps=246
+2025-09-22 06:20:00,224 | INFO | Using SmoothL1Loss with beta=0.1000
+2025-09-22 06:20:00,227 | INFO | Fold 3 | Epoch 1/3 - Training start
+2025-09-22 06:20:11,861 | INFO | Fold 3 | Epoch 1 | Step 100/821 | Loss: 0.252577 | LR(head/base): 0.00040650 / 0.00000207
+2025-09-22 06:20:23,281 | INFO | Fold 3 | Epoch 1 | Step 200/821 | Loss: 0.220490 | LR(head/base): 0.00081301 / 0.00000413
+2025-09-22 06:20:34,868 | INFO | Fold 3 | Epoch 1 | Step 300/821 | Loss: 0.229162 | LR(head/base): 0.00099854 / 0.00000508
+2025-09-22 06:20:46,896 | INFO | Fold 3 | Epoch 1 | Step 400/821 | Loss: 0.242618 | LR(head/base): 0.00098814 / 0.00000502
+2025-09-22 06:20:58,332 | INFO | Fold 3 | Epoch 1 | Step 500/821 | Loss: 0.235920 | LR(head/base): 0.00096796 / 0.00000492
+2025-09-22 06:21:09,704 | INFO | Fold 3 | Epoch 1 | Step 600/821 | Loss: 0.195367 | LR(head/base): 0.00093840 / 0.00000477
+2025-09-22 06:21:21,027 | INFO | Fold 3 | Epoch 1 | Step 700/821 | Loss: 0.157921 | LR(head/base): 0.00090005 / 0.00000458
+2025-09-22 06:21:32,471 | INFO | Fold 3 | Epoch 1 | Step 800/821 | Loss: 0.129327 | LR(head/base): 0.00085368 / 0.00000434
+2025-09-22 06:21:34,958 | INFO | Fold 3 | Epoch 1 completed in 94.73s | Avg Train Loss: 0.232586
+2025-09-22 06:21:34,958 | INFO | Fold 3 | Epoch 1 | Validation (in-epoch) start
+2025-09-22 06:21:34,958 | INFO | Evaluation start (use_ema=True)
+2025-09-22 06:21:34,959 | INFO | Applying EMA shadow weights for evaluation.
+2025-09-22 06:21:36,457 | INFO | Restoring original (non-EMA) weights after evaluation.
+2025-09-22 06:21:36,461 | INFO | Evaluation done. Pearson=0.692983
+2025-09-22 06:21:36,660 | INFO | Fold 3 | Epoch 1 | New best Pearson: 0.692983 -> saved model state.
+2025-09-22 06:21:36,660 | INFO | Fold 3 | Epoch 2/3 - Training start
+2025-09-22 06:21:48,229 | INFO | Fold 3 | Epoch 2 | Step 100/821 | Loss: 0.190733 | LR(head/base): 0.00078819 / 0.00000401
+2025-09-22 06:21:59,559 | INFO | Fold 3 | Epoch 2 | Step 200/821 | Loss: 0.193496 | LR(head/base): 0.00072759 / 0.00000370
+2025-09-22 06:22:10,996 | INFO | Fold 3 | Epoch 2 | Step 300/821 | Loss: 0.179439 | LR(head/base): 0.00066244 / 0.00000337
+2025-09-22 06:22:22,512 | INFO | Fold 3 | Epoch 2 | Step 400/821 | Loss: 0.137479 | LR(head/base): 0.00059402 / 0.00000302
+2025-09-22 06:22:33,909 | INFO | Fold 3 | Epoch 2 | Step 500/821 | Loss: 0.145119 | LR(head/base): 0.00052373 / 0.00000266
+2025-09-22 06:22:45,340 | INFO | Fold 3 | Epoch 2 | Step 600/821 | Loss: 0.125969 | LR(head/base): 0.00045295 / 0.00000230
+2025-09-22 06:22:56,811 | INFO | Fold 3 | Epoch 2 | Step 700/821 | Loss: 0.128800 | LR(head/base): 0.00038312 / 0.00000195
+2025-09-22 06:23:08,231 | INFO | Fold 3 | Epoch 2 | Step 800/821 | Loss: 0.158369 | LR(head/base): 0.00031563 / 0.00000160
+2025-09-22 06:23:10,757 | INFO | Fold 3 | Epoch 2 completed in 94.10s | Avg Train Loss: 0.159964
+2025-09-22 06:23:10,757 | INFO | Fold 3 | Epoch 2 | Validation (in-epoch) start
+2025-09-22 06:23:10,758 | INFO | Evaluation start (use_ema=True)
+2025-09-22 06:23:10,758 | INFO | Applying EMA shadow weights for evaluation.
+2025-09-22 06:23:12,271 | INFO | Restoring original (non-EMA) weights after evaluation.
+2025-09-22 06:23:12,275 | INFO | Evaluation done. Pearson=0.747432
+2025-09-22 06:23:12,511 | INFO | Fold 3 | Epoch 2 | New best Pearson: 0.747432 -> saved model state.
+2025-09-22 06:23:12,511 | INFO | Fold 3 | Epoch 3/3 - Training start
+2025-09-22 06:23:24,128 | INFO | Fold 3 | Epoch 3 | Step 100/821 | Loss: 0.103094 | LR(head/base): 0.00023904 / 0.00000122
+2025-09-22 06:23:35,496 | INFO | Fold 3 | Epoch 3 | Step 200/821 | Loss: 0.140594 | LR(head/base): 0.00018142 / 0.00000092
+2025-09-22 06:23:46,874 | INFO | Fold 3 | Epoch 3 | Step 300/821 | Loss: 0.178027 | LR(head/base): 0.00013019 / 0.00000066
+2025-09-22 06:23:58,295 | INFO | Fold 3 | Epoch 3 | Step 400/821 | Loss: 0.130348 | LR(head/base): 0.00008637 / 0.00000044
+2025-09-22 06:24:09,961 | INFO | Fold 3 | Epoch 3 | Step 500/821 | Loss: 0.131597 | LR(head/base): 0.00005084 / 0.00000026
+2025-09-22 06:24:21,245 | INFO | Fold 3 | Epoch 3 | Step 600/821 | Loss: 0.210050 | LR(head/base): 0.00002432 / 0.00000012
+2025-09-22 06:24:32,526 | INFO | Fold 3 | Epoch 3 | Step 700/821 | Loss: 0.149384 | LR(head/base): 0.00000733 / 0.00000004
+2025-09-22 06:24:43,843 | INFO | Fold 3 | Epoch 3 | Step 800/821 | Loss: 0.186269 | LR(head/base): 0.00000022 / 0.00000000
+2025-09-22 06:24:46,323 | INFO | Fold 3 | Epoch 3 completed in 93.81s | Avg Train Loss: 0.147067
+2025-09-22 06:24:46,323 | INFO | Fold 3 | Epoch 3 | Validation (in-epoch) start
+2025-09-22 06:24:46,323 | INFO | Evaluation start (use_ema=True)
+2025-09-22 06:24:46,324 | INFO | Applying EMA shadow weights for evaluation.
+2025-09-22 06:24:47,809 | INFO | Restoring original (non-EMA) weights after evaluation.
+2025-09-22 06:24:47,813 | INFO | Evaluation done. Pearson=0.765131
+2025-09-22 06:24:47,987 | INFO | Fold 3 | Epoch 3 | New best Pearson: 0.765131 -> saved model state.
+2025-09-22 06:24:47,987 | INFO | Fold 3 | Loading best model state with Pearson=0.765131
+2025-09-22 06:24:48,019 | INFO | Fold 3 | Final Validation with best model
+2025-09-22 06:24:48,019 | INFO | Evaluation start (use_ema=True)
+2025-09-22 06:24:48,020 | INFO | Applying EMA shadow weights for evaluation.
+2025-09-22 06:24:49,528 | INFO | Restoring original (non-EMA) weights after evaluation.
+2025-09-22 06:24:49,532 | INFO | Evaluation done. Pearson=0.765131
+2025-09-22 06:24:49,533 | INFO | Fold 3 | Validation Pearson: 0.765131
+2025-09-22 06:24:49,533 | INFO | Applying EMA weights for test inference.
+2025-09-22 06:24:49,537 | INFO | Fold 3 | Tokenizing test set
+2025-09-22 06:24:50,146 | INFO | Fold 3 | Test inference start
+2025-09-22 06:24:51,117 | INFO | Fold 3 | TTA swap enabled: running swapped test inference
+2025-09-22 06:24:52,278 | INFO | Fold 3 | TTA averaging completed
+2025-09-22 06:24:52,278 | INFO | Restoring original weights after EMA test inference.
+2025-09-22 06:24:52,283 | INFO | Fold 3 | Test inference completed
+2025-09-22 06:24:52,799 | INFO | ================================================================================
+2025-09-22 06:24:52,799 | INFO | Starting Fold 4/5
+2025-09-22 06:24:52,799 | INFO | Fold train size: 26260 | Fold valid size: 6565
+2025-09-22 06:24:52,799 | INFO | Building fold texts and labels with augmentation=True
+2025-09-22 06:24:52,808 | INFO | Building text inputs with context enrichment...
+2025-09-22 06:24:52,808 | INFO | Context enrichment columns used: ['title', 'section', 'class', 'subclass']
+2025-09-22 06:24:52,808 | INFO | Sample built text_a[0]: anchor: obstacle course | context: B60 | title: VEHICLES IN GENERAL | section: B | class: 60.0 | subclass: nan
+2025-09-22 06:24:52,808 | INFO | Sample built text_b[0]: target: obstacle position trajectory
+2025-09-22 06:24:52,809 | INFO | Sample built text_a[1]: anchor: collator | context: H04 | title: ELECTRIC COMMUNICATION TECHNIQUE | section: H | class: 4.0 | subclass: nan
+2025-09-22 06:24:52,809 | INFO | Sample built text_b[1]: target: collation apparatus
+2025-09-22 06:24:53,744 | INFO | Completed building 26260 input text pairs.
+2025-09-22 06:24:53,744 | INFO | Building soft class targets using Gaussian sigma=0.750 over 5 classes.
+2025-09-22 06:24:54,140 | INFO | Building SWAPPED text inputs for augmentation/inference...
+2025-09-22 06:24:54,143 | INFO | Building text inputs with context enrichment...
+2025-09-22 06:24:54,143 | INFO | Context enrichment columns used: ['title', 'section', 'class', 'subclass']
+2025-09-22 06:24:54,143 | INFO | Sample built text_a[0]: anchor: obstacle position trajectory | context: B60 | title: VEHICLES IN GENERAL | section: B | class: 60.0 | subclass: nan
+2025-09-22 06:24:54,143 | INFO | Sample built text_b[0]: target: obstacle course
+2025-09-22 06:24:54,143 | INFO | Sample built text_a[1]: anchor: collation apparatus | context: H04 | title: ELECTRIC COMMUNICATION TECHNIQUE | section: H | class: 4.0 | subclass: nan
+2025-09-22 06:24:54,143 | INFO | Sample built text_b[1]: target: collator
+2025-09-22 06:24:55,089 | INFO | Completed building 26260 input text pairs.
+2025-09-22 06:24:55,091 | INFO | Train augmentation doubled samples: 26260 -> 52520
+2025-09-22 06:24:55,091 | INFO | Building text inputs with context enrichment...
+2025-09-22 06:24:55,091 | INFO | Context enrichment columns used: ['title', 'section', 'class', 'subclass']
+2025-09-22 06:24:55,091 | INFO | Sample built text_a[0]: anchor: hardware blocks | context: G06 | title: COMPUTING; CALCULATING; COUNTING | section: G | class: 6.0 | subclass: nan
+2025-09-22 06:24:55,091 | INFO | Sample built text_b[0]: target: housing
+2025-09-22 06:24:55,091 | INFO | Sample built text_a[1]: anchor: intermediate connection | context: B41 | title: PRINTING; LINING MACHINES; TYPEWRITERS; STAMPS | section: B | class: 41.0 | subclass: nan
+2025-09-22 06:24:55,091 | INFO | Sample built text_b[1]: target: intermediate mesoderm
+2025-09-22 06:24:55,324 | INFO | Completed building 6565 input text pairs.
+2025-09-22 06:24:55,325 | INFO | Building soft class targets using Gaussian sigma=0.750 over 5 classes.
+2025-09-22 06:24:55,428 | INFO | Tokenizing train/valid for fold 4 with max_length=128
+2025-09-22 06:24:59,517 | INFO | Computing sample weights for training loss balancing.
+2025-09-22 06:24:59,517 | INFO | Class counts per bin [0,0.25,0.5,0.75,1.0]: [10838.0, 16488.0, 17710.0, 5816.0, 1668.0]
+2025-09-22 06:24:59,517 | INFO | Weights per bin: [9.2267946456559e-05, 6.0650170780718327e-05, 5.6465272791683674e-05, 0.00017193947860505432, 0.0005995203973725438]
+2025-09-22 06:24:59,685 | INFO | Initializing PatentRegressor with backbone: microsoft/deberta-v3-xsmall
+2025-09-22 06:25:00,192 | INFO | Gradient checkpointing disabled by config.
+2025-09-22 06:25:00,192 | INFO | Initialized WeightedLayerPooling over last 12 layers (of 13 total).
+2025-09-22 06:25:00,193 | INFO | Initialized TokenAttentionPooling with hidden_size=384
+2025-09-22 06:25:00,194 | INFO | Backbone hidden size: 384
+2025-09-22 06:25:00,194 | INFO | Pooling: wlp_attn | last_n=4 | wlp_use_last_n=12 | MSD=5 | Class head=True
+2025-09-22 06:25:00,246 | INFO | Preparing LLRD optimizer (AdamW) with base_lr=0.000020, head_lr=0.001000, decay=0.900, weight_decay=0.010000
+2025-09-22 06:25:00,246 | INFO | Backbone num_hidden_layers: 12
+2025-09-22 06:25:00,247 | INFO | Embeddings lr: 0.00000508
+2025-09-22 06:25:00,247 | INFO | Layer 0 lr: 0.00000628 (params=16)
+2025-09-22 06:25:00,247 | INFO | Layer 1 lr: 0.00000697 (params=16)
+2025-09-22 06:25:00,248 | INFO | Layer 2 lr: 0.00000775 (params=16)
+2025-09-22 06:25:00,248 | INFO | Layer 3 lr: 0.00000861 (params=16)
+2025-09-22 06:25:00,248 | INFO | Layer 4 lr: 0.00000957 (params=16)
+2025-09-22 06:25:00,249 | INFO | Layer 5 lr: 0.00001063 (params=16)
+2025-09-22 06:25:00,249 | INFO | Layer 6 lr: 0.00001181 (params=16)
+2025-09-22 06:25:00,249 | INFO | Layer 7 lr: 0.00001312 (params=16)
+2025-09-22 06:25:00,250 | INFO | Layer 8 lr: 0.00001458 (params=16)
+2025-09-22 06:25:00,250 | INFO | Layer 9 lr: 0.00001620 (params=16)
+2025-09-22 06:25:00,250 | INFO | Layer 10 lr: 0.00001800 (params=16)
+2025-09-22 06:25:00,251 | INFO | Layer 11 lr: 0.00002000 (params=16)
+2025-09-22 06:25:00,251 | INFO | Other backbone no-decay params: 2, lr: 0.00002000
+2025-09-22 06:25:00,251 | INFO | Head params: 13 | head_lr: 0.00100000
+2025-09-22 06:25:00,252 | INFO | Preparing cosine scheduler: total steps=2463, warmup steps=246
+2025-09-22 06:25:00,252 | INFO | Using SmoothL1Loss with beta=0.1000
+2025-09-22 06:25:00,255 | INFO | Fold 4 | Epoch 1/3 - Training start
+2025-09-22 06:25:12,261 | INFO | Fold 4 | Epoch 1 | Step 100/821 | Loss: 0.270208 | LR(head/base): 0.00040650 / 0.00000207
+2025-09-22 06:25:24,180 | INFO | Fold 4 | Epoch 1 | Step 200/821 | Loss: 0.186486 | LR(head/base): 0.00081301 / 0.00000413
+2025-09-22 06:25:35,941 | INFO | Fold 4 | Epoch 1 | Step 300/821 | Loss: 0.269291 | LR(head/base): 0.00099854 / 0.00000508
+2025-09-22 06:25:47,727 | INFO | Fold 4 | Epoch 1 | Step 400/821 | Loss: 0.203983 | LR(head/base): 0.00098814 / 0.00000502
+2025-09-22 06:25:59,255 | INFO | Fold 4 | Epoch 1 | Step 500/821 | Loss: 0.176491 | LR(head/base): 0.00096796 / 0.00000492
+2025-09-22 06:26:10,625 | INFO | Fold 4 | Epoch 1 | Step 600/821 | Loss: 0.164400 | LR(head/base): 0.00093840 / 0.00000477
+2025-09-22 06:26:21,868 | INFO | Fold 4 | Epoch 1 | Step 700/821 | Loss: 0.180908 | LR(head/base): 0.00090005 / 0.00000458
+2025-09-22 06:26:33,113 | INFO | Fold 4 | Epoch 1 | Step 800/821 | Loss: 0.153815 | LR(head/base): 0.00085368 / 0.00000434
+2025-09-22 06:26:35,607 | INFO | Fold 4 | Epoch 1 completed in 95.35s | Avg Train Loss: 0.232657
+2025-09-22 06:26:35,607 | INFO | Fold 4 | Epoch 1 | Validation (in-epoch) start
+2025-09-22 06:26:35,607 | INFO | Evaluation start (use_ema=True)
+2025-09-22 06:26:35,608 | INFO | Applying EMA shadow weights for evaluation.
+2025-09-22 06:26:37,200 | INFO | Restoring original (non-EMA) weights after evaluation.
+2025-09-22 06:26:37,204 | INFO | Evaluation done. Pearson=0.691988
+2025-09-22 06:26:37,369 | INFO | Fold 4 | Epoch 1 | New best Pearson: 0.691988 -> saved model state.
+2025-09-22 06:26:37,370 | INFO | Fold 4 | Epoch 2/3 - Training start
+2025-09-22 06:26:49,059 | INFO | Fold 4 | Epoch 2 | Step 100/821 | Loss: 0.170104 | LR(head/base): 0.00078819 / 0.00000401
+2025-09-22 06:27:00,396 | INFO | Fold 4 | Epoch 2 | Step 200/821 | Loss: 0.147794 | LR(head/base): 0.00072759 / 0.00000370
+2025-09-22 06:27:11,747 | INFO | Fold 4 | Epoch 2 | Step 300/821 | Loss: 0.175190 | LR(head/base): 0.00066244 / 0.00000337
+2025-09-22 06:27:23,155 | INFO | Fold 4 | Epoch 2 | Step 400/821 | Loss: 0.173350 | LR(head/base): 0.00059402 / 0.00000302
+2025-09-22 06:27:34,630 | INFO | Fold 4 | Epoch 2 | Step 500/821 | Loss: 0.141964 | LR(head/base): 0.00052373 / 0.00000266
+2025-09-22 06:27:45,965 | INFO | Fold 4 | Epoch 2 | Step 600/821 | Loss: 0.159620 | LR(head/base): 0.00045295 / 0.00000230
+2025-09-22 06:27:57,352 | INFO | Fold 4 | Epoch 2 | Step 700/821 | Loss: 0.152931 | LR(head/base): 0.00038312 / 0.00000195
+2025-09-22 06:28:09,259 | INFO | Fold 4 | Epoch 2 | Step 800/821 | Loss: 0.189367 | LR(head/base): 0.00031563 / 0.00000160
+2025-09-22 06:28:11,768 | INFO | Fold 4 | Epoch 2 completed in 94.40s | Avg Train Loss: 0.160186
+2025-09-22 06:28:11,768 | INFO | Fold 4 | Epoch 2 | Validation (in-epoch) start
+2025-09-22 06:28:11,768 | INFO | Evaluation start (use_ema=True)
+2025-09-22 06:28:11,769 | INFO | Applying EMA shadow weights for evaluation.
+2025-09-22 06:28:13,325 | INFO | Restoring original (non-EMA) weights after evaluation.
+2025-09-22 06:28:13,329 | INFO | Evaluation done. Pearson=0.754360
+2025-09-22 06:28:13,584 | INFO | Fold 4 | Epoch 2 | New best Pearson: 0.754360 -> saved model state.
+2025-09-22 06:28:13,584 | INFO | Fold 4 | Epoch 3/3 - Training start
+2025-09-22 06:28:26,803 | INFO | Fold 4 | Epoch 3 | Step 100/821 | Loss: 0.188338 | LR(head/base): 0.00023904 / 0.00000122
+2025-09-22 06:28:44,232 | INFO | Fold 4 | Epoch 3 | Step 200/821 | Loss: 0.137681 | LR(head/base): 0.00018142 / 0.00000092
+2025-09-22 06:29:01,383 | INFO | Fold 4 | Epoch 3 | Step 300/821 | Loss: 0.134043 | LR(head/base): 0.00013019 / 0.00000066
+2025-09-22 06:29:18,478 | INFO | Fold 4 | Epoch 3 | Step 400/821 | Loss: 0.127918 | LR(head/base): 0.00008637 / 0.00000044
+2025-09-22 06:29:35,277 | INFO | Fold 4 | Epoch 3 | Step 500/821 | Loss: 0.158851 | LR(head/base): 0.00005084 / 0.00000026
+2025-09-22 06:29:52,572 | INFO | Fold 4 | Epoch 3 | Step 600/821 | Loss: 0.121179 | LR(head/base): 0.00002432 / 0.00000012
+2025-09-22 06:30:07,408 | INFO | Fold 4 | Epoch 3 | Step 700/821 | Loss: 0.156713 | LR(head/base): 0.00000733 / 0.00000004
+2025-09-22 06:30:18,670 | INFO | Fold 4 | Epoch 3 | Step 800/821 | Loss: 0.163846 | LR(head/base): 0.00000022 / 0.00000000
+2025-09-22 06:30:21,180 | INFO | Fold 4 | Epoch 3 completed in 127.59s | Avg Train Loss: 0.146231
+2025-09-22 06:30:21,180 | INFO | Fold 4 | Epoch 3 | Validation (in-epoch) start
+2025-09-22 06:30:21,180 | INFO | Evaluation start (use_ema=True)
+2025-09-22 06:30:21,181 | INFO | Applying EMA shadow weights for evaluation.
+2025-09-22 06:30:22,689 | INFO | Restoring original (non-EMA) weights after evaluation.
+2025-09-22 06:30:22,693 | INFO | Evaluation done. Pearson=0.771013
+2025-09-22 06:30:22,879 | INFO | Fold 4 | Epoch 3 | New best Pearson: 0.771013 -> saved model state.
+2025-09-22 06:30:22,879 | INFO | Fold 4 | Loading best model state with Pearson=0.771013
+2025-09-22 06:30:22,921 | INFO | Fold 4 | Final Validation with best model
+2025-09-22 06:30:22,921 | INFO | Evaluation start (use_ema=True)
+2025-09-22 06:30:22,921 | INFO | Applying EMA shadow weights for evaluation.
+2025-09-22 06:30:24,423 | INFO | Restoring original (non-EMA) weights after evaluation.
+2025-09-22 06:30:24,427 | INFO | Evaluation done. Pearson=0.771013
+2025-09-22 06:30:24,428 | INFO | Fold 4 | Validation Pearson: 0.771013
+2025-09-22 06:30:24,428 | INFO | Applying EMA weights for test inference.
+2025-09-22 06:30:24,433 | INFO | Fold 4 | Tokenizing test set
+2025-09-22 06:30:24,657 | INFO | Fold 4 | Test inference start
+2025-09-22 06:30:25,598 | INFO | Fold 4 | TTA swap enabled: running swapped test inference
+2025-09-22 06:30:26,734 | INFO | Fold 4 | TTA averaging completed
+2025-09-22 06:30:26,734 | INFO | Restoring original weights after EMA test inference.
+2025-09-22 06:30:26,739 | INFO | Fold 4 | Test inference completed
+2025-09-22 06:30:27,239 | INFO | ================================================================================
+2025-09-22 06:30:27,239 | INFO | Starting Fold 5/5
+2025-09-22 06:30:27,239 | INFO | Fold train size: 26260 | Fold valid size: 6565
+2025-09-22 06:30:27,239 | INFO | Building fold texts and labels with augmentation=True
+2025-09-22 06:30:27,248 | INFO | Building text inputs with context enrichment...
+2025-09-22 06:30:27,248 | INFO | Context enrichment columns used: ['title', 'section', 'class', 'subclass']
+2025-09-22 06:30:27,248 | INFO | Sample built text_a[0]: anchor: obstacle course | context: B60 | title: VEHICLES IN GENERAL | section: B | class: 60.0 | subclass: nan
+2025-09-22 06:30:27,248 | INFO | Sample built text_b[0]: target: obstacle position trajectory
+2025-09-22 06:30:27,248 | INFO | Sample built text_a[1]: anchor: hardware blocks | context: G06 | title: COMPUTING; CALCULATING; COUNTING | section: G | class: 6.0 | subclass: nan
+2025-09-22 06:30:27,248 | INFO | Sample built text_b[1]: target: housing
+2025-09-22 06:30:28,185 | INFO | Completed building 26260 input text pairs.
+2025-09-22 06:30:28,185 | INFO | Building soft class targets using Gaussian sigma=0.750 over 5 classes.
+2025-09-22 06:30:28,584 | INFO | Building SWAPPED text inputs for augmentation/inference...
+2025-09-22 06:30:28,587 | INFO | Building text inputs with context enrichment...
+2025-09-22 06:30:28,587 | INFO | Context enrichment columns used: ['title', 'section', 'class', 'subclass']
+2025-09-22 06:30:28,588 | INFO | Sample built text_a[0]: anchor: obstacle position trajectory | context: B60 | title: VEHICLES IN GENERAL | section: B | class: 60.0 | subclass: nan
+2025-09-22 06:30:28,588 | INFO | Sample built text_b[0]: target: obstacle course
+2025-09-22 06:30:28,588 | INFO | Sample built text_a[1]: anchor: housing | context: G06 | title: COMPUTING; CALCULATING; COUNTING | section: G | class: 6.0 | subclass: nan
+2025-09-22 06:30:28,588 | INFO | Sample built text_b[1]: target: hardware blocks
+2025-09-22 06:30:29,514 | INFO | Completed building 26260 input text pairs.
+2025-09-22 06:30:29,517 | INFO | Train augmentation doubled samples: 26260 -> 52520
+2025-09-22 06:30:29,517 | INFO | Building text inputs with context enrichment...
+2025-09-22 06:30:29,517 | INFO | Context enrichment columns used: ['title', 'section', 'class', 'subclass']
+2025-09-22 06:30:29,517 | INFO | Sample built text_a[0]: anchor: collator | context: H04 | title: ELECTRIC COMMUNICATION TECHNIQUE | section: H | class: 4.0 | subclass: nan
+2025-09-22 06:30:29,517 | INFO | Sample built text_b[0]: target: collation apparatus
+2025-09-22 06:30:29,517 | INFO | Sample built text_a[1]: anchor: oven batteries | context: C10 | title: PETROLEUM, GAS OR COKE INDUSTRIES; TECHNICAL GASES CONTAINING CARBON MONOXIDE; FUELS; LUBRICANTS; PEAT | section: C | class: 10.0 | subclass: nan
+2025-09-22 06:30:29,517 | INFO | Sample built text_b[1]: target: batteries
+2025-09-22 06:30:29,748 | INFO | Completed building 6565 input text pairs.
+2025-09-22 06:30:29,748 | INFO | Building soft class targets using Gaussian sigma=0.750 over 5 classes.
+2025-09-22 06:30:29,854 | INFO | Tokenizing train/valid for fold 5 with max_length=128
+2025-09-22 06:30:34,138 | INFO | Computing sample weights for training loss balancing.
+2025-09-22 06:30:34,139 | INFO | Class counts per bin [0,0.25,0.5,0.75,1.0]: [10838.0, 16490.0, 17710.0, 5814.0, 1668.0]
+2025-09-22 06:30:34,139 | INFO | Weights per bin: [9.2267946456559e-05, 6.064281478757039e-05, 5.6465272791683674e-05, 0.0001719986175885424, 0.0005995203973725438]
+2025-09-22 06:30:34,330 | INFO | Initializing PatentRegressor with backbone: microsoft/deberta-v3-xsmall
+2025-09-22 06:30:34,833 | INFO | Gradient checkpointing disabled by config.
+2025-09-22 06:30:34,834 | INFO | Initialized WeightedLayerPooling over last 12 layers (of 13 total).
+2025-09-22 06:30:34,834 | INFO | Initialized TokenAttentionPooling with hidden_size=384
+2025-09-22 06:30:34,836 | INFO | Backbone hidden size: 384
+2025-09-22 06:30:34,836 | INFO | Pooling: wlp_attn | last_n=4 | wlp_use_last_n=12 | MSD=5 | Class head=True
+2025-09-22 06:30:34,899 | INFO | Preparing LLRD optimizer (AdamW) with base_lr=0.000020, head_lr=0.001000, decay=0.900, weight_decay=0.010000
+2025-09-22 06:30:34,899 | INFO | Backbone num_hidden_layers: 12
+2025-09-22 06:30:34,899 | INFO | Embeddings lr: 0.00000508
+2025-09-22 06:30:34,900 | INFO | Layer 0 lr: 0.00000628 (params=16)
+2025-09-22 06:30:34,900 | INFO | Layer 1 lr: 0.00000697 (params=16)
+2025-09-22 06:30:34,900 | INFO | Layer 2 lr: 0.00000775 (params=16)
+2025-09-22 06:30:34,901 | INFO | Layer 3 lr: 0.00000861 (params=16)
+2025-09-22 06:30:34,901 | INFO | Layer 4 lr: 0.00000957 (params=16)
+2025-09-22 06:30:34,901 | INFO | Layer 5 lr: 0.00001063 (params=16)
+2025-09-22 06:30:34,902 | INFO | Layer 6 lr: 0.00001181 (params=16)
+2025-09-22 06:30:34,902 | INFO | Layer 7 lr: 0.00001312 (params=16)
+2025-09-22 06:30:34,902 | INFO | Layer 8 lr: 0.00001458 (params=16)
+2025-09-22 06:30:34,903 | INFO | Layer 9 lr: 0.00001620 (params=16)
+2025-09-22 06:30:34,903 | INFO | Layer 10 lr: 0.00001800 (params=16)
+2025-09-22 06:30:34,903 | INFO | Layer 11 lr: 0.00002000 (params=16)
+2025-09-22 06:30:34,904 | INFO | Other backbone no-decay params: 2, lr: 0.00002000
+2025-09-22 06:30:34,904 | INFO | Head params: 13 | head_lr: 0.00100000
+2025-09-22 06:30:34,905 | INFO | Preparing cosine scheduler: total steps=2463, warmup steps=246
+2025-09-22 06:30:34,905 | INFO | Using SmoothL1Loss with beta=0.1000
+2025-09-22 06:30:34,907 | INFO | Fold 5 | Epoch 1/3 - Training start
+2025-09-22 06:30:46,554 | INFO | Fold 5 | Epoch 1 | Step 100/821 | Loss: 0.217368 | LR(head/base): 0.00040650 / 0.00000207
+2025-09-22 06:30:57,884 | INFO | Fold 5 | Epoch 1 | Step 200/821 | Loss: 0.196633 | LR(head/base): 0.00081301 / 0.00000413
+2025-09-22 06:31:09,220 | INFO | Fold 5 | Epoch 1 | Step 300/821 | Loss: 0.165932 | LR(head/base): 0.00099854 / 0.00000508
+2025-09-22 06:31:20,506 | INFO | Fold 5 | Epoch 1 | Step 400/821 | Loss: 0.179078 | LR(head/base): 0.00098814 / 0.00000502
+2025-09-22 06:31:31,848 | INFO | Fold 5 | Epoch 1 | Step 500/821 | Loss: 0.179332 | LR(head/base): 0.00096796 / 0.00000492
+2025-09-22 06:31:43,201 | INFO | Fold 5 | Epoch 1 | Step 600/821 | Loss: 0.190048 | LR(head/base): 0.00093840 / 0.00000477
+2025-09-22 06:31:54,543 | INFO | Fold 5 | Epoch 1 | Step 700/821 | Loss: 0.133169 | LR(head/base): 0.00090005 / 0.00000458
+2025-09-22 06:32:06,001 | INFO | Fold 5 | Epoch 1 | Step 800/821 | Loss: 0.190557 | LR(head/base): 0.00085368 / 0.00000434
+2025-09-22 06:32:08,495 | INFO | Fold 5 | Epoch 1 completed in 93.59s | Avg Train Loss: 0.232121
+2025-09-22 06:32:08,496 | INFO | Fold 5 | Epoch 1 | Validation (in-epoch) start
+2025-09-22 06:32:08,496 | INFO | Evaluation start (use_ema=True)
+2025-09-22 06:32:08,497 | INFO | Applying EMA shadow weights for evaluation.
+2025-09-22 06:32:09,999 | INFO | Restoring original (non-EMA) weights after evaluation.
+2025-09-22 06:32:10,003 | INFO | Evaluation done. Pearson=0.684174
+2025-09-22 06:32:10,162 | INFO | Fold 5 | Epoch 1 | New best Pearson: 0.684174 -> saved model state.
+2025-09-22 06:32:10,162 | INFO | Fold 5 | Epoch 2/3 - Training start
+2025-09-22 06:32:21,886 | INFO | Fold 5 | Epoch 2 | Step 100/821 | Loss: 0.179632 | LR(head/base): 0.00078819 / 0.00000401
+2025-09-22 06:32:33,315 | INFO | Fold 5 | Epoch 2 | Step 200/821 | Loss: 0.183136 | LR(head/base): 0.00072759 / 0.00000370
+2025-09-22 06:32:44,761 | INFO | Fold 5 | Epoch 2 | Step 300/821 | Loss: 0.143030 | LR(head/base): 0.00066244 / 0.00000337
+2025-09-22 06:32:56,166 | INFO | Fold 5 | Epoch 2 | Step 400/821 | Loss: 0.154360 | LR(head/base): 0.00059402 / 0.00000302
+2025-09-22 06:33:07,557 | INFO | Fold 5 | Epoch 2 | Step 500/821 | Loss: 0.160094 | LR(head/base): 0.00052373 / 0.00000266
+2025-09-22 06:33:19,097 | INFO | Fold 5 | Epoch 2 | Step 600/821 | Loss: 0.137148 | LR(head/base): 0.00045295 / 0.00000230
+2025-09-22 06:33:30,494 | INFO | Fold 5 | Epoch 2 | Step 700/821 | Loss: 0.118584 | LR(head/base): 0.00038312 / 0.00000195
+2025-09-22 06:33:41,897 | INFO | Fold 5 | Epoch 2 | Step 800/821 | Loss: 0.175878 | LR(head/base): 0.00031563 / 0.00000160
+2025-09-22 06:33:44,417 | INFO | Fold 5 | Epoch 2 completed in 94.25s | Avg Train Loss: 0.161476
+2025-09-22 06:33:44,417 | INFO | Fold 5 | Epoch 2 | Validation (in-epoch) start
+2025-09-22 06:33:44,417 | INFO | Evaluation start (use_ema=True)
+2025-09-22 06:33:44,418 | INFO | Applying EMA shadow weights for evaluation.
+2025-09-22 06:33:45,887 | INFO | Restoring original (non-EMA) weights after evaluation.
+2025-09-22 06:33:45,891 | INFO | Evaluation done. Pearson=0.747780
+2025-09-22 06:33:46,097 | INFO | Fold 5 | Epoch 2 | New best Pearson: 0.747780 -> saved model state.
+2025-09-22 06:33:46,097 | INFO | Fold 5 | Epoch 3/3 - Training start
+2025-09-22 06:33:57,778 | INFO | Fold 5 | Epoch 3 | Step 100/821 | Loss: 0.112242 | LR(head/base): 0.00023904 / 0.00000122
+2025-09-22 06:34:09,253 | INFO | Fold 5 | Epoch 3 | Step 200/821 | Loss: 0.130731 | LR(head/base): 0.00018142 / 0.00000092
+2025-09-22 06:34:20,686 | INFO | Fold 5 | Epoch 3 | Step 300/821 | Loss: 0.115948 | LR(head/base): 0.00013019 / 0.00000066
+2025-09-22 06:34:32,101 | INFO | Fold 5 | Epoch 3 | Step 400/821 | Loss: 0.159738 | LR(head/base): 0.00008637 / 0.00000044
+2025-09-22 06:34:43,507 | INFO | Fold 5 | Epoch 3 | Step 500/821 | Loss: 0.254886 | LR(head/base): 0.00005084 / 0.00000026
+2025-09-22 06:34:54,922 | INFO | Fold 5 | Epoch 3 | Step 600/821 | Loss: 0.128097 | LR(head/base): 0.00002432 / 0.00000012
+2025-09-22 06:35:06,379 | INFO | Fold 5 | Epoch 3 | Step 700/821 | Loss: 0.163020 | LR(head/base): 0.00000733 / 0.00000004
+2025-09-22 06:35:18,291 | INFO | Fold 5 | Epoch 3 | Step 800/821 | Loss: 0.122601 | LR(head/base): 0.00000022 / 0.00000000
+2025-09-22 06:35:20,800 | INFO | Fold 5 | Epoch 3 completed in 94.70s | Avg Train Loss: 0.147559
+2025-09-22 06:35:20,800 | INFO | Fold 5 | Epoch 3 | Validation (in-epoch) start
+2025-09-22 06:35:20,800 | INFO | Evaluation start (use_ema=True)
+2025-09-22 06:35:20,801 | INFO | Applying EMA shadow weights for evaluation.
+2025-09-22 06:35:22,430 | INFO | Restoring original (non-EMA) weights after evaluation.
+2025-09-22 06:35:22,434 | INFO | Evaluation done. Pearson=0.767280
+2025-09-22 06:35:22,613 | INFO | Fold 5 | Epoch 3 | New best Pearson: 0.767280 -> saved model state.
+2025-09-22 06:35:22,613 | INFO | Fold 5 | Loading best model state with Pearson=0.767280
+2025-09-22 06:35:22,646 | INFO | Fold 5 | Final Validation with best model
+2025-09-22 06:35:22,646 | INFO | Evaluation start (use_ema=True)
+2025-09-22 06:35:22,647 | INFO | Applying EMA shadow weights for evaluation.
+2025-09-22 06:35:24,155 | INFO | Restoring original (non-EMA) weights after evaluation.
+2025-09-22 06:35:24,160 | INFO | Evaluation done. Pearson=0.767280
+2025-09-22 06:35:24,160 | INFO | Fold 5 | Validation Pearson: 0.767280
+2025-09-22 06:35:24,160 | INFO | Applying EMA weights for test inference.
+2025-09-22 06:35:24,165 | INFO | Fold 5 | Tokenizing test set
+2025-09-22 06:35:24,394 | INFO | Fold 5 | Test inference start
+2025-09-22 06:35:25,330 | INFO | Fold 5 | TTA swap enabled: running swapped test inference
+2025-09-22 06:35:26,493 | INFO | Fold 5 | TTA averaging completed
+2025-09-22 06:35:26,494 | INFO | Restoring original weights after EMA test inference.
+2025-09-22 06:35:26,501 | INFO | Fold 5 | Test inference completed
+2025-09-22 06:35:27,009 | INFO | FINAL OOF PEARSON: 0.765291
+2025-09-22 06:35:27,009 | INFO | Logging final validation results complete.
+2025-09-22 06:35:27,009 | INFO | Preparing submission by averaging 5 folds
+2025-09-22 06:35:27,017 | INFO | Saved submission to task/us-patent-phrase-to-phrase-matching/outputs/3/submission_9.csv with shape (3648, 2)
+2025-09-22 06:35:27,017 | INFO | Sample submission row 0: id=2a988c7d98568627, score=0.20261
+2025-09-22 06:35:27,017 | INFO | Sample submission row 1: id=75a3ae03b26e2f7e, score=0.21821
+2025-09-22 06:35:27,017 | INFO | Sample submission row 2: id=0126c870aede9858, score=0.12732
+2025-09-22 06:35:27,017 | INFO | Script completed successfully.

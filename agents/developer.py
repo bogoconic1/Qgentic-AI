@@ -290,18 +290,36 @@ Project structure:
                 if log_check.get("status") == "fail":
                     summary.append("- logging.basicConfig must be called before any top-level logging usage.")
                 try:
-                    parsed = json.loads(guard_report.get("leakage_check", "{}")) if isinstance(guard_report.get("leakage_check"), str) else guard_report.get("leakage_check", {})
+                    raw_leak = guard_report.get("leakage_check", "{}")
+                    parsed = json.loads(raw_leak.strip()) if isinstance(raw_leak, str) else (raw_leak or {})
                     sev = parsed.get("severity")
                     if sev == "block":
                         summary.append("- Potential data leakage risks detected. Please fix as suggested.")
+                        findings = parsed.get("findings", [])
+                        if findings:
+                            summary.append("\nLeakage reviewer findings:")
+                            for idx, f in enumerate(findings, start=1):
+                                rule_id = f.get("rule_id", "unknown")
+                                snippet = f.get("snippet", "")
+                                rationale = f.get("rationale", "")
+                                suggestion = f.get("suggestion", "")
+                                summary.append(
+                                    f"{idx}. rule_id={rule_id}\n   - snippet: {snippet}\n   - rationale: {rationale}\n   - suggestion: {suggestion}"
+                                )
                 except Exception:
-                    pass
+                    # Could not parse JSON; include raw reviewer text for context
+                    try:
+                        summary.append("- Data leakage reviewer returned non-JSON content:")
+                        summary.append(str(guard_report.get("leakage_check")))
+                    except Exception:
+                        pass
                 fix_instr = (
                     "\nPlease regenerate the script addressing the above guardrail issues. "
                     f"Write logs to task/{self.slug}/outputs/{self.iteration}/code_{self.iteration}_v{version+1}.txt "
                     f"and produce submission_{version+1}.csv."
                 )
                 self.messages.append({"role": "user", "content": "\n".join(summary) + fix_instr})
+                logger.info("User prompt with guardrail feedback: %s", "\n".join(summary) + fix_instr)
                 # continue to next attempt without execution
                 continue
 

@@ -5,7 +5,8 @@ __pycache__/
 files/
 mle-bench/
 cache/
-task/
+task/AI4Code
+task/hms-*
 catboost_info/
 code_*.py
 # C extensions

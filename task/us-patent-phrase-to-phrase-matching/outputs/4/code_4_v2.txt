@@ -1,0 +1,120 @@
+2025-09-22 06:39:46,723 | INFO | Initialized logging system.
+2025-09-22 06:39:46,723 | INFO | Logs will be written to: task/us-patent-phrase-to-phrase-matching/outputs/4/code_4_v2.txt
+2025-09-22 06:39:46,724 | INFO | Config: {'seed': 42, 'model_name': 'microsoft/deberta-v3-base', 'max_length': 64, 'train_bs': 32, 'valid_bs': 64, 'epochs': 3, 'lr': 3e-05, 'weight_decay': 0.01, 'warmup_ratio': 0.1, 'num_workers': 4, 'fold_id': 0, 'n_splits': 5, 'gradient_accumulation_steps': 1, 'fp16': True, 'optimizer_eps': 1e-08, 'max_grad_norm': 1.0, 'dropout': 0.1, 'gradient_checkpointing': False, 'train_file': 'task/us-patent-phrase-to-phrase-matching/train.csv', 'test_file': 'task/us-patent-phrase-to-phrase-matching/test.csv', 'titles_file': 'task/us-patent-phrase-to-phrase-matching/titles.csv', 'submission_file': 'task/us-patent-phrase-to-phrase-matching/outputs/4/submission_2.csv', 'log_interval': 100}
+2025-09-22 06:39:46,724 | INFO | Seeding all RNGs with seed=42
+2025-09-22 06:39:46,897 | INFO | Using device: cuda, CUDA device count: 1
+2025-09-22 06:39:46,900 | INFO | CUDA device name: NVIDIA A100-SXM4-80GB
+2025-09-22 06:39:46,901 | INFO | Loading CSV files.
+2025-09-22 06:39:47,249 | INFO | Train shape: (32825, 5), columns: ['id', 'anchor', 'target', 'context', 'score']
+2025-09-22 06:39:47,249 | INFO | Test shape: (3648, 5), columns: ['id', 'anchor', 'target', 'context', 'score']
+2025-09-22 06:39:47,249 | INFO | Titles shape: (260476, 7), columns: ['code', 'title', 'section', 'class', 'subclass', 'group', 'main_group']
+2025-09-22 06:39:47,249 | INFO | Column 'subgroup' not found in titles; creating empty column.
+2025-09-22 06:39:47,251 | INFO | Merging CPC titles into train and test on context->code.
+2025-09-22 06:39:47,358 | INFO | Post-merge train shape: (32825, 12), columns now: ['id', 'anchor', 'target', 'context', 'score', 'code', 'title', 'section', 'class', 'subclass', 'group', 'subgroup']
+2025-09-22 06:39:47,358 | INFO | Post-merge test shape: (3648, 12), columns now: ['id', 'anchor', 'target', 'context', 'score', 'code', 'title', 'section', 'class', 'subclass', 'group', 'subgroup']
+2025-09-22 06:39:47,358 | INFO | Checking for train-test leakage (overlap of (anchor, target, context)).
+2025-09-22 06:39:47,402 | INFO | Number of overlapping (anchor, target, context) triplets: 0
+2025-09-22 06:39:47,402 | INFO | Computing test context distribution (top 10).
+2025-09-22 06:39:47,403 | INFO | Test context H01: count=230, pct=6.30%
+2025-09-22 06:39:47,403 | INFO | Test context H04: count=215, pct=5.89%
+2025-09-22 06:39:47,403 | INFO | Test context G01: count=179, pct=4.91%
+2025-09-22 06:39:47,403 | INFO | Test context A61: count=165, pct=4.52%
+2025-09-22 06:39:47,403 | INFO | Test context F16: count=121, pct=3.32%
+2025-09-22 06:39:47,403 | INFO | Test context C07: count=115, pct=3.15%
+2025-09-22 06:39:47,403 | INFO | Test context G06: count=99, pct=2.71%
+2025-09-22 06:39:47,403 | INFO | Test context B60: count=94, pct=2.58%
+2025-09-22 06:39:47,403 | INFO | Test context G02: count=89, pct=2.44%
+2025-09-22 06:39:47,403 | INFO | Test context H03: count=83, pct=2.28%
+2025-09-22 06:39:47,404 | INFO | Score distribution per context for H04, G01, A61.
+2025-09-22 06:39:47,406 | INFO | Context H04: total=1962
+2025-09-22 06:39:47,406 | INFO |   score=0.0: count=478
+2025-09-22 06:39:47,406 | INFO |   score=0.25: count=617
+2025-09-22 06:39:47,406 | INFO |   score=0.5: count=562
+2025-09-22 06:39:47,406 | INFO |   score=0.75: count=251
+2025-09-22 06:39:47,406 | INFO |   score=1.0: count=54
+2025-09-22 06:39:47,409 | INFO | Context G01: total=1633
+2025-09-22 06:39:47,409 | INFO |   score=0.0: count=355
+2025-09-22 06:39:47,409 | INFO |   score=0.25: count=399
+2025-09-22 06:39:47,409 | INFO |   score=0.5: count=655
+2025-09-22 06:39:47,409 | INFO |   score=0.75: count=183
+2025-09-22 06:39:47,409 | INFO |   score=1.0: count=41
+2025-09-22 06:39:47,411 | INFO | Context A61: total=1312
+2025-09-22 06:39:47,411 | INFO |   score=0.0: count=298
+2025-09-22 06:39:47,411 | INFO |   score=0.25: count=376
+2025-09-22 06:39:47,411 | INFO |   score=0.5: count=512
+2025-09-22 06:39:47,411 | INFO |   score=0.75: count=102
+2025-09-22 06:39:47,411 | INFO |   score=1.0: count=24
+2025-09-22 06:39:47,412 | INFO | Maximum target character length in test.csv: 47
+2025-09-22 06:39:47,412 | INFO | Checking mapping coverage of contexts to titles codes.
+2025-09-22 06:39:47,439 | INFO | All train contexts covered by titles: True
+2025-09-22 06:39:47,440 | INFO | All test contexts covered by titles: True
+2025-09-22 06:39:47,440 | INFO | Building input_text fields for train and test.
+2025-09-22 06:39:48,057 | INFO | Sample train input_text:
+2025-09-22 06:39:48,058 | INFO | anchor: obstacle course [SEP] target: obstacle position trajectory [SEP] context: code: B60 | title: VEHICLES IN GENERAL | section: B | class: 60.0 | subclass: 
+2025-09-22 06:39:48,058 | INFO | anchor: hardware blocks [SEP] target: housing [SEP] context: code: G06 | title: COMPUTING; CALCULATING; COUNTING | section: G | class: 6.0 | subclass: 
+2025-09-22 06:39:48,058 | INFO | anchor: collator [SEP] target: collation apparatus [SEP] context: code: H04 | title: ELECTRIC COMMUNICATION TECHNIQUE | section: H | class: 4.0 | subclass: 
+2025-09-22 06:39:48,058 | INFO | Preparing stratified split (single fold).
+2025-09-22 06:39:48,081 | INFO | Fold 0 sizes -> train: 26260, valid: 6565
+2025-09-22 06:39:48,103 | INFO | Loading tokenizer.
+2025-09-22 06:39:49,201 | INFO | Creating datasets and dataloaders.
+2025-09-22 06:39:49,204 | INFO | Train batches: 821, Valid batches: 103, Test batches: 57
+2025-09-22 06:39:49,204 | INFO | Loading pretrained model.
+2025-09-22 06:39:50,082 | INFO | Gradient checkpointing is disabled in this run to ensure a single-backward-per-forward behavior.
+2025-09-22 06:39:50,395 | INFO | Model loaded: microsoft/deberta-v3-base
+2025-09-22 06:39:50,396 | INFO | Total parameters: 184422913
+2025-09-22 06:39:50,397 | INFO | Trainable parameters: 184422913
+2025-09-22 06:39:50,397 | INFO | Training steps: 2463, Warmup steps: 246
+2025-09-22 06:39:50,397 | INFO | Building optimizer (AdamW) with decoupled weight decay.
+2025-09-22 06:39:50,398 | INFO | Starting training with CUDA fp16.
+2025-09-22 06:39:57,292 | INFO | Epoch 1/3 | Step 100/821 | Loss: 0.062217 | LR: 0.00001220
+2025-09-22 06:40:02,941 | INFO | Epoch 1/3 | Step 200/821 | Loss: 0.069465 | LR: 0.00002439
+2025-09-22 06:40:08,570 | INFO | Epoch 1/3 | Step 300/821 | Loss: 0.027483 | LR: 0.00002927
+2025-09-22 06:40:14,181 | INFO | Epoch 1/3 | Step 400/821 | Loss: 0.032982 | LR: 0.00002792
+2025-09-22 06:40:19,809 | INFO | Epoch 1/3 | Step 500/821 | Loss: 0.027913 | LR: 0.00002656
+2025-09-22 06:40:25,424 | INFO | Epoch 1/3 | Step 600/821 | Loss: 0.016364 | LR: 0.00002521
+2025-09-22 06:40:31,031 | INFO | Epoch 1/3 | Step 700/821 | Loss: 0.042937 | LR: 0.00002386
+2025-09-22 06:40:36,729 | INFO | Epoch 1/3 | Step 800/821 | Loss: 0.023855 | LR: 0.00002250
+2025-09-22 06:40:37,916 | INFO | Epoch 1 done. Avg train loss: 0.045275 | Time: 47.52s
+2025-09-22 06:40:39,987 | INFO | Validation epoch 1: MSE=0.026837, Pearson=0.818665
+2025-09-22 06:40:39,987 | INFO | New best validation Pearson: 0.818665 at epoch 1
+2025-09-22 06:40:45,685 | INFO | Epoch 2/3 | Step 100/821 | Loss: 0.021100 | LR: 0.00002087
+2025-09-22 06:40:51,366 | INFO | Epoch 2/3 | Step 200/821 | Loss: 0.022769 | LR: 0.00001951
+2025-09-22 06:40:57,066 | INFO | Epoch 2/3 | Step 300/821 | Loss: 0.015269 | LR: 0.00001816
+2025-09-22 06:41:02,781 | INFO | Epoch 2/3 | Step 400/821 | Loss: 0.021026 | LR: 0.00001681
+2025-09-22 06:41:08,502 | INFO | Epoch 2/3 | Step 500/821 | Loss: 0.028509 | LR: 0.00001545
+2025-09-22 06:41:14,149 | INFO | Epoch 2/3 | Step 600/821 | Loss: 0.013398 | LR: 0.00001410
+2025-09-22 06:41:19,774 | INFO | Epoch 2/3 | Step 700/821 | Loss: 0.017397 | LR: 0.00001275
+2025-09-22 06:41:25,398 | INFO | Epoch 2/3 | Step 800/821 | Loss: 0.023141 | LR: 0.00001139
+2025-09-22 06:41:26,579 | INFO | Epoch 2 done. Avg train loss: 0.019458 | Time: 46.59s
+2025-09-22 06:41:28,477 | INFO | Validation epoch 2: MSE=0.019921, Pearson=0.844741
+2025-09-22 06:41:28,477 | INFO | New best validation Pearson: 0.844741 at epoch 2
+2025-09-22 06:41:34,104 | INFO | Epoch 3/3 | Step 100/821 | Loss: 0.016152 | LR: 0.00000976
+2025-09-22 06:41:39,771 | INFO | Epoch 3/3 | Step 200/821 | Loss: 0.013002 | LR: 0.00000840
+2025-09-22 06:41:45,437 | INFO | Epoch 3/3 | Step 300/821 | Loss: 0.017875 | LR: 0.00000705
+2025-09-22 06:41:51,112 | INFO | Epoch 3/3 | Step 400/821 | Loss: 0.014694 | LR: 0.00000570
+2025-09-22 06:41:56,743 | INFO | Epoch 3/3 | Step 500/821 | Loss: 0.010928 | LR: 0.00000434
+2025-09-22 06:42:02,374 | INFO | Epoch 3/3 | Step 600/821 | Loss: 0.009496 | LR: 0.00000299
+2025-09-22 06:42:08,009 | INFO | Epoch 3/3 | Step 700/821 | Loss: 0.015092 | LR: 0.00000164
+2025-09-22 06:42:13,611 | INFO | Epoch 3/3 | Step 800/821 | Loss: 0.008526 | LR: 0.00000028
+2025-09-22 06:42:14,788 | INFO | Epoch 3 done. Avg train loss: 0.014099 | Time: 46.31s
+2025-09-22 06:42:16,701 | INFO | Validation epoch 3: MSE=0.020834, Pearson=0.848777
+2025-09-22 06:42:16,701 | INFO | New best validation Pearson: 0.848777 at epoch 3
+2025-09-22 06:42:16,701 | INFO | Final best validation Pearson correlation: 0.848777 (epoch 3)
+2025-09-22 06:42:16,701 | INFO | Validation history:
+2025-09-22 06:42:16,701 | INFO |   Epoch 1: train_loss=0.045275, val_mse=0.026837, val_pearson=0.818665
+2025-09-22 06:42:16,701 | INFO |   Epoch 2: train_loss=0.019458, val_mse=0.019921, val_pearson=0.844741
+2025-09-22 06:42:16,701 | INFO |   Epoch 3: train_loss=0.014099, val_mse=0.020834, val_pearson=0.848777
+2025-09-22 06:42:16,701 | INFO | Running final validation inference for logging.
+2025-09-22 06:42:18,611 | INFO | Final Validation Results -> MSE: 0.020834, Pearson: 0.848777
+2025-09-22 06:42:18,611 | INFO | Running inference on test set.
+2025-09-22 06:42:19,880 | INFO | Preparing submission file.
+2025-09-22 06:42:19,891 | INFO | Submission saved to: task/us-patent-phrase-to-phrase-matching/outputs/4/submission_2.csv
+2025-09-22 06:42:19,891 | INFO | Extra analytics and diagnostics.
+2025-09-22 06:42:19,893 | INFO | Train score=0.0: count=6774, pct=20.64%
+2025-09-22 06:42:19,893 | INFO | Train score=0.25: count=10306, pct=31.40%
+2025-09-22 06:42:19,893 | INFO | Train score=0.5: count=11068, pct=33.72%
+2025-09-22 06:42:19,893 | INFO | Train score=0.75: count=3634, pct=11.07%
+2025-09-22 06:42:19,893 | INFO | Train score=1.0: count=1043, pct=3.18%
+2025-09-22 06:42:19,893 | INFO | Token length diagnostics (first 100 train samples).
+2025-09-22 06:42:19,911 | INFO | Token length stats -> mean=47.33, max=64, min=35
+2025-09-22 06:42:19,912 | INFO | Pipeline completed successfully with CUDA fp16. Submission ready.

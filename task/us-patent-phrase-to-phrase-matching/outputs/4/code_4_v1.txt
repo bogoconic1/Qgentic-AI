@@ -1,0 +1,66 @@
+2025-09-22 06:35:46,712 | INFO | Initialized logging system.
+2025-09-22 06:35:46,712 | INFO | Logs will be written to: task/us-patent-phrase-to-phrase-matching/outputs/4/code_4_v1.txt
+2025-09-22 06:35:46,713 | INFO | Config: {'seed': 42, 'model_name': 'microsoft/deberta-v3-base', 'max_length': 64, 'train_bs': 32, 'valid_bs': 64, 'epochs': 3, 'lr': 3e-05, 'weight_decay': 0.01, 'warmup_ratio': 0.1, 'num_workers': 4, 'fold_id': 0, 'n_splits': 5, 'gradient_accumulation_steps': 1, 'fp16': True, 'optimizer_eps': 1e-08, 'max_grad_norm': 1.0, 'dropout': 0.1, 'train_file': 'task/us-patent-phrase-to-phrase-matching/train.csv', 'test_file': 'task/us-patent-phrase-to-phrase-matching/test.csv', 'titles_file': 'task/us-patent-phrase-to-phrase-matching/titles.csv', 'submission_file': 'task/us-patent-phrase-to-phrase-matching/outputs/4/submission_1.csv', 'log_interval': 100}
+2025-09-22 06:35:46,714 | INFO | Seeding all RNGs with seed=42
+2025-09-22 06:35:46,895 | INFO | Using device: cuda, CUDA device count: 1
+2025-09-22 06:35:46,899 | INFO | CUDA device name: NVIDIA A100-SXM4-80GB
+2025-09-22 06:35:46,899 | INFO | Loading CSV files.
+2025-09-22 06:35:47,239 | INFO | Train shape: (32825, 5), columns: ['id', 'anchor', 'target', 'context', 'score']
+2025-09-22 06:35:47,239 | INFO | Test shape: (3648, 5), columns: ['id', 'anchor', 'target', 'context', 'score']
+2025-09-22 06:35:47,239 | INFO | Titles shape: (260476, 7), columns: ['code', 'title', 'section', 'class', 'subclass', 'group', 'main_group']
+2025-09-22 06:35:47,239 | INFO | Column 'subgroup' not found in titles; creating empty column.
+2025-09-22 06:35:47,241 | INFO | Merging CPC titles into train and test on context->code.
+2025-09-22 06:35:47,343 | INFO | Post-merge train shape: (32825, 12), columns now: ['id', 'anchor', 'target', 'context', 'score', 'code', 'title', 'section', 'class', 'subclass', 'group', 'subgroup']
+2025-09-22 06:35:47,343 | INFO | Post-merge test shape: (3648, 12), columns now: ['id', 'anchor', 'target', 'context', 'score', 'code', 'title', 'section', 'class', 'subclass', 'group', 'subgroup']
+2025-09-22 06:35:47,343 | INFO | Checking for train-test leakage (overlap of (anchor, target, context)).
+2025-09-22 06:35:47,387 | INFO | Number of overlapping (anchor, target, context) triplets: 0
+2025-09-22 06:35:47,387 | INFO | Computing test context distribution (top 10).
+2025-09-22 06:35:47,387 | INFO | Test context H01: count=230, pct=6.30%
+2025-09-22 06:35:47,387 | INFO | Test context H04: count=215, pct=5.89%
+2025-09-22 06:35:47,387 | INFO | Test context G01: count=179, pct=4.91%
+2025-09-22 06:35:47,387 | INFO | Test context A61: count=165, pct=4.52%
+2025-09-22 06:35:47,388 | INFO | Test context F16: count=121, pct=3.32%
+2025-09-22 06:35:47,388 | INFO | Test context C07: count=115, pct=3.15%
+2025-09-22 06:35:47,388 | INFO | Test context G06: count=99, pct=2.71%
+2025-09-22 06:35:47,388 | INFO | Test context B60: count=94, pct=2.58%
+2025-09-22 06:35:47,388 | INFO | Test context G02: count=89, pct=2.44%
+2025-09-22 06:35:47,388 | INFO | Test context H03: count=83, pct=2.28%
+2025-09-22 06:35:47,388 | INFO | Score distribution per context for H04, G01, A61.
+2025-09-22 06:35:47,390 | INFO | Context H04: total=1962
+2025-09-22 06:35:47,390 | INFO |   score=0.0: count=478
+2025-09-22 06:35:47,390 | INFO |   score=0.25: count=617
+2025-09-22 06:35:47,390 | INFO |   score=0.5: count=562
+2025-09-22 06:35:47,390 | INFO |   score=0.75: count=251
+2025-09-22 06:35:47,390 | INFO |   score=1.0: count=54
+2025-09-22 06:35:47,392 | INFO | Context G01: total=1633
+2025-09-22 06:35:47,392 | INFO |   score=0.0: count=355
+2025-09-22 06:35:47,392 | INFO |   score=0.25: count=399
+2025-09-22 06:35:47,393 | INFO |   score=0.5: count=655
+2025-09-22 06:35:47,393 | INFO |   score=0.75: count=183
+2025-09-22 06:35:47,393 | INFO |   score=1.0: count=41
+2025-09-22 06:35:47,395 | INFO | Context A61: total=1312
+2025-09-22 06:35:47,395 | INFO |   score=0.0: count=298
+2025-09-22 06:35:47,395 | INFO |   score=0.25: count=376
+2025-09-22 06:35:47,395 | INFO |   score=0.5: count=512
+2025-09-22 06:35:47,395 | INFO |   score=0.75: count=102
+2025-09-22 06:35:47,395 | INFO |   score=1.0: count=24
+2025-09-22 06:35:47,396 | INFO | Maximum target character length in test.csv: 47
+2025-09-22 06:35:47,396 | INFO | Checking mapping coverage of contexts to titles codes.
+2025-09-22 06:35:47,421 | INFO | All train contexts covered by titles: True
+2025-09-22 06:35:47,422 | INFO | All test contexts covered by titles: True
+2025-09-22 06:35:47,422 | INFO | Building input texts for train and test.
+2025-09-22 06:35:48,023 | INFO | Sample train input_text:
+2025-09-22 06:35:48,023 | INFO | anchor: obstacle course [SEP] target: obstacle position trajectory [SEP] context: code: B60 | title: VEHICLES IN GENERAL | section: B | class: 60.0 | subclass: 
+2025-09-22 06:35:48,023 | INFO | anchor: hardware blocks [SEP] target: housing [SEP] context: code: G06 | title: COMPUTING; CALCULATING; COUNTING | section: G | class: 6.0 | subclass: 
+2025-09-22 06:35:48,023 | INFO | anchor: collator [SEP] target: collation apparatus [SEP] context: code: H04 | title: ELECTRIC COMMUNICATION TECHNIQUE | section: H | class: 4.0 | subclass: 
+2025-09-22 06:35:48,035 | INFO | Preparing stratified splits (using single fold).
+2025-09-22 06:35:48,040 | INFO | Fold 0 sizes -> train: 26260, valid: 6565
+2025-09-22 06:35:48,048 | INFO | Loading tokenizer and preparing datasets.
+2025-09-22 06:35:51,191 | INFO | Train batches: 821, Valid batches: 103, Test batches: 57
+2025-09-22 06:35:51,192 | INFO | Loading pretrained model.
+2025-09-22 06:35:56,671 | INFO | Model loaded: microsoft/deberta-v3-base
+2025-09-22 06:35:56,672 | INFO | Total parameters: 184422913
+2025-09-22 06:35:56,673 | INFO | Trainable parameters: 184422913
+2025-09-22 06:35:56,673 | INFO | Training steps: 2463, Warmup steps: 246
+2025-09-22 06:35:56,673 | INFO | Building optimizer (AdamW) with weight decay.
+2025-09-22 06:35:56,674 | INFO | Starting training loop with fp16 mixed precision on CUDA.
