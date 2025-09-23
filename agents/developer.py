@@ -195,6 +195,7 @@ Hard constraints:
 - You should make your pipeline as customizable as possible (i.e. easy to add new techniques, models, etc).
 - If possible, DO NOT train from scratch. Use pretrained models.
 - NOTE: your code will be run on an H100 SXM5 80GB GPU.
+- IMPORTANT: Add a `DEBUG` flag at the top of the script. The pipeline should run **once with DEBUG=True** (using a very small subset of the data, e.g. 32 samples, 1 epoch) and then **once with DEBUG=False** (using the full training config). Both runs should happen sequentially in the same script. Log clearly when DEBUG mode is running and when FULL mode is running.
 {threshold_text}
 
 Environment context:
@@ -273,7 +274,7 @@ Project structure:
         logger.debug("Written code size: %s characters", len(code))
         return code_path
 
-    def run(self, plan_markdown: str, max_tries: int = 20) -> bool:
+    def run(self, plan_markdown: str, max_tries: int = 50) -> bool:
         logger.info(
             "Starting developer run for slug=%s iteration=%s with max_tries=%s",
             self.slug,

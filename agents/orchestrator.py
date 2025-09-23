@@ -11,7 +11,7 @@ class Orchestrator:
         self.researcher = ResearcherAgent(slug, iteration)
         self.developer = DeveloperAgent(slug, iteration)
 
-    def run(self, max_code_tries: int = 20) -> Tuple[bool, str]:
+    def run(self, max_code_tries: int = 50) -> Tuple[bool, str]:
         # if plan exists, don't run the researcher agent
         if Path(f"task/{self.slug}/outputs/{self.iteration}/plan.md").exists():
             with open(f"task/{self.slug}/outputs/{self.iteration}/plan.md", "r") as f:
