@@ -1,0 +1,144 @@
+2025-09-22 07:47:40,791 | INFO | Logging initialized. Writing to task/tabular-playground-series-dec-2021/outputs/1/code_1_v4.txt
+2025-09-22 07:47:40,791 | INFO | Setting global random seed to 42
+2025-09-22 07:47:40,792 | INFO | Loading training data from task/tabular-playground-series-dec-2021/train.csv
+2025-09-22 07:47:45,294 | INFO | Loading test data from task/tabular-playground-series-dec-2021/test.csv
+2025-09-22 07:47:45,721 | INFO | Loaded train shape=(3600000, 56), test shape=(400000, 56)
+2025-09-22 07:47:45,721 | INFO | Detected 40 soil type columns, 4 wilderness columns, and 10 other numeric columns.
+2025-09-22 07:47:45,721 | INFO | Cleaning one-hot group Soil_Type from columns: ['Soil_Type1', 'Soil_Type2', 'Soil_Type3', 'Soil_Type4', 'Soil_Type5', 'Soil_Type6', 'Soil_Type7', 'Soil_Type8', 'Soil_Type9', 'Soil_Type10', 'Soil_Type11', 'Soil_Type12', 'Soil_Type13', 'Soil_Type14', 'Soil_Type15', 'Soil_Type16', 'Soil_Type17', 'Soil_Type18', 'Soil_Type19', 'Soil_Type20', 'Soil_Type21', 'Soil_Type22', 'Soil_Type23', 'Soil_Type24', 'Soil_Type25', 'Soil_Type26', 'Soil_Type27', 'Soil_Type28', 'Soil_Type29', 'Soil_Type30', 'Soil_Type31', 'Soil_Type32', 'Soil_Type33', 'Soil_Type34', 'Soil_Type35', 'Soil_Type36', 'Soil_Type37', 'Soil_Type38', 'Soil_Type39', 'Soil_Type40'] with prefer='first'
+2025-09-22 07:47:46,244 | INFO | Soil_Type_Clean summary: unknown (sum=0) count=1490405, multi-hot (sum>1) count=703731, proper one-hot (sum=1) count=1405864
+2025-09-22 07:47:46,244 | INFO | Cleaning one-hot group Soil_Type from columns: ['Soil_Type1', 'Soil_Type2', 'Soil_Type3', 'Soil_Type4', 'Soil_Type5', 'Soil_Type6', 'Soil_Type7', 'Soil_Type8', 'Soil_Type9', 'Soil_Type10', 'Soil_Type11', 'Soil_Type12', 'Soil_Type13', 'Soil_Type14', 'Soil_Type15', 'Soil_Type16', 'Soil_Type17', 'Soil_Type18', 'Soil_Type19', 'Soil_Type20', 'Soil_Type21', 'Soil_Type22', 'Soil_Type23', 'Soil_Type24', 'Soil_Type25', 'Soil_Type26', 'Soil_Type27', 'Soil_Type28', 'Soil_Type29', 'Soil_Type30', 'Soil_Type31', 'Soil_Type32', 'Soil_Type33', 'Soil_Type34', 'Soil_Type35', 'Soil_Type36', 'Soil_Type37', 'Soil_Type38', 'Soil_Type39', 'Soil_Type40'] with prefer='first'
+2025-09-22 07:47:46,295 | INFO | Soil_Type_Clean summary: unknown (sum=0) count=165318, multi-hot (sum>1) count=78090, proper one-hot (sum=1) count=156592
+2025-09-22 07:47:46,295 | INFO | Cleaning one-hot group Wilderness from columns: ['Wilderness_Area1', 'Wilderness_Area2', 'Wilderness_Area3', 'Wilderness_Area4'] with prefer='first'
+2025-09-22 07:47:46,384 | INFO | Wilderness_Clean summary: unknown (sum=0) count=222205, multi-hot (sum>1) count=143827, proper one-hot (sum=1) count=3233968
+2025-09-22 07:47:46,384 | INFO | Cleaning one-hot group Wilderness from columns: ['Wilderness_Area1', 'Wilderness_Area2', 'Wilderness_Area3', 'Wilderness_Area4'] with prefer='first'
+2025-09-22 07:47:46,394 | INFO | Wilderness_Clean summary: unknown (sum=0) count=24827, multi-hot (sum>1) count=16041, proper one-hot (sum=1) count=359132
+2025-09-22 07:47:46,394 | INFO | Engineering distance features (Hydrology_Dist, Fire_Road_Dist)
+2025-09-22 07:47:46,415 | INFO | Engineering distance features (Hydrology_Dist, Fire_Road_Dist)
+2025-09-22 07:47:46,417 | INFO | Engineering binned features (Elevation_Band) with band size 100
+2025-09-22 07:47:46,422 | INFO | Engineering binned features (Elevation_Band) with band size 100
+2025-09-22 07:47:46,423 | INFO | Engineering PCA over Hillshade columns
+2025-09-22 07:47:46,432 | INFO | Fitting PCA on GPU with torch for 3600000 samples and 3 features, n_components=2
+2025-09-22 07:47:47,033 | INFO | PCA eigenvalues (descending): [1911.0794677734375, 943.2023315429688, 493.7745056152344]
+2025-09-22 07:47:47,057 | INFO | PCA features added: Hillshade_PCA1, Hillshade_PCA2
+2025-09-22 07:47:47,059 | INFO | Running distribution shift checks (KS for continuous, Chi-square for categorical)
+2025-09-22 07:47:47,059 | INFO | KS test on GPU with samples a=500000, b=400000
+2025-09-22 07:47:47,192 | INFO | KS test on GPU with samples a=500000, b=400000
+2025-09-22 07:47:47,259 | INFO | KS test on GPU with samples a=500000, b=400000
+2025-09-22 07:47:47,330 | INFO | KS test on GPU with samples a=500000, b=400000
+2025-09-22 07:47:47,422 | INFO | KS test on GPU with samples a=500000, b=400000
+2025-09-22 07:47:47,491 | INFO | KS test on GPU with samples a=500000, b=400000
+2025-09-22 07:47:47,563 | INFO | KS test on GPU with samples a=500000, b=400000
+2025-09-22 07:47:47,632 | INFO | KS test on GPU with samples a=500000, b=400000
+2025-09-22 07:47:47,704 | INFO | KS test on GPU with samples a=500000, b=400000
+2025-09-22 07:47:47,774 | INFO | KS test on GPU with samples a=500000, b=400000
+2025-09-22 07:47:47,843 | INFO | KS test on GPU with samples a=500000, b=400000
+2025-09-22 07:47:47,906 | INFO | KS test on GPU with samples a=500000, b=400000
+2025-09-22 07:47:47,968 | INFO | KS test on GPU with samples a=500000, b=400000
+2025-09-22 07:47:48,036 | INFO | KS test on GPU with samples a=500000, b=400000
+2025-09-22 07:47:48,103 | INFO | KS test on GPU with samples a=500000, b=400000
+2025-09-22 07:47:48,168 | INFO | KS test flagged 8 continuous features with p<0.01
+2025-09-22 07:47:48,168 | INFO | KS shift: Elevation_Band: D=0.125686, p=0.0000e+00
+2025-09-22 07:47:48,168 | INFO | KS shift: Slope: D=0.047079, p=0.0000e+00
+2025-09-22 07:47:48,168 | INFO | KS shift: Vertical_Distance_To_Hydrology: D=0.042115, p=0.0000e+00
+2025-09-22 07:47:48,168 | INFO | KS shift: Hillshade_Noon: D=0.021035, p=7.0431e-86
+2025-09-22 07:47:48,169 | INFO | KS shift: Hillshade_9am: D=0.016177, p=5.7533e-51
+2025-09-22 07:47:48,169 | INFO | KS shift: Hillshade_3pm: D=0.011207, p=1.1119e-24
+2025-09-22 07:47:48,169 | INFO | KS shift: Aspect: D=0.004977, p=3.2912e-05
+2025-09-22 07:47:48,169 | INFO | KS shift: Horizontal_Distance_To_Hydrology: D=0.004786, p=7.5263e-05
+2025-09-22 07:47:48,416 | INFO | Chi-square test flagged 0 categorical features with p<0.01
+2025-09-22 07:47:48,416 | INFO | Computing mutual information for leakage checks
+2025-09-22 07:47:48,420 | INFO | Computing MI on GPU (is_categorical=False, bins=20) for 3600000 samples
+2025-09-22 07:47:48,438 | INFO | Discretizing to quantile bins on GPU: n=3600000, bins=20
+2025-09-22 07:47:48,639 | INFO | Computed MI=0.597353
+2025-09-22 07:47:48,639 | INFO | Computing MI on GPU (is_categorical=False, bins=20) for 3600000 samples
+2025-09-22 07:47:48,646 | INFO | Discretizing to quantile bins on GPU: n=3600000, bins=20
+2025-09-22 07:47:48,673 | INFO | Computed MI=0.000083
+2025-09-22 07:47:48,673 | INFO | Computing MI on GPU (is_categorical=False, bins=20) for 3600000 samples
+2025-09-22 07:47:48,678 | INFO | Discretizing to quantile bins on GPU: n=3600000, bins=20
+2025-09-22 07:47:48,705 | INFO | Computed MI=0.001206
+2025-09-22 07:47:48,705 | INFO | Computing MI on GPU (is_categorical=False, bins=20) for 3600000 samples
+2025-09-22 07:47:48,719 | INFO | Discretizing to quantile bins on GPU: n=3600000, bins=20
+2025-09-22 07:47:48,746 | INFO | Computed MI=0.001047
+2025-09-22 07:47:48,746 | INFO | Computing MI on GPU (is_categorical=False, bins=20) for 3600000 samples
+2025-09-22 07:47:48,754 | INFO | Discretizing to quantile bins on GPU: n=3600000, bins=20
+2025-09-22 07:47:48,782 | INFO | Computed MI=0.003027
+2025-09-22 07:47:48,782 | INFO | Computing MI on GPU (is_categorical=False, bins=20) for 3600000 samples
+2025-09-22 07:47:48,787 | INFO | Discretizing to quantile bins on GPU: n=3600000, bins=20
+2025-09-22 07:47:48,813 | INFO | Computed MI=0.029471
+2025-09-22 07:47:48,813 | INFO | Computing MI on GPU (is_categorical=False, bins=20) for 3600000 samples
+2025-09-22 07:47:48,821 | INFO | Discretizing to quantile bins on GPU: n=3600000, bins=20
+2025-09-22 07:47:48,846 | INFO | Computed MI=0.000139
+2025-09-22 07:47:48,846 | INFO | Computing MI on GPU (is_categorical=False, bins=20) for 3600000 samples
+2025-09-22 07:47:48,851 | INFO | Discretizing to quantile bins on GPU: n=3600000, bins=20
+2025-09-22 07:47:48,881 | INFO | Computed MI=0.000140
+2025-09-22 07:47:48,881 | INFO | Computing MI on GPU (is_categorical=False, bins=20) for 3600000 samples
+2025-09-22 07:47:48,890 | INFO | Discretizing to quantile bins on GPU: n=3600000, bins=20
+2025-09-22 07:47:48,925 | INFO | Computed MI=0.000205
+2025-09-22 07:47:48,925 | INFO | Computing MI on GPU (is_categorical=False, bins=20) for 3600000 samples
+2025-09-22 07:47:48,934 | INFO | Discretizing to quantile bins on GPU: n=3600000, bins=20
+2025-09-22 07:47:48,963 | INFO | Computed MI=0.018416
+2025-09-22 07:47:48,964 | INFO | Computing MI on GPU (is_categorical=False, bins=20) for 3600000 samples
+2025-09-22 07:47:48,972 | INFO | Discretizing to quantile bins on GPU: n=3600000, bins=20
+2025-09-22 07:47:48,998 | INFO | Computed MI=0.000206
+2025-09-22 07:47:48,998 | INFO | Computing MI on GPU (is_categorical=False, bins=20) for 3600000 samples
+2025-09-22 07:47:49,006 | INFO | Discretizing to quantile bins on GPU: n=3600000, bins=20
+2025-09-22 07:47:49,036 | INFO | Computed MI=0.000149
+2025-09-22 07:47:49,036 | INFO | Computing MI on GPU (is_categorical=False, bins=20) for 3600000 samples
+2025-09-22 07:47:49,045 | INFO | Discretizing to quantile bins on GPU: n=3600000, bins=20
+2025-09-22 07:47:49,071 | INFO | Computed MI=0.001514
+2025-09-22 07:47:49,071 | INFO | Computing MI on GPU (is_categorical=False, bins=20) for 3600000 samples
+2025-09-22 07:47:49,076 | INFO | Discretizing to quantile bins on GPU: n=3600000, bins=20
+2025-09-22 07:47:49,105 | INFO | Computed MI=0.036489
+2025-09-22 07:47:49,105 | INFO | Computing MI on GPU (is_categorical=False, bins=20) for 3600000 samples
+2025-09-22 07:47:49,110 | INFO | Discretizing to quantile bins on GPU: n=3600000, bins=20
+2025-09-22 07:47:49,139 | INFO | Computed MI=0.579056
+2025-09-22 07:47:49,140 | INFO | Computing MI on GPU (is_categorical=True, bins=50) for 3600000 samples
+2025-09-22 07:47:49,182 | INFO | Computed MI=0.091789
+2025-09-22 07:47:49,182 | INFO | Computing MI on GPU (is_categorical=True, bins=50) for 3600000 samples
+2025-09-22 07:47:49,219 | INFO | Computed MI=0.041102
+2025-09-22 07:47:49,220 | INFO | Top 15 features by MI with target:
+2025-09-22 07:47:49,220 | INFO | MI: Elevation -> 0.597353
+2025-09-22 07:47:49,220 | INFO | MI: Elevation_Band -> 0.579056
+2025-09-22 07:47:49,220 | INFO | MI: Wilderness_Clean -> 0.091789
+2025-09-22 07:47:49,220 | INFO | MI: Soil_Type_Clean -> 0.041102
+2025-09-22 07:47:49,220 | INFO | MI: Fire_Road_Dist -> 0.036489
+2025-09-22 07:47:49,220 | INFO | MI: Horizontal_Distance_To_Roadways -> 0.029471
+2025-09-22 07:47:49,220 | INFO | MI: Horizontal_Distance_To_Fire_Points -> 0.018416
+2025-09-22 07:47:49,220 | INFO | MI: Vertical_Distance_To_Hydrology -> 0.003027
+2025-09-22 07:47:49,220 | INFO | MI: Hydrology_Dist -> 0.001514
+2025-09-22 07:47:49,220 | INFO | MI: Slope -> 0.001206
+2025-09-22 07:47:49,220 | INFO | MI: Horizontal_Distance_To_Hydrology -> 0.001047
+2025-09-22 07:47:49,220 | INFO | MI: Hillshade_PCA1 -> 0.000206
+2025-09-22 07:47:49,220 | INFO | MI: Hillshade_3pm -> 0.000205
+2025-09-22 07:47:49,220 | INFO | MI: Hillshade_PCA2 -> 0.000149
+2025-09-22 07:47:49,220 | INFO | MI: Hillshade_Noon -> 0.000140
+2025-09-22 07:47:49,220 | INFO | No features exceed MI > 0.95; leakage unlikely.
+2025-09-22 07:47:49,220 | INFO | Building feature matrices (X_train, X_test)
+2025-09-22 07:47:49,220 | INFO | Detected 40 soil type columns, 4 wilderness columns, and 19 other numeric columns.
+2025-09-22 07:47:49,462 | INFO | Engineering interaction one-hot features STC x WLC
+2025-09-22 07:47:51,263 | INFO | Final feature matrix shapes: X_train=(3600000, 262), X_test=(400000, 262)
+2025-09-22 07:47:51,283 | INFO | Creating a robust single fold split with stratification where possible. test_size=0.2, seed=42
+2025-09-22 07:47:51,292 | INFO | Split label distribution (before split): {"0": 1320866, "1": 2036254, "2": 176184, "3": 333, "4": 1, "5": 10237, "6": 56125}
+2025-09-22 07:47:51,292 | INFO | Eligible classes for stratified split: [0, 1, 2, 3, 5, 6]
+2025-09-22 07:47:51,292 | INFO | Ineligible (count<2) classes assigned entirely to train: [4]
+2025-09-22 07:47:52,297 | INFO | Train label distribution after split: {"0": 1056693, "1": 1629003, "2": 140947, "3": 266, "4": 1, "5": 8190, "6": 44900}
+2025-09-22 07:47:52,297 | INFO | Valid label distribution after split: {"0": 264173, "1": 407251, "2": 35237, "3": 67, "5": 2047, "6": 11225}
+2025-09-22 07:47:52,297 | INFO | Computing inverse-frequency class weights
+2025-09-22 07:47:52,308 | INFO | Class distribution: {"0": 1320866, "1": 2036254, "2": 176184, "3": 333, "4": 1, "5": 10237, "6": 56125}
+2025-09-22 07:47:52,308 | INFO | Class weights (normalized): {"0": 5.283041701413749e-06, "1": 3.4269743165536186e-06, "2": 3.960739999080265e-05, "3": 0.020955526005944667, "4": 6.978190159979574, "5": 0.0006816635889400776, "6": 0.00012433300953193003}
+2025-09-22 07:47:52,903 | INFO | Creating XGBoost DMatrices (GPU)
+2025-09-22 07:48:02,025 | INFO | Starting XGBoost training with GPU
+2025-09-22 07:50:58,033 | INFO | Training completed in 176.01 seconds. Best iteration: 134, best score: 1.881974040300297
+2025-09-22 07:50:58,033 | INFO | Evaluating validation performance
+2025-09-22 07:50:58,184 | INFO | Validation Accuracy: 0.001594
+2025-09-22 07:50:58,184 | INFO | Per-class validation accuracy:
+2025-09-22 07:50:58,184 | INFO |   Class 1: 0.000000
+2025-09-22 07:50:58,184 | INFO |   Class 2: 0.000000
+2025-09-22 07:50:58,184 | INFO |   Class 3: 0.000000
+2025-09-22 07:50:58,184 | INFO |   Class 4: 0.537313
+2025-09-22 07:50:58,184 | INFO |   Class 6: 0.543234
+2025-09-22 07:50:58,184 | INFO |   Class 7: 0.000000
+2025-09-22 07:50:58,184 | INFO | Refitting model on full training data with best_iteration
+2025-09-22 07:53:19,396 | INFO | Predicting on test set and generating submission CSV
+2025-09-22 07:53:20,387 | INFO | Submission saved to task/tabular-playground-series-dec-2021/outputs/1/submission_4.csv
+2025-09-22 07:53:20,387 | INFO | Pipeline completed successfully

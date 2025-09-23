@@ -1,0 +1,72 @@
+2025-09-22 17:47:23,938 | INFO | Config: {'base_dir': 'task/tabular-playground-series-dec-2021', 'outputs_dir': 'task/tabular-playground-series-dec-2021/outputs/4', 'train_file': 'task/tabular-playground-series-dec-2021/train.csv', 'test_file': 'task/tabular-playground-series-dec-2021/test.csv', 'submission_file': 'task/tabular-playground-series-dec-2021/outputs/4/submission_3.csv', 'random_state': 42, 'valid_size': 0.2, 'target_col': 'Cover_Type', 'id_col': 'Id', 'drop_test_target_if_present': True, 'drop_soil_zero_variance': ('Soil_Type7', 'Soil_Type15'), 'hillshade_cols': ('Hillshade_9am', 'Hillshade_Noon', 'Hillshade_3pm'), 'horiz_distance_cols': ('Horizontal_Distance_To_Hydrology', 'Horizontal_Distance_To_Roadways', 'Horizontal_Distance_To_Fire_Points'), 'wilderness_area_cols': ('Wilderness_Area1', 'Wilderness_Area2', 'Wilderness_Area3', 'Wilderness_Area4'), 'soil_type_cols': ('Soil_Type1', 'Soil_Type2', 'Soil_Type3', 'Soil_Type4', 'Soil_Type5', 'Soil_Type6', 'Soil_Type7', 'Soil_Type8', 'Soil_Type9', 'Soil_Type10', 'Soil_Type11', 'Soil_Type12', 'Soil_Type13', 'Soil_Type14', 'Soil_Type15', 'Soil_Type16', 'Soil_Type17', 'Soil_Type18', 'Soil_Type19', 'Soil_Type20', 'Soil_Type21', 'Soil_Type22', 'Soil_Type23', 'Soil_Type24', 'Soil_Type25', 'Soil_Type26', 'Soil_Type27', 'Soil_Type28', 'Soil_Type29', 'Soil_Type30', 'Soil_Type31', 'Soil_Type32', 'Soil_Type33', 'Soil_Type34', 'Soil_Type35', 'Soil_Type36', 'Soil_Type37', 'Soil_Type38', 'Soil_Type39', 'Soil_Type40'), 'xgb_n_estimators': 2000, 'xgb_learning_rate': 0.05, 'xgb_max_depth': 8, 'xgb_subsample': 0.8, 'xgb_colsample_bytree': 0.8, 'xgb_min_child_weight': 2.0, 'xgb_reg_lambda': 1.0, 'xgb_tree_method': 'gpu_hist', 'xgb_predictor': 'gpu_predictor', 'xgb_eval_metric': 'mlogloss', 'xgb_early_stopping_rounds': 200, 'make_aspect_sin_cos': True, 'clip_hillshade': True, 'fix_negative_horizontal_distances': True, 'engineer_hydrology_features': True, 'engineer_hillshade_stats': True, 'engineer_onehot_sums': True, 'drop_original_aspect': True, 'remove_cover_type_5_from_train': True, 'dtype_float': 'float32'}
+2025-09-22 17:47:23,938 | INFO | ==== Pipeline start ====
+2025-09-22 17:47:23,938 | INFO | Loading data.
+2025-09-22 17:47:28,966 | INFO | Loaded train shape: (3600000, 56), test shape: (400000, 56)
+2025-09-22 17:47:28,966 | INFO | Checking for presence of target in test and dropping if present.
+2025-09-22 17:47:28,966 | INFO | Found Cover_Type in test; dropping it as per plan.
+2025-09-22 17:47:28,983 | INFO | Dropping zero-variance soil column: Soil_Type7
+2025-09-22 17:47:29,205 | INFO | Dropping zero-variance soil column: Soil_Type15
+2025-09-22 17:47:30,035 | INFO | Dropping zero-variance soil column: Soil_Type7
+2025-09-22 17:47:30,053 | INFO | Dropping zero-variance soil column: Soil_Type15
+2025-09-22 17:47:30,069 | INFO | Clipping hillshade values to [0, 255].
+2025-09-22 17:47:30,111 | INFO | Clipping hillshade values to [0, 255].
+2025-09-22 17:47:30,118 | INFO | Fixing negative horizontal distances by setting negatives to 0.
+2025-09-22 17:47:30,120 | INFO | Horizontal_Distance_To_Hydrology: 2661 negative values found; setting them to 0.
+2025-09-22 17:47:30,133 | INFO | Horizontal_Distance_To_Roadways: 27755 negative values found; setting them to 0.
+2025-09-22 17:47:30,141 | INFO | Horizontal_Distance_To_Fire_Points: 23160 negative values found; setting them to 0.
+2025-09-22 17:47:30,148 | INFO | Fixing negative horizontal distances by setting negatives to 0.
+2025-09-22 17:47:30,148 | INFO | Horizontal_Distance_To_Hydrology: 298 negative values found; setting them to 0.
+2025-09-22 17:47:30,150 | INFO | Horizontal_Distance_To_Roadways: 2971 negative values found; setting them to 0.
+2025-09-22 17:47:30,152 | INFO | Horizontal_Distance_To_Fire_Points: 2557 negative values found; setting them to 0.
+2025-09-22 17:47:30,153 | INFO | Normalizing Aspect to [0, 360) and creating circular encodings.
+2025-09-22 17:47:30,308 | INFO | Dropping original Aspect column.
+2025-09-22 17:47:30,497 | INFO | Normalizing Aspect to [0, 360) and creating circular encodings.
+2025-09-22 17:47:30,514 | INFO | Dropping original Aspect column.
+2025-09-22 17:47:30,534 | INFO | Starting feature engineering.
+2025-09-22 17:47:30,534 | INFO | Engineering hydrology features.
+2025-09-22 17:47:30,618 | INFO | Engineering hillshade mean and range features.
+2025-09-22 17:47:31,323 | INFO | Engineering Wilderness_Area count feature.
+2025-09-22 17:47:31,552 | INFO | Engineering Soil_Type sum feature.
+2025-09-22 17:47:31,957 | INFO | Finished feature engineering.
+2025-09-22 17:47:31,957 | INFO | Starting feature engineering.
+2025-09-22 17:47:31,957 | INFO | Engineering hydrology features.
+2025-09-22 17:47:31,966 | INFO | Engineering hillshade mean and range features.
+2025-09-22 17:47:32,041 | INFO | Engineering Wilderness_Area count feature.
+2025-09-22 17:47:32,067 | INFO | Engineering Soil_Type sum feature.
+2025-09-22 17:47:32,111 | INFO | Finished feature engineering.
+2025-09-22 17:47:32,111 | INFO | Running diagnostics for Wilderness_Area and Soil_Type sum distributions.
+2025-09-22 17:47:32,377 | INFO | Wilderness_Area sum freq (train): {0: 222205, 1: 3233968, 2: 143692, 3: 135}
+2025-09-22 17:47:32,379 | INFO | Wilderness_Area sum freq (test): {0: 24827, 1: 359132, 2: 16027, 3: 14}
+2025-09-22 17:47:32,782 | INFO | Soil_Type sum freq (train): {0: 1490405, 1: 1405864, 2: 557030, 3: 126409, 4: 18259, 5: 1864, 6: 158, 7: 11}}
+2025-09-22 17:47:32,826 | INFO | Soil_Type sum freq (test): {0: 165318, 1: 156592, 2: 61885, 3: 13953, 4: 2039, 5: 186, 6: 25, 7: 2}}
+2025-09-22 17:47:32,826 | INFO | Removing rows with Cover_Type == 5 from training data as specified.
+2025-09-22 17:47:33,229 | INFO | Removed 1 rows from training (Cover_Type == 5).
+2025-09-22 17:47:33,229 | INFO | Preparing features and labels.
+2025-09-22 17:47:33,328 | INFO | Encoded classes: [1, 2, 3, 4, 6, 7]
+2025-09-22 17:47:33,329 | INFO | Preparing training and test matrices.
+2025-09-22 17:47:33,329 | INFO | Number of common feature columns: 59
+2025-09-22 17:47:33,787 | INFO | Using 59 features.
+2025-09-22 17:47:33,787 | INFO | Running simple distribution shift diagnostics (KS) on Elevation.
+2025-09-22 17:47:33,790 | INFO | Computing KS statistic.
+2025-09-22 17:47:33,884 | INFO | KS statistic computed: 0.0013383718953809964
+2025-09-22 17:47:33,885 | INFO | KS statistic Elevation (train vs test): 0.001338
+2025-09-22 17:47:33,885 | INFO | Running simple distribution shift diagnostics (KS) on Hillshade_Mean.
+2025-09-22 17:47:33,887 | INFO | Computing KS statistic.
+2025-09-22 17:47:33,975 | INFO | KS statistic computed: 0.008195990488469529
+2025-09-22 17:47:33,975 | INFO | KS statistic Hillshade_Mean (train vs test): 0.008196
+2025-09-22 17:47:33,975 | INFO | Starting single-fold stratified split for validation (early iteration).
+2025-09-22 17:47:35,810 | INFO | Train fold shape: (2879999, 59), Validation fold shape: (720000, 59)
+2025-09-22 17:47:35,810 | INFO | Computing class weights (inverse frequency).
+2025-09-22 17:47:35,816 | INFO | Class distribution: {0: 1056693, 1: 1629003, 2: 140947, 3: 266, 4: 8190, 5: 44900}
+2025-09-22 17:47:35,817 | INFO | Class weights: {0: 0.4542471969941443, 1: 0.29465865522244794, 2: 3.4055342315432986, 3: 1804.5106516290728, 4: 58.608038258038256, 5: 10.690419450631031}
+2025-09-22 17:47:36,106 | INFO | Number of classes after potential filtering: 6
+2025-09-22 17:47:36,106 | INFO | Fitting XGBoost model on GPU with sample weights and estimator-level early stopping.
+2025-09-22 17:50:02,685 | INFO | Best iteration: 1999
+2025-09-22 17:50:02,685 | INFO | Evaluating validation performance.
+2025-09-22 17:50:04,251 | INFO | Validation accuracy: 0.957803
+2025-09-22 17:50:04,252 | INFO | Validation logloss: 0.097973
+2025-09-22 17:50:04,252 | INFO | Predicting on test data for submission.
+2025-09-22 17:50:05,311 | INFO | Building submission file.
+2025-09-22 17:50:05,453 | INFO | Saved submission to: task/tabular-playground-series-dec-2021/outputs/4/submission_3.csv
+2025-09-22 17:50:05,453 | INFO | Final validation results -> Accuracy: 0.957803, LogLoss: 0.097973
+2025-09-22 17:50:05,453 | INFO | ==== Pipeline end ====

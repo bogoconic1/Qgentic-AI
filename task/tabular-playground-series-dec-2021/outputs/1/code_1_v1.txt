@@ -1,0 +1,49 @@
+2025-09-22 07:32:38,343 | INFO | Logging initialized. Writing to task/tabular-playground-series-dec-2021/outputs/1/code_1_v1.txt
+2025-09-22 07:32:38,343 | INFO | Setting global random seed to 42
+2025-09-22 07:32:38,344 | INFO | Loading training data from task/tabular-playground-series-dec-2021/train.csv
+2025-09-22 07:32:42,863 | INFO | Loading test data from task/tabular-playground-series-dec-2021/test.csv
+2025-09-22 07:32:43,289 | INFO | Loaded train shape=(3600000, 56), test shape=(400000, 56)
+2025-09-22 07:32:43,289 | INFO | Detected 40 soil type columns, 4 wilderness columns, and 10 other numeric columns.
+2025-09-22 07:32:43,290 | INFO | Cleaning one-hot group Soil_Type from columns: ['Soil_Type1', 'Soil_Type2', 'Soil_Type3', 'Soil_Type4', 'Soil_Type5', 'Soil_Type6', 'Soil_Type7', 'Soil_Type8', 'Soil_Type9', 'Soil_Type10', 'Soil_Type11', 'Soil_Type12', 'Soil_Type13', 'Soil_Type14', 'Soil_Type15', 'Soil_Type16', 'Soil_Type17', 'Soil_Type18', 'Soil_Type19', 'Soil_Type20', 'Soil_Type21', 'Soil_Type22', 'Soil_Type23', 'Soil_Type24', 'Soil_Type25', 'Soil_Type26', 'Soil_Type27', 'Soil_Type28', 'Soil_Type29', 'Soil_Type30', 'Soil_Type31', 'Soil_Type32', 'Soil_Type33', 'Soil_Type34', 'Soil_Type35', 'Soil_Type36', 'Soil_Type37', 'Soil_Type38', 'Soil_Type39', 'Soil_Type40'] with prefer='first'
+2025-09-22 07:32:43,792 | INFO | Soil_Type_Clean summary: unknown (sum=0) count=1490405, multi-hot (sum>1) count=703731, proper one-hot (sum=1) count=1405864
+2025-09-22 07:32:43,793 | INFO | Cleaning one-hot group Soil_Type from columns: ['Soil_Type1', 'Soil_Type2', 'Soil_Type3', 'Soil_Type4', 'Soil_Type5', 'Soil_Type6', 'Soil_Type7', 'Soil_Type8', 'Soil_Type9', 'Soil_Type10', 'Soil_Type11', 'Soil_Type12', 'Soil_Type13', 'Soil_Type14', 'Soil_Type15', 'Soil_Type16', 'Soil_Type17', 'Soil_Type18', 'Soil_Type19', 'Soil_Type20', 'Soil_Type21', 'Soil_Type22', 'Soil_Type23', 'Soil_Type24', 'Soil_Type25', 'Soil_Type26', 'Soil_Type27', 'Soil_Type28', 'Soil_Type29', 'Soil_Type30', 'Soil_Type31', 'Soil_Type32', 'Soil_Type33', 'Soil_Type34', 'Soil_Type35', 'Soil_Type36', 'Soil_Type37', 'Soil_Type38', 'Soil_Type39', 'Soil_Type40'] with prefer='first'
+2025-09-22 07:32:43,845 | INFO | Soil_Type_Clean summary: unknown (sum=0) count=165318, multi-hot (sum>1) count=78090, proper one-hot (sum=1) count=156592
+2025-09-22 07:32:43,845 | INFO | Cleaning one-hot group Wilderness from columns: ['Wilderness_Area1', 'Wilderness_Area2', 'Wilderness_Area3', 'Wilderness_Area4'] with prefer='first'
+2025-09-22 07:32:43,936 | INFO | Wilderness_Clean summary: unknown (sum=0) count=222205, multi-hot (sum>1) count=143827, proper one-hot (sum=1) count=3233968
+2025-09-22 07:32:43,936 | INFO | Cleaning one-hot group Wilderness from columns: ['Wilderness_Area1', 'Wilderness_Area2', 'Wilderness_Area3', 'Wilderness_Area4'] with prefer='first'
+2025-09-22 07:32:43,946 | INFO | Wilderness_Clean summary: unknown (sum=0) count=24827, multi-hot (sum>1) count=16041, proper one-hot (sum=1) count=359132
+2025-09-22 07:32:43,947 | INFO | Engineering distance features (Hydrology_Dist, Fire_Road_Dist)
+2025-09-22 07:32:43,967 | INFO | Engineering distance features (Hydrology_Dist, Fire_Road_Dist)
+2025-09-22 07:32:43,970 | INFO | Engineering binned features (Elevation_Band) with band size 100
+2025-09-22 07:32:43,975 | INFO | Engineering binned features (Elevation_Band) with band size 100
+2025-09-22 07:32:43,976 | INFO | Engineering PCA over Hillshade columns
+2025-09-22 07:32:43,985 | INFO | Fitting PCA on GPU with torch for 3600000 samples and 3 features, n_components=2
+2025-09-22 07:32:44,601 | INFO | PCA eigenvalues (descending): [1911.0794677734375, 943.2023315429688, 493.7745056152344]
+2025-09-22 07:32:44,626 | INFO | PCA features added: Hillshade_PCA1, Hillshade_PCA2
+2025-09-22 07:32:44,628 | INFO | Running distribution shift checks (KS for continuous, Chi-square for categorical)
+2025-09-22 07:32:44,628 | INFO | KS test on GPU with samples a=500000, b=400000
+2025-09-22 07:32:44,789 | INFO | KS test on GPU with samples a=500000, b=400000
+2025-09-22 07:32:44,860 | INFO | KS test on GPU with samples a=500000, b=400000
+2025-09-22 07:32:44,929 | INFO | KS test on GPU with samples a=500000, b=400000
+2025-09-22 07:32:45,005 | INFO | KS test on GPU with samples a=500000, b=400000
+2025-09-22 07:32:45,081 | INFO | KS test on GPU with samples a=500000, b=400000
+2025-09-22 07:32:45,156 | INFO | KS test on GPU with samples a=500000, b=400000
+2025-09-22 07:32:45,231 | INFO | KS test on GPU with samples a=500000, b=400000
+2025-09-22 07:32:45,306 | INFO | KS test on GPU with samples a=500000, b=400000
+2025-09-22 07:32:45,378 | INFO | KS test on GPU with samples a=500000, b=400000
+2025-09-22 07:32:45,452 | INFO | KS test on GPU with samples a=500000, b=400000
+2025-09-22 07:32:45,530 | INFO | KS test on GPU with samples a=500000, b=400000
+2025-09-22 07:32:45,604 | INFO | KS test on GPU with samples a=500000, b=400000
+2025-09-22 07:32:45,675 | INFO | KS test on GPU with samples a=500000, b=400000
+2025-09-22 07:32:45,751 | INFO | KS test on GPU with samples a=500000, b=400000
+2025-09-22 07:32:45,822 | INFO | KS test flagged 8 continuous features with p<0.01
+2025-09-22 07:32:45,822 | INFO | KS shift: Elevation_Band: D=0.125686, p=0.0000e+00
+2025-09-22 07:32:45,822 | INFO | KS shift: Slope: D=0.047079, p=0.0000e+00
+2025-09-22 07:32:45,822 | INFO | KS shift: Vertical_Distance_To_Hydrology: D=0.042115, p=0.0000e+00
+2025-09-22 07:32:45,822 | INFO | KS shift: Hillshade_Noon: D=0.021035, p=7.0431e-86
+2025-09-22 07:32:45,822 | INFO | KS shift: Hillshade_9am: D=0.016177, p=5.7533e-51
+2025-09-22 07:32:45,822 | INFO | KS shift: Hillshade_3pm: D=0.011207, p=1.1119e-24
+2025-09-22 07:32:45,822 | INFO | KS shift: Aspect: D=0.004977, p=3.2912e-05
+2025-09-22 07:32:45,822 | INFO | KS shift: Horizontal_Distance_To_Hydrology: D=0.004786, p=7.5263e-05
+2025-09-22 07:32:46,070 | INFO | Chi-square test flagged 0 categorical features with p<0.01
+2025-09-22 07:32:46,071 | INFO | Computing mutual information for leakage checks
