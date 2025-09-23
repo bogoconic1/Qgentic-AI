@@ -59,6 +59,8 @@ class DeveloperAgent:
         self.plan_path = self.outputs_dir / "plan.md"
         self.messages = []
         self.latest_submission_path: Optional[Path] = None
+        self.benchmark_info: Optional[dict] = None
+        self.threshold_directive: str = ""
 
         # OpenRouter client
         self.client = OpenAI(api_key=os.environ.get("OPENROUTER_API_KEY"), base_url="https://openrouter.ai/api/v1")
@@ -96,6 +98,78 @@ class DeveloperAgent:
                 lines.append(f"{indent}    {name}")
         return "\n".join(lines)
 
+    def _load_benchmark_info(self) -> None:
+        self.benchmark_info = None
+        self.threshold_directive = ""
+        sample_submission = self.base_dir / "sample_submission.csv"
+        if not sample_submission.exists():
+            logger.warning(
+                "Sample submission not found at %s; skipping baseline grading",
+                sample_submission,
+            )
+            return
+
+        grade_cmd = [
+            "mlebench",
+            "grade-sample",
+            str(sample_submission),
+            self.slug,
+        ]
+
+        logger.info("Fetching grading baseline via: %s", " ".join(grade_cmd))
+        try:
+            result = subprocess.run(
+                grade_cmd,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except Exception:
+            logger.exception("Failed to execute mlebench grade-sample for baseline")
+            return
+
+        stdout = (result.stdout or "").strip()
+        if result.returncode != 0:
+            logger.warning(
+                "Baseline grading command returned non-zero exit (%s). stderr=\n%s",
+                result.returncode,
+                (result.stderr or "").strip(),
+            )
+            return
+
+        try:
+            start = stdout.index("{")
+            end = stdout.rindex("}") + 1
+            stdout = stdout[start:end]
+            logger.debug("stdout JSON snippet: %s", stdout)
+            info = json.loads(stdout)
+        except json.JSONDecodeError:
+            logger.warning("Baseline grading output was not valid JSON: %s", stdout[:500])
+            return
+
+        self.benchmark_info = info
+        median = info.get("median_threshold")
+        is_lower_better = info.get("is_lower_better")
+
+        if median is None or is_lower_better is None:
+            logger.debug(
+                "Insufficient benchmark data to build threshold directive: %s",
+                info,
+            )
+            return
+
+        comparator = "greater than" if is_lower_better else "less than"
+        self.threshold_directive = (
+            "Remember: you must include this in your code. Performance baseline: After the first validation fold, if the score is "
+            f"{comparator} {median}, break out of the loop after fold 0 instead of completing all folds. For deep learning pipelines, if at the end of the 1st epoch of fold 0, the loss or metric is NaN, also break out of the loop. If you are using more than 1 model, the stopping condition should be computed based on the ensembled result, not the individual model result. Also add a logging message which says CRITICAL: the performance is too weak and you need to investigate."
+        )
+        logger.info(
+            "Baseline grading info cached: median=%s, is_lower_better=%s",
+            median,
+            is_lower_better,
+        )
+        logger.info("Threshold directive: %s", self.threshold_directive)
+
     def _compose_system(self) -> str:
         logger.debug("Composing system prompt for slug=%s", self.slug)
         self.description = _safe_read(str(self.base_dir / "description.md"))
@@ -104,6 +178,7 @@ class DeveloperAgent:
         logger.debug(
             "Directory listing prepared for %s (length=%s)", self.base_dir, len(directory_listing)
         )
+        threshold_text = f"\n- {self.threshold_directive}" if self.threshold_directive else ""
         return f"""
 You are a expert Python developer with 10 years of experience. Produce a single, self-contained Python script.
 
@@ -112,13 +187,16 @@ Hard constraints:
 - Use CUDA everywhere where possible.
 - Write logging.info statements everywhere where possible in your code. 
 - MAKE SURE you call logging.basicConfig() at the beginning of your code before any other logging statements.
-- Always train with fp16 if using PyTorch/transformers or deep learning.
+- Always train with bfloat16 if using PyTorch/transformers or deep learning.
 - Do not code any fallback methods.
+- Do not use LightGBM as it is very slow.
+- Do not use transformers.Trainer or transformers.TrainingArguments.
 - Do not try to bypass any potential exceptions by writing your code in try/except blocks.
 - Make sure you log the final validation results.
 - You should make your pipeline as customizable as possible (i.e. easy to add new techniques, models, etc).
 - If possible, DO NOT train from scratch. Use pretrained models.
-- NOTE: your code will be run on an A100 SXM4 80GB GPU.
+- NOTE: your code will be run on an H100 SXM5 80GB GPU.
+{threshold_text}
 
 Environment context:
 {self.description}
@@ -152,6 +230,8 @@ Project structure:
             "and produces a submission CSV at "
             f"task/{self.slug}/outputs/{self.iteration}/submission_{version}.csv."
         )
+        if self.threshold_directive:
+            base += f"\n{self.threshold_directive}"
         return base
 
     def _extract_code(self, content: str) -> str:
@@ -203,10 +283,11 @@ Project structure:
         except Exception:
             logger.exception("Failed to persist plan markdown to %s", self.plan_path)
 
+        self._load_benchmark_info()
         system_prompt = self._compose_system()
         user_prompt = self._build_user_prompt(plan_markdown, version=1)
         self.messages.append({"role": "system", "content": system_prompt})
-        self.messages.append({"role": "user", "content": user_prompt + "\n" + "This is an early iteration, you should only use a single fold for validation."})
+        self.messages.append({"role": "user", "content": user_prompt})
 
         for attempt in range(1, max_tries + 1):
             # keep at most 3 assistant/user messages

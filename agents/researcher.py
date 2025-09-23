@@ -46,7 +46,6 @@ class ResearcherAgent:
         if not logging.getLogger().handlers:
             logging.basicConfig(
                 level=logging.DEBUG,
-                format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
             )
 
         # Prevent duplicate handlers
@@ -56,9 +55,6 @@ class ResearcherAgent:
         }
         if str(self.researcher_log_path) not in existing_paths:
             file_handler = logging.FileHandler(self.researcher_log_path)
-            file_handler.setFormatter(
-                logging.Formatter("%(asctime)s %(levelname)s [%(name)s] %(message)s")
-            )
             logger.addHandler(file_handler)
         logger.setLevel(logging.DEBUG)
         logger.info(
@@ -95,13 +91,13 @@ Deliverable:
 Competition Description:
 {self.description}
 
-Supporting baseline notes (may be useful to see what other competitors are trying):
+What other competitors have tried? It may be useful to get you started:
 {_safe_read(os.path.join(base_dir, "public_insights.md"))}
 
 IMPORTANT: DO NOT OPTIMIZE FOR THE EFFICIENCY PRIZE
 """
 
-    def build_plan(self, max_steps: int = 32) -> str:
+    def build_plan(self, max_steps: int = 512) -> str:
         system_prompt = self._compose_system()
         self.messages = [
             {"role": "system", "content": system_prompt},
@@ -124,7 +120,8 @@ IMPORTANT: DO NOT OPTIMIZE FOR THE EFFICIENCY PRIZE
                 logger.info("Reached final step; forcing plan output prompt")
 
             llm_params = {
-                "model": "qwen/qwen3-next-80b-a3b-thinking",
+                # "model": "qwen/qwen3-next-80b-a3b-thinking",
+                "model": "gpt-5",
                 "messages": self.messages,
                 "tools": tools,
                 "tool_choice": "auto",
@@ -151,12 +148,15 @@ IMPORTANT: DO NOT OPTIMIZE FOR THE EFFICIENCY PRIZE
                     )
                     if function_name == "ask_eda":
                         question = arguments.get("question", "")
+                        logger.info(f"{question}")
                         if len(question) == 0:
                             tool_output = "Your question cannot be answered based on the competition discussion threads."
                         else:
                             tool_output = ask_eda(question, self.description, data_path=f"task/{self.slug}")
 
-                        logger.info("Tool response length=%s", len(tool_output or ""))
+                        logger.info("```tool")
+                        logger.info(f"{tool_output}")
+                        logger.info("```")
 
                         self.messages.append(
                             {

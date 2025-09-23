@@ -71,9 +71,10 @@ The machine learning task description is:
 The initial script and logs are:
 {context}
 
-You should give 3 advices (potentially state-of-the-art models or architectures) that may potentially improve the metric performance(e.g. accuracy) of the script on this machine learning task.
+First check if the script has sections that say the loss/metric is NaN. If so, you also need to provide advice on how to fix the NaN issue.
+Please do some research on recent effective models/techniques and provide 3 advices that may potentially improve the metric performance(e.g. accuracy) of the script on this machine learning task.
 
-You advices in you answer should strictly following the following format:
+Your advices in you answer should strictly following the following format:
 <advice> [YOUR ADVICE] </advice>
 <advice> [YOUR ADVICE] </advice>    
 <advice> [YOUR ADVICE] </advice>
