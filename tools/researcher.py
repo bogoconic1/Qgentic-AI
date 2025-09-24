@@ -21,18 +21,19 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
-def _build_directory_listing(root: str) -> str:
+def _build_directory_listing(root: str, num_files: int = 10) -> str:
     lines: list[str] = []
     for current_root, dirs, files in os.walk(root):
         dirs[:] = sorted(d for d in dirs if d != "outputs")
         rel_root = os.path.relpath(current_root, root)
         depth = 0 if rel_root in (".", "") else rel_root.count(os.sep) + 1
         indent = "    " * depth
-        folder_display = "." if rel_root in (".", "") else rel_root
+        folder_display = "." if rel_root in (".", "") else os.path.basename(rel_root)
         lines.append(f"{indent}{folder_display}/")
-        for name in sorted(files):
+        for name in files[:num_files]: # to avoid stuffing context window
             lines.append(f"{indent}    {name}")
+        if len(files) > num_files:
+            lines.append(f"{indent}    ... ({len(files) - num_files} more files)")
     return "\n".join(lines)
 
 
@@ -98,10 +99,10 @@ IMPORTANT: Always provide descriptive answers. Instead of just printing a number
                 old_stdout = sys.stdout
                 sys.stdout = captured_output = StringIO()
 
-                with open(f"code_{question.lower().replace(' ', '_')[:32]}.py", "w") as f:
+                with open(f"code_abc.py", "w") as f:
                     f.write(code)
 
-                exec(open(f"code_{question.lower().replace(' ', '_')[:32]}.py").read(), globals())
+                exec(open(f"code_abc.py").read(), globals())
                 output = captured_output.getvalue()
 
                 sys.stdout = old_stdout
@@ -140,7 +141,7 @@ def download_external_datasets(query: str, slug: str) -> str:
     messages = [
         {
             "role": "user",
-            "content": f"""Search for Kaggle datasets which are relevant to the following query: {query}. Provide up till 5 dataset URLs.
+            "content": f"""Search for Kaggle datasets which are relevant to the following query: {query}. Provide up till 3 dataset URLs.
 At the end of your reasoning/explanation, your response should be in strict JSON format within backticks:
 ```json
 {{"datasets": ["https://www.kaggle.com/datasets/<user1>/<dataset1>", "https://www.kaggle.com/datasets/<user2>/<dataset2>", ...]}}
@@ -176,17 +177,18 @@ At the end of your reasoning/explanation, your response should be in strict JSON
         return "No relevant datasets found."
 
     data = json.loads(matches[0])
-    datasets = data.get("datasets", [])
-    if not datasets:
+    relevant_datasets = data.get("datasets", [])
+    if not relevant_datasets:
         logger.info("No datasets found in web search JSON response.")
         return "No relevant datasets found."
-    logger.info("Found %s relevant datasets from web search.", len(datasets))
+    logger.info("Found %s relevant datasets from web search.", len(relevant_datasets))
     dest_path = f"task/{slug}"
-    for dataset in datasets:
+    os.makedirs(f"{dest_path}/external-data", exist_ok=True)
+    for dataset in relevant_datasets:
         try:
             kaggle_url = "/".join(dataset.split("/")[-2:])
-            datasets = kaggle.api.dataset_list(search=kaggle_url)
-            dataset_metadata = vars(datasets[0])
+            datasets_list = kaggle.api.dataset_list(search=kaggle_url)
+            dataset_metadata = vars(datasets_list[0])
             if pd.to_datetime(dataset_metadata['lastUpdated']) > pd.to_datetime(COMP_METADATA['END_DATE']):
                 logger.info("Skipping dataset %s as it was published after competition end date. last update: %s, comp end: %s", kaggle_url, dataset_metadata['lastUpdated'], COMP_METADATA['END_DATE'])
                 continue
@@ -195,7 +197,8 @@ At the end of your reasoning/explanation, your response should be in strict JSON
             path = kagglehub.dataset_download(kaggle_url)
             logger.info("Dataset downloaded to temporary path: %s", path)
             # os cp -r to task/{slug}
-            os.system(f"cp -r {path}/* {dest_path}")
+            os.makedirs(f"{dest_path}/external-data/{path.split('/')[-3]}", exist_ok=True)
+            os.system(f"cp -r {path}/* {dest_path}/external-data/{path.split('/')[-3]}")
             logger.info("Dataset downloaded to: %s", dest_path)
         except:
             logger.exception("Failed to download dataset: %s", dataset)
