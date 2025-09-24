@@ -8,6 +8,7 @@ import json
 
 from dotenv import load_dotenv
 from openai import OpenAI
+from sortedcontainers import SortedList
 
 from tools.developer import (
     execute_code,
@@ -33,7 +34,7 @@ def _safe_read(path: str) -> str:
         logger.exception("Failed to read file: %s", path)
         return ""
 
-
+# NOTE: I am aware that this code will not work if self.is_lower_better is True (to be fixed)
 class DeveloperAgent:
     """Turns the Researcher plan into a runnable single-file solution.
 
@@ -54,6 +55,7 @@ class DeveloperAgent:
         self.outputs_dir.mkdir(parents=True, exist_ok=True)
         self.developer_log_path = self.outputs_dir / "developer.txt"
         self._configure_logger()
+        self._load_benchmark_info()
 
         # File targets
         self.plan_path = self.outputs_dir / "plan.md"
@@ -61,6 +63,7 @@ class DeveloperAgent:
         self.latest_submission_path: Optional[Path] = None
         self.benchmark_info: Optional[dict] = None
         self.threshold_directive: str = ""
+        self.previous_runs = [("Initial State", float("inf") if self.is_lower_better else float("-inf"), [""])]
 
         # OpenRouter client
         self.client = OpenAI(api_key=os.environ.get("OPENROUTER_API_KEY"), base_url="https://openrouter.ai/api/v1")
@@ -97,6 +100,20 @@ class DeveloperAgent:
             for name in sorted(files):
                 lines.append(f"{indent}    {name}")
         return "\n".join(lines)
+
+    @staticmethod
+    def _get_grade_report_json(stdout: str) -> Optional[dict]:
+        try:
+            start = stdout.index("{")
+            end = stdout.rindex("}") + 1
+            stdout = stdout[start:end]
+            logger.debug("stdout JSON snippet: %s", stdout)
+            info = json.loads(stdout)
+        except json.JSONDecodeError:
+            logger.warning("Baseline grading output was not valid JSON: %s", stdout[:500])
+            return
+
+        return info
 
     def _load_benchmark_info(self) -> None:
         self.benchmark_info = None
@@ -137,22 +154,13 @@ class DeveloperAgent:
             )
             return
 
-        try:
-            start = stdout.index("{")
-            end = stdout.rindex("}") + 1
-            stdout = stdout[start:end]
-            logger.debug("stdout JSON snippet: %s", stdout)
-            info = json.loads(stdout)
-        except json.JSONDecodeError:
-            logger.warning("Baseline grading output was not valid JSON: %s", stdout[:500])
-            return
-
+        info = self._get_grade_report_json(stdout)
         self.benchmark_info = info
         median = info.get("median_threshold")
         self.gold_threshold = info.get("gold_threshold")
-        is_lower_better = info.get("is_lower_better")
+        self.is_lower_better = info.get("is_lower_better")
 
-        if median is None or is_lower_better is None:
+        if median is None or self.is_lower_better is None:
             logger.debug(
                 "Insufficient benchmark data to build threshold directive: %s",
                 info,
@@ -160,12 +168,12 @@ class DeveloperAgent:
             return
 
         self.threshold_directive = (
-            "Remember: you must include this in your code. For deep learning pipelines, if at the end of the 1st epoch of fold 0, the loss or metric is NaN, break out of the training loop. Also add a logging message which says CRITICAL: the loss/metric is NaN and you need to investigate."
+            "Remember: you must include this in your code. For deep learning pipelines, if at the end of the 1st epoch of fold 0, the loss or metric is NaN, raise an Exception to stop the run immediately."
         )
         logger.info(
             "Baseline grading info cached: median=%s, is_lower_better=%s",
             median,
-            is_lower_better,
+            self.is_lower_better,
         )
         logger.info("Threshold directive: %s", self.threshold_directive)
 
@@ -195,7 +203,8 @@ Hard constraints:
 - You should make your pipeline as customizable as possible (i.e. easy to add new techniques, models, etc).
 - If possible, DO NOT train from scratch. Use pretrained models.
 - NOTE: your code will be run on an H100 SXM5 80GB GPU.
-- IMPORTANT: Add a `DEBUG` flag at the top of the script. The pipeline should run **once with DEBUG=True** (using a very small subset of the data, e.g. 32 samples, 1 epoch) and then **once with DEBUG=False** (using the full training config). Both runs should happen sequentially in the same script. Log clearly when DEBUG mode is running and when FULL mode is running.
+- IMPORTANT: Add a `DEBUG` flag at the top of the script. The pipeline should run **once with DEBUG=True** (using a very small subset of the data, e.g. 32 samples, 1 epoch, but everything else the same) and then **once with DEBUG=False** (using the full training config). Both runs should happen sequentially in the same script. Log clearly when DEBUG mode is running and when FULL mode is running.
+
 {threshold_text}
 
 Environment context:
@@ -288,16 +297,14 @@ Project structure:
         except Exception:
             logger.exception("Failed to persist plan markdown to %s", self.plan_path)
 
-        self._load_benchmark_info()
+        run_score = 0
+
         system_prompt = self._compose_system()
         user_prompt = self._build_user_prompt(plan_markdown, version=1)
         self.messages.append({"role": "system", "content": system_prompt})
         self.messages.append({"role": "user", "content": user_prompt})
 
         for attempt in range(1, max_tries + 1):
-            # keep at most 3 assistant/user messages
-            if len(self.messages) > 6:
-                self.messages = self.messages[:2] + self.messages[-4:]
 
             logger.info("Attempt %s/%s for developer run", attempt, max_tries)
             version = attempt
@@ -414,20 +421,11 @@ Project structure:
             logger.info("Execution output captured for version v%s", version)
             logger.debug("Execution output: %s", output)
 
-            self.messages.append({'role': 'assistant', 'content': code})
-
-            try:
-                with open(self.outputs_dir / f"run_v{version}.log", "w") as f:
-                    f.write(output or "")
-                logger.debug("Run log written for version v%s", version)
-            except Exception:
-                logger.exception("Failed to write run log for version v%s", version)
-
             log_path = self.outputs_dir / f"code_{self.iteration}_v{version}.txt"
             log_content = ""
             try:
                 if log_path.exists():
-                    log_content = log_path.read_text()
+                    log_content = log_path.read_text().strip()
                     logger.debug(
                         "Loaded execution log from %s (length=%s)",
                         log_path,
@@ -437,11 +435,7 @@ Project structure:
                 logger.exception("Failed to read execution log at %s", log_path)
 
             submission_path = self.outputs_dir / f"submission_{version}.csv"
-            feedback_parts = []
-            if log_content:
-                feedback_parts.append("Execution log:\n" + log_content.strip())
-            if output:
-                feedback_parts.append("Program stdout/stderr:\n" + output.strip())
+            code += "\n\n" + log_content
 
             if submission_path.exists():
                 self.latest_submission_path = submission_path
@@ -463,41 +457,81 @@ Project structure:
                         check=False,
                     )
                     grade_feedback = (grade_result.stdout or "").strip()
-                    if grade_result.stderr:
-                        if grade_feedback:
-                            grade_feedback += "\n"
-                        grade_feedback += grade_result.stderr.strip()
-                    logger.info("mlebench grade-sample output:\n%s", grade_feedback)
+                    if grade_result.returncode != 0:
+                        logger.warning(
+                            "Grading command returned non-zero exit (%s). stderr=\n%s",
+                            grade_result.returncode,
+                            (grade_result.stderr or "").strip(),
+                        )
+                    else:
+                        logger.info("Grading command completed successfully for version %s", version)
+                        info = self._get_grade_report_json(grade_feedback)
+                        run_score = info.get('score')
+                        logger.info("Your result on the test set is %s", run_score)
                 except Exception as exc:
                     grade_feedback = f"Failed to run grading tool: {exc}"
                     logger.exception("Grading command failed for version %s", version)
 
-                if grade_feedback:
-                    feedback_parts.append("Grader report:\n" + grade_feedback)
+                # improvement
+                if (run_score < self.previous_runs[-1][1]) == self.is_lower_better:
+                    logger.info(
+                        "New best score achieved: %s (previous best was %s)",
+                        run_score,
+                        self.previous_runs[-1][1],
+                    )
+                    prev_suggestions = ""
+                    self.previous_runs.append((code, run_score, []))
+                else:
+                    # discard
+                    logger.info(
+                        "No improvement over previous best score of %s; current score is %s",
+                        self.previous_runs[-1][1],
+                        run_score,
+                    )
 
-                sota_context = code + "\n\n".join(part for part in feedback_parts if part)
+                    # rollback
+                    code = self.previous_runs[-1][0]
+
+                    # prev sota
+                    prev_suggestions = "These suggestions have failed to improve score: " + "\n".join(self.previous_runs[-1][2])
+
+                sota_context = code + "\n\n" + prev_suggestions
                 try:
                     sota_suggestions = search_sota_suggestions(self.description, sota_context)
                 except Exception:
                     logger.exception("Failed to fetch SOTA suggestions for attempt %s", attempt)
                     sota_suggestions = ""
-                if sota_suggestions:
-                    feedback_parts.append("Improvment advices:\n" + sota_suggestions)
 
-                feedback = "\n\n".join(part for part in feedback_parts if part) or "Submission generated successfully."
-                next_instr = (
-                    f"\nAbove are the logs and advices. You must incorporate the advices in your refined solution. Remember you must make the test metric as high as possible. You want to cross the gold threshold in as few iterations as possible. In the refined solution, write logs to "
-                    f"task/{self.slug}/outputs/{self.iteration}/code_{self.iteration}_v{version+1}.txt "
-                    f"and produce the next submission at task/{self.slug}/outputs/{self.iteration}/submission_{version+1}.csv."
-                )
-                self.messages.append({'role': 'user', 'content': feedback + next_instr})
+                self.previous_runs[-1][2].append(sota_suggestions)
+
+                next_instr = f"""
+                Please modify your code to ONLY incorporate this advice (keep everything else the same):
+                {sota_suggestions}
+
+                Remember:
+                - write logs to task/{self.slug}/outputs/{self.iteration}/code_{self.iteration}_v{version+1}.txt
+                - and produce the next submission at task/{self.slug}/outputs/{self.iteration}/submission_{version+1}.csv."
+                """
+                self.messages = self.messages[:2]
+                self.messages.append({'role': 'assistant', 'content': code})
+                self.messages.append({'role': 'user', 'content': next_instr})
             else:
-                feedback = "\n\n".join(part for part in feedback_parts if part) or "Run did not produce a submission."
-                next_instr = (
-                    f"\nIn your revised script, ensure logs write to task/{self.slug}/outputs/{self.iteration}/code_{self.iteration}_v{version+1}.txt "
-                    f"and output submission_{version+1}.csv in the same directory."
-                )
-                self.messages.append({'role': 'user', 'content': feedback + next_instr})
+                next_instr = f"""
+                Your code FAILED during execution!
+                This is the stack trace and advice on how to fix the error:
+                {output}
+
+                Please modify your code to fix the error!
+
+                Remember:
+                - write logs to task/{self.slug}/outputs/{self.iteration}/code_{self.iteration}_v{version+1}.txt
+                - and produce the next submission at task/{self.slug}/outputs/{self.iteration}/submission_{version+1}.csv."
+                """
+                self.messages.append({'role': 'assistant', 'content': code})
+                self.messages.append({'role': 'user', 'content': next_instr})
+
+            logger.info("previous runs count: %s", len(self.previous_runs))
+            logger.info("previous runs list: %s", str(self.previous_runs))
 
         logger.warning(
             "Developer run exhausted all attempts without creating submission: %s",

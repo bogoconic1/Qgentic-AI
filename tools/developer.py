@@ -71,13 +71,7 @@ The machine learning task description is:
 The initial script and logs are:
 {context}
 
-First check if the script has sections that say the loss/metric is NaN. If so, you also need to provide advice on how to fix the NaN issue.
-Please do some research on recent effective models/techniques and provide 3 advices that may potentially improve the metric performance(e.g. accuracy) of the script on this machine learning task.
-
-Your advices in you answer should strictly following the following format:
-<advice> [YOUR ADVICE] </advice>
-<advice> [YOUR ADVICE] </advice>    
-<advice> [YOUR ADVICE] </advice>
+PLEASE provide ONE suggestion to improve the model's performance on the task. Explain in detail why this would help. If you have no suggestions, say "No suggestions".
 """
         }
     ]
