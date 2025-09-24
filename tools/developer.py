@@ -63,15 +63,15 @@ def search_sota_suggestions(description: str, context: str) -> str:
     messages = [
         {
             "role": "user",
-            "content": f"""You are given a machine learning task and an initial script on the task.
+            "content": f"""You are given a Kaggle competition description and an initial script on the task.
 
-The machine learning task description is:
+The Kaggle competition description is:
 {description}
 
 The initial script and logs are:
 {context}
 
-PLEASE provide ONE suggestion to improve the model's performance on the task. Explain in detail why this would help. If you have no suggestions, say "No suggestions".
+PLEASE provide ONLY ONE suggestion (together with its sample code) to improve the performance on the competition metric. Explain in detail why this would help. If you have no suggestions, say "No suggestions".
 """
         }
     ]

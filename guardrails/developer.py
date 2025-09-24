@@ -198,3 +198,48 @@ Be concise and pragmatic; do not include prose outside JSON.
         return '{"severity": "warn", "findings": [{"rule_id": "llm_error", "snippet": "N/A", "rationale": "LLM call failed", "suggestion": "Proceed with caution; add manual review."}]}'
 
 
+def llm_debug_sequence_review(code: str) -> str:
+    """Ensure generated code runs DEBUG then FULL modes and raises on NaNs."""
+
+    PROMPT = """
+You are reviewing a Python training pipeline for compliance with two runtime rules:
+1. The script must execute with DEBUG=True (using a tiny subset/config) before it executes with DEBUG=False (full run). Both executions should happen sequentially in the same process.
+2. The code must raise an Exception immediately if any training/validation loss or metric becomes NaN (not just log it).
+
+Examine the code and determine whether both requirements are satisfied.
+
+Output strictly as JSON in this schema:
+{
+  "severity": "block" | "warn" | "none",
+  "findings": [
+    {"rule_id": "debug_sequence" | "nan_guard", "snippet": "<excerpt>", "rationale": "<why non-compliant>", "suggestion": "<how to fix>"}
+  ]
+}
+
+Set severity="block" if either requirement is missing or incorrect. Use severity="warn" if unsure. Use severity="none" only when both requirements are clearly implemented.
+Be concise; no extra prose outside JSON.
+    """
+
+    content_payload = (
+        f"{PROMPT}\n\nCode:\n" + "\"\"\"" + f"\n{code}\n" + "\"\"\""
+    )
+
+    messages = [
+        {"role": "user", "content": content_payload}
+    ]
+
+    try:
+        content = ""
+        while content == "":
+            completion = call_llm_with_retry(
+                client,
+                model="qwen/qwen3-next-80b-a3b-thinking",
+                messages=messages,
+            )
+            msg = completion.choices[0].message
+            content = msg.content or ""
+        return content
+    except Exception:
+        logger.exception("DEBUG sequence LLM review failed")
+        return '{"severity": "warn", "findings": [{"rule_id": "llm_error", "snippet": "N/A", "rationale": "LLM call failed", "suggestion": "Manually verify DEBUG sequencing and NaN safeguards."}]}'
+

@@ -16,6 +16,7 @@ from tools.developer import (
 )
 from guardrails.developer import (
     check_logging_basicconfig_order,
+    llm_debug_sequence_review,
     llm_leakage_review,
 )
 from tools.helpers import call_llm_with_retry
@@ -194,7 +195,7 @@ Hard constraints:
 - Use CUDA everywhere where possible.
 - Write logging.info statements everywhere where possible in your code. 
 - MAKE SURE you call logging.basicConfig() at the beginning of your code before any other logging statements.
-- Always train with bfloat16 if using PyTorch/transformers or deep learning.
+- Always train with bfloat16 if using PyTorch/transformers or deep learning, and disable gradient checkpointing.
 - Do not code any fallback methods.
 - Do not use LightGBM as it is very slow.
 - Do not use transformers.Trainer or transformers.TrainingArguments.
@@ -314,7 +315,12 @@ Project structure:
             # ---------------------------
             # Pre-exec guardrail checks
             # ---------------------------
-            guard_report = {"logging_check": {}, "leakage_check": {}, "decision": "proceed"}
+            guard_report = {
+                "logging_check": {},
+                "debug_sequence_check": {},
+                "leakage_check": {},
+                "decision": "proceed",
+            }
 
             # 1 AST logging.basicConfig order
             try:
@@ -336,7 +342,34 @@ Project structure:
             if log_check.get("status") == "fail":
                 guard_report["decision"] = "block"
 
-            # 2 LLM-based leakage review (only if not already blocked)
+            # 2 DEBUG sequencing + NaN guard review (LLM)
+            if guard_report["decision"] != "block":
+                try:
+                    debug_json_text = llm_debug_sequence_review(_safe_read(str(code_path)))
+                except Exception:
+                    logger.exception("DEBUG sequencing guardrail call failed")
+                    debug_json_text = '{"severity":"warn","findings":[{"rule_id":"llm_error","snippet":"N/A","rationale":"LLM call failed","suggestion":"Manually ensure DEBUG precedes FULL run and NaN raises exceptions."}]}'
+                guard_report["debug_sequence_check"] = debug_json_text
+                try:
+                    parsed = json.loads(debug_json_text)
+                    try:
+                        logger.info(
+                            "Guardrail[debug_seq] v%s: severity=%s, findings=%s",
+                            version,
+                            parsed.get("severity"),
+                            len(parsed.get("findings", [])),
+                        )
+                    except Exception:
+                        logger.debug("Failed to log debug sequencing guardrail status for v%s", version)
+                    if parsed.get("severity") == "block":
+                        guard_report["decision"] = "block"
+                except Exception:
+                    logger.warning(
+                        "Guardrail[debug_seq] v%s: malformed JSON from reviewer; proceeding as warn",
+                        version,
+                    )
+
+            # 3 LLM-based leakage review (only if not already blocked)
             if guard_report["decision"] != "block":
                 try:
                     leakage_json_text = llm_leakage_review(self.description, _safe_read(str(code_path)))
@@ -364,11 +397,15 @@ Project structure:
             # Persist guard report
             try:
                 with open(self.outputs_dir / f"guardrail_v{version}.json", "w") as f:
-                    if isinstance(guard_report.get("leakage_check"), str):
-                        # Keep raw string for leakage_check if not JSON parsed
-                        json.dump({**guard_report, "_note": "leakage_check is raw string if model returned non-JSON"}, f)
-                    else:
-                        json.dump(guard_report, f)
+                    serialized = dict(guard_report)
+                    notes = []
+                    if isinstance(serialized.get("debug_sequence_check"), str):
+                        notes.append("debug_sequence_check is raw string if model returned non-JSON")
+                    if isinstance(serialized.get("leakage_check"), str):
+                        notes.append("leakage_check is raw string if model returned non-JSON")
+                    if notes:
+                        serialized["_note"] = " | ".join(notes)
+                    json.dump(serialized, f)
             except Exception:
                 logger.exception("Failed to write guardrail report for v%s", version)
 
@@ -382,6 +419,26 @@ Project structure:
                 summary = ["Guardrail checks failed:"]
                 if log_check.get("status") == "fail":
                     summary.append("- logging.basicConfig must be called before any top-level logging usage.")
+                try:
+                    raw_debug = guard_report.get("debug_sequence_check", "{}")
+                    parsed_debug = json.loads(raw_debug.strip()) if isinstance(raw_debug, str) else (raw_debug or {})
+                    if parsed_debug.get("severity") == "block":
+                        summary.append(
+                            "- Ensure the script runs DEBUG mode before FULL mode and raises an Exception when loss/metric is NaN."
+                        )
+                        findings = parsed_debug.get("findings", [])
+                        if findings:
+                            summary.append("\nDEBUG sequencing findings:")
+                            for idx, finding in enumerate(findings, start=1):
+                                summary.append(
+                                    f"{idx}. rule_id={finding.get('rule_id', 'unknown')}\n   - snippet: {finding.get('snippet', '')}\n   - rationale: {finding.get('rationale', '')}\n   - suggestion: {finding.get('suggestion', '')}"
+                                )
+                except Exception:
+                    try:
+                        summary.append("- DEBUG sequencing reviewer returned non-JSON content:")
+                        summary.append(str(guard_report.get("debug_sequence_check")))
+                    except Exception:
+                        pass
                 try:
                     raw_leak = guard_report.get("leakage_check", "{}")
                     parsed = json.loads(raw_leak.strip()) if isinstance(raw_leak, str) else (raw_leak or {})
@@ -501,6 +558,8 @@ Project structure:
                 except Exception:
                     logger.exception("Failed to fetch SOTA suggestions for attempt %s", attempt)
                     sota_suggestions = ""
+
+                logger.info("SOTA suggestion: %s", sota_suggestions)
 
                 self.previous_runs[-1][2].append(sota_suggestions)
 
