@@ -2,6 +2,7 @@ import logging
 import os
 import re
 import sys
+import traceback
 from io import StringIO
 
 from dotenv import load_dotenv
@@ -12,6 +13,7 @@ import kaggle
 import yaml
 import pandas as pd
 import weave
+from tools.developer import web_search_stack_trace
 from tools.helpers import call_llm_with_retry, _build_directory_listing
 load_dotenv()
 
@@ -68,6 +70,7 @@ Competition Description:
             messages=all_messages
         )
         response_text = completion.choices[0].message.content or ""
+        assistant_message = {"role": "assistant", "content": response_text}
 
         matches = re.findall(pattern, response_text, re.DOTALL)
         code = "\n\n".join(matches).strip()
@@ -76,6 +79,7 @@ Competition Description:
         if not code:
             last_error = "No python code block found in the model response."
             logger.warning(last_error)
+            all_messages.append(assistant_message)
         else:
             try:
                 # Simple policy assertion carried forward
@@ -110,8 +114,32 @@ Competition Description:
                     sys.stdout = old_stdout
                 except Exception:
                     pass
+                all_messages.append(assistant_message)
+                stack_trace = traceback.format_exc()
                 last_error = f"Error executing code: {str(e)}"
                 logger.exception("ask_eda execution failed: %s", e)
+
+                try:
+                    search_result = web_search_stack_trace(stack_trace)
+                    if search_result:
+                        logger.info("ask_eda web search guidance retrieved.")
+                        last_error = (
+                            f"{last_error}\n\nStack trace:\n{stack_trace}\n\n"
+                            f"Web search guidance:\n{search_result}"
+                        )
+                        all_messages.append(
+                            {
+                                "role": "user",
+                                "content": (
+                                    "The previous code attempt failed with this stack trace:\n"
+                                    f"{stack_trace}\n\nHere is external guidance that may help fix it:\n"
+                                    f"{search_result}\n\n"
+                                    "Please provide a corrected solution."
+                                ),
+                            }
+                        )
+                except Exception:
+                    logger.exception("ask_eda web search for stack trace failed.")
 
     logger.error(
         "ask_eda exhausted all attempts without success. Last error: %s", last_error

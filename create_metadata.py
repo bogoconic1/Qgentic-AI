@@ -64,7 +64,7 @@ Given code:
 Return the result in a JSON code block exactly as shown:
 
 ```json
-{
+{{
   "overall_approach": "string",
   "data_preprocessing": ["string", ...],
   "feature_engineering": ["string", ...],
@@ -72,7 +72,7 @@ Return the result in a JSON code block exactly as shown:
   "modeling": "string",
   "post_processing": ["string", ...],
   "technical_stack": ["string", ...]
-}
+}}
 ```
 
 Maintain the chronological order as seen in the code for process lists. After extraction, validate that each required field is present and formatted correctly according to the schema; self-correct and reformat output if validation fails.
@@ -209,25 +209,39 @@ def main() -> None:
         kernels["MadePublicDate"].notna() & (kernels["MadePublicDate"] <= cutoff_ts)
     ]
     kernels["CurrentKernelVersionId"] = kernels["CurrentKernelVersionId"].astype("Int64")
+    print(f"Extracted {len(kernels)} kernels")
 
     def extract_code(row):
         id_str = str(int(row["CurrentKernelVersionId"]))
         first6 = id_str[:-3]
         first3 = first6[:-3]
         next3 = first6[-3:]
-        src = args.meta_kaggle_code_path / f"{first3}".zfill(4) / f"{next3}" / f"{id_str}.ipynb"
-        dst = task_dir / "codes" / f"{id_str}.ipynb"
-        os.makedirs(dst.parent, exist_ok=True)
-        try:
-            shutil.copy2(src, dst)
-            markdown = read_jupyter_notebook(dst)
-            os.remove(dst)
-            return markdown
-        except FileNotFoundError:
-            return "Notebook not found."
+        
+        base_path = args.meta_kaggle_code_path / f"{first3}".zfill(4) / f"{next3}" / f"{id_str}"
+        
+        candidates = [base_path.with_suffix(".ipynb"), base_path.with_suffix(".py")]
+        for src in candidates:
+            if src.exists():
+                dst = task_dir / "codes" / src.name
+                os.makedirs(dst.parent, exist_ok=True)
+                try:
+                    shutil.copy2(src, dst)
+                    if src.suffix == ".ipynb":
+                        markdown = read_jupyter_notebook(dst)
+                    elif src.suffix == ".py":
+                        with open(dst, "r", encoding="utf-8") as f:
+                            markdown = f.read()
+                    os.remove(dst)
+                    return markdown
+                except FileNotFoundError:
+                    return "Code file not found."
+        
+        return "Notebook or script not found."
+
 
     kernels["code"] = kernels.progress_apply(extract_code, axis=1)
     kernels = kernels[kernels["code"] != "Notebook not found"]
+    print(f"Filtered {len(kernels)} kernels")
 
     kernels["code_summary"] = kernels["code"].progress_apply(lambda code: summarize_code(client, code))
     kernels = kernels[kernels["code_summary"] != "Failed to generate JSON"]
@@ -241,7 +255,7 @@ def main() -> None:
             elif value != "":
                 all_kernels_metadata[key].append(value)
 
-    st_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", device="mps")
+    st_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", device="cuda")
 
     clusters = defaultdict(set)
     for key in all_kernels_metadata:
