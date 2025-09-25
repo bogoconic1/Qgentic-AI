@@ -173,8 +173,8 @@ Begin with a concise checklist (3-7 bullets) of what you will do; keep items con
 - Log the **final validation results** after training.
 - Design the pipeline so it is highly customizable (i.e., it's easy to add or swap techniques, models, etc).
 - Prefer pretrained models over training from scratch, whenever possible.
-- **IMPORTANT:** At the very top, add a `DEBUG` flag. The pipeline must run sequentially twice: once with `DEBUG=True` (using a small subset of data, e.g., 32 samples and 1 epoch, but otherwise unchanged) and then once with `DEBUG=False` (using the full training config). Clearly log when the script is in DEBUG or FULL mode.
 - **IMPORTANT:** For deep learning pipelines, if at the end of the 1st epoch of fold 0, the loss or metric is NaN, raise an Exception to stop the run immediately.
+- Run your experiments with just validation on fold 0 UNLESS EXPLICITLY INSTRUCTED OTHERWISE.
 
 **Additional Context**
 - Competition Description:
@@ -279,6 +279,8 @@ Project structure:
 
         for attempt in range(1, max_tries + 1):
 
+            artifact = wandb.Artifact(f'{self.iteration}-{self.slug}', type='files')
+
             if len(self.messages) > 6:
                 self.messages = self.messages[:2] + self.messages[-4:]
 
@@ -286,10 +288,6 @@ Project structure:
             version = attempt
             code = self._generate_code(self.messages)
             code_path = self._write_code(code, version)
-            if code_path.exists():
-                artifact = wandb.Artifact(f'{self.iteration}-{self.slug}-code', type='code')
-                artifact.add_file(str(code_path), overwrite=True)
-                artifact.save()
 
             # ---------------------------
             # Pre-exec guardrail checks
@@ -327,7 +325,7 @@ Project structure:
                     debug_json_text = llm_debug_sequence_review(_safe_read(str(code_path)))
                 except Exception:
                     logger.exception("DEBUG sequencing guardrail call failed")
-                    debug_json_text = '{"severity":"warn","findings":[{"rule_id":"llm_error","snippet":"N/A","rationale":"LLM call failed","suggestion":"Manually ensure DEBUG precedes FULL run and NaN raises exceptions."}]}'
+                    debug_json_text = '{"severity":"warn","findings":[{"rule_id":"llm_error","snippet":"N/A","rationale":"LLM call failed","suggestion":"Manually ensure NaN raises exceptions."}]}'
                 guard_report["debug_sequence_check"] = debug_json_text
                 try:
                     parsed = json.loads(debug_json_text)
@@ -392,14 +390,6 @@ Project structure:
                 logger.info("Guardrail decision v%s: %s", version, guard_report.get("decision"))
             except Exception:
                 logger.debug("Failed to log final guardrail decision for v%s", version)
-
-            if os.path.exists(self.outputs_dir / f"guardrail_v{version}.json"):
-                artifact = wandb.Artifact(f'{self.iteration}-{self.slug}-guardrail', type='guardrail')
-                artifact.add_file(
-                    str(self.outputs_dir / f"guardrail_v{version}.json"),
-                    overwrite=True,
-                )
-                artifact.save()
 
             if guard_report.get("decision") == "block":
                 # Build feedback and ask for a corrected script without executing
@@ -475,9 +465,6 @@ Project structure:
                         log_path,
                         len(log_content),
                     )
-                    artifact = wandb.Artifact(f'{self.iteration}-{self.slug}-exec-log', type='exec-log')
-                    artifact.add_file(str(log_path), overwrite=True)
-                    artifact.save()
             except Exception:
                 logger.exception("Failed to read execution log at %s", log_path)
 
@@ -485,9 +472,6 @@ Project structure:
             code += "\n\n" + log_content[-30000:] # to avoid token limit issues
 
             if submission_path.exists():
-                artifact = wandb.Artifact(f'{self.iteration}-{self.slug}-submission', type='submission')
-                artifact.add_file(str(submission_path), overwrite=True)
-                artifact.save()
                 self.latest_submission_path = submission_path
                 logger.info(
                     "Submission detected at %s after attempt %s", submission_path, attempt
@@ -545,12 +529,16 @@ Project structure:
                     # prev sota
                     prev_suggestions = "These suggestions have failed to improve score: " + "\n".join(self.previous_runs[-1][2])
 
-                sota_context = code + "\n\n" + prev_suggestions
-                try:
-                    sota_suggestions = search_sota_suggestions(self.description, sota_context)
-                except Exception:
-                    logger.exception("Failed to fetch SOTA suggestions for attempt %s", attempt)
-                    sota_suggestions = ""
+                if len(self.previous_runs[-1][2]) >= 5 and "Please scale up the number of folds in your training." not in self.previous_runs[-1][2]:
+                    # we may have pleataued
+                    sota_suggestions = "Please scale up the number of folds in your training."
+                else:
+                    sota_context = code + "\n\n" + prev_suggestions
+                    try:
+                        sota_suggestions = search_sota_suggestions(self.description, sota_context)
+                    except Exception:
+                        logger.exception("Failed to fetch SOTA suggestions for attempt %s", attempt)
+                        sota_suggestions = ""
 
                 logger.info("SOTA suggestion: %s", sota_suggestions)
 
@@ -567,6 +555,7 @@ Project structure:
                 self.messages = self.messages[:2]
                 self.messages.append({'role': 'assistant', 'content': code})
                 self.messages.append({'role': 'user', 'content': next_instr})
+
             else:
                 next_instr = f"""
                 Your code FAILED during execution!
@@ -585,8 +574,9 @@ Project structure:
             logger.info("previous runs count: %s", len(self.previous_runs))
             logger.info("previous runs list: %s", str(self.previous_runs))
 
-            artifact = wandb.Artifact(f'{self.iteration}-{self.slug}-plan', type='plan')
-            artifact.add_file(f"task/{self.slug}/outputs/{self.iteration}/developer.txt", overwrite=True)
+            for file in os.listdir(self.outputs_dir):
+                artifact.add_file(str(self.outputs_dir / file), overwrite=True)
+
             artifact.save()
 
         logger.warning(

@@ -79,11 +79,13 @@ Competition Description:
 Initial Script and Logs:
 {context}
 
-Begin with a concise checklist (3-7 bullets) of what you will do; keep items conceptual, not implementation-level.
+Begin with a concise checklist (3-7 bullets) of the possible red flags in the logs and what you will do; keep items conceptual, not implementation-level.
 Your task is to provide a single, impactful suggestion — along with sample code — to improve the model's performance with respect to the competition metric. In approximately 100 words, explain why your suggestion would help.
 If you have no suggestions, simply reply with "No suggestions."
 After proposing your suggestion and code, briefly validate its relevance to the competition details and metric in 1-2 lines. If your suggestion cannot be validated, state why and consider whether to proceed or reply "No suggestions."
 Carefully consider the competition details and context to deliver the most impactful recommendation possible.
+
+**IMPORTANT**: Do not suggest scaling up the number of folds unless you have no other ideas.
 """
         }
     ]
