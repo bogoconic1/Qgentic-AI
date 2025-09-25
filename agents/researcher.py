@@ -10,6 +10,7 @@ from openai import OpenAI
 from tools.researcher import ask_eda, download_external_datasets, get_tools
 from tools.helpers import call_llm_with_retry
 import weave
+import wandb
 
 
 def _safe_read(path: str) -> str:

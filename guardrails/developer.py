@@ -204,7 +204,7 @@ def llm_debug_sequence_review(code: str) -> str:
     PROMPT = """
 You are reviewing a Python training pipeline for compliance with two runtime rules:
 1. The script must execute with DEBUG=True (using a tiny subset/config) before it executes with DEBUG=False (full run). Both executions should happen sequentially in the same process.
-2. The code must raise an Exception immediately if any training/validation loss or metric becomes NaN (not just log it).
+2. For deep learning pipelines, if at the end of the 1st epoch of fold 0, the loss or metric is NaN, raise an Exception to stop the run immediately.
 
 Examine the code and determine whether both requirements are satisfied.
 
@@ -233,7 +233,7 @@ Be concise; no extra prose outside JSON.
         while content == "":
             completion = call_llm_with_retry(
                 client,
-                model="qwen/qwen3-next-80b-a3b-thinking",
+                model="qwen/qwen3-next-80b-a3b-instruct",
                 messages=messages,
             )
             msg = completion.choices[0].message

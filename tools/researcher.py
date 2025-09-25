@@ -12,7 +12,7 @@ import kaggle
 import yaml
 import pandas as pd
 import weave
-from tools.helpers import call_llm_with_retry
+from tools.helpers import call_llm_with_retry, _build_directory_listing
 load_dotenv()
 
 
@@ -21,21 +21,6 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
 logger = logging.getLogger(__name__)
-
-def _build_directory_listing(root: str, num_files: int = 10) -> str:
-    lines: list[str] = []
-    for current_root, dirs, files in os.walk(root):
-        dirs[:] = sorted(d for d in dirs if d != "outputs")
-        rel_root = os.path.relpath(current_root, root)
-        depth = 0 if rel_root in (".", "") else rel_root.count(os.sep) + 1
-        indent = "    " * depth
-        folder_display = "." if rel_root in (".", "") else os.path.basename(rel_root)
-        lines.append(f"{indent}{folder_display}/")
-        for name in files[:num_files]: # to avoid stuffing context window
-            lines.append(f"{indent}    {name}")
-        if len(files) > num_files:
-            lines.append(f"{indent}    ... ({len(files) - num_files} more files)")
-    return "\n".join(lines)
 
 @weave.op()
 def ask_eda(question: str, description: str, data_path: str, max_attempts: int = 5) -> str:
@@ -62,6 +47,7 @@ data_path = "{data_path}"
 - After executing each significant code block, validate the output in 1-2 lines and clarify next steps or corrections, if needed.
 - Ensure all answers are complete and descriptive. Rather than outputting plain numbers (e.g., "100"), explain results clearly (e.g., "There are a total of 100 records in the dataset").
 - Answers should be informative and easy to understand.
+- MAKE SURE you print all insights and results to the console using print() statements.
 
 Competition Description:
 {description}
@@ -158,12 +144,12 @@ After generating the JSON output, validate that the format matches the specifica
 
 Example: successful output
 ```json
-{"datasets": ["https://www.kaggle.com/datasets/exampleuser/first-dataset", "https://www.kaggle.com/datasets/exampleuser/second-dataset"]}
+{{"datasets": ["https://www.kaggle.com/datasets/exampleuser/first-dataset", "https://www.kaggle.com/datasets/exampleuser/second-dataset"]}}
 ```
 
 Example: when no datasets are found
 ```json
-{"datasets": []}
+{{"datasets": []}}
 ```
 """,
         }

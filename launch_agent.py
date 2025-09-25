@@ -3,6 +3,7 @@ import os
 
 from agents.orchestrator import Orchestrator
 import weave
+import wandb
 
 
 def main():
@@ -13,7 +14,8 @@ def main():
     args = parser.parse_args()
 
     os.environ["TASK_SLUG"] = args.slug
-    weave.init(f'{args.iteration}-{args.slug[:20]}')
+    wandb.init(entity='bogoconic1', project='gstar-wandb', name=f'{args.iteration}-{args.slug}')
+    weave.init(project_name='bogoconic1/gstar-wandb')
 
     orchestrator = Orchestrator(args.slug, args.iteration)
     success, plan = orchestrator.run(max_code_tries=args.tries)

@@ -4,6 +4,7 @@ from pathlib import Path
 from agents.researcher import ResearcherAgent
 from agents.developer import DeveloperAgent
 import weave
+import wandb
 
 class Orchestrator:
     def __init__(self, slug: str, iteration: int):
@@ -15,6 +16,7 @@ class Orchestrator:
     @weave.op()
     def run(self, max_code_tries: int = 50) -> Tuple[bool, str]:
         # if plan exists, don't run the researcher agent
+        artifact = wandb.Artifact(f'{self.iteration}-{self.slug}-plan', type='plan')
         if Path(f"task/{self.slug}/outputs/{self.iteration}/plan.md").exists():
             with open(f"task/{self.slug}/outputs/{self.iteration}/plan.md", "r") as f:
                 plan = f.read()
@@ -22,6 +24,17 @@ class Orchestrator:
             plan = self.researcher.build_plan()
             with open(f"task/{self.slug}/outputs/{self.iteration}/plan.md", "w") as f:
                 f.write(plan)
+        artifact.add_file(
+            f"task/{self.slug}/outputs/{self.iteration}/plan.md",
+            overwrite=True,
+        )
+        artifact.add_file(
+            f"task/{self.slug}/outputs/{self.iteration}/researcher.txt",
+            overwrite=True,
+        )
+        artifact.save()
+        
         success = self.developer.run(plan, max_tries=max_code_tries)
+
         return success, plan
     

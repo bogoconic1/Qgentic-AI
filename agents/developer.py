@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from sortedcontainers import SortedList
 import weave
+import wandb
 
 from tools.developer import (
     execute_code,
@@ -20,7 +21,7 @@ from guardrails.developer import (
     llm_debug_sequence_review,
     llm_leakage_review,
 )
-from tools.helpers import call_llm_with_retry
+from tools.helpers import call_llm_with_retry, _build_directory_listing
 
 
 logger = logging.getLogger(__name__)
@@ -90,19 +91,6 @@ class DeveloperAgent:
             logger.addHandler(file_handler)
         logger.setLevel(logging.DEBUG)
 
-    def _build_directory_listing(self) -> str:
-        lines: list[str] = []
-        for current_root, dirs, files in os.walk(self.base_dir):
-            dirs[:] = sorted(d for d in dirs if d != "outputs")
-            rel_root = os.path.relpath(current_root, self.base_dir)
-            depth = 0 if rel_root in (".", "") else rel_root.count(os.sep) + 1
-            indent = "    " * depth
-            folder_display = "." if rel_root in (".", "") else rel_root
-            lines.append(f"{indent}{folder_display}/")
-            for name in sorted(files):
-                lines.append(f"{indent}    {name}")
-        return "\n".join(lines)
-
     @staticmethod
     def _get_grade_report_json(stdout: str) -> Optional[dict]:
         try:
@@ -119,7 +107,6 @@ class DeveloperAgent:
 
     def _load_benchmark_info(self) -> None:
         self.benchmark_info = None
-        self.threshold_directive = ""
         sample_submission = self.base_dir / "sample_submission.csv"
         if not sample_submission.exists():
             logger.warning(
@@ -158,36 +145,17 @@ class DeveloperAgent:
 
         info = self._get_grade_report_json(stdout)
         self.benchmark_info = info
-        median = info.get("median_threshold")
         self.gold_threshold = info.get("gold_threshold")
         self.is_lower_better = info.get("is_lower_better")
-
-        if median is None or self.is_lower_better is None:
-            logger.debug(
-                "Insufficient benchmark data to build threshold directive: %s",
-                info,
-            )
-            return
-
-        self.threshold_directive = (
-            "Remember: you must include this in your code. For deep learning pipelines, if at the end of the 1st epoch of fold 0, the loss or metric is NaN, raise an Exception to stop the run immediately."
-        )
-        logger.info(
-            "Baseline grading info cached: median=%s, is_lower_better=%s",
-            median,
-            self.is_lower_better,
-        )
-        logger.info("Threshold directive: %s", self.threshold_directive)
 
     def _compose_system(self) -> str:
         logger.debug("Composing system prompt for slug=%s", self.slug)
         self.description = _safe_read(str(self.base_dir / "description.md"))
         logger.debug("Description length: %s characters", len(self.description))
-        directory_listing = self._build_directory_listing()
+        directory_listing = _build_directory_listing(self.base_dir)
         logger.debug(
             "Directory listing prepared for %s (length=%s)", self.base_dir, len(directory_listing)
         )
-        threshold_text = f"\n- {self.threshold_directive}" if self.threshold_directive else ""
         return f"""Role: Lead Developer for Machine-Learning Competition Team. Your task is to produce a single, self-contained Python script, specifically targeted at developing a solution for a Kaggle Competition.
 
 Begin with a concise checklist (3-7 bullets) of what you will do; keep items conceptual, not implementation-level.
@@ -206,20 +174,17 @@ Begin with a concise checklist (3-7 bullets) of what you will do; keep items con
 - Design the pipeline so it is highly customizable (i.e., it's easy to add or swap techniques, models, etc).
 - Prefer pretrained models over training from scratch, whenever possible.
 - **IMPORTANT:** At the very top, add a `DEBUG` flag. The pipeline must run sequentially twice: once with `DEBUG=True` (using a small subset of data, e.g., 32 samples and 1 epoch, but otherwise unchanged) and then once with `DEBUG=False` (using the full training config). Clearly log when the script is in DEBUG or FULL mode.
-
-Set reasoning_effort = medium, as the task complexity is moderate. Tool calls and log statements should be terse; your code and overall output may be more detailed.
-
-After each significant code section (especially after data loading, training, and validation steps), validate results in 1-2 lines of logging and proceed or adjust as needed if validation does not meet expectations.
+- **IMPORTANT:** For deep learning pipelines, if at the end of the 1st epoch of fold 0, the loss or metric is NaN, raise an Exception to stop the run immediately.
 
 **Additional Context**
-- Threshold requirements:
-  {threshold_text}
-- Environment context:
+- Competition Description:
   {self.description}
 - Directory structure for task/{self.slug}:
   {directory_listing}
 - Score to beat:
   {self.gold_threshold}
+- Environment that your code will run in:
+  A single A100 80GB GPU
 
 **Output Format**
 Return Python code only, enclosed in triple backticks with the `python` annotation:
@@ -321,6 +286,10 @@ Project structure:
             version = attempt
             code = self._generate_code(self.messages)
             code_path = self._write_code(code, version)
+            if code_path.exists():
+                artifact = wandb.Artifact(f'{self.iteration}-{self.slug}-code', type='code')
+                artifact.add_file(str(code_path), overwrite=True)
+                artifact.save()
 
             # ---------------------------
             # Pre-exec guardrail checks
@@ -424,6 +393,14 @@ Project structure:
             except Exception:
                 logger.debug("Failed to log final guardrail decision for v%s", version)
 
+            if os.path.exists(self.outputs_dir / f"guardrail_v{version}.json"):
+                artifact = wandb.Artifact(f'{self.iteration}-{self.slug}-guardrail', type='guardrail')
+                artifact.add_file(
+                    str(self.outputs_dir / f"guardrail_v{version}.json"),
+                    overwrite=True,
+                )
+                artifact.save()
+
             if guard_report.get("decision") == "block":
                 # Build feedback and ask for a corrected script without executing
                 summary = ["Guardrail checks failed:"]
@@ -498,6 +475,9 @@ Project structure:
                         log_path,
                         len(log_content),
                     )
+                    artifact = wandb.Artifact(f'{self.iteration}-{self.slug}-exec-log', type='exec-log')
+                    artifact.add_file(str(log_path), overwrite=True)
+                    artifact.save()
             except Exception:
                 logger.exception("Failed to read execution log at %s", log_path)
 
@@ -505,6 +485,9 @@ Project structure:
             code += "\n\n" + log_content[-30000:] # to avoid token limit issues
 
             if submission_path.exists():
+                artifact = wandb.Artifact(f'{self.iteration}-{self.slug}-submission', type='submission')
+                artifact.add_file(str(submission_path), overwrite=True)
+                artifact.save()
                 self.latest_submission_path = submission_path
                 logger.info(
                     "Submission detected at %s after attempt %s", submission_path, attempt
@@ -601,6 +584,10 @@ Project structure:
 
             logger.info("previous runs count: %s", len(self.previous_runs))
             logger.info("previous runs list: %s", str(self.previous_runs))
+
+            artifact = wandb.Artifact(f'{self.iteration}-{self.slug}-plan', type='plan')
+            artifact.add_file(f"task/{self.slug}/outputs/{self.iteration}/developer.txt", overwrite=True)
+            artifact.save()
 
         logger.warning(
             "Developer run exhausted all attempts without creating submission: %s",
