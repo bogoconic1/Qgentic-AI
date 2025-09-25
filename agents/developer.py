@@ -527,15 +527,14 @@ Project structure:
                     code = self.previous_runs[-1][0]
 
                     # prev sota
-                    prev_suggestions = "These suggestions have failed to improve score: " + "\n".join(self.previous_runs[-1][2])
+                    prev_suggestions = "\n------------------------------".join(self.previous_runs[-1][2])
 
                 if len(self.previous_runs[-1][2]) >= 5 and "Please scale up the number of folds in your training." not in self.previous_runs[-1][2]:
                     # we may have pleataued
                     sota_suggestions = "Please scale up the number of folds in your training."
                 else:
-                    sota_context = code + "\n\n" + prev_suggestions
                     try:
-                        sota_suggestions = search_sota_suggestions(self.description, sota_context)
+                        sota_suggestions = search_sota_suggestions(self.description, code, prev_suggestions)
                     except Exception:
                         logger.exception("Failed to fetch SOTA suggestions for attempt %s", attempt)
                         sota_suggestions = ""
