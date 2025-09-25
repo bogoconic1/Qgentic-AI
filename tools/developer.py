@@ -137,4 +137,3 @@ def execute_code(filepath: str) -> str:
         logger.exception("Unexpected error while executing %s", filepath)
         search_result = web_search_stack_trace(trace)
         return trace + "\n" + search_result
-
