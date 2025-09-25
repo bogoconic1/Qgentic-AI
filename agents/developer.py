@@ -187,44 +187,48 @@ class DeveloperAgent:
             "Directory listing prepared for %s (length=%s)", self.base_dir, len(directory_listing)
         )
         threshold_text = f"\n- {self.threshold_directive}" if self.threshold_directive else ""
-        return f"""
-You are a expert Python developer with 10 years of experience. Produce a single, self-contained Python script.
+        return f"""Role: Lead Developer for Machine-Learning Competition Team. Your task is to produce a single, self-contained Python script, specifically targeted at developing a solution for a Kaggle Competition.
 
-Hard constraints:
-- Single file script.
-- Use CUDA everywhere where possible.
-- Write logging.info statements everywhere where possible in your code. 
-- MAKE SURE you call logging.basicConfig() at the beginning of your code before any other logging statements.
-- Always train with bfloat16 if using PyTorch/transformers or deep learning, and disable gradient checkpointing.
-- Do not code any fallback methods.
-- Do not use LightGBM as it is very slow.
-- Do not use transformers.Trainer or transformers.TrainingArguments.
-- Do not try to bypass any potential exceptions by writing your code in try/except blocks.
-- Make sure you log the final validation results.
-- You should make your pipeline as customizable as possible (i.e. easy to add new techniques, models, etc).
-- If possible, DO NOT train from scratch. Use pretrained models.
-- NOTE: your code will be run on an H100 SXM5 80GB GPU.
-- IMPORTANT: Add a `DEBUG` flag at the top of the script. The pipeline should run **once with DEBUG=True** (using a very small subset of the data, e.g. 32 samples, 1 epoch, but everything else the same) and then **once with DEBUG=False** (using the full training config). Both runs should happen sequentially in the same script. Log clearly when DEBUG mode is running and when FULL mode is running.
+Begin with a concise checklist (3-7 bullets) of what you will do; keep items conceptual, not implementation-level.
 
-{threshold_text}
+**Hard Constraints:**
+- Deliver a single-file script.
+- Utilize CUDA wherever possible.
+- Insert detailed `logging.info` statements covering all aspects of training and validation (e.g., losses, learning rates, timings, evaluation metrics). Only log other code sections (such as data loading or config setup) if they're directly relevant to training or validation.
+- Place `logging.basicConfig()` at the very start of your code, before any other logging statements.
+- Always train with `bfloat16` when using PyTorch, transformers, or other deep learning libraries. Gradient checkpointing must be disabled.
+- Do **not** code any fallback methods.
+- **Do not** use LightGBM (it's very slow). For gradient boosting, use XGBoost or CatBoost instead.
+- **Do not** use `transformers.Trainer` or `transformers.TrainingArguments`.
+- **Do not** use `try/except` blocks to bypass exceptions.
+- Log the **final validation results** after training.
+- Design the pipeline so it is highly customizable (i.e., it's easy to add or swap techniques, models, etc).
+- Prefer pretrained models over training from scratch, whenever possible.
+- **IMPORTANT:** At the very top, add a `DEBUG` flag. The pipeline must run sequentially twice: once with `DEBUG=True` (using a small subset of data, e.g., 32 samples and 1 epoch, but otherwise unchanged) and then once with `DEBUG=False` (using the full training config). Clearly log when the script is in DEBUG or FULL mode.
 
-Environment context:
-{self.description}
+Set reasoning_effort = medium, as the task complexity is moderate. Tool calls and log statements should be terse; your code and overall output may be more detailed.
 
-Directory structure for task/{self.slug}:
-{directory_listing}
+After each significant code section (especially after data loading, training, and validation steps), validate results in 1-2 lines of logging and proceed or adjust as needed if validation does not meet expectations.
 
-Score to beat:
-{self.gold_threshold}
+**Additional Context**
+- Threshold requirements:
+  {threshold_text}
+- Environment context:
+  {self.description}
+- Directory structure for task/{self.slug}:
+  {directory_listing}
+- Score to beat:
+  {self.gold_threshold}
 
-Remember: Implement what you believe is the best solution for this task. You want to make the test metric as high as possible. You want to cross the gold threshold in as few iterations as possible.
-
-Deliver only Python. Your code should be between ```python backticks, like this:
-```python 
+**Output Format**
+Return Python code only, enclosed in triple backticks with the `python` annotation:
+```python
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "0" 
-<YOUR CODE>
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+# <YOUR CODE>
 ```
+
+Implement the best possible solution for this task, with the goal of maximizing the test metric and surpassing the gold threshold in as few iterations as possible.
 """
 
     def _build_user_prompt(self, plan_markdown: str, version: int) -> str:
@@ -306,6 +310,9 @@ Project structure:
         self.messages.append({"role": "user", "content": user_prompt})
 
         for attempt in range(1, max_tries + 1):
+
+            if len(self.messages) > 6:
+                self.messages = self.messages[:2] + self.messages[-4:]
 
             logger.info("Attempt %s/%s for developer run", attempt, max_tries)
             version = attempt
@@ -492,7 +499,7 @@ Project structure:
                 logger.exception("Failed to read execution log at %s", log_path)
 
             submission_path = self.outputs_dir / f"submission_{version}.csv"
-            code += "\n\n" + log_content
+            code += "\n\n" + log_content[-30000:] # to avoid token limit issues
 
             if submission_path.exists():
                 self.latest_submission_path = submission_path

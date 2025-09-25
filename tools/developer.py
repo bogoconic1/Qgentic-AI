@@ -32,7 +32,14 @@ def web_search_stack_trace(query: str) -> str:
     messages = [
         {
             "role": "user",
-            "content": f"I am currently facing this bug: {query}. How do I fix it?",
+            "content": f"""Begin with a concise checklist (3-7 bullets) of what you will do; keep items conceptual, not implementation-level.
+
+I am currently encountering the following bug:
+
+{query}
+
+After proposing a solution, validate that the recommendation directly addresses the stack trace and describe any needed next steps or confirm if the issue should be resolved. How can I resolve this issue?
+            """,
         }
     ]
     logger.debug("Web search messages: %s", messages)
@@ -63,15 +70,19 @@ def search_sota_suggestions(description: str, context: str) -> str:
     messages = [
         {
             "role": "user",
-            "content": f"""You are given a Kaggle competition description and an initial script on the task.
+            "content": f"""You are provided with a Kaggle competition description and an initial script for the task.
 
-The Kaggle competition description is:
+Competition Description:
 {description}
 
-The initial script and logs are:
+Initial Script and Logs:
 {context}
 
-PLEASE provide ONLY ONE suggestion (together with its sample code) to improve the performance on the competition metric. Explain in detail why this would help. If you have no suggestions, say "No suggestions".
+Begin with a concise checklist (3-7 bullets) of what you will do; keep items conceptual, not implementation-level.
+Your task is to provide a single, impactful suggestion — along with sample code — to improve the model's performance with respect to the competition metric. In approximately 100 words, explain why your suggestion would help.
+If you have no suggestions, simply reply with "No suggestions."
+After proposing your suggestion and code, briefly validate its relevance to the competition details and metric in 1-2 lines. If your suggestion cannot be validated, state why and consider whether to proceed or reply "No suggestions."
+Carefully consider the competition details and context to deliver the most impactful recommendation possible.
 """
         }
     ]
