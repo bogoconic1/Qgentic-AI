@@ -3,6 +3,7 @@ from pathlib import Path
 
 from agents.researcher import ResearcherAgent
 from agents.developer import DeveloperAgent
+import weave
 
 class Orchestrator:
     def __init__(self, slug: str, iteration: int):
@@ -11,6 +12,7 @@ class Orchestrator:
         self.researcher = ResearcherAgent(slug, iteration)
         self.developer = DeveloperAgent(slug, iteration)
 
+    @weave.op()
     def run(self, max_code_tries: int = 50) -> Tuple[bool, str]:
         # if plan exists, don't run the researcher agent
         if Path(f"task/{self.slug}/outputs/{self.iteration}/plan.md").exists():

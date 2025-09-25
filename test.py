@@ -1,9 +1,8 @@
 import logging
-
 from dotenv import load_dotenv
-
 from tools.developer import search_sota_suggestions, web_search_stack_trace
-
+import weave
+import wandb
 
 load_dotenv()
 
@@ -12,6 +11,9 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
 logging.getLogger("tools.developer").setLevel(logging.DEBUG)
+
+wandb.init(project="gstar-project-tests")
+weave.init('test_tools_developer')
 
 
 with open("task/us-patent-phrase-to-phrase-matching/description.md", "r") as f:
@@ -23,8 +25,8 @@ with open("/workspace/gstar-project/task/us-patent-phrase-to-phrase-matching/out
 with open("/workspace/gstar-project/task/us-patent-phrase-to-phrase-matching/outputs/3/code_3_v1.txt", "r") as f:
     logs = f.read()
 
-# suggestions = search_sota_suggestions(description, code + "\n\n" + logs)
-# print("SOTA Suggestions:\n", suggestions)
+suggestions = search_sota_suggestions(description, code + "\n\n" + logs)
+print("SOTA Suggestions:\n", suggestions)
 
 stack_trace = """Traceback (most recent call last):
   File "/workspace/gstar-project/test.py", line 4, in <module>

@@ -11,6 +11,7 @@ import json
 import kaggle
 import yaml
 import pandas as pd
+import weave
 from tools.helpers import call_llm_with_retry
 load_dotenv()
 
@@ -36,7 +37,7 @@ def _build_directory_listing(root: str, num_files: int = 10) -> str:
             lines.append(f"{indent}    ... ({len(files) - num_files} more files)")
     return "\n".join(lines)
 
-
+@weave.op()
 def ask_eda(question: str, description: str, data_path: str, max_attempts: int = 5) -> str:
     """Asks a question about the data provided for exploratory data analysis (EDA)"""
     client = OpenAI(api_key=os.environ.get("OPENROUTER_API_KEY"), base_url="https://openrouter.ai/api/v1")
@@ -61,6 +62,9 @@ data_path = "{data_path}"
 - After executing each significant code block, validate the output in 1-2 lines and clarify next steps or corrections, if needed.
 - Ensure all answers are complete and descriptive. Rather than outputting plain numbers (e.g., "100"), explain results clearly (e.g., "There are a total of 100 records in the dataset").
 - Answers should be informative and easy to understand.
+
+Competition Description:
+{description}
 """
     all_messages = [
         {"role": "system", "content": PROMPT},
@@ -128,6 +132,7 @@ data_path = "{data_path}"
     )
     return "Your question cannot be answered."
 
+@weave.op()
 def download_external_datasets(query: str, slug: str) -> str:
     """Downloads external datasets"""
     client = OpenAI(api_key=os.environ.get("OPENROUTER_API_KEY"), base_url="https://openrouter.ai/api/v1")

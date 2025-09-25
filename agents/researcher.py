@@ -9,6 +9,7 @@ from openai import OpenAI
 
 from tools.researcher import ask_eda, download_external_datasets, get_tools
 from tools.helpers import call_llm_with_retry
+import weave
 
 
 def _safe_read(path: str) -> str:
@@ -60,7 +61,7 @@ class ResearcherAgent:
         logger.info(
             "ResearcherAgent initialized for slug=%s iteration=%s", self.slug, self.iteration
         )
-
+        
     def _compose_system(self) -> str:
         base_dir = os.path.join("task", self.slug)
         self.description = _safe_read(os.path.join(base_dir, "description.md"))
@@ -105,6 +106,7 @@ Refer to the following for what other competitors have tried—this may inform y
 Note: DO NOT optimize for the efficiency prize.
 """
 
+    @weave.op()
     def build_plan(self, max_steps: int = 512) -> str:
         system_prompt = self._compose_system()
         self.messages = [

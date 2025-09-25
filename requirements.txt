@@ -49,3 +49,6 @@ bitsandbytes
 tf-keras
 sentencepiece
 vllm
+
+wandb
+weave

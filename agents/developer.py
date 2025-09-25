@@ -9,6 +9,7 @@ import json
 from dotenv import load_dotenv
 from openai import OpenAI
 from sortedcontainers import SortedList
+import weave
 
 from tools.developer import (
     execute_code,
@@ -263,6 +264,7 @@ Project structure:
         logger.debug("No fenced block detected; returning raw content.")
         return content.strip()
 
+    @weave.op()
     def _generate_code(self, messages: list[dict[str, str]]) -> str:
         logger.info("Requesting code generation from model for iteration %s", self.iteration)
         
@@ -288,6 +290,7 @@ Project structure:
         logger.debug("Written code size: %s characters", len(code))
         return code_path
 
+    @weave.op()
     def run(self, plan_markdown: str, max_tries: int = 50) -> bool:
         logger.info(
             "Starting developer run for slug=%s iteration=%s with max_tries=%s",

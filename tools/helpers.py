@@ -1,6 +1,9 @@
+import logging
 import time
 import openai
+import weave
 
+@weave.op()
 def call_llm_with_retry(llm_client, max_retries=3, **kwargs):
     """Call LLM with retry logic."""
     for attempt in range(max_retries):

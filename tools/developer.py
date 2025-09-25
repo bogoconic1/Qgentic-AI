@@ -10,6 +10,7 @@ import traceback
 from dotenv import load_dotenv
 from openai import OpenAI
 from tools.helpers import call_llm_with_retry
+import weave
 
 load_dotenv()
 
@@ -23,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 client = OpenAI(api_key=os.environ.get("OPENROUTER_API_KEY"), base_url="https://openrouter.ai/api/v1")
 
-
+@weave.op()
 def web_search_stack_trace(query: str) -> str:
     """Research how to fix a bug based on the stack trace and error message."""
     logger.info("Dispatching web search for stack trace remediation guidance.")
@@ -63,7 +64,7 @@ After proposing a solution, validate that the recommendation directly addresses 
 
     return content
 
-
+@weave.op()
 def search_sota_suggestions(description: str, context: str) -> str:
     """Use web search to surface potential SOTA improvements for the competition."""
     logger.info("Dispatching SOTA web search")
@@ -106,8 +107,7 @@ Carefully consider the competition details and context to deliver the most impac
         logger.exception("SOTA suggestions web search failed")
         return ""
 
-
-
+@weave.op()
 def execute_code(filepath: str) -> str:
     """Execute a generated Python file and enrich errors with search guidance."""
     logger.info("Executing generated script: %s", filepath)
