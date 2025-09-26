@@ -92,7 +92,8 @@ class DeveloperAgent:
         self.latest_submission_path: Optional[Path] = None
         self.benchmark_info: Optional[dict] = None
         self.threshold_directive: str = ""
-        self.previous_runs = [("Initial State", float("inf") if self.is_lower_better else float("-inf"), [""])]
+        self.previous_runs = [("Initial State", float("inf") if self.is_lower_better else float("-inf"))] # monotonic stack
+        self.blacklisted_ideas = []
 
         # OpenRouter client
         self.client = OpenAI(api_key=os.environ.get(_API_KEY_ENV), base_url=_BASE_URL)
@@ -198,7 +199,7 @@ Begin with a concise checklist (3-7 bullets) of what you will do; keep items con
 **Hard Constraints:**
 - Deliver a single-file script.
 - Utilize CUDA wherever possible.
-- Insert detailed `logging.info` statements covering all aspects of training and validation (e.g., losses, learning rates, timings, evaluation metrics). Only log other code sections (such as data loading or config setup) if they're directly relevant to training or validation.
+- Insert detailed `logging.info` statements only for validation results (every fold, every model used, overall OOF). Only log other code sections (such as data loading or config setup) if they're directly relevant to validation.
 - Place `logging.basicConfig()` at the very start of your code, before any other logging statements.
 - Always train with `bfloat16` when using PyTorch, transformers, or other deep learning libraries. Gradient checkpointing must be disabled.
 - Do **not** code any fallback methods.
@@ -540,7 +541,11 @@ Project structure:
                 logger.exception("Failed to read execution log at %s", log_path)
 
             submission_path = self.outputs_dir / self._submission_filename(version)
-            code += "\n\n" + log_content[-30000:] # to avoid token limit issues
+            code = "<code>\n" + code + "\n</code>\n"
+            if log_content:
+                code += f"<validation_log>\n{log_content[-30000:]}\n</validation_log>\n"  # to avoid token limit issues
+
+            run_score = float("inf") if self.is_lower_better else float("-inf")
 
             if submission_path.exists():
                 self.latest_submission_path = submission_path
@@ -578,6 +583,8 @@ Project structure:
                     grade_feedback = f"Failed to run grading tool: {exc}"
                     logger.exception("Grading command failed for version %s", version)
 
+                code += f"<leaderboard_score>\n{run_score}\n</leaderboard_score>\n"
+
                 # improvement
                 if (run_score < self.previous_runs[-1][1]) == self.is_lower_better:
                     logger.info(
@@ -585,27 +592,23 @@ Project structure:
                         run_score,
                         self.previous_runs[-1][1],
                     )
-                    prev_suggestions = ""
-                    self.previous_runs.append((code, run_score, []))
+                    self.previous_runs.append((code, run_score))
+                    code += f"Nice work! The score has improved to {run_score}. But I want to push further to reach {self.gold_threshold}. Please investigate how to further improve the score."
+                    failed_to_improve_score = False
+
                 else:
-                    # discard
+                    # let the model analyze both codes and validation
                     logger.info(
                         "No improvement over previous best score of %s; current score is %s",
                         self.previous_runs[-1][1],
                         run_score,
                     )
-
-                    # rollback
-                    code = self.previous_runs[-1][0]
-
-                    # prev sota
-                    prev_suggestions = "\n-".join(self.previous_runs[-1][2])
-
-                #if len(self.previous_runs[-1][2]) >= 5:
-                    #self.messages[0]['content'] = self.messages[0]['content'].replace("- Run your experiments with just validation on fold 0 UNLESS EXPLICITLY INSTRUCTED OTHERWISE.", "")
-                #else:
+                    code += f"I applied the following change to the code \n<patch_string>\n{patch_string}\n</patch_string>\n"
+                    code += f"But my score has reduced from {self.previous_runs[-1][1]} to {run_score}. Could you investigate why and decide whether to continue with this change or blacklist the approach?"
+                    failed_to_improve_score = True
+                
                 try:
-                    sota_suggestions = search_sota_suggestions(self.description, code, prev_suggestions)
+                    sota_suggestions = search_sota_suggestions(self.description, code, failed_to_improve_score, self.blacklisted_ideas)
                 except Exception:
                     logger.exception("Failed to fetch SOTA suggestions for attempt %s", attempt)
                     sota_suggestions = ""
