@@ -33,6 +33,11 @@ _LLM_CFG = _CONFIG.get("llm", {}) if isinstance(_CONFIG, dict) else {}
 _PATH_CFG = _CONFIG.get("paths", {}) if isinstance(_CONFIG, dict) else {}
 _RUNTIME_CFG = _CONFIG.get("runtime", {}) if isinstance(_CONFIG, dict) else {}
 _HARDWARE_CFG = _CONFIG.get("hardware", {}) if isinstance(_CONFIG, dict) else {}
+_GUARDRAIL_CFG = _CONFIG.get("guardrails", {}) if isinstance(_CONFIG, dict) else {}
+
+_ENABLE_LOGGING_GUARD = bool(_GUARDRAIL_CFG.get("logging_basicconfig_order", True))
+_ENABLE_NAN_GUARD = bool(_GUARDRAIL_CFG.get("nan_guard", True))
+_ENABLE_LEAKAGE_GUARD = bool(_GUARDRAIL_CFG.get("leakage_review", True))
 
 _BASE_URL = _LLM_CFG.get("base_url", "https://openrouter.ai/api/v1")
 _API_KEY_ENV = _LLM_CFG.get("api_key_env", "OPENROUTER_API_KEY")
@@ -197,14 +202,12 @@ Begin with a concise checklist (3-7 bullets) of what you will do; keep items con
 - Place `logging.basicConfig()` at the very start of your code, before any other logging statements.
 - Always train with `bfloat16` when using PyTorch, transformers, or other deep learning libraries. Gradient checkpointing must be disabled.
 - Do **not** code any fallback methods.
-- **Do not** use LightGBM (it's very slow). For gradient boosting, use XGBoost or CatBoost instead.
 - **Do not** use `transformers.Trainer` or `transformers.TrainingArguments`.
 - **Do not** use `try/except` blocks to bypass exceptions.
 - Log the **final validation results** after training.
 - Design the pipeline so it is highly customizable (i.e., it's easy to add or swap techniques, models, etc).
 - Prefer pretrained models over training from scratch, whenever possible.
 - **IMPORTANT:** For deep learning pipelines, if at the end of the 1st epoch of fold 0, the loss or metric is NaN, raise an Exception to stop the run immediately.
-- Run your experiments with just validation on fold 0 UNLESS EXPLICITLY INSTRUCTED OTHERWISE.
 
 **Additional Context**
 - Competition Description:
@@ -213,8 +216,6 @@ Begin with a concise checklist (3-7 bullets) of what you will do; keep items con
   {directory_listing}
 - Score to beat:
   {self.gold_threshold}
-- Environment that your code will run in:
-  {_HARDWARE_DESCRIPTION}
 
 **Output Format**
 Return Python code only, enclosed in triple backticks with the `python` annotation:
@@ -319,7 +320,7 @@ Project structure:
         user_prompt = self._build_user_prompt(plan_markdown, version=1)
         self.messages.append({"role": "system", "content": system_prompt})
         self.messages.append({"role": "user", "content": user_prompt})
-
+        
         for attempt in range(1, max_tries + 1):
 
             artifact = wandb.Artifact(f'{self.iteration}-{self.slug}', type='files')
@@ -343,91 +344,116 @@ Project structure:
             }
 
             # 1 AST logging.basicConfig order
-            try:
-                log_check = check_logging_basicconfig_order(str(code_path))
-            except Exception:
-                logger.exception("Logging AST check failed")
-                log_check = {"status": "error", "error": "exception in logging check"}
-            guard_report["logging_check"] = log_check
-            try:
-                logger.info(
-                    "Guardrail[logging] v%s: status=%s, violations=%s, basic_line=%s",
-                    version,
-                    log_check.get("status"),
-                    len(log_check.get("violations", [])),
-                    log_check.get("basicConfig_line"),
-                )
-            except Exception:
-                logger.debug("Failed to log logging guardrail status for v%s", version)
-            if log_check.get("status") == "fail":
-                guard_report["decision"] = "block"
-
-            # 2 DEBUG sequencing + NaN guard review (LLM)
-            if guard_report["decision"] != "block":
+            log_check = {"status": "skipped", "reason": "disabled in config"}
+            if _ENABLE_LOGGING_GUARD:
                 try:
-                    debug_json_text = llm_debug_sequence_review(_safe_read(str(code_path)))
+                    log_check = check_logging_basicconfig_order(str(code_path))
                 except Exception:
-                    logger.exception("DEBUG sequencing guardrail call failed")
-                    debug_json_text = '{"severity":"warn","findings":[{"rule_id":"llm_error","snippet":"N/A","rationale":"LLM call failed","suggestion":"Manually ensure NaN raises exceptions."}]}'
-                guard_report["debug_sequence_check"] = debug_json_text
+                    logger.exception("Logging AST check failed")
+                    log_check = {"status": "error", "error": "exception in logging check"}
+                guard_report["logging_check"] = log_check
                 try:
-                    parsed = json.loads(debug_json_text)
-                    try:
-                        logger.info(
-                            "Guardrail[debug_seq] v%s: severity=%s, findings=%s",
-                            version,
-                            parsed.get("severity"),
-                            len(parsed.get("findings", [])),
-                        )
-                    except Exception:
-                        logger.debug("Failed to log debug sequencing guardrail status for v%s", version)
-                    if parsed.get("severity") == "block":
-                        guard_report["decision"] = "block"
+                    logger.info(
+                        "Guardrail[logging] v%s: status=%s, violations=%s, basic_line=%s",
+                        version,
+                        log_check.get("status"),
+                        len(log_check.get("violations", [])),
+                        log_check.get("basicConfig_line"),
+                    )
                 except Exception:
-                    logger.warning(
-                        "Guardrail[debug_seq] v%s: malformed JSON from reviewer; proceeding as warn",
+                    logger.debug("Failed to log logging guardrail status for v%s", version)
+                if log_check.get("status") == "fail":
+                    guard_report["decision"] = "block"
+            else:
+                guard_report["logging_check"] = log_check
+                try:
+                    logger.info(
+                        "Guardrail[logging] v%s: skipped (disabled in config)",
                         version,
                     )
+                except Exception:
+                    logger.debug("Failed to log logging guardrail skip status for v%s", version)
+
+            # 2 NaN guard review (LLM)
+            if guard_report["decision"] != "block":
+                if _ENABLE_NAN_GUARD:
+                    try:
+                        debug_json_text = llm_debug_sequence_review(_safe_read(str(code_path)))
+                    except Exception:
+                        logger.exception("NaN guardrail call failed")
+                        debug_json_text = '{"severity":"warn","findings":[{"rule_id":"llm_error","snippet":"N/A","rationale":"LLM call failed","suggestion":"Manually ensure NaN raises exceptions."}]}'
+                    guard_report["debug_sequence_check"] = debug_json_text
+                    try:
+                        parsed = json.loads(debug_json_text)
+                        try:
+                            logger.info(
+                                "Guardrail[debug_seq] v%s: severity=%s, findings=%s",
+                                version,
+                                parsed.get("severity"),
+                                len(parsed.get("findings", [])),
+                            )
+                        except Exception:
+                            logger.debug("Failed to log NaN guardrail status for v%s", version)
+                        if parsed.get("severity") == "block":
+                            guard_report["decision"] = "block"
+                    except Exception:
+                        logger.warning(
+                            "Guardrail[debug_seq] v%s: malformed JSON from NaN reviewer; proceeding as warn",
+                            version,
+                        )
+                else:
+                    guard_report["debug_sequence_check"] = {
+                        "status": "skipped",
+                        "reason": "disabled in config",
+                    }
+                    try:
+                        logger.info(
+                            "Guardrail[debug_seq] v%s: skipped (disabled in config)",
+                            version,
+                        )
+                    except Exception:
+                        logger.debug("Failed to log NaN guardrail skip status for v%s", version)
 
             # 3 LLM-based leakage review (only if not already blocked)
             if guard_report["decision"] != "block":
-                try:
-                    leakage_json_text = llm_leakage_review(self.description, _safe_read(str(code_path)))
-                except Exception:
-                    logger.exception("LLM leakage review call failed")
-                    leakage_json_text = '{"severity":"warn","findings":[{"rule_id":"llm_error","snippet":"N/A","rationale":"LLM call failed","suggestion":"Proceed with caution"}]}'
-                guard_report["leakage_check"] = leakage_json_text
-                try:
-                    parsed = json.loads(leakage_json_text)
+                if _ENABLE_LEAKAGE_GUARD:
+                    try:
+                        leakage_json_text = llm_leakage_review(self.description, _safe_read(str(code_path)))
+                    except Exception:
+                        logger.exception("LLM leakage review call failed")
+                        leakage_json_text = '{"severity":"warn","findings":[{"rule_id":"llm_error","snippet":"N/A","rationale":"LLM call failed","suggestion":"Proceed with caution"}]}'
+                    guard_report["leakage_check"] = leakage_json_text
+                    try:
+                        parsed = json.loads(leakage_json_text)
+                        try:
+                            logger.info(
+                                "Guardrail[leakage] v%s: severity=%s, findings=%s",
+                                version,
+                                parsed.get("severity"),
+                                len(parsed.get("findings", [])),
+                            )
+                        except Exception:
+                            logger.debug("Failed to log leakage guardrail status for v%s", version)
+                        if parsed.get("severity") == "block":
+                            guard_report["decision"] = "block"
+                    except Exception:
+                        # If JSON malformed, treat as warn but proceed
+                        logger.warning(
+                            "Guardrail[leakage] v%s: malformed JSON from reviewer; proceeding as warn",
+                            version,
+                        )
+                else:
+                    guard_report["leakage_check"] = {
+                        "status": "skipped",
+                        "reason": "disabled in config",
+                    }
                     try:
                         logger.info(
-                            "Guardrail[leakage] v%s: severity=%s, findings=%s",
+                            "Guardrail[leakage] v%s: skipped (disabled in config)",
                             version,
-                            parsed.get("severity"),
-                            len(parsed.get("findings", [])),
                         )
                     except Exception:
-                        logger.debug("Failed to log leakage guardrail status for v%s", version)
-                    if parsed.get("severity") == "block":
-                        guard_report["decision"] = "block"
-                except Exception:
-                    # If JSON malformed, treat as warn but proceed
-                    logger.warning("Guardrail[leakage] v%s: malformed JSON from reviewer; proceeding as warn", version)
-
-            # Persist guard report
-            try:
-                with open(self.outputs_dir / f"guardrail_v{version}.json", "w") as f:
-                    serialized = dict(guard_report)
-                    notes = []
-                    if isinstance(serialized.get("debug_sequence_check"), str):
-                        notes.append("debug_sequence_check is raw string if model returned non-JSON")
-                    if isinstance(serialized.get("leakage_check"), str):
-                        notes.append("leakage_check is raw string if model returned non-JSON")
-                    if notes:
-                        serialized["_note"] = " | ".join(notes)
-                    json.dump(serialized, f)
-            except Exception:
-                logger.exception("Failed to write guardrail report for v%s", version)
+                        logger.debug("Failed to log leakage guardrail skip status for v%s", version)
 
             try:
                 logger.info("Guardrail decision v%s: %s", version, guard_report.get("decision"))
@@ -444,18 +470,18 @@ Project structure:
                     parsed_debug = json.loads(raw_debug.strip()) if isinstance(raw_debug, str) else (raw_debug or {})
                     if parsed_debug.get("severity") == "block":
                         summary.append(
-                            "- Ensure the script runs DEBUG mode before FULL mode and raises an Exception when loss/metric is NaN."
+                            "- Ensure the script raises an Exception when loss/metric is NaN."
                         )
                         findings = parsed_debug.get("findings", [])
                         if findings:
-                            summary.append("\nDEBUG sequencing findings:")
+                            summary.append("\nNaN guard findings:")
                             for idx, finding in enumerate(findings, start=1):
                                 summary.append(
                                     f"{idx}. rule_id={finding.get('rule_id', 'unknown')}\n   - snippet: {finding.get('snippet', '')}\n   - rationale: {finding.get('rationale', '')}\n   - suggestion: {finding.get('suggestion', '')}"
                                 )
                 except Exception:
                     try:
-                        summary.append("- DEBUG sequencing reviewer returned non-JSON content:")
+                        summary.append("- NaN guard reviewer returned non-JSON content:")
                         summary.append(str(guard_report.get("debug_sequence_check")))
                     except Exception:
                         pass
@@ -573,22 +599,36 @@ Project structure:
                     code = self.previous_runs[-1][0]
 
                     # prev sota
-                    prev_suggestions = "\n------------------------------".join(self.previous_runs[-1][2])
+                    prev_suggestions = "\n-".join(self.previous_runs[-1][2])
 
-                if len(self.previous_runs[-1][2]) >= 8 and "Please scale up the number of folds in your training." not in self.previous_runs[-1][2]:
-                    # we may have pleataued
-                    sota_suggestions = "Please scale up the number of folds in your training."
-                else:
-                    use_sota = True if len(self.previous_runs[-1][2]) >= 4 else False
-                    try:
-                        sota_suggestions = search_sota_suggestions(self.description, code, prev_suggestions, use_sota)
-                    except Exception:
-                        logger.exception("Failed to fetch SOTA suggestions for attempt %s", attempt)
-                        sota_suggestions = ""
+                #if len(self.previous_runs[-1][2]) >= 5:
+                    #self.messages[0]['content'] = self.messages[0]['content'].replace("- Run your experiments with just validation on fold 0 UNLESS EXPLICITLY INSTRUCTED OTHERWISE.", "")
+                #else:
+                try:
+                    sota_suggestions = search_sota_suggestions(self.description, code, prev_suggestions)
+                except Exception:
+                    logger.exception("Failed to fetch SOTA suggestions for attempt %s", attempt)
+                    sota_suggestions = ""
 
                 logger.info("SOTA suggestion: %s", sota_suggestions)
 
-                self.previous_runs[-1][2].append(sota_suggestions)
+                # extract json
+                sota_suggestion_short_summary = ""
+                try:
+                    m = re.search(r"```json\s*(\{.*?\})\s*```", sota_suggestions, re.DOTALL | re.IGNORECASE)
+                    if m:
+                        json_text = m.group(1)
+                        logger.debug("Extracted JSON snippet from SOTA suggestions: %s", json_text)
+                        parsed = json.loads(json_text)
+                        sota_suggestion_short_summary = parsed.get("suggestion", "")
+                    else: 
+                        logger.debug("No JSON snippet found in SOTA suggestions; using full text.")
+                except Exception:
+                    logger.exception("Failed to parse JSON from SOTA suggestions; using full text.")
+
+
+                self.previous_runs[-1][2].append(sota_suggestion_short_summary)
+                logger.info("Summary of SOTA suggestion: %s", sota_suggestion_short_summary)
 
                 next_log_path = self.outputs_dir / self._log_filename(version + 1)
                 next_submission_path = self.outputs_dir / self._submission_filename(version + 1)
@@ -622,7 +662,6 @@ Project structure:
                 self.messages.append({'role': 'user', 'content': next_instr})
 
             logger.info("previous runs count: %s", len(self.previous_runs))
-            logger.info("previous runs list: %s", str(self.previous_runs))
 
             for path in self.outputs_dir.iterdir():
                 if path.is_file():

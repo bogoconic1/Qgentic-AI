@@ -70,10 +70,11 @@ After proposing a solution, validate that the recommendation directly addresses 
     return content
 
 @weave.op()
-def search_sota_suggestions(description: str, context: str, failed_ideas: str, use_sota: bool) -> str:
+def search_sota_suggestions(description: str, context: str, failed_ideas: str) -> str:
     """Use web search to surface potential SOTA improvements for the competition."""
     logger.info("Dispatching SOTA web search")
-    prompt = f"""You are provided with a Kaggle competition description and an initial script for the task.
+    prompt = f"""
+You will receive a Kaggle competition description along with an initial script and its logs.
 
 <competition description>
 {description}
@@ -83,20 +84,43 @@ def search_sota_suggestions(description: str, context: str, failed_ideas: str, u
 {context}
 </initial script and logs>
 
-<previous failed ideas> DO NOT TRY THESE AGAIN ❌  ❌  ❌ 
+<previous failed ideas> DO NOT TRY THESE AGAIN 
 {failed_ideas}
 </previous failed ideas>
 
-Begin with a concise checklist (3-7 bullets) of the possible red flags in the logs and what you will do; keep items conceptual, not implementation-level.
-Your task is to provide a single, impactful suggestion — along with sample code — to improve the model's performance with respect to the competition metric. In approximately 100 words, explain why your suggestion would help.
-If you have no suggestions, simply reply with "No suggestions."
-After proposing your suggestion and code, briefly validate its relevance to the competition details and metric in 1-2 lines. If your suggestion cannot be validated, state why and consider whether to proceed or reply "No suggestions."
-Carefully consider the competition details and context to deliver the most impactful recommendation possible.
+- Begin with a concise checklist (3-7 bullet points) summarizing high-level conceptual red flags found in the logs and your intended overall strategies for addressing them. Keep bullets conceptual, not implementation-specific. Use "- " to denote each bullet.
 
-**IMPORTANT**: Do not repeat any ideas listed in the <previous failed ideas> section.
-**IMPORTANT**: Do not suggest scaling up the number of folds unless you have no other ideas."""
-    if use_sota:
-        prompt += "\n**IMPORTANT**: Please do some research on SOTA techniques that can be applied to this competition."
+- Web search recent effective models, architectures, or techniques relevant to this competition that could address the red flags. Before suggesting an approach, explicitly state its purpose and why you have selected it, referencing information from the competition description and context. Propose a single, high-impact suggestion to improve performance for the competition's metric. Whenever feasible, include a sample Python code block (unless otherwise indicated in the context) between triple backticks (```), and accompany it with an approximately 100-word explanation of why this approach is beneficial.
+
+- After presenting your suggestion and code, validate its relevance to the specific competition details and metric in 1-2 sentences. State clear criteria for validation, referencing key details from the input where possible. If validation is not possible because the input is insufficient, mention this clearly and return "No suggestions.".
+
+- If the <competition description> or <initial script and logs> are missing or clearly inadequate, state this before the checklist. Then, output only the section headings with "No suggestions." and a summary JSON as described below.
+
+- At the end, provide a single-line summary of your recommendation using the following strict JSON format within backticks (if no suggestion, use an empty string for the field):
+```json
+{{
+    "suggestion": "<your suggestion here>"
+}}
+```
+
+- Never repeat any ideas from <previous failed ideas>.
+
+## Output Format
+Your output must follow these sections, strictly in this order:
+
+1. **Checklist**: 3-7 bullet points on conceptual red flags and strategies.
+2. **Research & Suggestion**:
+    - Name and briefly describe the recent effective model or technique.
+    - Offer one high-impact improvement suggestion with purpose stated upfront.
+    - Include a code block (default Python; adapt if another language is evident in context).
+    - Provide a concise explanation (~100 words).
+3. **Validation**: 1-2 sentence relevance check against the competition description and metric, with explicit validation criteria.
+4. **JSON Summary**: One-line summary in the specified JSON format; use an empty string if no suggestion.
+
+If no actionable suggestion is possible, provide all section headings with "No suggestions." in the appropriate places and ensure the JSON uses an empty string.
+
+Always comply with required section order and formatting, clearly handle missing input cases, and ensure never to repeat any idea from <previous failed ideas>.
+"""
         
     messages = [
         {

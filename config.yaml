@@ -21,3 +21,7 @@ paths:
   submission_filename_template: "submission_{version}.csv"
 hardware:
   description: "A single A100 80GB GPU"
+guardrails:
+  logging_basicconfig_order: true
+  nan_guard: true
+  leakage_review: false
