@@ -255,6 +255,14 @@ Project structure:
         logger.debug("Written code size: %s characters", len(code))
         return code_path
 
+    def _log_attempt_score(self, attempt: int, score: Optional[float]) -> None:
+        """Send attempt/score metrics to wandb while guarding against logging errors."""
+        try:
+            wandb.log({"attempt": attempt, "score": score})
+            logger.debug("Logged attempt %s with score %s to wandb", attempt, score)
+        except Exception:
+            logger.exception("Failed to log attempt %s metrics to wandb", attempt)
+
     @weave.op()
     def run(self, plan_markdown: str, max_tries: int = 50) -> bool:
         logger.info(
@@ -501,6 +509,7 @@ Project structure:
                         logger.info("Grading command completed successfully for version %s", version)
                         info = self._get_grade_report_json(grade_feedback)
                         run_score = info.get('score')
+                        self._log_attempt_score(attempt, run_score)
                         logger.info("Your result on the test set is %s", run_score)
                 except Exception as exc:
                     grade_feedback = f"Failed to run grading tool: {exc}"
@@ -529,12 +538,13 @@ Project structure:
                     # prev sota
                     prev_suggestions = "\n------------------------------".join(self.previous_runs[-1][2])
 
-                if len(self.previous_runs[-1][2]) >= 5 and "Please scale up the number of folds in your training." not in self.previous_runs[-1][2]:
+                if len(self.previous_runs[-1][2]) >= 8 and "Please scale up the number of folds in your training." not in self.previous_runs[-1][2]:
                     # we may have pleataued
                     sota_suggestions = "Please scale up the number of folds in your training."
                 else:
+                    use_sota = True if len(self.previous_runs[-1][2]) >= 4 else False
                     try:
-                        sota_suggestions = search_sota_suggestions(self.description, code, prev_suggestions)
+                        sota_suggestions = search_sota_suggestions(self.description, code, prev_suggestions, use_sota)
                     except Exception:
                         logger.exception("Failed to fetch SOTA suggestions for attempt %s", attempt)
                         sota_suggestions = ""
@@ -573,8 +583,11 @@ Project structure:
             logger.info("previous runs count: %s", len(self.previous_runs))
             logger.info("previous runs list: %s", str(self.previous_runs))
 
-            for file in os.listdir(self.outputs_dir):
-                artifact.add_file(str(self.outputs_dir / file), overwrite=True)
+            for path in self.outputs_dir.iterdir():
+                if path.is_file():
+                    artifact.add_file(str(path), overwrite=True)
+                else:
+                    logger.debug("Skipping non-file path when logging artifact: %s", path)
 
             artifact.save()
 

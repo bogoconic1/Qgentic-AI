@@ -65,13 +65,10 @@ After proposing a solution, validate that the recommendation directly addresses 
     return content
 
 @weave.op()
-def search_sota_suggestions(description: str, context: str, failed_ideas: str) -> str:
+def search_sota_suggestions(description: str, context: str, failed_ideas: str, use_sota: bool) -> str:
     """Use web search to surface potential SOTA improvements for the competition."""
     logger.info("Dispatching SOTA web search")
-    messages = [
-        {
-            "role": "user",
-            "content": f"""You are provided with a Kaggle competition description and an initial script for the task.
+    prompt = f"""You are provided with a Kaggle competition description and an initial script for the task.
 
 <competition description>
 {description}
@@ -92,8 +89,14 @@ After proposing your suggestion and code, briefly validate its relevance to the 
 Carefully consider the competition details and context to deliver the most impactful recommendation possible.
 
 **IMPORTANT**: Do not repeat any ideas listed in the <previous failed ideas> section.
-**IMPORTANT**: Do not suggest scaling up the number of folds unless you have no other ideas.
-"""
+**IMPORTANT**: Do not suggest scaling up the number of folds unless you have no other ideas."""
+    if use_sota:
+        prompt += "\n**IMPORTANT**: Please do some research on SOTA techniques that can be applied to this competition."
+        
+    messages = [
+        {
+            "role": "user",
+            "content": prompt
         }
     ]
 
