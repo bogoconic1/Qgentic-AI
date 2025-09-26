@@ -23,6 +23,7 @@ pymupdf>=1.24
 # Images/Video
 Pillow>=10.0
 opencv-python>=4.8
+albumentations>=1.4
 
 # Anthropic SDK for Async Messages API
 anthropic>=0.34.0
@@ -43,6 +44,8 @@ kaggle
 kagglehub
 
 transformers[torch]
+torchvision
+tensorflow
 accelerate
 peft
 bitsandbytes
@@ -52,3 +55,8 @@ vllm
 
 wandb
 weave
+timm>=0.9.16
+datasets 
+tensorboard
+matplotlib
+seaborn

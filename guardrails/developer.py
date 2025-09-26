@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
 from openai import OpenAI
+from project_config import get_config
 
 from tools.helpers import call_llm_with_retry
 
@@ -12,7 +13,14 @@ from tools.helpers import call_llm_with_retry
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-client = OpenAI(api_key=os.environ.get("OPENROUTER_API_KEY"), base_url="https://openrouter.ai/api/v1")
+_CONFIG = get_config()
+_LLM_CFG = _CONFIG.get("llm", {}) if isinstance(_CONFIG, dict) else {}
+_BASE_URL = _LLM_CFG.get("base_url", "https://openrouter.ai/api/v1")
+_API_KEY_ENV = _LLM_CFG.get("api_key_env", "OPENROUTER_API_KEY")
+_LEAKAGE_REVIEW_MODEL = _LLM_CFG.get("leakage_review_model", "qwen/qwen3-next-80b-a3b-thinking")
+_LEAKAGE_FOLLOWUP_MODEL = _LLM_CFG.get("leakage_followup_model", "qwen/qwen3-next-80b-a3b-instruct")
+
+client = OpenAI(api_key=os.environ.get(_API_KEY_ENV), base_url=_BASE_URL)
 
 
 # -----------------------------
@@ -146,7 +154,7 @@ def check_logging_basicconfig_order(filepath: str) -> Dict[str, Any]:
 def llm_leakage_review(task_description: str, code: str) -> str:
     """
     Ask an LLM to review potential data leakage risks in the generated code.
-    Uses qwen/qwen3-next-80b-a3b-thinking via OpenRouter. Returns raw model text.
+    Uses the configured leakage review model via OpenRouter. Returns raw model text.
     """
     PROMPT = """
 You are a senior ML engineer auditing a training script for data leakage.
@@ -187,7 +195,7 @@ Be concise and pragmatic; do not include prose outside JSON.
         while content == "":
             completion = call_llm_with_retry(
                 client,
-                model="qwen/qwen3-next-80b-a3b-thinking",
+                model=_LEAKAGE_REVIEW_MODEL,
                 messages=messages,
             )
             msg = completion.choices[0].message
@@ -232,7 +240,7 @@ Be concise; no extra prose outside JSON.
         while content == "":
             completion = call_llm_with_retry(
                 client,
-                model="qwen/qwen3-next-80b-a3b-instruct",
+                model=_LEAKAGE_FOLLOWUP_MODEL,
                 messages=messages,
             )
             msg = completion.choices[0].message
@@ -241,4 +249,3 @@ Be concise; no extra prose outside JSON.
     except Exception:
         logger.exception("DEBUG sequence LLM review failed")
         return '{"severity": "warn", "findings": [{"rule_id": "llm_error", "snippet": "N/A", "rationale": "LLM call failed", "suggestion": "Manually verify DEBUG sequencing and NaN safeguards."}]}'
-

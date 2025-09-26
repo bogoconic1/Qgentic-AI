@@ -13,6 +13,7 @@ import polars as pl  # noqa: F401
 import yaml
 from dotenv import load_dotenv
 from openai import OpenAI
+from project_config import get_config
 from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 tqdm.pandas()
@@ -42,6 +43,9 @@ class UnionFind:
                 self.parent[root_v] = root_u
                 self.rank[root_u] += 1
                 self.sizes[root_u] += self.sizes[root_v]
+
+CONFIG = get_config()
+CONFIG_LLM = CONFIG.get("llm", {}) if isinstance(CONFIG, dict) else {}
 
 PROMPT = """You are a Kaggle Competitions Grandmaster tasked with extracting specific pipeline details from provided code. Begin with a concise checklist (3-7 bullets) of what you will do; keep items conceptual, not implementation-level. Extract the following components:
 
@@ -147,7 +151,7 @@ def summarize_code(client: OpenAI, code: str) -> dict:
     messages = [{'role': 'user', 'content': PROMPT.format(code=code)}]
     response = client.chat.completions.create(
         extra_body={},
-        model="openai/gpt-5",
+        model=CONFIG_LLM.get("offline_model", "openai/gpt-5"),
         messages=messages,
     ).choices[0].message.content
 
@@ -171,7 +175,10 @@ def main() -> None:
     task_dir = args.task_path / args.competition_slug
     os.makedirs(task_dir, exist_ok=True)
 
-    client = OpenAI(api_key=os.environ.get("OPENROUTER_API_KEY"), base_url="https://openrouter.ai/api/v1")
+    client = OpenAI(
+        api_key=os.environ.get(CONFIG_LLM.get("api_key_env", "OPENROUTER_API_KEY")),
+        base_url=CONFIG_LLM.get("base_url", "https://openrouter.ai/api/v1"),
+    )
 
     competition_id, forum_id, start_ts, cutoff_ts = get_competition_and_forum_ids(
         args.meta_kaggle_path, args.competition_slug

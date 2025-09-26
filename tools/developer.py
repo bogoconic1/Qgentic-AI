@@ -2,13 +2,12 @@
 
 import logging
 import os
-import pickle
 import subprocess
-import textwrap
 import traceback
 
 from dotenv import load_dotenv
 from openai import OpenAI
+from project_config import get_config
 from tools.helpers import call_llm_with_retry
 import weave
 
@@ -22,7 +21,13 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-client = OpenAI(api_key=os.environ.get("OPENROUTER_API_KEY"), base_url="https://openrouter.ai/api/v1")
+_CONFIG = get_config()
+_LLM_CFG = _CONFIG.get("llm", {}) if isinstance(_CONFIG, dict) else {}
+_BASE_URL = _LLM_CFG.get("base_url", "https://openrouter.ai/api/v1")
+_API_KEY_ENV = _LLM_CFG.get("api_key_env", "OPENROUTER_API_KEY")
+_ONLINE_MODEL = _LLM_CFG.get("online_model", "openai/gpt-5:online")
+
+client = OpenAI(api_key=os.environ.get(_API_KEY_ENV), base_url=_BASE_URL)
 
 @weave.op()
 def web_search_stack_trace(query: str) -> str:
@@ -50,7 +55,7 @@ After proposing a solution, validate that the recommendation directly addresses 
         while content == "":
             completion = call_llm_with_retry(
                 client,
-                model="openai/gpt-5:online",
+                model=_ONLINE_MODEL,
                 messages=messages,
             )
             msg = completion.choices[0].message
@@ -105,7 +110,7 @@ Carefully consider the competition details and context to deliver the most impac
         while content == "":
             completion = call_llm_with_retry(
                 client,
-                model="openai/gpt-5:online",
+                model=_ONLINE_MODEL,
                 messages=messages,
             )
             msg = completion.choices[0].message

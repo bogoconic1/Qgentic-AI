@@ -8,6 +8,7 @@ import json
 
 from dotenv import load_dotenv
 from openai import OpenAI
+from project_config import get_config
 from sortedcontainers import SortedList
 import weave
 import wandb
@@ -27,6 +28,24 @@ from tools.helpers import call_llm_with_retry, _build_directory_listing
 logger = logging.getLogger(__name__)
 
 
+_CONFIG = get_config()
+_LLM_CFG = _CONFIG.get("llm", {}) if isinstance(_CONFIG, dict) else {}
+_PATH_CFG = _CONFIG.get("paths", {}) if isinstance(_CONFIG, dict) else {}
+_RUNTIME_CFG = _CONFIG.get("runtime", {}) if isinstance(_CONFIG, dict) else {}
+_HARDWARE_CFG = _CONFIG.get("hardware", {}) if isinstance(_CONFIG, dict) else {}
+
+_BASE_URL = _LLM_CFG.get("base_url", "https://openrouter.ai/api/v1")
+_API_KEY_ENV = _LLM_CFG.get("api_key_env", "OPENROUTER_API_KEY")
+_ONLINE_MODEL = _LLM_CFG.get("online_model", "openai/gpt-5:online")
+
+_TASK_ROOT = Path(_PATH_CFG.get("task_root", "task"))
+_OUTPUTS_DIRNAME = _PATH_CFG.get("outputs_dirname", "outputs")
+_CODE_TEMPLATE = _PATH_CFG.get("code_filename_template", "code_{iteration}_v{version}.py")
+_LOG_TEMPLATE = _PATH_CFG.get("log_filename_template", "code_{iteration}_v{version}.txt")
+_SUBMISSION_TEMPLATE = _PATH_CFG.get("submission_filename_template", "submission_{version}.csv")
+_HARDWARE_DESCRIPTION = _HARDWARE_CFG.get("description", "A single A100 80GB GPU")
+_DEFAULT_MAX_TRIES = _RUNTIME_CFG.get("developer_max_tries", 50)
+
 def _safe_read(path: str) -> str:
     try:
         with open(path, "r") as f:
@@ -44,7 +63,7 @@ class DeveloperAgent:
     - Generates a single python file: code_{iteration}_v{version}.py
     - Executes it and iterates on failures up to max_tries
     - Success condition: writes submission.csv at
-      task/<slug>/outputs/<iteration>/submission.csv
+      <task_root>/<slug>/<outputs_dir>/<iteration>/submission.csv
     - Ensures Torch MPS fallback flags for Apple Silicon
     """
 
@@ -53,8 +72,10 @@ class DeveloperAgent:
         self.slug = slug
         self.iteration = iteration
 
-        self.base_dir = Path("task") / slug
-        self.outputs_dir = self.base_dir / "outputs" / str(iteration)
+        self.task_root = _TASK_ROOT
+        self.outputs_dirname = _OUTPUTS_DIRNAME
+        self.base_dir = self.task_root / slug
+        self.outputs_dir = self.base_dir / self.outputs_dirname / str(iteration)
         self.outputs_dir.mkdir(parents=True, exist_ok=True)
         self.developer_log_path = self.outputs_dir / "developer.txt"
         self._configure_logger()
@@ -69,7 +90,7 @@ class DeveloperAgent:
         self.previous_runs = [("Initial State", float("inf") if self.is_lower_better else float("-inf"), [""])]
 
         # OpenRouter client
-        self.client = OpenAI(api_key=os.environ.get("OPENROUTER_API_KEY"), base_url="https://openrouter.ai/api/v1")
+        self.client = OpenAI(api_key=os.environ.get(_API_KEY_ENV), base_url=_BASE_URL)
         os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
         logger.info(
@@ -90,6 +111,15 @@ class DeveloperAgent:
             )
             logger.addHandler(file_handler)
         logger.setLevel(logging.DEBUG)
+
+    def _code_filename(self, version: int) -> str:
+        return _CODE_TEMPLATE.format(iteration=self.iteration, version=version)
+
+    def _log_filename(self, version: int) -> str:
+        return _LOG_TEMPLATE.format(iteration=self.iteration, version=version)
+
+    def _submission_filename(self, version: int) -> str:
+        return _SUBMISSION_TEMPLATE.format(iteration=self.iteration, version=version)
 
     @staticmethod
     def _get_grade_report_json(stdout: str) -> Optional[dict]:
@@ -179,12 +209,12 @@ Begin with a concise checklist (3-7 bullets) of what you will do; keep items con
 **Additional Context**
 - Competition Description:
   {self.description}
-- Directory structure for task/{self.slug}:
+- Directory structure for {self.base_dir}:
   {directory_listing}
 - Score to beat:
   {self.gold_threshold}
 - Environment that your code will run in:
-  A single A100 80GB GPU
+  {_HARDWARE_DESCRIPTION}
 
 **Output Format**
 Return Python code only, enclosed in triple backticks with the `python` annotation:
@@ -199,21 +229,25 @@ Implement the best possible solution for this task, with the goal of maximizing 
 
     def _build_user_prompt(self, plan_markdown: str, version: int) -> str:
         logger.debug("Building user prompt")
+        base_dir_display = self.base_dir
+        outputs_dir_display = self.outputs_dir
+        log_path_display = self.outputs_dir / self._log_filename(version)
+        submission_path_display = self.outputs_dir / self._submission_filename(version)
         base = f"""
 Researcher Technical Plan (Markdown):
 {plan_markdown}
 
 Project structure:
-- Base data dir: task/{self.slug}
-- Outputs dir: task/{self.slug}/outputs/{self.iteration}
-- The logs should be written to a file named task/{self.slug}/outputs/{self.iteration}/code_{self.iteration}_v{version}.txt
-- Required output: task/{self.slug}/outputs/{self.iteration}/submission_{version}.csv
+- Base data dir: {base_dir_display}
+- Outputs dir: {outputs_dir_display}
+- The logs should be written to a file named {log_path_display}
+- Required output: {submission_path_display}
 """
         base += (
             "\nReturn the complete Python script that, when run, writes logs to "
-            f"task/{self.slug}/outputs/{self.iteration}/code_{self.iteration}_v{version}.txt "
+            f"{log_path_display} "
             "and produces a submission CSV at "
-            f"task/{self.slug}/outputs/{self.iteration}/submission_{version}.csv."
+            f"{submission_path_display}."
         )
         if self.threshold_directive:
             base += f"\n{self.threshold_directive}"
@@ -237,7 +271,7 @@ Project structure:
         while content == "":
             completion = call_llm_with_retry(
                 self.client,
-                model="openai/gpt-5:online",
+                model=_ONLINE_MODEL,
                 messages=messages,
             )
             msg = completion.choices[0].message
@@ -248,7 +282,7 @@ Project structure:
         return self._extract_code(content)
 
     def _write_code(self, code: str, version: int) -> Path:
-        code_path = self.outputs_dir / f"code_{self.iteration}_v{version}.py"
+        code_path = self.outputs_dir / self._code_filename(version)
         logger.info("Writing generated code to %s", code_path)
         with open(code_path, "w") as f:
             f.write(code)
@@ -264,7 +298,8 @@ Project structure:
             logger.exception("Failed to log attempt %s metrics to wandb", attempt)
 
     @weave.op()
-    def run(self, plan_markdown: str, max_tries: int = 50) -> bool:
+    def run(self, plan_markdown: str, max_tries: Optional[int] = None) -> bool:
+        max_tries = max_tries or _DEFAULT_MAX_TRIES
         logger.info(
             "Starting developer run for slug=%s iteration=%s with max_tries=%s",
             self.slug,
@@ -448,10 +483,12 @@ Project structure:
                         summary.append(str(guard_report.get("leakage_check")))
                     except Exception:
                         pass
+                next_log_path = self.outputs_dir / self._log_filename(version + 1)
+                next_submission_path = self.outputs_dir / self._submission_filename(version + 1)
                 fix_instr = (
                     "\nPlease regenerate the script addressing the above guardrail issues. "
-                    f"Write logs to task/{self.slug}/outputs/{self.iteration}/code_{self.iteration}_v{version+1}.txt "
-                    f"and produce submission_{version+1}.csv."
+                    f"Write logs to {next_log_path} "
+                    f"and produce {next_submission_path}."
                 )
                 self.messages.append({"role": "user", "content": "\n".join(summary) + fix_instr})
                 logger.info("User prompt with guardrail feedback: %s", "\n".join(summary) + fix_instr)
@@ -463,7 +500,7 @@ Project structure:
             logger.info("Execution output captured for version v%s", version)
             logger.debug("Execution output: %s", output)
 
-            log_path = self.outputs_dir / f"code_{self.iteration}_v{version}.txt"
+            log_path = self.outputs_dir / self._log_filename(version)
             log_content = ""
             try:
                 if log_path.exists():
@@ -476,7 +513,7 @@ Project structure:
             except Exception:
                 logger.exception("Failed to read execution log at %s", log_path)
 
-            submission_path = self.outputs_dir / f"submission_{version}.csv"
+            submission_path = self.outputs_dir / self._submission_filename(version)
             code += "\n\n" + log_content[-30000:] # to avoid token limit issues
 
             if submission_path.exists():
@@ -553,19 +590,23 @@ Project structure:
 
                 self.previous_runs[-1][2].append(sota_suggestions)
 
+                next_log_path = self.outputs_dir / self._log_filename(version + 1)
+                next_submission_path = self.outputs_dir / self._submission_filename(version + 1)
                 next_instr = f"""
                 Please modify your code to ONLY incorporate this advice (keep everything else the same):
                 {sota_suggestions}
 
                 Remember:
-                - write logs to task/{self.slug}/outputs/{self.iteration}/code_{self.iteration}_v{version+1}.txt
-                - and produce the next submission at task/{self.slug}/outputs/{self.iteration}/submission_{version+1}.csv."
+                - write logs to {next_log_path}
+                - and produce the next submission at {next_submission_path}"
                 """
                 self.messages = self.messages[:2]
                 self.messages.append({'role': 'assistant', 'content': code})
                 self.messages.append({'role': 'user', 'content': next_instr})
 
             else:
+                next_log_path = self.outputs_dir / self._log_filename(version + 1)
+                next_submission_path = self.outputs_dir / self._submission_filename(version + 1)
                 next_instr = f"""
                 Your code FAILED during execution!
                 This is the stack trace and advice on how to fix the error:
@@ -574,8 +615,8 @@ Project structure:
                 Please modify your code to fix the error!
 
                 Remember:
-                - write logs to task/{self.slug}/outputs/{self.iteration}/code_{self.iteration}_v{version+1}.txt
-                - and produce the next submission at task/{self.slug}/outputs/{self.iteration}/submission_{version+1}.csv."
+                - write logs to {next_log_path}
+                - and produce the next submission at {next_submission_path}"
                 """
                 self.messages.append({'role': 'assistant', 'content': code})
                 self.messages.append({'role': 'user', 'content': next_instr})
@@ -593,6 +634,6 @@ Project structure:
 
         logger.warning(
             "Developer run exhausted all attempts without creating submission: %s",
-            self.outputs_dir / f"submission_{max_tries}.csv",
+            self.outputs_dir / self._submission_filename(max_tries),
         )
         return True
