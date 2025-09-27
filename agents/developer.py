@@ -287,6 +287,20 @@ Project structure:
         return content.strip()
 
     @staticmethod
+    def _format_with_line_numbers(code: str) -> str:
+        lines = code.splitlines()
+        return "\n".join(f"{idx:04d}: {line}" for idx, line in enumerate(lines, start=1))
+
+    def _build_assistant_payload(self, code: str, include_line_numbers: bool) -> str:
+        if include_line_numbers:
+            return (
+                "<previous_code_with_line_numbers>\n"
+                f"{self._format_with_line_numbers(code)}\n"
+                "</previous_code_with_line_numbers>"
+            )
+        return "<previous_code>\n" + code + "\n</previous_code>"
+
+    @staticmethod
     def _extract_diff_block(content: str) -> str:
         """Extract unified diff payload from the completion content."""
         if not content:
@@ -338,6 +352,8 @@ Project structure:
 
         if not diff_text.endswith("\n"):
             diff_text += "\n"
+
+        logger.debug("diff text: %s", diff_text)
 
         output_filename = self._code_filename(target_version)
         output_path = self.outputs_dir / output_filename
@@ -397,16 +413,34 @@ Project structure:
     def _append_patch_directive(self, instruction: str, version: int) -> str:
         if not self.patch_mode_enabled:
             return instruction
+        instruction = instruction.replace("Please modify your code to fix the error!", "Please write a git diff within ```diff to fix the error!")
         base_filename = self._code_filename(version)
         directive = textwrap.dedent(
             f"""
+Patch instructions:
+- Produce a unified diff (apply patch format) that updates {base_filename}. Do not include any prefixes in the diff other than {base_filename}.
+- Return only the diff enclosed in ```diff fences; do not resend the full script.
+- Ensure the diff applies cleanly with the `patch` utility using the file names above.
+- Use standard hunk headers with explicit line numbers, e.g. @@ -12,7 +12,9 @@.
+- Refer to the <previous_code_with_line_numbers> section above when calculating line numbers.
 
-            Patch instructions:
-            - Produce a unified diff (apply patch format) that updates {base_filename}.
-            - Return only the diff enclosed in ```diff fences; do not resend the full script.
-            - Ensure the diff applies cleanly with the `patch` utility using the file names above.
-            """
-        ).strip()
+Like this
+```diff
+--- {base_filename}
++++ {base_filename}
+@@ -1,3 +1,3 @@
+ start
+-first change
++new first change
+ middle
+@@ -7,4 +7,4 @@
+ some content
+-second change
++new second change
+ more content
+ end
+ ```
+""").strip()
         return f"{instruction}\n\n{directive}"
 
     def _write_code(self, code: str, version: int) -> Path:
@@ -774,9 +808,9 @@ Project structure:
                 logger.exception("Failed to read execution log at %s", log_path)
 
             submission_path = self.outputs_dir / self._submission_filename(version)
-            code = "<code>\n" + code + "\n</code>\n"
+            code_with_logs = "<code>\n" + code + "\n</code>\n"
             if log_content:
-                code += f"<validation_log>\n{log_content[-30000:]}\n</validation_log>\n"  # to avoid token limit issues
+                code_with_logs += f"<validation_log>\n{log_content[-30000:]}\n</validation_log>\n"  # to avoid token limit issues
 
             run_score = float("inf") if self.is_lower_better else float("-inf")
 
@@ -816,7 +850,7 @@ Project structure:
                     grade_feedback = f"Failed to run grading tool: {exc}"
                     logger.exception("Grading command failed for version %s", version)
 
-                code += f"<leaderboard_score>\n{run_score}\n</leaderboard_score>\n"
+                code_with_logs += f"<leaderboard_score>\n{run_score}\n</leaderboard_score>\n"
 
                 previous_best = self.best_score
                 run_score_display = self._format_score_value(run_score)
@@ -854,7 +888,7 @@ Project structure:
                             "The latest run did not improve the benchmark. Please investigate the reasons before continuing."
                         )
 
-                code += f"<analysis>\n{analysis_msg}\n</analysis>\n"
+                code_with_logs += f"<analysis>\n{analysis_msg}\n</analysis>\n"
                 if improvement:
                     self.best_code = code
                 self.previous_runs.append((code, run_score))
@@ -862,7 +896,7 @@ Project structure:
                 try:
                     sota_suggestions = search_sota_suggestions(
                         self.description,
-                        code,
+                        code_with_logs,
                         executed_suggestion=self.last_suggestion,
                         failed_to_improve_score=not improvement,
                         failed_ideas=self.blacklisted_ideas,
@@ -936,10 +970,14 @@ Project structure:
 
                 self.messages = self.messages[:2]
                 if blacklist_flag and self.best_code:
-                    assistant_content = self.best_code
+                    base_code = self.best_code
                 else:
-                    assistant_content = code
-                self.messages.append({'role': 'assistant', 'content': assistant_content})
+                    base_code = code
+                assistant_payload = self._build_assistant_payload(
+                    base_code,
+                    include_line_numbers=self.patch_mode_enabled,
+                )
+                self.messages.append({'role': 'assistant', 'content': assistant_payload})
                 self.messages.append({'role': 'user', 'content': next_instr})
 
             else:
@@ -957,7 +995,11 @@ Project structure:
                 - and produce the next submission at {next_submission_path}"
                 """
                 next_instr = self._append_patch_directive(next_instr, version)
-                self.messages.append({'role': 'assistant', 'content': code})
+                assistant_payload = self._build_assistant_payload(
+                    code,
+                    include_line_numbers=self.patch_mode_enabled,
+                )
+                self.messages.append({'role': 'assistant', 'content': assistant_payload})
                 self.messages.append({'role': 'user', 'content': next_instr})
 
             logger.info("previous runs count: %s", len(self.previous_runs))
