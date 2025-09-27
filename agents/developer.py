@@ -95,7 +95,7 @@ class DeveloperAgent:
         self.previous_runs: list[tuple[str, float]] = []
         self.blacklisted_ideas: list[str] = []
         self.last_suggestion: Optional[str] = None
-        self.last_patch_string: Optional[str] = None
+        self.last_suggestion_code: Optional[str] = None
         self.best_code: Optional[str] = None
 
         self._load_benchmark_info()
@@ -345,14 +345,14 @@ Project structure:
         return f"{value}"
 
     def _parse_sota_response(self, raw: str) -> tuple[str, str, bool, str]:
-        """Extract new suggestion, patch, blacklist decision, and rationale."""
+        """Extract new suggestion, code snippet, blacklist decision, and rationale."""
         suggestion_text = ""
-        patch_text = ""
+        code_snippet = ""
         blacklist_flag = False
         blacklist_reason = ""
 
         if not raw:
-            return suggestion_text, patch_text, blacklist_flag, blacklist_reason
+            return suggestion_text, code_snippet, blacklist_flag, blacklist_reason
 
         json_blocks = []
         try:
@@ -380,11 +380,11 @@ Project structure:
         if not suggestion_text:
             suggestion_text = (decision_payload.get("suggestion") or "").strip()
 
-        patch_match = re.search(r"<patch_string>(.*?)</patch_string>", raw, re.DOTALL | re.IGNORECASE)
-        if patch_match:
-            patch_text = patch_match.group(1).strip()
+        code_match = re.search(r"```python\s*(.*?)\s*```", raw, re.DOTALL | re.IGNORECASE)
+        if code_match:
+            code_snippet = code_match.group(1).strip()
 
-        return suggestion_text, patch_text, blacklist_flag, blacklist_reason
+        return suggestion_text, code_snippet, blacklist_flag, blacklist_reason
 
     def _register_blacklist(self, suggestion: str, reason: str | None = None) -> None:
         if not suggestion:
@@ -724,15 +724,33 @@ Project structure:
                     self.best_code = code
                 self.previous_runs.append((code, run_score))
 
+                if improvement:
+                    context_payload = code
+                else:
+                    context_payload = self.best_code or code
+                    failed_sections = ["<failed_attempt>"]
+                    if run_score_display != "N/A":
+                        failed_sections.append(f"<score>{run_score_display}</score>")
+                    if log_content:
+                        failed_sections.append(
+                            f"<validation_log>{log_content[-2000:]}</validation_log>"
+                        )
+                    if self.last_suggestion_code:
+                        failed_sections.append(
+                            f"<suggested_code>\n{self.last_suggestion_code}\n</suggested_code>"
+                        )
+                    failed_sections.append("</failed_attempt>")
+                    context_payload += "\n" + "\n".join(failed_sections)
+
                 try:
                     sota_suggestions = search_sota_suggestions(
                         self.description,
-                        code,
+                        context_payload,
                         executed_suggestion=self.last_suggestion,
                         failed_to_improve_score=not improvement,
                         failed_ideas=self.blacklisted_ideas,
-                        best_code=self.best_code if not improvement else None,
-                        executed_patch=self.last_patch_string,
+                        best_code=self.best_code,
+                        executed_code=self.last_suggestion_code,
                     )
                 except Exception:
                     logger.exception("Failed to fetch SOTA suggestions for attempt %s", attempt)
@@ -742,7 +760,7 @@ Project structure:
 
                 (
                     suggestion_text,
-                    patch_text,
+                    code_snippet,
                     blacklist_flag,
                     blacklist_reason,
                 ) = self._parse_sota_response(sota_suggestions)
@@ -766,7 +784,7 @@ Project structure:
                     # if suggestion missing but blacklist decision made, reset last suggestion
                     self.last_suggestion = None
 
-                self.last_patch_string = patch_text if patch_text else None
+                self.last_suggestion_code = code_snippet if code_snippet else None
 
                 next_log_path = self.outputs_dir / self._log_filename(version + 1)
                 next_submission_path = self.outputs_dir / self._submission_filename(version + 1)
@@ -777,10 +795,10 @@ Project structure:
                 else:
                     suggestion_block += "<suggestion>\nNo suggestion provided.\n</suggestion>\n"
 
-                if patch_text:
-                    suggestion_block += f"<patch_string>\n{patch_text}\n</patch_string>\n"
+                if code_snippet:
+                    suggestion_block += "Suggested code snippet:\n```python\n" + code_snippet + "\n```\n"
                 else:
-                    suggestion_block += "<patch_string>\nNo patch provided.\n</patch_string>\n"
+                    suggestion_block += "Suggested code snippet: No code provided.\n"
 
                 if improvement:
                     summary_line = "The latest attempt improved the score; refine the approach with the guidance below."
@@ -799,7 +817,8 @@ Project structure:
                 )
 
                 self.messages = self.messages[:2]
-                self.messages.append({'role': 'assistant', 'content': code})
+                assistant_content = self.best_code or code
+                self.messages.append({'role': 'assistant', 'content': assistant_content})
                 self.messages.append({'role': 'user', 'content': next_instr})
 
             else:
@@ -816,7 +835,8 @@ Project structure:
                 - write logs to {next_log_path}
                 - and produce the next submission at {next_submission_path}"
                 """
-                self.messages.append({'role': 'assistant', 'content': code})
+                assistant_content = self.best_code or code
+                self.messages.append({'role': 'assistant', 'content': assistant_content})
                 self.messages.append({'role': 'user', 'content': next_instr})
 
             logger.info("previous runs count: %s", len(self.previous_runs))

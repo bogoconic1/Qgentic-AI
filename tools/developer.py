@@ -77,14 +77,17 @@ def search_sota_suggestions(
     failed_to_improve_score: bool,
     failed_ideas: list[str],
     best_code: str | None = None,
-    executed_patch: str | None = None,
+    executed_code: str | None = None,
 ) -> str:
     """Use web search to surface potential SOTA improvements for the competition."""
     logger.info("Dispatching SOTA web search")
     failed_ideas_text = "No prior ideas are blacklisted."
     executed_suggestion_text = executed_suggestion or "No previous suggestion executed; this is the first attempt."
-    best_code_text = best_code or "Best-performing code snippet not available yet."
-    executed_patch_text = executed_patch or "No explicit patch was provided for the last attempt."
+    if best_code:
+        best_code_text = "Best-performing code accompanies this prompt; inspect the context payload above."
+    else:
+        best_code_text = "Best-performing code snippet not available yet."
+    executed_code_text = executed_code or "No explicit code snippet was provided for the last attempt."
     if failed_ideas:
         filtered = [idea for idea in failed_ideas if idea][-10:]
         if filtered:
@@ -105,9 +108,9 @@ You will receive a Kaggle competition description, an initial script, and its lo
 {executed_suggestion_text}
 </previous suggestion executed>
 
-<previous patch applied>
-{executed_patch_text}
-</previous patch applied>
+<previous code snippet applied>
+{executed_code_text}
+</previous code snippet applied>
 
 {context}
 
@@ -118,14 +121,14 @@ Outcome status: {"No improvement" if failed_to_improve_score else "Improved or m
 </best code reference>
 
 ### Checklist
-- Begin with a concise checklist of 3-7 bullet points summarizing high-level conceptual red flags from the logs and your intended strategies to address them. These should be conceptual (not implementation-specific). Use "- " for each bullet.
+- Begin with a concise checklist of 3-7 bullet points summarizing high-level conceptual red flags from the code/logs and your intended strategies to address them. These should be conceptual (not implementation-specific). Use "- " for each bullet.
 - Checklist: If fewer than three meaningful points arise, include as many as possible and explicitly state: "Fewer than 3 high-level red flags or strategies identified."
 
 ### Research and Suggestion
 - Before any web search or external query, briefly state the purpose and the minimal search terms you will use.
-- Perform a web search for recent, effective models, architectures, or techniques relevant to this competition, addressing the identified red flags.
+- Perform a web search for recent, effective models, architectures, techniques or hyperparameters relevant to this competition or similar tasks, addressing the identified red flags.
 - Before recommending any approach, clearly state its purpose and justification, referencing the competition description and context.
-- Propose one high-impact suggestion to improve performance for the competition’s metric, along with an approximately 100-word explanation of its benefits.
+- Propose one high-impact suggestion to improve performance for the competition's metric, along with an approximately 100-word explanation of its benefits.
 
 ### Validation
 - After offering your suggestion, validate its relevance to the competition details and metric in 1-2 sentences.
@@ -147,17 +150,16 @@ Structure your output as follows:
 
 ### Validation
 - ... (validation statements, or "No suggestions.")
-"""
-    prompt += """
+
 ### Previous Suggestion Review
 Decide whether the most recently executed suggestion (see <previous suggestion executed>) should be blacklisted. Base your decision on the validation outcomes and logs provided in the context.
 
 Output your decision in the following strict JSON format, enclosed in backticks:
 ```json
-{
+{{
     "blacklist": <true or false>,
     "reason": "<succinct justification; use empty string if blacklist is false>"
-}
+}}
 ```
 
 ### New Suggestion Summary
@@ -165,25 +167,17 @@ Propose the single best next idea for improving the competition score. Do not re
 
 Output your new idea in the following strict JSON format, enclosed in backticks:
 ```json
-{
+{{
     "suggestion": "<your suggestion here>"
-}
+}}
 ```
 If you have no viable suggestion, leave the value as an empty string.
 
-### Code Patch
-Enclose your recommended implementation details inside <patch_string> tags only. Use unified diff format for code suggestions. If not possible, provide a code block with a verbatim description of the change within the tags. Example:
-<patch_string>
---- a/script.py
-+++ b/script.py
-@@ ...
-+ # code changes
-</patch_string>
+### Code
+Provide a concise Python snippet (enclosed in ```python backticks) that implements the suggested change.
 
 - Never repeat any idea from <previous failed ideas>.
 - If blacklist is true, ensure the new suggestion avoids that approach.
-
-Always attempt a considered first pass based on the input provided; if essential information is missing or ambiguous, stop and request clarification instead of making unsupported assumptions.
 """
         
     messages = [
