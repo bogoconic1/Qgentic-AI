@@ -724,32 +724,13 @@ Project structure:
                     self.best_code = code
                 self.previous_runs.append((code, run_score))
 
-                if improvement:
-                    context_payload = code
-                else:
-                    context_payload = self.best_code or code
-                    failed_sections = ["<failed_attempt>"]
-                    if run_score_display != "N/A":
-                        failed_sections.append(f"<score>{run_score_display}</score>")
-                    if log_content:
-                        failed_sections.append(
-                            f"<validation_log>{log_content[-2000:]}</validation_log>"
-                        )
-                    if self.last_suggestion_code:
-                        failed_sections.append(
-                            f"<suggested_code>\n{self.last_suggestion_code}\n</suggested_code>"
-                        )
-                    failed_sections.append("</failed_attempt>")
-                    context_payload += "\n" + "\n".join(failed_sections)
-
                 try:
                     sota_suggestions = search_sota_suggestions(
                         self.description,
-                        context_payload,
+                        code,
                         executed_suggestion=self.last_suggestion,
                         failed_to_improve_score=not improvement,
                         failed_ideas=self.blacklisted_ideas,
-                        best_code=self.best_code,
                         executed_code=self.last_suggestion_code,
                     )
                 except Exception:
@@ -817,7 +798,10 @@ Project structure:
                 )
 
                 self.messages = self.messages[:2]
-                assistant_content = self.best_code or code
+                if blacklist_flag and self.best_code:
+                    assistant_content = self.best_code
+                else:
+                    assistant_content = code
                 self.messages.append({'role': 'assistant', 'content': assistant_content})
                 self.messages.append({'role': 'user', 'content': next_instr})
 
@@ -835,8 +819,7 @@ Project structure:
                 - write logs to {next_log_path}
                 - and produce the next submission at {next_submission_path}"
                 """
-                assistant_content = self.best_code or code
-                self.messages.append({'role': 'assistant', 'content': assistant_content})
+                self.messages.append({'role': 'assistant', 'content': code})
                 self.messages.append({'role': 'user', 'content': next_instr})
 
             logger.info("previous runs count: %s", len(self.previous_runs))

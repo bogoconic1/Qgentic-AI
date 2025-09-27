@@ -1,7 +1,9 @@
 """Utility helpers for executing generated code with rich logging."""
 
+import json
 import logging
 import os
+import re
 import subprocess
 import traceback
 
@@ -38,14 +40,28 @@ def web_search_stack_trace(query: str) -> str:
     messages = [
         {
             "role": "user",
-            "content": f"""Begin with a concise checklist (3-7 bullets) of what you will do; keep items conceptual, not implementation-level.
+            "content": f"""Begin by generating a concise checklist (3-7 items) of the high-level conceptual actions you will take to address the bug report. Present this checklist as a JSON array of strings, focusing on core debugging steps rather than low-level implementation details.
+You will receive a bug description in the "query" field. This field contains a plain text description of the encountered bug, which may include a stack trace or error message.
+When a stack trace or error message is present in the query, perform a web search using relevant keywords extracted from the stack trace or error message. Incorporate findings from the web search into your reasoning and solution, citing any particularly useful information or community guidance that directly informs your debugging approach or proposed fix.
 
-I am currently encountering the following bug:
+{{
+"query": "{query}"
+}}
 
-{query}
+Before composing your solution, set reasoning_effort = medium and ensure that your explanation is sufficiently detailed to guide a developer through both the 'why' and the 'how' of the proposed fix. After presenting the solution, validate in 1-2 lines that your recommendation specifically addresses any stack trace or error message found in the query. Clearly outline additional steps if required, or confirm that your resolution is sufficient and that the issue should now be considered resolved.
+Do not suggest downgrading packages unless absolutely necessary, and only after exploring all other avenues.
 
-After proposing a solution, validate that the recommendation directly addresses the stack trace and describe any needed next steps or confirm if the issue should be resolved. How can I resolve this issue?
-            """,
+{{
+"checklist": [
+"Conceptual step #1",
+"Conceptual step #2",
+"..."
+],
+"solution": "Detailed explanation of steps to resolve the issue, with clear reasoning to help a developer understand both the why and the how. Incorporate any relevant insights or advice acquired from the web search. Avoid overly terse answers.",
+"validation": "Explicit analysis demonstrating how your solution resolves the bug or handles all aspects of the stack trace, plus any further action or confirmation of completion. Reference web search findings if they directly impact the resolution."
+}}
+
+""",
         }
     ]
     logger.debug("Web search messages: %s", messages)
@@ -67,7 +83,27 @@ After proposing a solution, validate that the recommendation directly addresses 
         logger.exception("Web search request for stack trace failed.")
         return "Please try to fix the bug yourself."
 
-    return content
+    solution_text = content
+    parsed_payload = None
+    try:
+        parsed_payload = json.loads(content)
+    except json.JSONDecodeError:
+        logger.debug("Raw response is not bare JSON; attempting fenced-block extraction.")
+        try:
+            match = re.search(r"```json\s*(\{.*?\})\s*```", content, re.DOTALL | re.IGNORECASE)
+            if match:
+                parsed_payload = json.loads(match.group(1))
+        except json.JSONDecodeError:
+            logger.debug("Failed to parse JSON from fenced block in web search response.")
+
+    if isinstance(parsed_payload, dict):
+        solution_candidate = parsed_payload.get("solution")
+        if isinstance(solution_candidate, str) and solution_candidate.strip():
+            logger.debug("Returning solution field extracted from web search response.")
+            return solution_candidate.strip()
+        logger.debug("Solution field missing or empty in parsed payload.")
+
+    return solution_text
 
 @weave.op()
 def search_sota_suggestions(
@@ -76,17 +112,12 @@ def search_sota_suggestions(
     executed_suggestion: str | None,
     failed_to_improve_score: bool,
     failed_ideas: list[str],
-    best_code: str | None = None,
     executed_code: str | None = None,
 ) -> str:
     """Use web search to surface potential SOTA improvements for the competition."""
     logger.info("Dispatching SOTA web search")
     failed_ideas_text = "No prior ideas are blacklisted."
     executed_suggestion_text = executed_suggestion or "No previous suggestion executed; this is the first attempt."
-    if best_code:
-        best_code_text = "Best-performing code accompanies this prompt; inspect the context payload above."
-    else:
-        best_code_text = "Best-performing code snippet not available yet."
     executed_code_text = executed_code or "No explicit code snippet was provided for the last attempt."
     if failed_ideas:
         filtered = [idea for idea in failed_ideas if idea][-10:]
@@ -116,10 +147,6 @@ You will receive a Kaggle competition description, an initial script, and its lo
 
 Outcome status: {"No improvement" if failed_to_improve_score else "Improved or matched"}
 
-<best code reference>
-{best_code_text}
-</best code reference>
-
 ### Checklist
 - Begin with a concise checklist of 3-7 bullet points summarizing high-level conceptual red flags from the code/logs and your intended strategies to address them. These should be conceptual (not implementation-specific). Use "- " for each bullet.
 - Checklist: If fewer than three meaningful points arise, include as many as possible and explicitly state: "Fewer than 3 high-level red flags or strategies identified."
@@ -136,8 +163,9 @@ Outcome status: {"No improvement" if failed_to_improve_score else "Improved or m
 - If you cannot validate because of missing or insufficient input, clearly state so and return "No suggestions."
 
 ### Error Handling
-- If the <competition description> or <initial script and logs> are missing or clearly inadequate, mention this before the checklist.
-- In such cases, display only the section headings (as markdown headings) with "No suggestions." under each, and in the JSON summary output an empty string as shown:
+- If the <competition description> or <initial script and logs> are missing or clearly inadequate, mention this before the checklist and return "No suggestions."
+
+Before composing your solution, set reasoning_effort = medium and ensure that your explanation is sufficiently detailed to guide a developer through both the 'why' and the 'how' of the proposed suggestion.
 
 ### Output Format
 Structure your output as follows:
@@ -174,7 +202,7 @@ Output your new idea in the following strict JSON format, enclosed in backticks:
 If you have no viable suggestion, leave the value as an empty string.
 
 ### Code
-Provide a concise Python snippet (enclosed in ```python backticks) that implements the suggested change.
+Provide a concise Python snippet (enclosed in ```python backticks) that implements the suggested best next idea for improving the competition score. If no suggestion is provided, leave this section empty.
 
 - Never repeat any idea from <previous failed ideas>.
 - If blacklist is true, ensure the new suggestion avoids that approach.
