@@ -12,7 +12,7 @@ runtime:
   developer_max_tries: 50
   llm_max_retries: 3
   directory_listing_max_files: 10
-  patch_mode_enabled: true
+  patch_mode_enabled: false # this needs improvement - patch success rate is low
 paths:
   task_root: "task"
   outputs_dirname: "outputs"

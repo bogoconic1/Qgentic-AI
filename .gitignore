@@ -88,7 +88,6 @@ target/
 profile_default/
 ipython_config.py
 *.ipynb
-test_*
 cdd_report_sample.md
 cdd_report_sample.pdf
 web_search/
