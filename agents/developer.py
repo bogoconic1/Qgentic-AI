@@ -1,4 +1,5 @@
 import logging
+import math
 import os
 import re
 import subprocess
@@ -84,7 +85,21 @@ class DeveloperAgent:
         self.outputs_dir.mkdir(parents=True, exist_ok=True)
         self.developer_log_path = self.outputs_dir / "developer.txt"
         self._configure_logger()
+
+        # Metric-related defaults; overwritten once benchmark info is available
+        self.gold_threshold: Optional[float] = None
+        self.is_lower_better: bool = False
+        self.best_score: float = float("-inf")
+
+        # Iteration state
+        self.previous_runs: list[tuple[str, float]] = []
+        self.blacklisted_ideas: list[str] = []
+        self.last_suggestion: Optional[str] = None
+        self.last_patch_string: Optional[str] = None
+        self.best_code: Optional[str] = None
+
         self._load_benchmark_info()
+        self.best_score = float("inf") if self.is_lower_better else float("-inf")
 
         # File targets
         self.plan_path = self.outputs_dir / "plan.md"
@@ -92,7 +107,6 @@ class DeveloperAgent:
         self.latest_submission_path: Optional[Path] = None
         self.benchmark_info: Optional[dict] = None
         self.threshold_directive: str = ""
-        self.previous_runs = [("Initial State", float("inf") if self.is_lower_better else float("-inf"), [""])]
 
         # OpenRouter client
         self.client = OpenAI(api_key=os.environ.get(_API_KEY_ENV), base_url=_BASE_URL)
@@ -198,7 +212,7 @@ Begin with a concise checklist (3-7 bullets) of what you will do; keep items con
 **Hard Constraints:**
 - Deliver a single-file script.
 - Utilize CUDA wherever possible.
-- Insert detailed `logging.info` statements covering all aspects of training and validation (e.g., losses, learning rates, timings, evaluation metrics). Only log other code sections (such as data loading or config setup) if they're directly relevant to training or validation.
+- Insert detailed `logging.info` statements only for validation results (every fold, every model used, overall OOF). Only log other code sections (such as data loading or config setup) if they're directly relevant to validation.
 - Place `logging.basicConfig()` at the very start of your code, before any other logging statements.
 - Always train with `bfloat16` when using PyTorch, transformers, or other deep learning libraries. Gradient checkpointing must be disabled.
 - Do **not** code any fallback methods.
@@ -298,6 +312,90 @@ Project structure:
             logger.debug("Logged attempt %s with score %s to wandb", attempt, score)
         except Exception:
             logger.exception("Failed to log attempt %s metrics to wandb", attempt)
+
+    def _is_improvement(self, score: Optional[float], best_score: float) -> bool:
+        """Return True when the provided score beats the current best."""
+        if score is None:
+            return False
+        try:
+            if math.isnan(score):
+                return False
+        except TypeError:
+            return False
+
+        if self.is_lower_better:
+            if math.isinf(best_score):
+                return not math.isinf(score)
+            return score < best_score
+
+        if math.isinf(best_score):
+            return not math.isinf(score)
+        return score > best_score
+
+    @staticmethod
+    def _format_score_value(value: Optional[float]) -> str:
+        """Format score values for human-readable logging/messages."""
+        if value is None:
+            return "N/A"
+        try:
+            if math.isnan(value) or math.isinf(value):
+                return "N/A"
+        except TypeError:
+            return "N/A"
+        return f"{value}"
+
+    def _parse_sota_response(self, raw: str) -> tuple[str, str, bool, str]:
+        """Extract new suggestion, patch, blacklist decision, and rationale."""
+        suggestion_text = ""
+        patch_text = ""
+        blacklist_flag = False
+        blacklist_reason = ""
+
+        if not raw:
+            return suggestion_text, patch_text, blacklist_flag, blacklist_reason
+
+        json_blocks = []
+        try:
+            json_blocks = re.findall(r"```json\s*(\{.*?\})\s*```", raw, re.DOTALL | re.IGNORECASE)
+        except Exception:
+            logger.debug("Unable to locate JSON blocks in SOTA suggestions output.")
+
+        decision_payload = {}
+        suggestion_payload = {}
+
+        if json_blocks:
+            try:
+                decision_payload = json.loads(json_blocks[0])
+            except Exception:
+                logger.debug("Failed to parse blacklist decision JSON block.")
+        if len(json_blocks) >= 2:
+            try:
+                suggestion_payload = json.loads(json_blocks[1])
+            except Exception:
+                logger.debug("Failed to parse suggestion JSON block.")
+
+        blacklist_flag = bool(decision_payload.get("blacklist", False))
+        blacklist_reason = (decision_payload.get("reason") or "").strip()
+        suggestion_text = (suggestion_payload.get("suggestion") or "").strip()
+        if not suggestion_text:
+            suggestion_text = (decision_payload.get("suggestion") or "").strip()
+
+        patch_match = re.search(r"<patch_string>(.*?)</patch_string>", raw, re.DOTALL | re.IGNORECASE)
+        if patch_match:
+            patch_text = patch_match.group(1).strip()
+
+        return suggestion_text, patch_text, blacklist_flag, blacklist_reason
+
+    def _register_blacklist(self, suggestion: str, reason: str | None = None) -> None:
+        if not suggestion:
+            return
+        entry = suggestion
+        if reason:
+            entry = f"{suggestion} -- {reason}"
+        if entry not in self.blacklisted_ideas:
+            self.blacklisted_ideas.append(entry)
+        if len(self.blacklisted_ideas) > 10:
+            self.blacklisted_ideas = self.blacklisted_ideas[-10:]
 
     @weave.op()
     def run(self, plan_markdown: str, max_tries: Optional[int] = None) -> bool:
@@ -541,7 +639,11 @@ Project structure:
                 logger.exception("Failed to read execution log at %s", log_path)
 
             submission_path = self.outputs_dir / self._submission_filename(version)
-            code += "\n\n" + log_content[-30000:] # to avoid token limit issues
+            code = "<code>\n" + code + "\n</code>\n"
+            if log_content:
+                code += f"<validation_log>\n{log_content[-30000:]}\n</validation_log>\n"  # to avoid token limit issues
+
+            run_score = float("inf") if self.is_lower_better else float("-inf")
 
             if submission_path.exists():
                 self.latest_submission_path = submission_path
@@ -579,68 +681,123 @@ Project structure:
                     grade_feedback = f"Failed to run grading tool: {exc}"
                     logger.exception("Grading command failed for version %s", version)
 
-                # improvement
-                if (run_score < self.previous_runs[-1][1]) == self.is_lower_better:
+                code += f"<leaderboard_score>\n{run_score}\n</leaderboard_score>\n"
+
+                previous_best = self.best_score
+                run_score_display = self._format_score_value(run_score)
+                previous_best_display = self._format_score_value(previous_best)
+                improvement = self._is_improvement(run_score, previous_best)
+
+                if improvement:
                     logger.info(
                         "New best score achieved: %s (previous best was %s)",
                         run_score,
-                        self.previous_runs[-1][1],
+                        previous_best,
                     )
-                    prev_suggestions = ""
-                    self.previous_runs.append((code, run_score, []))
+                    self.best_score = run_score
+                    if self.gold_threshold is not None:
+                        target_text = f"Let's push further to reach {self.gold_threshold}."
+                    else:
+                        target_text = "Let's push further to reach an even stronger result."
+                    analysis_msg = (
+                        f"Nice work! The score has improved to {run_score_display}. "
+                        f"{target_text}"
+                    )
                 else:
-                    # discard
                     logger.info(
                         "No improvement over previous best score of %s; current score is %s",
-                        self.previous_runs[-1][1],
+                        previous_best,
                         run_score,
                     )
+                    if previous_best_display != "N/A" and run_score_display != "N/A":
+                        analysis_msg = (
+                            f"The latest run scored {run_score_display}, but the best remains {previous_best_display}. "
+                            "Please investigate the regression before proceeding."
+                        )
+                    else:
+                        analysis_msg = (
+                            "The latest run did not improve the benchmark. Please investigate the reasons before continuing."
+                        )
 
-                    # rollback
-                    code = self.previous_runs[-1][0]
+                code += f"<analysis>\n{analysis_msg}\n</analysis>\n"
+                if improvement:
+                    self.best_code = code
+                self.previous_runs.append((code, run_score))
 
-                    # prev sota
-                    prev_suggestions = "\n-".join(self.previous_runs[-1][2])
-
-                #if len(self.previous_runs[-1][2]) >= 5:
-                    #self.messages[0]['content'] = self.messages[0]['content'].replace("- Run your experiments with just validation on fold 0 UNLESS EXPLICITLY INSTRUCTED OTHERWISE.", "")
-                #else:
                 try:
-                    sota_suggestions = search_sota_suggestions(self.description, code, prev_suggestions)
+                    sota_suggestions = search_sota_suggestions(
+                        self.description,
+                        code,
+                        executed_suggestion=self.last_suggestion,
+                        failed_to_improve_score=not improvement,
+                        failed_ideas=self.blacklisted_ideas,
+                        best_code=self.best_code if not improvement else None,
+                        executed_patch=self.last_patch_string,
+                    )
                 except Exception:
                     logger.exception("Failed to fetch SOTA suggestions for attempt %s", attempt)
                     sota_suggestions = ""
 
                 logger.info("SOTA suggestion: %s", sota_suggestions)
 
-                # extract json
-                sota_suggestion_short_summary = ""
-                try:
-                    m = re.search(r"```json\s*(\{.*?\})\s*```", sota_suggestions, re.DOTALL | re.IGNORECASE)
-                    if m:
-                        json_text = m.group(1)
-                        logger.debug("Extracted JSON snippet from SOTA suggestions: %s", json_text)
-                        parsed = json.loads(json_text)
-                        sota_suggestion_short_summary = parsed.get("suggestion", "")
-                    else: 
-                        logger.debug("No JSON snippet found in SOTA suggestions; using full text.")
-                except Exception:
-                    logger.exception("Failed to parse JSON from SOTA suggestions; using full text.")
+                (
+                    suggestion_text,
+                    patch_text,
+                    blacklist_flag,
+                    blacklist_reason,
+                ) = self._parse_sota_response(sota_suggestions)
 
+                if blacklist_flag and self.last_suggestion:
+                    self._register_blacklist(self.last_suggestion, blacklist_reason)
+                    logger.info(
+                        "Previous suggestion marked as blacklisted: %s (reason: %s)",
+                        self.last_suggestion,
+                        blacklist_reason or "N/A",
+                    )
 
-                self.previous_runs[-1][2].append(sota_suggestion_short_summary)
-                logger.info("Summary of SOTA suggestion: %s", sota_suggestion_short_summary)
+                if suggestion_text:
+                    logger.info("Summary of SOTA suggestion: %s", suggestion_text)
+                else:
+                    logger.info("SOTA response did not include a new suggestion summary.")
+
+                if suggestion_text:
+                    self.last_suggestion = suggestion_text
+                elif blacklist_flag:
+                    # if suggestion missing but blacklist decision made, reset last suggestion
+                    self.last_suggestion = None
+
+                self.last_patch_string = patch_text if patch_text else None
 
                 next_log_path = self.outputs_dir / self._log_filename(version + 1)
                 next_submission_path = self.outputs_dir / self._submission_filename(version + 1)
-                next_instr = f"""
-                Please modify your code to ONLY incorporate this advice (keep everything else the same):
-                {sota_suggestions}
 
-                Remember:
-                - write logs to {next_log_path}
-                - and produce the next submission at {next_submission_path}"
-                """
+                suggestion_block = ""
+                if suggestion_text:
+                    suggestion_block += f"<suggestion>\n{suggestion_text}\n</suggestion>\n"
+                else:
+                    suggestion_block += "<suggestion>\nNo suggestion provided.\n</suggestion>\n"
+
+                if patch_text:
+                    suggestion_block += f"<patch_string>\n{patch_text}\n</patch_string>\n"
+                else:
+                    suggestion_block += "<patch_string>\nNo patch provided.\n</patch_string>\n"
+
+                if improvement:
+                    summary_line = "The latest attempt improved the score; refine the approach with the guidance below."
+                else:
+                    summary_line = "The latest attempt did not improve the score; address the issues flagged below."
+
+                if previous_best_display != "N/A" and run_score_display != "N/A":
+                    summary_line += (
+                        f" Previous best: {previous_best_display}. Current score: {run_score_display}."
+                    )
+
+                next_instr = (
+                    f"{summary_line}\n\n"
+                    f"{suggestion_block}\n"
+                    f"Remember:\n- write logs to {next_log_path}\n- and produce the next submission at {next_submission_path}"
+                )
+
                 self.messages = self.messages[:2]
                 self.messages.append({'role': 'assistant', 'content': code})
                 self.messages.append({'role': 'user', 'content': next_instr})
