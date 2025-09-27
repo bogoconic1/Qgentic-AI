@@ -92,8 +92,7 @@ class DeveloperAgent:
         self.latest_submission_path: Optional[Path] = None
         self.benchmark_info: Optional[dict] = None
         self.threshold_directive: str = ""
-        self.previous_runs = [("Initial State", float("inf") if self.is_lower_better else float("-inf"))] # monotonic stack
-        self.blacklisted_ideas = []
+        self.previous_runs = [("Initial State", float("inf") if self.is_lower_better else float("-inf"), [""])]
 
         # OpenRouter client
         self.client = OpenAI(api_key=os.environ.get(_API_KEY_ENV), base_url=_BASE_URL)
@@ -199,7 +198,7 @@ Begin with a concise checklist (3-7 bullets) of what you will do; keep items con
 **Hard Constraints:**
 - Deliver a single-file script.
 - Utilize CUDA wherever possible.
-- Insert detailed `logging.info` statements only for validation results (every fold, every model used, overall OOF). Only log other code sections (such as data loading or config setup) if they're directly relevant to validation.
+- Insert detailed `logging.info` statements covering all aspects of training and validation (e.g., losses, learning rates, timings, evaluation metrics). Only log other code sections (such as data loading or config setup) if they're directly relevant to training or validation.
 - Place `logging.basicConfig()` at the very start of your code, before any other logging statements.
 - Always train with `bfloat16` when using PyTorch, transformers, or other deep learning libraries. Gradient checkpointing must be disabled.
 - Do **not** code any fallback methods.
@@ -208,6 +207,7 @@ Begin with a concise checklist (3-7 bullets) of what you will do; keep items con
 - Log the **final validation results** after training.
 - Design the pipeline so it is highly customizable (i.e., it's easy to add or swap techniques, models, etc).
 - Prefer pretrained models over training from scratch, whenever possible.
+- **IMPORTANT:** At the very top, add a `DEBUG` flag. The pipeline must run sequentially twice: once with `DEBUG=True` (using a small subset of data, e.g., 256 samples and 1 epoch, but otherwise unchanged) and then once with `DEBUG=False` (using the full training config). Clearly log when the script is in DEBUG or FULL mode.
 - **IMPORTANT:** For deep learning pipelines, if at the end of the 1st epoch of fold 0, the loss or metric is NaN, raise an Exception to stop the run immediately.
 
 **Additional Context**
@@ -375,14 +375,14 @@ Project structure:
                 except Exception:
                     logger.debug("Failed to log logging guardrail skip status for v%s", version)
 
-            # 2 NaN guard review (LLM)
+            # 2 DEBUG sequencing + NaN guard review (LLM)
             if guard_report["decision"] != "block":
                 if _ENABLE_NAN_GUARD:
                     try:
                         debug_json_text = llm_debug_sequence_review(_safe_read(str(code_path)))
                     except Exception:
-                        logger.exception("NaN guardrail call failed")
-                        debug_json_text = '{"severity":"warn","findings":[{"rule_id":"llm_error","snippet":"N/A","rationale":"LLM call failed","suggestion":"Manually ensure NaN raises exceptions."}]}'
+                        logger.exception("DEBUG sequencing guardrail call failed")
+                        debug_json_text = '{"severity":"warn","findings":[{"rule_id":"llm_error","snippet":"N/A","rationale":"LLM call failed","suggestion":"Manually ensure DEBUG runs before FULL and NaN raises exceptions."}]}'
                     guard_report["debug_sequence_check"] = debug_json_text
                     try:
                         parsed = json.loads(debug_json_text)
@@ -394,12 +394,12 @@ Project structure:
                                 len(parsed.get("findings", [])),
                             )
                         except Exception:
-                            logger.debug("Failed to log NaN guardrail status for v%s", version)
+                            logger.debug("Failed to log DEBUG sequencing guardrail status for v%s", version)
                         if parsed.get("severity") == "block":
                             guard_report["decision"] = "block"
                     except Exception:
                         logger.warning(
-                            "Guardrail[debug_seq] v%s: malformed JSON from NaN reviewer; proceeding as warn",
+                            "Guardrail[debug_seq] v%s: malformed JSON from reviewer; proceeding as warn",
                             version,
                         )
                 else:
@@ -413,7 +413,7 @@ Project structure:
                             version,
                         )
                     except Exception:
-                        logger.debug("Failed to log NaN guardrail skip status for v%s", version)
+                        logger.debug("Failed to log DEBUG sequencing guardrail skip status for v%s", version)
 
             # 3 LLM-based leakage review (only if not already blocked)
             if guard_report["decision"] != "block":
@@ -471,18 +471,18 @@ Project structure:
                     parsed_debug = json.loads(raw_debug.strip()) if isinstance(raw_debug, str) else (raw_debug or {})
                     if parsed_debug.get("severity") == "block":
                         summary.append(
-                            "- Ensure the script raises an Exception when loss/metric is NaN."
+                            "- Ensure the script runs DEBUG mode before FULL mode and raises an Exception when loss/metric is NaN."
                         )
                         findings = parsed_debug.get("findings", [])
                         if findings:
-                            summary.append("\nNaN guard findings:")
+                            summary.append("\nDEBUG sequencing findings:")
                             for idx, finding in enumerate(findings, start=1):
                                 summary.append(
                                     f"{idx}. rule_id={finding.get('rule_id', 'unknown')}\n   - snippet: {finding.get('snippet', '')}\n   - rationale: {finding.get('rationale', '')}\n   - suggestion: {finding.get('suggestion', '')}"
                                 )
                 except Exception:
                     try:
-                        summary.append("- NaN guard reviewer returned non-JSON content:")
+                        summary.append("- DEBUG sequencing reviewer returned non-JSON content:")
                         summary.append(str(guard_report.get("debug_sequence_check")))
                     except Exception:
                         pass
@@ -541,11 +541,7 @@ Project structure:
                 logger.exception("Failed to read execution log at %s", log_path)
 
             submission_path = self.outputs_dir / self._submission_filename(version)
-            code = "<code>\n" + code + "\n</code>\n"
-            if log_content:
-                code += f"<validation_log>\n{log_content[-30000:]}\n</validation_log>\n"  # to avoid token limit issues
-
-            run_score = float("inf") if self.is_lower_better else float("-inf")
+            code += "\n\n" + log_content[-30000:] # to avoid token limit issues
 
             if submission_path.exists():
                 self.latest_submission_path = submission_path
@@ -583,8 +579,6 @@ Project structure:
                     grade_feedback = f"Failed to run grading tool: {exc}"
                     logger.exception("Grading command failed for version %s", version)
 
-                code += f"<leaderboard_score>\n{run_score}\n</leaderboard_score>\n"
-
                 # improvement
                 if (run_score < self.previous_runs[-1][1]) == self.is_lower_better:
                     logger.info(
@@ -592,23 +586,27 @@ Project structure:
                         run_score,
                         self.previous_runs[-1][1],
                     )
-                    self.previous_runs.append((code, run_score))
-                    code += f"Nice work! The score has improved to {run_score}. But I want to push further to reach {self.gold_threshold}. Please investigate how to further improve the score."
-                    failed_to_improve_score = False
-
+                    prev_suggestions = ""
+                    self.previous_runs.append((code, run_score, []))
                 else:
-                    # let the model analyze both codes and validation
+                    # discard
                     logger.info(
                         "No improvement over previous best score of %s; current score is %s",
                         self.previous_runs[-1][1],
                         run_score,
                     )
-                    code += f"I applied the following change to the code \n<patch_string>\n{patch_string}\n</patch_string>\n"
-                    code += f"But my score has reduced from {self.previous_runs[-1][1]} to {run_score}. Could you investigate why and decide whether to continue with this change or blacklist the approach?"
-                    failed_to_improve_score = True
-                
+
+                    # rollback
+                    code = self.previous_runs[-1][0]
+
+                    # prev sota
+                    prev_suggestions = "\n-".join(self.previous_runs[-1][2])
+
+                #if len(self.previous_runs[-1][2]) >= 5:
+                    #self.messages[0]['content'] = self.messages[0]['content'].replace("- Run your experiments with just validation on fold 0 UNLESS EXPLICITLY INSTRUCTED OTHERWISE.", "")
+                #else:
                 try:
-                    sota_suggestions = search_sota_suggestions(self.description, code, failed_to_improve_score, self.blacklisted_ideas)
+                    sota_suggestions = search_sota_suggestions(self.description, code, prev_suggestions)
                 except Exception:
                     logger.exception("Failed to fetch SOTA suggestions for attempt %s", attempt)
                     sota_suggestions = ""
@@ -679,4 +677,3 @@ Project structure:
             self.outputs_dir / self._submission_filename(max_tries),
         )
         return True
-    

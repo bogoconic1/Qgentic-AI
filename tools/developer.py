@@ -70,103 +70,57 @@ After proposing a solution, validate that the recommendation directly addresses 
     return content
 
 @weave.op()
-def search_sota_suggestions(description: str, context: str, failed_to_improve_score: bool, failed_ideas: str) -> str:
+def search_sota_suggestions(description: str, context: str, failed_ideas: str) -> str:
     """Use web search to surface potential SOTA improvements for the competition."""
     logger.info("Dispatching SOTA web search")
     prompt = f"""
-You will receive a Kaggle competition description, an initial script, and its logs for analysis.
+You will receive a Kaggle competition description along with an initial script and its logs.
 
 <competition description>
 {description}
 </competition description>
 
-<previous failed ideas> DO NOT TRY THESE AGAIN
+<initial script and logs>
+{context}
+</initial script and logs>
+
+<previous failed ideas> DO NOT TRY THESE AGAIN 
 {failed_ideas}
 </previous failed ideas>
 
-{context}
+- Begin with a concise checklist (3-7 bullet points) summarizing high-level conceptual red flags found in the logs and your intended overall strategies for addressing them. Keep bullets conceptual, not implementation-specific. Use "- " to denote each bullet.
 
-### Checklist
-- Begin with a concise checklist of 3-7 bullet points summarizing high-level conceptual red flags from the logs and your intended strategies to address them. These should be conceptual (not implementation-specific). Use "- " for each bullet.
-- Checklist: If fewer than three meaningful points arise, include as many as possible and explicitly state: "Fewer than 3 high-level red flags or strategies identified."
+- Web search recent effective models, architectures, or techniques relevant to this competition that could address the red flags. Before suggesting an approach, explicitly state its purpose and why you have selected it, referencing information from the competition description and context. Propose a single, high-impact suggestion to improve performance for the competition's metric. Whenever feasible, include a sample Python code block (unless otherwise indicated in the context) between triple backticks (```), and accompany it with an approximately 100-word explanation of why this approach is beneficial.
 
-### Research and Suggestion
-- Before any web search or external query, briefly state the purpose and the minimal search terms you will use.
-- Perform a web search for recent, effective models, architectures, or techniques relevant to this competition, addressing the identified red flags.
-- Before recommending any approach, clearly state its purpose and justification, referencing the competition description and context.
-- Propose one high-impact suggestion to improve performance for the competition’s metric, along with an approximately 100-word explanation of its benefits.
+- After presenting your suggestion and code, validate its relevance to the specific competition details and metric in 1-2 sentences. State clear criteria for validation, referencing key details from the input where possible. If validation is not possible because the input is insufficient, mention this clearly and return "No suggestions.".
 
-### Validation
-- After offering your suggestion, validate its relevance to the competition details and metric in 1-2 sentences.
-- Clearly specify the validation criteria and reference key input details where possible.
-- If you cannot validate because of missing or insufficient input, clearly state so and return "No suggestions."
+- If the <competition description> or <initial script and logs> are missing or clearly inadequate, state this before the checklist. Then, output only the section headings with "No suggestions." and a summary JSON as described below.
 
-### Error Handling
-- If the <competition description> or <initial script and logs> are missing or clearly inadequate, mention this before the checklist.
-- In such cases, display only the section headings (as markdown headings) with "No suggestions." under each, and in the JSON summary output an empty string as shown:
-
-### Output Format
-Structure your output as follows:
-
-### Checklist
-- ... (3-7 conceptual bullet points; see above)
-
-### Research and Suggestion
-- ... (prose explanation)
-
-### Validation
-- ... (validation statements, or "No suggestions.")
-"""
-    if not failed_to_improve_score:
-        prompt += """
-### JSON Summary
-Place only the following strict JSON structure within backticks:
+- At the end, provide a single-line summary of your recommendation using the following strict JSON format within backticks (if no suggestion, use an empty string for the field):
 ```json
 {{
-    "suggestion": "<your suggestion here>",
+    "suggestion": "<your suggestion here>"
 }}
 ```
-If you have no suggestion, use an empty string for 'suggestion'.
 
-### Code Patch
-Enclose your patch string inside <patch_string> tags only. Use unified diff format for code suggestions. If not possible, provide a code block with a verbatim description of the change within the tags. Example:
-<patch_string>
---- a/script.py
-+++ b/script.py
-@@ ...
-+ # code changes
-</patch_string>
+- Never repeat any ideas from <previous failed ideas>.
 
-- Never repeat any idea from <previous failed ideas>.
+## Output Format
+Your output must follow these sections, strictly in this order:
 
-Always attempt a considered first pass based on the input provided; if essential information is missing or ambiguous, stop and request clarification instead of making unsupported assumptions.
+1. **Checklist**: 3-7 bullet points on conceptual red flags and strategies.
+2. **Research & Suggestion**:
+    - Name and briefly describe the recent effective model or technique.
+    - Offer one high-impact improvement suggestion with purpose stated upfront.
+    - Include a code block (default Python; adapt if another language is evident in context).
+    - Provide a concise explanation (~100 words).
+3. **Validation**: 1-2 sentence relevance check against the competition description and metric, with explicit validation criteria.
+4. **JSON Summary**: One-line summary in the specified JSON format; use an empty string if no suggestion.
+
+If no actionable suggestion is possible, provide all section headings with "No suggestions." in the appropriate places and ensure the JSON uses an empty string.
+
+Always comply with required section order and formatting, clearly handle missing input cases, and ensure never to repeat any idea from <previous failed ideas>.
 """
-    else:
-        prompt += """
-### JSON Summary
-Place only the following strict JSON structure within backticks:
-```json
-{{
-    "suggestion": "<your suggestion here>",
-    "blacklist": <true or false according to your investigation>
-}}
-```
-If you have no suggestion, use an empty string for 'suggestion'.
-
-### Code Patch
-Enclose your patch string inside <patch_string> tags only. Use unified diff format for code suggestions. If not possible, provide a code block with a verbatim description of the change within the tags. Example:
-<patch_string>
---- a/script.py
-+++ b/script.py
-@@ ...
-+ # code changes
-</patch_string>
-
-- Never repeat any idea from <previous failed ideas>.
-
-Always attempt a considered first pass based on the input provided; if essential information is missing or ambiguous, stop and request clarification instead of making unsupported assumptions.
-"""
-
         
     messages = [
         {

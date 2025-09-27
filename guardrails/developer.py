@@ -210,8 +210,9 @@ def llm_debug_sequence_review(code: str) -> str:
     """Ensure generated code runs DEBUG then FULL modes and raises on NaNs."""
 
     PROMPT = """
-You are reviewing a Python training pipeline for compliance with a runtime rule:
-- For deep learning pipelines, if at the end of the 1st epoch of fold 0, the loss or metric is NaN, raise an Exception to stop the run immediately.
+You are reviewing a Python training pipeline for compliance with two runtime rules:
+1. The script must execute with DEBUG=True (using a tiny subset/config) before it executes with DEBUG=False (full run). Both executions should happen sequentially in the same process.
+2. For deep learning pipelines, if at the end of the 1st epoch of fold 0, the loss or metric is NaN, raise an Exception to stop the run immediately.
 
 Examine the code and determine whether both requirements are satisfied.
 
