@@ -3,6 +3,7 @@ import math
 import os
 import re
 import subprocess
+import textwrap
 from pathlib import Path
 from typing import Optional
 import json
@@ -39,6 +40,8 @@ _GUARDRAIL_CFG = _CONFIG.get("guardrails", {}) if isinstance(_CONFIG, dict) else
 _ENABLE_LOGGING_GUARD = bool(_GUARDRAIL_CFG.get("logging_basicconfig_order", True))
 _ENABLE_NAN_GUARD = bool(_GUARDRAIL_CFG.get("nan_guard", True))
 _ENABLE_LEAKAGE_GUARD = bool(_GUARDRAIL_CFG.get("leakage_review", True))
+
+_PATCH_MODE_ENABLED = bool(_RUNTIME_CFG.get("patch_mode_enabled", False))
 
 _BASE_URL = _LLM_CFG.get("base_url", "https://openrouter.ai/api/v1")
 _API_KEY_ENV = _LLM_CFG.get("api_key_env", "OPENROUTER_API_KEY")
@@ -111,6 +114,9 @@ class DeveloperAgent:
         # OpenRouter client
         self.client = OpenAI(api_key=os.environ.get(_API_KEY_ENV), base_url=_BASE_URL)
         os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+
+        # Patch mode configuration
+        self.patch_mode_enabled = _PATCH_MODE_ENABLED
 
         logger.info(
             "Initialized DeveloperAgent for slug=%s iteration=%s", self.slug, self.iteration
@@ -216,6 +222,7 @@ Begin with a concise checklist (3-7 bullets) of what you will do; keep items con
 - Place `logging.basicConfig()` at the very start of your code, before any other logging statements.
 - Always train with `bfloat16` when using PyTorch, transformers, or other deep learning libraries. Gradient checkpointing must be disabled.
 - Do **not** code any fallback methods.
+- **Do not** use LightGBM. You can research other alternatives like XGBoost or CatBoost.
 - **Do not** use `transformers.Trainer` or `transformers.TrainingArguments`.
 - **Do not** use `try/except` blocks to bypass exceptions.
 - Log the **final validation results** after training.
@@ -279,8 +286,21 @@ Project structure:
         logger.debug("No fenced block detected; returning raw content.")
         return content.strip()
 
+    @staticmethod
+    def _extract_diff_block(content: str) -> str:
+        """Extract unified diff payload from the completion content."""
+        if not content:
+            return ""
+        fenced = re.search(r"```diff\s*(.*?)\s*```", content, re.DOTALL | re.IGNORECASE)
+        if fenced:
+            return fenced.group(1).strip()
+        generic = re.search(r"```\s*(.*?)\s*```", content, re.DOTALL)
+        if generic:
+            return generic.group(1).strip()
+        return content.strip()
+
     @weave.op()
-    def _generate_code(self, messages: list[dict[str, str]]) -> str:
+    def _generate_code(self, messages: list[dict[str, str]], expect_patch: bool = False) -> str:
         logger.info("Requesting code generation from model for iteration %s", self.iteration)
         
         content = ""
@@ -295,7 +315,99 @@ Project structure:
 
         logger.info("Model response received for iteration %s", self.iteration)
         logger.debug("Completion content length: %s", len(content))
+        if expect_patch:
+            return content.strip()
         return self._extract_code(content)
+
+    def _apply_patch(self, base_version: int, diff_payload: str, target_version: int) -> Optional[str]:
+        """Apply diff payload to the previous source file and return updated code."""
+        if base_version <= 0:
+            logger.warning("Patch requested but base version is invalid: %s", base_version)
+            return None
+
+        base_filename = self._code_filename(base_version)
+        base_path = self.outputs_dir / base_filename
+        if not base_path.exists():
+            logger.warning("Patch requested but base file does not exist: %s", base_path)
+            return None
+
+        diff_text = self._extract_diff_block(diff_payload)
+        if not diff_text:
+            logger.warning("Patch payload was empty after extraction.")
+            return None
+
+        if not diff_text.endswith("\n"):
+            diff_text += "\n"
+
+        output_filename = self._code_filename(target_version)
+        output_path = self.outputs_dir / output_filename
+        if output_path.exists():
+            try:
+                output_path.unlink()
+            except Exception:
+                logger.exception(
+                    "Failed to remove existing output file before applying patch: %s",
+                    output_path,
+                )
+                return None
+
+        cmd = ["patch", "-o", output_filename, base_filename]
+
+        try:
+            result = subprocess.run(
+                cmd,
+                input=diff_text,
+                text=True,
+                capture_output=True,
+                cwd=self.outputs_dir,
+                check=False,
+            )
+        except FileNotFoundError:
+            logger.exception("`patch` utility not available on system path.")
+            return None
+        except Exception:
+            logger.exception("Unexpected failure while applying patch command.")
+            return None
+
+        if result.returncode != 0:
+            logger.warning(
+                "Patch command returned non-zero exit code %s. stderr=\n%s",
+                result.returncode,
+                (result.stderr or "").strip(),
+            )
+            if output_path.exists():
+                try:
+                    output_path.unlink()
+                except Exception:
+                    logger.debug("Failed to clean up partial patched file: %s", output_path)
+            return None
+
+        try:
+            updated_code = output_path.read_text()
+            logger.info(
+                "Successfully applied patch to generate version %s from base %s",
+                target_version,
+                base_version,
+            )
+            return updated_code
+        except Exception:
+            logger.exception("Failed to read patched file at %s", output_path)
+            return None
+
+    def _append_patch_directive(self, instruction: str, version: int) -> str:
+        if not self.patch_mode_enabled:
+            return instruction
+        base_filename = self._code_filename(version)
+        directive = textwrap.dedent(
+            f"""
+
+            Patch instructions:
+            - Produce a unified diff (apply patch format) that updates {base_filename}.
+            - Return only the diff enclosed in ```diff fences; do not resend the full script.
+            - Ensure the diff applies cleanly with the `patch` utility using the file names above.
+            """
+        ).strip()
+        return f"{instruction}\n\n{directive}"
 
     def _write_code(self, code: str, version: int) -> Path:
         code_path = self.outputs_dir / self._code_filename(version)
@@ -429,7 +541,28 @@ Project structure:
 
             logger.info("Attempt %s/%s for developer run", attempt, max_tries)
             version = attempt
-            code = self._generate_code(self.messages)
+            expect_patch = self.patch_mode_enabled and attempt > 1
+            while True:
+                generated = self._generate_code(self.messages, expect_patch=expect_patch)
+                if expect_patch:
+                    base_version = version - 1
+                    code = self._apply_patch(base_version, generated, version)
+                    if code is not None:
+                        break
+                    logger.warning(
+                        "Patch generation failed for attempt %s; requesting full script instead.",
+                        attempt,
+                    )
+                    if self.messages and self.messages[-1].get("role") == "user":
+                        self.messages[-1]["content"] += (
+                            "\n\nPatch application failed. Ignore the diff request and return the complete updated script enclosed in triple backticks with the `python` annotation."
+                        )
+                    expect_patch = False
+                    continue
+                else:
+                    code = generated
+                    break
+
             code_path = self._write_code(code, version)
 
             # ---------------------------
@@ -615,8 +748,10 @@ Project structure:
                     f"Write logs to {next_log_path} "
                     f"and produce {next_submission_path}."
                 )
-                self.messages.append({"role": "user", "content": "\n".join(summary) + fix_instr})
-                logger.info("User prompt with guardrail feedback: %s", "\n".join(summary) + fix_instr)
+                guardrail_prompt = "\n".join(summary) + fix_instr
+                guardrail_prompt = self._append_patch_directive(guardrail_prompt, version)
+                self.messages.append({"role": "user", "content": guardrail_prompt})
+                logger.info("User prompt with guardrail feedback: %s", guardrail_prompt)
                 # continue to next attempt without execution
                 continue
 
@@ -797,6 +932,8 @@ Project structure:
                     f"Remember:\n- write logs to {next_log_path}\n- and produce the next submission at {next_submission_path}"
                 )
 
+                next_instr = self._append_patch_directive(next_instr, version)
+
                 self.messages = self.messages[:2]
                 if blacklist_flag and self.best_code:
                     assistant_content = self.best_code
@@ -819,6 +956,7 @@ Project structure:
                 - write logs to {next_log_path}
                 - and produce the next submission at {next_submission_path}"
                 """
+                next_instr = self._append_patch_directive(next_instr, version)
                 self.messages.append({'role': 'assistant', 'content': code})
                 self.messages.append({'role': 'user', 'content': next_instr})
 

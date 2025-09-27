@@ -26,6 +26,7 @@ _DEFAULT_CONFIG: dict[str, Any] = {
         "developer_max_tries": 50,
         "llm_max_retries": 3,
         "directory_listing_max_files": 10,
+        "patch_mode_enabled": False,
     },
     "paths": {
         "task_root": "task",
