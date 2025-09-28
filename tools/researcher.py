@@ -82,10 +82,10 @@ Competition Description:
     last_error = ""
     for attempt in range(1, attempts + 1):
         logger.info("ask_eda attempt %s/%s", attempt, attempts)
-        completion = client.chat.completions.create(
-            extra_body={},
+        completion = call_llm_with_retry(
+            client,
             model=_OFFLINE_MODEL,
-            messages=all_messages
+            messages=all_messages,
         )
         response_text = completion.choices[0].message.content or ""
         assistant_message = {"role": "assistant", "content": response_text}

@@ -151,7 +151,7 @@ def summarize_code(client: OpenAI, code: str) -> dict:
     messages = [{'role': 'user', 'content': PROMPT.format(code=code)}]
     response = client.chat.completions.create(
         extra_body={},
-        model=CONFIG_LLM.get("offline_model", "openai/gpt-5"),
+        model=CONFIG_LLM.get("offline_model", "qwen/qwen3-next-80b-a3b-instruct"),
         messages=messages,
     ).choices[0].message.content
 
