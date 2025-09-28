@@ -229,7 +229,7 @@ Begin with a concise checklist (3-7 bullets) of what you will do; keep items con
 - Design the pipeline so it is highly customizable (i.e., it's easy to add or swap techniques, models, etc).
 - Prefer pretrained models over training from scratch, whenever possible.
 - **IMPORTANT:** At the very top, add a `DEBUG` flag. The pipeline must run sequentially twice: once with `DEBUG=True` (using a small subset of data, e.g., 256 samples and 1 epoch, but otherwise unchanged) and then once with `DEBUG=False` (using the full training config). Clearly log when the script is in DEBUG or FULL mode.
-- **IMPORTANT:** For deep learning pipelines, if at the end of the 1st epoch of fold 0, the loss or metric is NaN, raise an Exception to stop the run immediately.
+- **IMPORTANT:** For deep learning pipelines, if at the end of the 1st epoch of fold 0, the loss or metric is NaN or exactly 0, raise an Exception to stop the run immediately.
 
 **Additional Context**
 - Competition Description:
@@ -646,7 +646,7 @@ Like this
                         debug_json_text = llm_debug_sequence_review(_safe_read(str(code_path)))
                     except Exception:
                         logger.exception("DEBUG sequencing guardrail call failed")
-                        debug_json_text = '{"severity":"warn","findings":[{"rule_id":"llm_error","snippet":"N/A","rationale":"LLM call failed","suggestion":"Manually ensure DEBUG runs before FULL and NaN raises exceptions."}]}'
+                        debug_json_text = '{"severity":"warn","findings":[{"rule_id":"llm_error","snippet":"N/A","rationale":"LLM call failed","suggestion":"Manually ensure DEBUG runs before FULL and loss/metric NaN or zero values raise exceptions."}]}'
                     guard_report["debug_sequence_check"] = debug_json_text
                     try:
                         parsed = json.loads(debug_json_text)
@@ -735,7 +735,7 @@ Like this
                     parsed_debug = json.loads(raw_debug.strip()) if isinstance(raw_debug, str) else (raw_debug or {})
                     if parsed_debug.get("severity") == "block":
                         summary.append(
-                            "- Ensure the script runs DEBUG mode before FULL mode and raises an Exception when loss/metric is NaN."
+                            "- Ensure the script runs DEBUG mode before FULL mode and raises an Exception when loss/metric is NaN or 0."
                         )
                         findings = parsed_debug.get("findings", [])
                         if findings:

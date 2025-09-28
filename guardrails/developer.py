@@ -207,12 +207,12 @@ Be concise and pragmatic; do not include prose outside JSON.
 
 
 def llm_debug_sequence_review(code: str) -> str:
-    """Ensure generated code runs DEBUG then FULL modes and raises on NaNs."""
+    """Ensure generated code runs DEBUG then FULL modes and guards against NaNs/zeros."""
 
     PROMPT = """
 You are reviewing a Python training pipeline for compliance with two runtime rules:
 1. The script must execute with DEBUG=True (using a tiny subset/config) before it executes with DEBUG=False (full run). Both executions should happen sequentially in the same process.
-2. For deep learning pipelines, if at the end of the 1st epoch of fold 0, the loss or metric is NaN, raise an Exception to stop the run immediately.
+2. For deep learning pipelines, if at the end of the 1st epoch of fold 0, the loss or metric is NaN or exactly 0, raise an Exception to stop the run immediately.
 
 Examine the code and determine whether both requirements are satisfied.
 
@@ -224,7 +224,7 @@ Output strictly as JSON in this schema:
   ]
 }
 
-Set severity="block" if either requirement is missing or incorrect. Use severity="warn" if unsure. Use severity="none" only when both requirements are clearly implemented.
+Set severity="block" if either requirement is missing or incorrect. Use severity="warn" if unsure. Use severity="none" only when both requirements (including the NaN/zero safeguard) are clearly implemented.
 Be concise; no extra prose outside JSON.
     """
 
@@ -249,4 +249,4 @@ Be concise; no extra prose outside JSON.
         return content
     except Exception:
         logger.exception("DEBUG sequence LLM review failed")
-        return '{"severity": "warn", "findings": [{"rule_id": "llm_error", "snippet": "N/A", "rationale": "LLM call failed", "suggestion": "Manually verify DEBUG sequencing and NaN safeguards."}]}'
+        return '{"severity": "warn", "findings": [{"rule_id": "llm_error", "snippet": "N/A", "rationale": "LLM call failed", "suggestion": "Manually verify DEBUG sequencing and NaN/zero safeguards."}]}'
