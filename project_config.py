@@ -14,10 +14,12 @@ _DEFAULT_CONFIG: dict[str, Any] = {
     "llm": {
         "base_url": "https://openrouter.ai/api/v1",
         "api_key_env": "OPENROUTER_API_KEY",
-        "offline_model": "openai/gpt-5",
-        "online_model": "openai/gpt-5:online",
-        "researcher_model": "gpt-5",
-        "leakage_review_model": "qwen/qwen3-next-80b-a3b-thinking",
+        "developer_model": "google/gemini-2.5-pro",
+        "developer_tool_model": "openai/gpt-5:online",
+        "researcher_model": "google/gemini-2.5-pro",
+        "researcher_tool_offline_model": "google/gemini-2.5-pro",
+        "researcher_tool_online_model": "openai/gpt-5:online",
+        "leakage_review_model": "qwen/qwen3-next-80b-a3b-instruct",
         "leakage_followup_model": "qwen/qwen3-next-80b-a3b-instruct",
     },
     "runtime": {

@@ -34,8 +34,15 @@ _PATH_CFG = _CONFIG.get("paths", {}) if isinstance(_CONFIG, dict) else {}
 
 _BASE_URL = _LLM_CFG.get("base_url", "https://openrouter.ai/api/v1")
 _API_KEY_ENV = _LLM_CFG.get("api_key_env", "OPENROUTER_API_KEY")
-_OFFLINE_MODEL = _LLM_CFG.get("offline_model", "openai/gpt-5")
-_ONLINE_MODEL = _LLM_CFG.get("online_model", "openai/gpt-5:online")
+_RESEARCHER_MODEL = _LLM_CFG.get("researcher_model", "google/gemini-2.5-pro")
+_RESEARCHER_TOOL_OFFLINE_MODEL = _LLM_CFG.get(
+    "researcher_tool_offline_model",
+    _RESEARCHER_MODEL,
+)
+_RESEARCHER_TOOL_ONLINE_MODEL = _LLM_CFG.get(
+    "researcher_tool_online_model",
+    _RESEARCHER_MODEL,
+)
 _DEFAULT_ASK_ATTEMPTS = _RUNTIME_CFG.get("ask_eda_max_attempts", 5)
 _TASK_ROOT = Path(_PATH_CFG.get("task_root", "task"))
 _EXTERNAL_DIRNAME = _PATH_CFG.get("external_data_dirname", "external-data")
@@ -84,7 +91,7 @@ Competition Description:
         logger.info("ask_eda attempt %s/%s", attempt, attempts)
         completion = call_llm_with_retry(
             client,
-            model=_OFFLINE_MODEL,
+            model=_RESEARCHER_TOOL_OFFLINE_MODEL,
             messages=all_messages,
         )
         response_text = completion.choices[0].message.content or ""
@@ -208,7 +215,7 @@ Example: when no datasets are found
         while content == "":
             completion = call_llm_with_retry(
                 client,
-                model=_ONLINE_MODEL,
+                model=_RESEARCHER_TOOL_ONLINE_MODEL,
                 messages=messages,
             )
             msg = completion.choices[0].message

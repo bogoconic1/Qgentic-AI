@@ -27,7 +27,8 @@ _CONFIG = get_config()
 _LLM_CFG = _CONFIG.get("llm", {}) if isinstance(_CONFIG, dict) else {}
 _BASE_URL = _LLM_CFG.get("base_url", "https://openrouter.ai/api/v1")
 _API_KEY_ENV = _LLM_CFG.get("api_key_env", "OPENROUTER_API_KEY")
-_ONLINE_MODEL = _LLM_CFG.get("online_model", "openai/gpt-5:online")
+_DEVELOPER_MODEL = _LLM_CFG.get("developer_model", "google/gemini-2.5-pro")
+_DEVELOPER_TOOL_MODEL = _LLM_CFG.get("developer_tool_model", _DEVELOPER_MODEL)
 
 client = OpenAI(api_key=os.environ.get(_API_KEY_ENV), base_url=_BASE_URL)
 
@@ -71,7 +72,7 @@ Do not suggest downgrading packages unless absolutely necessary, and only after 
         while content == "":
             completion = call_llm_with_retry(
                 client,
-                model=_ONLINE_MODEL,
+                model=_DEVELOPER_TOOL_MODEL,
                 messages=messages,
             )
             msg = completion.choices[0].message
@@ -220,7 +221,7 @@ Provide a concise Python snippet (enclosed in ```python backticks) that implemen
         while content == "":
             completion = call_llm_with_retry(
                 client,
-                model=_ONLINE_MODEL,
+                model=_DEVELOPER_TOOL_MODEL,
                 messages=messages,
             )
             msg = completion.choices[0].message

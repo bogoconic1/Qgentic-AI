@@ -45,7 +45,7 @@ _PATCH_MODE_ENABLED = bool(_RUNTIME_CFG.get("patch_mode_enabled", False))
 
 _BASE_URL = _LLM_CFG.get("base_url", "https://openrouter.ai/api/v1")
 _API_KEY_ENV = _LLM_CFG.get("api_key_env", "OPENROUTER_API_KEY")
-_ONLINE_MODEL = _LLM_CFG.get("online_model", "openai/gpt-5:online")
+_DEVELOPER_MODEL = _LLM_CFG.get("developer_model", "google/gemini-2.5-pro")
 
 _TASK_ROOT = Path(_PATH_CFG.get("task_root", "task"))
 _OUTPUTS_DIRNAME = _PATH_CFG.get("outputs_dirname", "outputs")
@@ -316,12 +316,11 @@ Project structure:
     @weave.op()
     def _generate_code(self, messages: list[dict[str, str]], expect_patch: bool = False) -> str:
         logger.info("Requesting code generation from model for iteration %s", self.iteration)
-        
         content = ""
         while content == "":
             completion = call_llm_with_retry(
                 self.client,
-                model=_ONLINE_MODEL,
+                model=_DEVELOPER_MODEL,
                 messages=messages,
             )
             msg = completion.choices[0].message

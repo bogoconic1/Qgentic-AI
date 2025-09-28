@@ -30,7 +30,7 @@ _RUNTIME_CFG = _CONFIG.get("runtime", {}) if isinstance(_CONFIG, dict) else {}
 
 _BASE_URL = _LLM_CFG.get("base_url", "https://openrouter.ai/api/v1")
 _API_KEY_ENV = _LLM_CFG.get("api_key_env", "OPENROUTER_API_KEY")
-_RESEARCHER_MODEL = _LLM_CFG.get("researcher_model", "gpt-5")
+_RESEARCHER_AGENT_MODEL = _LLM_CFG.get("researcher_model", "google/gemini-2.5-pro")
 
 _TASK_ROOT = Path(_PATH_CFG.get("task_root", "task"))
 _OUTPUTS_DIRNAME = _PATH_CFG.get("outputs_dirname", "outputs")
@@ -147,7 +147,7 @@ Note: DO NOT optimize for the efficiency prize.
                 logger.info("Reached final step; forcing plan output prompt")
 
             llm_params = {
-                "model": _RESEARCHER_MODEL,
+                "model": _RESEARCHER_AGENT_MODEL,
                 "messages": self.messages,
                 "tools": tools,
                 "tool_choice": "auto",
