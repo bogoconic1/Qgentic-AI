@@ -227,8 +227,8 @@ Begin with a concise checklist (3-7 bullets) of what you will do; keep items con
 - **Do not** use `try/except` blocks to bypass exceptions.
 - Log the **final validation results** after training.
 - Design the pipeline so it is highly customizable (i.e., it's easy to add or swap techniques, models, etc).
-- Prefer pretrained models over training from scratch, whenever possible.
-- **IMPORTANT:** At the very top, add a `DEBUG` flag. The pipeline must run sequentially twice: once with `DEBUG=True` (using a small subset of data, e.g., 256 samples and 1 epoch, but otherwise unchanged) and then once with `DEBUG=False` (using the full training config). Clearly log when the script is in DEBUG or FULL mode.
+- You should use pretrained models over training from scratch, whenever possible.
+- **IMPORTANT:** At the very top, add a `DEBUG` flag. The pipeline must run sequentially twice: once with `DEBUG=True` (using a small subset of data, e.g., 256 samples and 1 epoch, but others unchanged) and then once with `DEBUG=False` (using the full training config). Clearly log when the script is in DEBUG or FULL mode.
 - **IMPORTANT:** For deep learning pipelines, if at the end of the 1st epoch of fold 0, the loss or metric is NaN or exactly 0, raise an Exception to stop the run immediately.
 
 **Additional Context**

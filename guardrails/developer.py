@@ -171,10 +171,10 @@ Goals:
 
 Output strictly as JSON with this schema:
 {
-  "severity": "block" | "warn" | "none",
   "findings": [
     {"rule_id": "<short_id>", "snippet": "<inline snippet or description>", "rationale": "<why this is risky>", "suggestion": "<how to fix>"}
-  ]
+  ],
+  "severity": "block" | "warn" | "none",
 }
 
 Be concise and pragmatic; do not include prose outside JSON.
@@ -218,10 +218,10 @@ Examine the code and determine whether both requirements are satisfied.
 
 Output strictly as JSON in this schema:
 {
-  "severity": "block" | "warn" | "none",
   "findings": [
     {"rule_id": "debug_sequence" | "nan_guard", "snippet": "<excerpt>", "rationale": "<why non-compliant>", "suggestion": "<how to fix>"}
-  ]
+  ],
+  "severity": "block" | "warn" | "none",
 }
 
 Set severity="block" if either requirement is missing or incorrect. Use severity="warn" if unsure. Use severity="none" only when both requirements (including the NaN/zero safeguard) are clearly implemented.
