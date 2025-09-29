@@ -8,6 +8,17 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
 
 ---
 
+## Results
+
+| Kaggle Competition | Difficulty | Type | Metric | AIDE with DeepSeek-R1 (extracted)<br>Average / Max | MLE-Star with Gemini-2.5-Pro (1 manual run)<br>- 24h time limit<br>Average / Max | Qgentic-AI with GPT-5<br>- 24h time limit<br>Average / Max |
+| --- | --- | --- | --- | --- | --- | --- |
+| us-patent-phrase-to-phrase-matching | Medium | Information Retrieval | PCC (higher) | 0.465 / 0.481 | 0.849 / 0.849 | **0.863 / 0.880** |
+| learning-agency-lab-automated-essay-scoring-2 | Medium | Text | QWK (higher) | 0.733 / 0.748 | No submission.csv generated | **0.825 / 0.828** |
+| tabular-playground-series-dec-2021 | Easy | Tabular | Accuracy % (higher) | 0.9578 / 0.9612 | 0.9627 / 0.9627 | 0.9611 / **0.9631** |
+| statoil-iceberg-classifier-challenge | Medium | Image Classification | Logloss (lower) | 0.290 / 0.270 | 0.414 / 0.414 | **0.171 / 0.140** |
+
+--- 
+
 ## Architecture at a Glance
 
 - **Researcher Agent (`agents/researcher.py`)**
@@ -33,23 +44,23 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
   - Expected layout: Kaggle metadata, `description.md`, `plan.md`, `outputs/<iteration>/`
     (logs, generated code, submissions), and optional external-data caches.
 
----
-
 ## Getting Started
 
 ### 1. Prerequisites
 
 - Python 3.10+ (the development environment uses 3.11).
-- `git`, `patch`, and system build tools for native dependencies.
 - Optional: CUDA-enabled GPU for training scripts that request GPU resources.
+- Make sure you have ```kaggle.json``` file in the same directory
+- Copy and paste ```install.sh``` into your local directory before doing anything. Then run ```bash install.sh```
+
+If you want to download MLE-Bench Data for another competition, modify ```install.sh``` ```TASK_NAME``` and only execute ```prepare_data``` and ```copy_task_data```
 
 ### 2. Install Dependencies
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+pip install vllm
 ```
+This is an additional dependency not in requirements.txt, as running it together with others causes errors.
 
 ### 3. Configure API Keys & Environment
 
@@ -67,32 +78,41 @@ E2B_API_KEY=...
 These keys are loaded via `python-dotenv`. Adjust the environment variables listed in
 `config.yaml` if you need custom names or endpoints.
 
-### 4. Organise a Competition Bundle
+### 4. Download Meta Kaggle and Meta Kaggle Code from Kaggle Datasets
+```
+sudo apt-get install unzip
+curl -L -o /workspace/meta-kaggle.zip https://www.kaggle.com/api/v1/datasets/download/kaggle/meta-kaggle
+curl -L -o /workspace/meta-kaggle-code.zip https://www.kaggle.com/api/v1/datasets/download/kaggle/meta-kaggle-code
 
-Place each competition under `task/<slug>/`. A minimal bundle looks like:
+unzip meta-kaggle.zip -d /workspace/meta-kaggle
+unzip meta-kaggle-code.zip -d /workspace/meta-kaggle-code
+```
+
+Then run
+```
+python create_metadata.py --competition-slug "enter slug"
+```
+
+You will see something like this
 
 ```
 task/
-└─ statoil-iceberg-classifier-challenge/
+└─ "enter slug"/
    ├─ description.md
-   ├─ plan.md               # (optional – generated if missing)
-   ├─ sample_submission.csv # for baseline grading
-   ├─ comp_metadata.yaml    # created by create_metadata.py
-   ├─ outputs/
-   │  └─ <iteration>/       # logs, generated code, submissions
-   └─ external-data/        # optional downloaded datasets
+   ├─ public_insights.md
+   ├─ sample_submission.csv
+   ├─ comp_metadata.yaml   
+   └─ train files/test files
 ```
-
-Use `create_metadata.py` if you need to rebuild `comp_metadata.yaml` from Meta Kaggle.
 
 ### 5. Launch an Iteration
 
 ```bash
-python launch_agent.py --slug statoil-iceberg-classifier-challenge --iteration 10 --tries 20
+python launch_agent.py --slug "enter slug" --iteration 1 --tries 50
 ```
 
 - The Researcher runs first (unless `plan.md` already exists for that iteration).
-- The Developer then cycles through code generations, writing artefacts to
+- The Developer then cycles through code generations, writing artifacts to
   `task/<slug>/outputs/<iteration>/`.
 - `submission.csv` (or the configured `submission_{version}.csv`) is produced on success.
 
@@ -113,45 +133,14 @@ Key settings live in `config.yaml` (merged with `project_config.py` defaults):
 - **llm**: base URL, API key env var, model IDs for Researcher/Developer and guardrails.
 - **runtime**: max steps/tries, retry counts, directory listing depth, patch mode switch.
 - **paths**: root directories and naming templates for generated artefacts.
-- **guardrails**: toggles for logging order checks, NaN guard, and leakage reviews.
+- **guardrails**: toggles for logging order checks, debug/NaN guard, and leakage reviews.
 
 > **Patch Mode (Experimental)** – The developer supports a token-efficient diff workflow.
 > Toggle `runtime.patch_mode_enabled: true` to request unified diffs (with line numbers)
-> from the model instead of full files. This feature is still being tuned; enable only if
-> you are comfortable debugging occasional patch failures.
-
----
-
-## Development & Testing
-
-- `test_patch.py` – exercises patch application via `DeveloperAgent._apply_patch()`.
-- `test_download_dataset.py` – validates the researcher’s external dataset download tool.
-- `test_list_directory.py` – quick check of directory listings used in prompts.
-- `test_sota_stack_trace.py`, `test_weave.py` – demonstrate tooling integrations.
-
-Run any of the scripts directly with the virtualenv activated:
-
-```bash
-python test_patch.py
-```
-
-When modifying agents or tools, favour small, focused tests (either scripts like above or
-bespoke notebooks) to verify changes end-to-end.
-
----
-
-## Tips & Best Practices
-
-- Keep `plan.md` and `outputs/<iteration>/` under version control to audit agent progress.
-- Reset or archive `outputs` before re-running an iteration to avoid stale artefacts.
-- If you introduce new guardrails or tools, wire them through `project_config.py` so they
-  can be toggled without code changes.
-- For manual experiments, you can reuse the generated scripts within the task directory –
-  just remember to log results back into the outputs folder for traceability.
+> from the model instead of full files. This feature is still being tuned
 
 ---
 
 ## License
 
-This repository is provided as-is for experimentation with agentic Kaggle workflows.
-Please review any third-party model or dataset licenses before usage.
+MIT
