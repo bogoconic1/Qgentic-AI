@@ -9,6 +9,14 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from agents.developer import DeveloperAgent
 
+import logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
+logging.getLogger("agents.developer").setLevel(logging.DEBUG)
+
+
 
 WRONG_PATCH = """--- code_16_v2.py
 +++ code_16_v2.py
@@ -240,45 +248,40 @@ def developer_agent(monkeypatch):
     return agent
 
 
-def test_apply_wrong_then_correct_patch_on_code_16_v2(developer_agent):
-    target_path = Path("/workspace/gstar-project/code_16_v2.py")
-    backup_content = target_path.read_text()
+def test_apply_wrong_then_correct_patch_on_code_16_v2(developer_agent, tmp_path):
+    base_source = Path("task/us-patent-phrase-to-phrase-matching/outputs/16/code_16_v2.py")
+    base_source_content = base_source.read_text()
 
-    original_content = _restore_original_from_diff(WRONG_PATCH)
-    target_content = Path("task/us-patent-phrase-to-phrase-matching/outputs/16/code_16_v3.py").read_text()
-    if not target_content.endswith("\n"):
-        target_content += "\n"
+    work_dir = tmp_path / "outputs"
+    work_dir.mkdir()
 
-    correct_diff = "\n".join(
-        difflib.unified_diff(
-            original_content.splitlines(),
-            target_content.splitlines(),
-            fromfile="code_16_v2.py",
-            tofile="code_16_v2.py",
-            lineterm="",
-        )
-    ) + "\n"
+    copied_base = work_dir / base_source.name
+    copied_base.write_text(base_source_content)
+
+    developer_agent.outputs_dir = work_dir
+    developer_agent.developer_log_path = work_dir / "developer_patch.log"
+    developer_agent.plan_path = work_dir / "developer_patch_plan.md"
+
+    normalized = DeveloperAgent._normalize_diff_payload(copied_base, WRONG_PATCH)
+    assert normalized is not None
 
     new_file = developer_agent.outputs_dir / developer_agent._code_filename(3)
-    preexisting_new_file = new_file.exists()
+    if new_file.exists():
+        new_file.unlink()
 
-    target_path.write_text(original_content)
+    result = developer_agent._apply_patch(base_version=2, diff_payload=WRONG_PATCH, target_version=3)
+    assert result is not None
+    assert "PatentPairDataset" in result
+    assert "submission_3.csv" in result
+
+    expected_lines = DeveloperAgent._apply_unified_diff(base_source_content.splitlines(), normalized.splitlines())
+    assert expected_lines is not None
+    assert result.splitlines() == expected_lines
+
+    assert copied_base.read_text() == base_source_content
 
     try:
-        bad_result = developer_agent._apply_patch(base_version=2, diff_payload=WRONG_PATCH, target_version=3)
-        assert bad_result is None
-        assert target_path.read_text() == original_content
-
-        good_result = developer_agent._apply_patch(base_version=2, diff_payload=correct_diff, target_version=3)
-        assert good_result is not None
-
         assert new_file.exists()
-        patched_content = new_file.read_text()
-        assert patched_content == target_content
-
-        target_path.write_text(target_content)
-        assert target_path.read_text() == target_content
     finally:
-        if not preexisting_new_file and new_file.exists():
+        if new_file.exists():
             new_file.unlink()
-        target_path.write_text(backup_content)

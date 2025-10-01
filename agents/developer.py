@@ -339,86 +339,39 @@ Project structure:
             return None
 
         result: list[str] = []
-        orig_idx = 0
-        i = 0
-        header_seen = False
-        hunk_re = re.compile(r"@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
+        base_idx = 0
 
-        while i < len(diff_lines):
-            line = diff_lines[i]
-            if line.startswith("diff ") or line.startswith("index "):
-                i += 1
+        for line in diff_lines:
+            if not line:
                 continue
-            if line.startswith("--- "):
-                header_seen = True
-                i += 1
+            if line.startswith(("diff ", "index ", "--- ", "+++ ", "@@ ")):
                 continue
-            if line.startswith("+++ "):
-                i += 1
-                continue
-            if not header_seen:
-                i += 1
-                continue
-            if not line.startswith("@@ "):
-                i += 1
-                continue
-
-            match = hunk_re.match(line)
-            if not match:
-                return None
-            start_old = int(match.group(1))
-            old_count = int(match.group(2) or "1")
-            start_new = int(match.group(3))
-            new_count = int(match.group(4) or "1")
-            target_idx = max(start_old - 1, 0)
-            if target_idx > len(base_lines):
-                return None
-            if target_idx < orig_idx:
-                return None
-            if target_idx > orig_idx:
-                result.extend(base_lines[orig_idx:target_idx])
-                orig_idx = target_idx
-
-            i += 1
-            old_consumed = 0
-            new_emitted = 0
-            while i < len(diff_lines):
-                hline = diff_lines[i]
-                if hline.startswith("@@ "):
-                    break
-                if hline.startswith("diff ") or hline.startswith("index ") or hline.startswith("--- "):
-                    break
-                if not hline:
-                    i += 1
-                    continue
-                prefix = hline[0]
-                content = hline[1:]
-                if prefix == ' ':
-                    if orig_idx >= len(base_lines) or base_lines[orig_idx] != content:
-                        return None
-                    result.append(base_lines[orig_idx])
-                    orig_idx += 1
-                    old_consumed += 1
-                    new_emitted += 1
-                elif prefix == '-':
-                    if orig_idx >= len(base_lines) or base_lines[orig_idx] != content:
-                        return None
-                    orig_idx += 1
-                    old_consumed += 1
-                elif prefix == '+':
-                    result.append(content)
-                    new_emitted += 1
-                elif prefix == '\\':
-                    pass
-                else:
+            prefix = line[0]
+            content = line[1:]
+            if prefix == ' ':
+                while base_idx < len(base_lines) and base_lines[base_idx] != content:
+                    result.append(base_lines[base_idx])
+                    base_idx += 1
+                if base_idx >= len(base_lines):
                     return None
-                i += 1
-
-            if old_count != old_consumed or new_count != new_emitted:
+                result.append(base_lines[base_idx])
+                base_idx += 1
+            elif prefix == '-':
+                while base_idx < len(base_lines) and base_lines[base_idx] != content:
+                    result.append(base_lines[base_idx])
+                    base_idx += 1
+                if base_idx >= len(base_lines):
+                    return None
+                base_idx += 1
+            elif prefix == '+':
+                result.append(content)
+            elif prefix == '\\':
+                continue
+            else:
                 return None
 
-        if orig_idx < len(base_lines):
-            result.extend(base_lines[orig_idx:])
+        if base_idx < len(base_lines):
+            result.extend(base_lines[base_idx:])
 
         return result
 
@@ -431,7 +384,10 @@ Project structure:
             return None
 
         diff_lines = diff_text.splitlines()
-        new_lines = DeveloperAgent._apply_unified_diff(base_lines, diff_lines)
+        fixed_lines = DeveloperAgent._fix_hunk_headers(diff_lines)
+        new_lines = DeveloperAgent._apply_unified_diff(base_lines, fixed_lines)
+        if new_lines is None:
+            new_lines = DeveloperAgent._apply_with_patch_tool(base_lines, diff_text, base_path.name)
         if new_lines is None:
             return None
         if base_lines == new_lines:
@@ -449,6 +405,48 @@ Project structure:
         if not normalized:
             return None
         return "\n".join(normalized) + "\n"
+
+    @staticmethod
+    def _fix_hunk_headers(diff_lines: list[str]) -> list[str]:
+        return diff_lines
+
+    @staticmethod
+    def _apply_with_patch_tool(base_lines: list[str], diff_text: str, base_filename: str) -> Optional[list[str]]:
+        import tempfile
+
+        try:
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                tmp_dir_path = Path(tmp_dir)
+                tmp_base = tmp_dir_path / base_filename
+                tmp_base.write_text("\n".join(base_lines) + "\n")
+                patched_path = tmp_dir_path / (base_filename + ".patched")
+                cmd = ["patch", "-o", patched_path.name, tmp_base.name]
+                try:
+                    result = subprocess.run(
+                        cmd,
+                        input=diff_text if diff_text.endswith("\n") else diff_text + "\n",
+                        text=True,
+                        capture_output=True,
+                        cwd=tmp_dir,
+                        check=False,
+                    )
+                except FileNotFoundError:
+                    return None
+                except Exception:
+                    return None
+                if not patched_path.exists():
+                    return None
+                try:
+                    patched_lines = patched_path.read_text().splitlines()
+                except Exception:
+                    return None
+                # Validate by forward diff so we don't return identical content
+                if patched_lines == base_lines:
+                    return None
+                return patched_lines
+        except Exception:
+            return None
+
 
     def _apply_patch(self, base_version: int, diff_payload: str, target_version: int) -> Optional[str]:
         """Apply diff payload to the previous source file and return updated code."""
@@ -556,10 +554,11 @@ Project structure:
         if not self.patch_mode_enabled:
             return instruction
         instruction = instruction.replace("Please modify your code to fix the error!", "Please write a git diff within ```diff to fix the error!")
+        instruction = instruction.replace("Please regenerate the script addressing the above guardrail issues.", "Please write a git diff within ```diff to fix the above issues.")
         base_filename = self._code_filename(version)
         directive = textwrap.dedent(
             f"""
-Patch instructions:
+**IMPORTANT**: Please write a git diff (patch) within ```diff to fix the above issues!
 - Produce a unified diff (apply patch format) that updates {base_filename}. Do not include any prefixes in the diff other than {base_filename}.
 - Return only the diff enclosed in ```diff fences; do not resend the full script.
 - Ensure the diff applies cleanly with the `patch` utility using the file names above.
@@ -926,6 +925,11 @@ Like this
                 )
                 guardrail_prompt = "\n".join(summary) + fix_instr
                 guardrail_prompt = self._append_patch_directive(guardrail_prompt, version)
+                assistant_payload = self._build_assistant_payload(
+                    code,
+                    include_line_numbers=self.patch_mode_enabled,
+                )
+                self.messages.append({"role": "assistant", "content": assistant_payload})
                 self.messages.append({"role": "user", "content": guardrail_prompt})
                 logger.info("User prompt with guardrail feedback: %s", guardrail_prompt)
                 # continue to next attempt without execution
