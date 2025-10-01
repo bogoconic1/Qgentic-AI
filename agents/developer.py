@@ -1,3 +1,4 @@
+import difflib
 import logging
 import math
 import os
@@ -332,6 +333,123 @@ Project structure:
             return content.strip()
         return self._extract_code(content)
 
+    @staticmethod
+    def _apply_unified_diff(base_lines: list[str], diff_lines: list[str]) -> Optional[list[str]]:
+        if not diff_lines:
+            return None
+
+        result: list[str] = []
+        orig_idx = 0
+        i = 0
+        header_seen = False
+        hunk_re = re.compile(r"@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
+
+        while i < len(diff_lines):
+            line = diff_lines[i]
+            if line.startswith("diff ") or line.startswith("index "):
+                i += 1
+                continue
+            if line.startswith("--- "):
+                header_seen = True
+                i += 1
+                continue
+            if line.startswith("+++ "):
+                i += 1
+                continue
+            if not header_seen:
+                i += 1
+                continue
+            if not line.startswith("@@ "):
+                i += 1
+                continue
+
+            match = hunk_re.match(line)
+            if not match:
+                return None
+            start_old = int(match.group(1))
+            old_count = int(match.group(2) or "1")
+            start_new = int(match.group(3))
+            new_count = int(match.group(4) or "1")
+            target_idx = max(start_old - 1, 0)
+            if target_idx > len(base_lines):
+                return None
+            if target_idx < orig_idx:
+                return None
+            if target_idx > orig_idx:
+                result.extend(base_lines[orig_idx:target_idx])
+                orig_idx = target_idx
+
+            i += 1
+            old_consumed = 0
+            new_emitted = 0
+            while i < len(diff_lines):
+                hline = diff_lines[i]
+                if hline.startswith("@@ "):
+                    break
+                if hline.startswith("diff ") or hline.startswith("index ") or hline.startswith("--- "):
+                    break
+                if not hline:
+                    i += 1
+                    continue
+                prefix = hline[0]
+                content = hline[1:]
+                if prefix == ' ':
+                    if orig_idx >= len(base_lines) or base_lines[orig_idx] != content:
+                        return None
+                    result.append(base_lines[orig_idx])
+                    orig_idx += 1
+                    old_consumed += 1
+                    new_emitted += 1
+                elif prefix == '-':
+                    if orig_idx >= len(base_lines) or base_lines[orig_idx] != content:
+                        return None
+                    orig_idx += 1
+                    old_consumed += 1
+                elif prefix == '+':
+                    result.append(content)
+                    new_emitted += 1
+                elif prefix == '\\':
+                    pass
+                else:
+                    return None
+                i += 1
+
+            if old_count != old_consumed or new_count != new_emitted:
+                return None
+
+        if orig_idx < len(base_lines):
+            result.extend(base_lines[orig_idx:])
+
+        return result
+
+    @staticmethod
+    def _normalize_diff_payload(base_path: Path, diff_text: str) -> Optional[str]:
+        try:
+            base_lines = base_path.read_text().splitlines()
+        except Exception:
+            logger.exception("Failed to read base file while normalizing diff: %s", base_path)
+            return None
+
+        diff_lines = diff_text.splitlines()
+        new_lines = DeveloperAgent._apply_unified_diff(base_lines, diff_lines)
+        if new_lines is None:
+            return None
+        if base_lines == new_lines:
+            return None
+
+        normalized = list(
+            difflib.unified_diff(
+                base_lines,
+                new_lines,
+                fromfile=base_path.name,
+                tofile=base_path.name,
+                lineterm="",
+            )
+        )
+        if not normalized:
+            return None
+        return "\n".join(normalized) + "\n"
+
     def _apply_patch(self, base_version: int, diff_payload: str, target_version: int) -> Optional[str]:
         """Apply diff payload to the previous source file and return updated code."""
         if base_version <= 0:
@@ -349,11 +467,6 @@ Project structure:
             logger.warning("Patch payload was empty after extraction.")
             return None
 
-        if not diff_text.endswith("\n"):
-            diff_text += "\n"
-
-        logger.debug("diff text: %s", diff_text)
-
         output_filename = self._code_filename(target_version)
         output_path = self.outputs_dir / output_filename
         if output_path.exists():
@@ -366,48 +479,78 @@ Project structure:
                 )
                 return None
 
+        attempts: list[tuple[str, str]] = []
+        original_payload = diff_text if diff_text.endswith("\n") else diff_text + "\n"
+        attempts.append(("original", original_payload))
+
+        normalized_payload = self._normalize_diff_payload(base_path, diff_text)
+        if normalized_payload and normalized_payload != original_payload:
+            attempts.append(("normalized", normalized_payload))
+
         cmd = ["patch", "-o", output_filename, base_filename]
 
-        try:
-            result = subprocess.run(
-                cmd,
-                input=diff_text,
-                text=True,
-                capture_output=True,
-                cwd=self.outputs_dir,
-                check=False,
-            )
-        except FileNotFoundError:
-            logger.exception("`patch` utility not available on system path.")
-            return None
-        except Exception:
-            logger.exception("Unexpected failure while applying patch command.")
-            return None
-
-        if result.returncode != 0:
-            logger.warning(
-                "Patch command returned non-zero exit code %s. stderr=\n%s",
-                result.returncode,
-                (result.stderr or "").strip(),
-            )
+        for label, payload in attempts:
+            logger.debug("Attempting to apply %s diff for version %s", label, target_version)
             if output_path.exists():
                 try:
                     output_path.unlink()
                 except Exception:
-                    logger.debug("Failed to clean up partial patched file: %s", output_path)
-            return None
+                    logger.exception(
+                        "Failed to remove existing output file before applying %s diff: %s",
+                        label,
+                        output_path,
+                    )
+                    return None
+            try:
+                result = subprocess.run(
+                    cmd,
+                    input=payload,
+                    text=True,
+                    capture_output=True,
+                    cwd=self.outputs_dir,
+                    check=False,
+                )
+            except FileNotFoundError:
+                logger.exception("`patch` utility not available on system path.")
+                return None
+            except Exception:
+                logger.exception("Unexpected failure while applying patch command.")
+                return None
 
-        try:
-            updated_code = output_path.read_text()
+            if result.returncode != 0:
+                logger.warning(
+                    "Patch command (%s diff) returned non-zero exit code %s. stderr=\n%s",
+                    label,
+                    result.returncode,
+                    (result.stderr or "").strip(),
+                )
+                if output_path.exists():
+                    try:
+                        output_path.unlink()
+                    except Exception:
+                        logger.debug(
+                            "Failed to clean up partial patched file after %s diff attempt: %s",
+                            label,
+                            output_path,
+                        )
+                continue
+
+            try:
+                updated_code = output_path.read_text()
+            except Exception:
+                logger.exception("Failed to read patched file at %s", output_path)
+                return None
+
             logger.info(
-                "Successfully applied patch to generate version %s from base %s",
+                "Successfully applied %s diff to generate version %s from base %s",
+                label,
                 target_version,
                 base_version,
             )
             return updated_code
-        except Exception:
-            logger.exception("Failed to read patched file at %s", output_path)
-            return None
+
+        logger.warning("All patch attempts failed for target version %s", target_version)
+        return None
 
     def _append_patch_directive(self, instruction: str, version: int) -> str:
         if not self.patch_mode_enabled:
