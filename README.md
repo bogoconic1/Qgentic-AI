@@ -44,6 +44,10 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
   - Expected layout: Kaggle metadata, `description.md`, `plan.md`, `outputs/<iteration>/`
     (logs, generated code, submissions), and optional external-data caches.
 
+# Sample Logs
+
+![Screenshot of wandb run metrics for the pipeline](docs/assets/wandb_sample_log.png)
+
 ## Getting Started
 
 ### 1. Prerequisites
@@ -121,8 +125,9 @@ python launch_agent.py --slug "enter slug" --iteration 1 --tries 50
 - `researcher.txt` / `developer.txt` capture detailed logs for each iteration.
 - `code_{iteration}_v{version}.py` are the generated scripts; corresponding logs sit under
   `code_{iteration}_v{version}.txt`.
-- Weights & Biases and Weave projects are initialised in `launch_agent.py`; set the
-  respective API keys or disable instrumentation as needed.
+- Weights & Biases and Weave projects are initialised in `launch_agent.py`; supply
+  `--wandb-entity/--wandb-project`, export `WANDB_ENTITY/WANDB_PROJECT`, or define them
+  in `config.yaml` under `tracking.wandb`.
 
 ---
 

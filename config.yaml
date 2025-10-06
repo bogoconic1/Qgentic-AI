@@ -28,3 +28,7 @@ guardrails:
   logging_basicconfig_order: true
   nan_guard: true
   leakage_review: true
+tracking:
+  wandb:
+    entity: null # replace with your W&B entity
+    project: null # replace with your W&B project
