@@ -21,6 +21,8 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
 
 ## Architecture at a Glance
 
+![Architecture diagram showing the Researcher and Developer flow](docs/assets/architecture.png)
+
 - **Researcher Agent (`agents/researcher.py`)**
   - Uses tool-calling (EDA snippets, external dataset search) to understand the task.
   - Logs every step to `task/<slug>/outputs/<iteration>/researcher.txt`.
