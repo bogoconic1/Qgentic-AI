@@ -61,3 +61,17 @@ matplotlib
 seaborn
 torchgeo
 scikit-image
+ 
+# Google GenAI & Vertex AI
+google-adk
+google-genai
+google-cloud-aiplatform
+
+# Core libs (from project deps)
+pydantic
+
+# Dev & testing
+pytest
+pytest-asyncio
+black
+absl-py

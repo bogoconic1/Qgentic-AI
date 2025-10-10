@@ -18,238 +18,158 @@ logging.getLogger("agents.developer").setLevel(logging.DEBUG)
 
 
 
-WRONG_PATCH = """--- code_16_v2.py
-+++ code_16_v2.py
-@@ -20,5 +20,5 @@
- BASE_DIR = "task/us-patent-phrase-to-phrase-matching"
- OUTPUT_DIR = os.path.join(BASE_DIR, "outputs", "16")
--SUB_PATH = os.path.join(OUTPUT_DIR, "submission_2.csv")
--LOG_PATH = os.path.join(OUTPUT_DIR, "code_16_v2.txt")
-+SUB_PATH = os.path.join(OUTPUT_DIR, "submission_3.csv")
-+LOG_PATH = os.path.join(OUTPUT_DIR, "code_16_v3.txt")
- os.makedirs(OUTPUT_DIR, exist_ok=True)
-@@ -90,10 +90,16 @@
-     titles = titles.rename(columns={"code": "context"})
-     train = train.merge(titles[["context", "title"]], on="context", how="left")
-     test = test.merge(titles[["context", "title"]], on="context", how="left")
-     train["title"] = train["title"].fillna("")
-     test["title"] = test["title"].fillna("")
--    train["text_input"] = train.apply(lambda r: create_text_input(r["anchor"], r["target"], r["title"]), axis=1)
--    test["text_input"] = test.apply(lambda r: create_text_input(r["anchor"], r["target"], r["title"]), axis=1)
-+    # Lowercased fields for two-segment tokenization
-+    train["anchor_l"] = train["anchor"].astype(str).str.lower()
-+    train["target_l"] = train["target"].astype(str).str.lower()
-+    train["title_l"] = train["title"].fillna("").astype(str).str.lower()
-+    test["anchor_l"] = test["anchor"].astype(str).str.lower()
-+    test["target_l"] = test["target"].astype(str).str.lower()
-+    test["title_l"] = test["title"].fillna("").astype(str).str.lower()
-     # Group key to prevent leakage
-     train["group"] = (train["anchor"].astype(str) + "||" + train["target"].astype(str))
-     if debug_mode:
-         # Take a head sample; maintain group integrity
-         # Select groups until approximately debug_max_samples reached
-@@ -151,7 +157,50 @@
-     if "label" in batch[0]:
-         labels = torch.tensor([b["label"] for b in batch], dtype=torch.float32)
-         result["labels"] = labels
-     return result
+WRONG_PATCH = """--- code_10_v1.py
++++ code_10_v1.py
+@@ -25,7 +25,7 @@
+ import logging
+ logging.basicConfig(
+-    filename=str(OUT_DIR / "code_10_v1.txt"),
++    filename=str(OUT_DIR / "code_10_v2.txt"),
+     level=logging.INFO,
+     format="%(asctime)s %(levelname)s %(message)s"
+ )
+@@ -59,7 +59,7 @@
+     cfg["base_dir"] = BASE_DIR
+     cfg["train_path"] = BASE_DIR / "train.json"
+     cfg["test_path"] = BASE_DIR / "test.json"
+-    cfg["sub_path"] = OUT_DIR / "submission_1.csv"
++    cfg["sub_path"] = OUT_DIR / "submission_2.csv"
+     cfg["device"] = "cuda" if torch.cuda.is_available() else "cuda"  # enforce CUDA usage
+     cfg["round_angle_decimals"] = 4
+     cfg["xgb_params"] = {
+@@ -446,14 +446,18 @@
+     folds = list(gkf.split(np.zeros(len(y)), y, groups))
  
-+class PatentPairDataset(Dataset):
-+    def __init__(self, anchors: List[str], targets: List[str], titles: List[str], labels: Optional[List[float]], tokenizer, max_len: int):
-+        self.anchors = anchors
-+        self.targets = targets
-+        self.titles = titles
-+        self.labels = labels
-+        self.tokenizer = tokenizer
-+        self.max_len = max_len
-+
-+    def __len__(self):
-+        return len(self.anchors)
-+
-+    def __getitem__(self, idx):
-+        item = {
-+            "a": self.anchors[idx],
-+            "t": self.targets[idx],
-+            "c": self.titles[idx],
-+        }
-+        if self.labels is not None:
-+            item["label"] = float(self.labels[idx])
-+        return item
-+
-+def collate_pair(batch, tokenizer, max_len: int):
-+    # Two-segment packing:
-+    # text_a = [ANCHOR] anchor + [CONTEXT] title
-+    # text_b = [TARGET] target
-+    text_a = [f"[ANCHOR] {b['a']} [CONTEXT] {b['c']}".strip() for b in batch]
-+    text_b = [f"[TARGET] {b['t']}".strip() for b in batch]
-+
-+    enc = tokenizer(
-+        text_a,
-+        text_b,
-+        max_length=max_len,
-+        padding=True,
-+        truncation=True,
-+        return_tensors="pt",
-+    )
-+    out = {
-+        "input_ids": enc["input_ids"],
-+        "attention_mask": enc["attention_mask"],
-+    }
-+    if "token_type_ids" in enc:
-+        out["token_type_ids"] = enc["token_type_ids"]
-+    if "label" in batch[0]:
-+        out["labels"] = torch.tensor([b["label"] for b in batch], dtype=torch.float32)
-+    return out
-+
- class MeanPooler(nn.Module):
-     def __init__(self):
-         super().__init__()
-     def forward(self, last_hidden_state, attention_mask):
-         mask = attention_mask.unsqueeze(-1).to(last_hidden_state.dtype)
-@@ -363,21 +412,26 @@
-     # Return the best model for test inference and the oof predictions for this split will be set by caller
-     return val_pred, val_tgt, model
+     # Storage
+     oof_xgb = np.zeros(len(y), dtype=np.float32)
+     oof_cnn = np.zeros(len(y), dtype=np.float32)
++    oof_ens_cal = np.zeros(len(y), dtype=np.float32)
++    oof_ens_pp = np.zeros(len(y), dtype=np.float32)
+     test_preds_xgb_folds = []
+     test_preds_cnn_folds = []
++    test_preds_ens_cal_folds = []
  
--def infer_on_dataset(model: nn.Module, texts: List[str], tokenizer, cfg: Config, device: torch.device) -> np.ndarray:
--    ds = PatentDataset(texts, labels=None, tokenizer=tokenizer, max_len=cfg.max_len)
-+def infer_on_dataset(model: nn.Module, anchors: List[str], targets: List[str], titles: List[str], tokenizer, cfg: Config, device: torch.device) -> np.ndarray:
-+    ds = PatentPairDataset(
-+        anchors=anchors,
-+        targets=targets,
-+        titles=titles,
-+        labels=None,
-+        tokenizer=tokenizer,
-+        max_len=cfg.max_len
-+    )
-     loader = DataLoader(
--        ds, batch_size=cfg.valid_bs, shuffle=False, num_workers=cfg.num_workers, pin_memory=True,
--        collate_fn=lambda b: collate_fn(b, tokenizer, cfg.max_len)
-+        ds, batch_size=cfg.valid_bs, shuffle=False, num_workers=cfg.num_workers, pin_memory=True,
-+        collate_fn=lambda b: collate_pair(b, tokenizer, cfg.max_len)
-     )
-     model.eval()
-     all_preds = []
-     with torch.no_grad():
-         for batch in loader:
-             input_ids = batch["input_ids"].to(device, non_blocking=True)
-             attention_mask = batch["attention_mask"].to(device, non_blocking=True)
-             token_type_ids = batch.get("token_type_ids", None)
-             if token_type_ids is not None:
-                 token_type_ids = token_type_ids.to(device, non_blocking=True)
-             with torch.cuda.amp.autocast(dtype=torch.bfloat16):
-                 preds = model(input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
-             all_preds.append(preds.detach().float().cpu().numpy())
-     preds = np.concatenate(all_preds)
-     preds = np.clip(preds, 0.0, 1.0)
-     return preds
-@@ -398,4 +452,8 @@
-     # Load data
-     train_df, test_df, _ = load_and_prepare_data(cfg, debug_mode)
-     tokenizer = AutoTokenizer.from_pretrained(cfg.model_name)
-+    # Add special role tokens and keep tokenizer/model in sync
-+    special_tokens = {"additional_special_tokens": ["[ANCHOR]", "[TARGET]", "[CONTEXT]"]}
-+    num_added = tokenizer.add_special_tokens(special_tokens)
+     # Models list to free later if needed
+     cnn_models = []
+     xgb_models = []
++    calibrators = []
  
-@@ -416,33 +474,31 @@
-         trn_df = train_df.iloc[trn_idx].reset_index(drop=True).copy()
-         val_df = train_df.iloc[val_idx].reset_index(drop=True).copy()
+     # CV Loop
+     for fold_idx, (tr_idx, va_idx) in enumerate(folds):
+         # Build per-fold pure angle map from training part (leak-aware)
+         angle_map_fold = get_pure_angle_map(
+@@ -498,19 +502,31 @@
+         test_preds_cnn_folds.append(te_pred_cnn)
+         xgb_models.append(xgb_model)
  
--        # Build datasets for fold specifically
--        trn_dataset = PatentDataset(trn_df["text_input"].tolist(), trn_df["score"].tolist(), tokenizer, cfg.max_len)
--        val_dataset = PatentDataset(val_df["text_input"].tolist(), val_df["score"].tolist(), tokenizer, cfg.max_len)
+         # Per-fold validation logging (raw)
+         va_true = y[va_idx]
+         fold_ll_xgb = log_loss(va_true, np.clip(va_pred_xgb, cfg["clip_min"], cfg["clip_max"]))
+         logging.info(f"[{mode_str}] XGB Fold {fold_idx} log_loss: {fold_ll_xgb:.6f}")
+         fold_ll_cnn = log_loss(va_true, np.clip(va_pred_cnn, cfg["clip_min"], cfg["clip_max"]))
+         logging.info(f"[{mode_str}] CNN Fold {fold_idx} log_loss: {fold_ll_cnn:.6f}")
+ 
+         # Ensemble raw
+         va_pred_ens = (va_pred_xgb + va_pred_cnn) / 2.0
+         fold_ll_ens = log_loss(va_true, np.clip(va_pred_ens, cfg["clip_min"], cfg["clip_max"]))
+         logging.info(f"[{mode_str}] Ensemble (raw) Fold {fold_idx} log_loss: {fold_ll_ens:.6f}")
+ 
+-        # Post-processed ensemble (using fold-specific angle map)
+-        va_angle_keys = angle_keys_train[va_idx]
+-        va_na_flags = na_train[va_idx]
+-        va_pred_ens_pp = apply_postprocess(cfg, va_pred_ens, va_angle_keys, va_na_flags, angle_map_fold, keep_if_conf=cfg["pp_keep_if_confident"])
+-        fold_ll_ens_pp = log_loss(va_true, va_pred_ens_pp)
+-        logging.info(f"[{mode_str}] Ensemble (postproc) Fold {fold_idx} log_loss: {fold_ll_ens_pp:.6f}")
++        # Fold-wise calibration (fit calibrator on this fold's logits and labels)
++        va_logits = sigmoid_to_logit(va_pred_ens)
++        calib_fold = LogisticRegression(max_iter=1000, solver="lbfgs")
++        calib_fold.fit(va_logits.reshape(-1, 1), va_true)
++        calibrators.append(calib_fold)
++        va_pred_ens_cal = calib_fold.predict_proba(va_logits.reshape(-1, 1))[:, 1]
++        oof_ens_cal[va_idx] = va_pred_ens_cal
++        fold_ll_ens_cal = log_loss(va_true, np.clip(va_pred_ens_cal, cfg["clip_min"], cfg["clip_max"]))
++        logging.info(f"[{mode_str}] Ensemble (calibrated) Fold {fold_idx} log_loss: {fold_ll_ens_cal:.6f}")
++
++        # Post-processed calibrated ensemble (using fold-specific angle map)
++        va_angle_keys = angle_keys_train[va_idx]
++        va_na_flags = na_train[va_idx]
++        va_pred_ens_cal_pp = apply_postprocess(cfg, va_pred_ens_cal, va_angle_keys, va_na_flags, angle_map_fold, keep_if_conf=cfg["pp_keep_if_confident"])
++        oof_ens_pp[va_idx] = va_pred_ens_cal_pp
++        fold_ll_ens_cal_pp = log_loss(va_true, va_pred_ens_cal_pp)
++        logging.info(f"[{mode_str}] Ensemble (calibrated + postproc) Fold {fold_idx} log_loss: {fold_ll_ens_cal_pp:.6f}")
++
++        # Calibrated test predictions for this fold
++        te_pred_ens = (te_pred_xgb + te_pred_cnn) / 2.0
++        te_logits = sigmoid_to_logit(te_pred_ens)
++        te_pred_cal = calib_fold.predict_proba(te_logits.reshape(-1, 1))[:, 1]
++        test_preds_ens_cal_folds.append(te_pred_cal)
+ 
+     # OOF metrics
+     oof_ens_raw = (oof_xgb + oof_cnn) / 2.0
+     oof_ll_xgb = log_loss(y, np.clip(oof_xgb, cfg["clip_min"], cfg["clip_max"]))
+     oof_ll_cnn = log_loss(y, np.clip(oof_cnn, cfg["clip_min"], cfg["clip_max"]))
+     oof_ll_ens_raw = log_loss(y, np.clip(oof_ens_raw, cfg["clip_min"], cfg["clip_max"]))
+     logging.info(f"[{mode_str}] OOF XGB log_loss: {oof_ll_xgb:.6f}")
+     logging.info(f"[{mode_str}] OOF CNN log_loss: {oof_ll_cnn:.6f}")
+     logging.info(f"[{mode_str}] OOF Ensemble (raw) log_loss: {oof_ll_ens_raw:.6f}")
+ 
+-    # Calibrate ensemble using OOF (Platt scaling via LogisticRegression on logits)
+-    oof_logits = sigmoid_to_logit(oof_ens_raw)
+-    calib = LogisticRegression(max_iter=1000, solver="lbfgs")
+-    calib.fit(oof_logits.reshape(-1, 1), y)
+-    oof_calibrated = calib.predict_proba(oof_logits.reshape(-1, 1))[:, 1]
+-    oof_ll_ens_cal = log_loss(y, np.clip(oof_calibrated, cfg["clip_min"], cfg["clip_max"]))
+-    logging.info(f"[{mode_str}] OOF Ensemble (calibrated) log_loss: {oof_ll_ens_cal:.6f}")
 -
--        # Wrap into loaders inside the fold-specific training function
--        # Reuse train_one_fold but pass in sliced datasets through DataLoaders constructed there
--        # Instead, to use the same routine while keeping code manageable, temporarily override train_df inside the function:
--        # We'll pass a holder dataframe with the same API used in train_one_fold
--        fold_train_wrapper = pd.DataFrame({"text_input": trn_df["text_input"], "score": trn_df["score"]})
--        fold_valid_wrapper = pd.DataFrame({"text_input": val_df["text_input"], "score": val_df["score"]})
-+        # Build datasets for fold specifically (two-segment inputs)
-+        trn_dataset = PatentPairDataset(
-+            anchors=trn_df["anchor_l"].tolist(),
-+            targets=trn_df["target_l"].tolist(),
-+            titles=trn_df["title_l"].tolist(),
-+            labels=trn_df["score"].tolist(),
-+            tokenizer=tokenizer,
-+            max_len=cfg.max_len
-+        )
-+        val_dataset = PatentPairDataset(
-+            anchors=val_df["anchor_l"].tolist(),
-+            targets=val_df["target_l"].tolist(),
-+            titles=val_df["title_l"].tolist(),
-+            labels=val_df["score"].tolist(),
-+            tokenizer=tokenizer,
-+            max_len=cfg.max_len
-+        )
+-    # Post-processing on OOF using full-train pure angle map
+-    full_angle_map = get_pure_angle_map(train_df, angle_keys_train, y, min_count=2)
+-    oof_ens_pp = apply_postprocess(cfg, oof_calibrated, angle_keys_train, na_train, full_angle_map, keep_if_conf=cfg["pp_keep_if_confident"])
+-    oof_ll_ens_pp = log_loss(y, oof_ens_pp)
+-    logging.info(f"[{mode_str}] OOF Ensemble (calibrated + postproc) log_loss: {oof_ll_ens_pp:.6f}")
++    # OOF calibrated and post-processed metrics (built fold-wise to avoid leakage)
++    oof_ll_ens_cal = log_loss(y, np.clip(oof_ens_cal, cfg["clip_min"], cfg["clip_max"]))
++    logging.info(f"[{mode_str}] OOF Ensemble (calibrated) log_loss: {oof_ll_ens_cal:.6f}")
++    oof_ll_ens_pp_val = log_loss(y, oof_ens_pp)
++    logging.info(f"[{mode_str}] OOF Ensemble (calibrated + postproc) log_loss: {oof_ll_ens_pp_val:.6f}")
  
-         # Build model and loaders directly here to maintain customization and test-time usage
-         model = DebertaRegressor(cfg.model_name)
-         model.to(device)
-+        # Ensure embeddings resized to accommodate added special tokens
-+        model.backbone.resize_token_embeddings(len(tokenizer))
+     # Final validation results summary
+-    logging.info(f"[{mode_str}] FINAL OOF RESULTS -> XGB: {oof_ll_xgb:.6f} | CNN: {oof_ll_cnn:.6f} | Ensemble Raw: {oof_ll_ens_raw:.6f} | Ensemble Calibrated: {oof_ll_ens_cal:.6f} | Ensemble Calibrated+Postproc: {oof_ll_ens_pp:.6f}")
++    logging.info(f"[{mode_str}] FINAL OOF RESULTS -> XGB: {oof_ll_xgb:.6f} | CNN: {oof_ll_cnn:.6f} | Ensemble Raw: {oof_ll_ens_raw:.6f} | Ensemble Calibrated: {oof_ll_ens_cal:.6f} | Ensemble Calibrated+Postproc: {oof_ll_ens_pp_val:.6f}")
  
-         train_loader = DataLoader(
-             trn_dataset,
-             batch_size=cfg.train_bs,
-             shuffle=True,
-             num_workers=cfg.num_workers,
-             pin_memory=True,
--            collate_fn=lambda b: collate_fn(b, tokenizer, cfg.max_len)
-+            collate_fn=lambda b: collate_pair(b, tokenizer, cfg.max_len)
-         )
-         valid_loader = DataLoader(
-             val_dataset,
-             batch_size=cfg.valid_bs,
-             shuffle=False,
-             num_workers=cfg.num_workers,
-             pin_memory=True,
--            collate_fn=lambda b: collate_fn(b, tokenizer, cfg.max_len)
-+            collate_fn=lambda b: collate_pair(b, tokenizer, cfg.max_len)
-         )
+-    # Test predictions
+-    test_pred_xgb = np.mean(np.stack(test_preds_xgb_folds, axis=0), axis=0)
+-    test_pred_cnn = np.mean(np.stack(test_preds_cnn_folds, axis=0), axis=0)
+-    test_pred_ens_raw = (test_pred_xgb + test_pred_cnn) / 2.0
+-    test_logits = sigmoid_to_logit(test_pred_ens_raw)
+-    test_pred_cal = calib.predict_proba(test_logits.reshape(-1, 1))[:, 1]
+-    test_pred_final = apply_postprocess(cfg, test_pred_cal, angle_keys_test, na_test, full_angle_map, keep_if_conf=cfg["pp_keep_if_confident"])
++    # Build full-train pure angle map for TEST post-processing only (no OOF use)
++    full_angle_map = get_pure_angle_map(train_df, angle_keys_train, y, min_count=2)
++
++    # Test predictions (per-fold calibrated ensemble averaged)
++    test_pred_ens_cal = np.mean(np.stack(test_preds_ens_cal_folds, axis=0), axis=0)
++    test_pred_final = apply_postprocess(cfg, test_pred_ens_cal, angle_keys_test, na_test, full_angle_map, keep_if_conf=cfg["pp_keep_if_confident"])
+     # Clip
+     test_pred_final = np.clip(test_pred_final, cfg["clip_min"], cfg["clip_max"])
  
-@@ -541,7 +597,9 @@
-         logging.info(f"MODE={'DEBUG' if debug_mode else 'FULL'} | FOLD={fold+1}/{total_folds} | FINAL_FOLD_PEARSON={fold_corr:.6f}")
- 
-         # Test inference for this fold
--        test_preds_fold = infer_on_dataset(model, test_df["text_input"].tolist(), tokenizer, cfg, device)
-+        test_preds_fold = infer_on_dataset(
-+            model, test_df["anchor_l"].tolist(), test_df["target_l"].tolist(), test_df["title_l"].tolist(),
-+            tokenizer, cfg, device
-+        )
-         test_fold_preds.append(test_preds_fold)
- 
-         # Free memory
-         del model
-         torch.cuda.empty_cache()
+     # Save submission only for FULL run
+     if not debug:
+         sub = pd.DataFrame({"id": test_df["id"], "is_iceberg": test_pred_final})
+         sub.to_csv(cfg["sub_path"], index=False)
 """
-
-
-def _restore_original_from_diff(diff_text: str) -> str:
-    original_lines = []
-    for line in diff_text.splitlines():
-        if not line or line.startswith("diff ") or line.startswith("index "):
-            continue
-        if line.startswith("--- ") or line.startswith("+++ ") or line.startswith("@@ "):
-            continue
-        prefix = line[0]
-        content = line[1:]
-        if prefix in {"-", " "}:
-            original_lines.append(content)
-    return "\n".join(original_lines) + "\n"
-
 
 @pytest.fixture
 def developer_agent(monkeypatch):
     monkeypatch.setattr(DeveloperAgent, "_load_benchmark_info", lambda self: None)
-    agent = DeveloperAgent("us-patent-phrase-to-phrase-matching", iteration=16)
+    agent = DeveloperAgent("statoil-iceberg-classifier-challenge", iteration=10)
     agent.outputs_dir = Path("/workspace/gstar-project")
     agent.developer_log_path = agent.outputs_dir / "developer_patch.log"
     agent.plan_path = agent.outputs_dir / "developer_patch_plan.md"
     return agent
 
 
-def test_apply_wrong_then_correct_patch_on_code_16_v2(developer_agent, tmp_path):
-    base_source = Path("task/us-patent-phrase-to-phrase-matching/outputs/16/code_16_v2.py")
+def test_apply_wrong_then_correct_patch(developer_agent, tmp_path):
+    base_source = Path("task/statoil-iceberg-classifier-challenge/outputs/10/code_10_v1.py")
     base_source_content = base_source.read_text()
 
     work_dir = tmp_path / "outputs"
@@ -265,14 +185,12 @@ def test_apply_wrong_then_correct_patch_on_code_16_v2(developer_agent, tmp_path)
     normalized = DeveloperAgent._normalize_diff_payload(copied_base, WRONG_PATCH)
     assert normalized is not None
 
-    new_file = developer_agent.outputs_dir / developer_agent._code_filename(3)
+    new_file = developer_agent.outputs_dir / developer_agent._code_filename(2)
     if new_file.exists():
         new_file.unlink()
 
-    result = developer_agent._apply_patch(base_version=2, diff_payload=WRONG_PATCH, target_version=3)
+    result = developer_agent._apply_patch(base_version=1, diff_payload=WRONG_PATCH, target_version=2)
     assert result is not None
-    assert "PatentPairDataset" in result
-    assert "submission_3.csv" in result
 
     expected_lines = DeveloperAgent._apply_unified_diff(base_source_content.splitlines(), normalized.splitlines())
     assert expected_lines is not None
