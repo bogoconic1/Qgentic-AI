@@ -56,8 +56,14 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
 
 - Python 3.10+ (the development environment uses 3.11).
 - Optional: CUDA-enabled GPU for training scripts that request GPU resources.
-- Make sure you have ```kaggle.json``` file in the same directory
-- Copy and paste ```install.sh``` into your local directory before doing anything. Then run ```bash install.sh```
+
+```
+git clone https://github.com/bogoconic1/Qgentic-AI.git
+cd Qgentic-AI
+bash install.sh
+```
+
+Add your ```kaggle.json``` file in the Qgentic-AI directory
 
 If you want to download MLE-Bench Data for another competition, modify ```install.sh``` ```TASK_NAME``` and only execute ```prepare_data``` and ```copy_task_data```
 

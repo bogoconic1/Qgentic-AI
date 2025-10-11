@@ -88,8 +88,9 @@ target/
 profile_default/
 ipython_config.py
 *.ipynb
-cdd_report_sample.md
-cdd_report_sample.pdf
+catboost_test.py
+code_16_v2.py
+kaggle.json
 web_search/
 logs/
 

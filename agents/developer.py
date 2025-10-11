@@ -12,7 +12,6 @@ import json
 from dotenv import load_dotenv
 from openai import OpenAI
 from project_config import get_config
-from sortedcontainers import SortedList
 import weave
 import wandb
 
@@ -382,11 +381,15 @@ Project structure:
         except Exception:
             logger.exception("Failed to read base file while normalizing diff: %s", base_path)
             return None
-
         diff_lines = diff_text.splitlines()
-        fixed_lines = DeveloperAgent._fix_hunk_headers(diff_lines)
+        fixed_lines = DeveloperAgent._fix_hunk_headers(base_lines, diff_lines)
         new_lines = DeveloperAgent._apply_unified_diff(base_lines, fixed_lines)
         if new_lines is None:
+            # Try applying the corrected diff via patch tool
+            corrected_text = "\n".join(fixed_lines)
+            new_lines = DeveloperAgent._apply_with_patch_tool(base_lines, corrected_text, base_path.name)
+        if new_lines is None:
+            # Fall back to attempting original payload
             new_lines = DeveloperAgent._apply_with_patch_tool(base_lines, diff_text, base_path.name)
         if new_lines is None:
             return None
@@ -407,7 +410,83 @@ Project structure:
         return "\n".join(normalized) + "\n"
 
     @staticmethod
-    def _fix_hunk_headers(diff_lines: list[str]) -> list[str]:
+    def _fix_hunk_headers(base_lines: list[str], diff_lines: list[str]) -> list[str]:
+        """Fix incorrect @@ hunk headers to be consistent with the diff body and the base file.
+
+        Rules implemented:
+        - Split the patch into hunks on lines starting with "@@".
+        - For each hunk body, count minus/plus/context lines to set b and d.
+        - Recompute a (old start) by locating the first non-added line (" " or "-") in base_lines,
+          choosing the occurrence closest to the previous hunk's a (if any), otherwise earliest.
+        - Maintain running delta (initially 0) so c = a + delta; then delta += (plus_count - minus_count).
+        - Pure-additions first hunk: assume a=1 and c=1. If a later hunk has no non-added lines,
+          fall back to earliest valid match (a=1).
+        - Rebuild header as: @@ -{a},{b} +{c},{d} @@ and keep body lines unchanged.
+        """
+
+        header_re = re.compile(r"^@@\s*-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s+@@")
+
+        output_lines = []
+        i = 0
+        delta = 0
+        hunks = []
+
+        for i in range(len(diff_lines)):
+            if re.match(header_re, diff_lines[i]):
+                A, B, C, D = map(int, header_re.match(diff_lines[i]).groups())
+                hunks.append([i, A, B, C, D])
+
+        hunks.append([len(diff_lines), 0, 0, 0, 0])
+
+        for i in range(len(hunks)-1):
+            # within this hunk
+            diff_hunk_l, old_A, old_B, old_C, old_D = hunks[i]
+            diff_hunk_r, _, _, _, _ = hunks[i+1]
+            hunk_lines = diff_lines[diff_hunk_l+1:diff_hunk_r]
+            minus_count = 0
+            plus_count = 0
+            first_valid_line = None
+            for line in hunk_lines:
+                assert not re.match(header_re, line)
+                if line.startswith("-"):
+                    minus_count += 1
+                    if first_valid_line is None:
+                        first_valid_line = line[1:]
+                elif line.startswith("+"):
+                    plus_count += 1
+                else:
+                    # in old and new file
+                    minus_count += 1
+                    plus_count += 1
+                    if first_valid_line is None:
+                        first_valid_line = line
+
+            print("First valid line:")
+            print(first_valid_line.strip())
+            new_A = None
+            
+            for line_no in range(old_A - 15, old_A + 15):
+                if line_no < 0:
+                    continue
+                if line_no >= len(base_lines):
+                    continue
+                if base_lines[line_no].strip() == first_valid_line.strip():
+                    new_A = line_no + 1
+                    break
+
+            if new_A is None:
+                # edge case - the content is completely wrong (patch will not work)
+                return diff_lines
+
+            new_C = new_A + delta
+            new_B = minus_count
+            new_D = plus_count
+
+            delta += (plus_count - minus_count)
+            diff_lines[diff_hunk_l] = f"@@ -{new_A},{new_B} +{new_C},{new_D} @@"
+
+        print("Fixed diff lines:")
+        print(diff_lines)
         return diff_lines
 
     @staticmethod
@@ -479,7 +558,7 @@ Project structure:
 
         attempts: list[tuple[str, str]] = []
         original_payload = diff_text if diff_text.endswith("\n") else diff_text + "\n"
-        attempts.append(("original", original_payload))
+        # attempts.append(("original", original_payload))
 
         normalized_payload = self._normalize_diff_payload(base_path, diff_text)
         if normalized_payload and normalized_payload != original_payload:
@@ -489,6 +568,8 @@ Project structure:
 
         for label, payload in attempts:
             logger.debug("Attempting to apply %s diff for version %s", label, target_version)
+            logger.debug("Payload: %s", payload)
+            # print(payload)
             if output_path.exists():
                 try:
                     output_path.unlink()
