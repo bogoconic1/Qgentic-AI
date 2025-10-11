@@ -463,6 +463,7 @@ Project structure:
 
             print("First valid line:")
             print(first_valid_line.strip())
+            new_A = None
             
             for line_no in range(old_A - 15, old_A + 15):
                 if line_no < 0:
@@ -472,6 +473,10 @@ Project structure:
                 if base_lines[line_no].strip() == first_valid_line.strip():
                     new_A = line_no + 1
                     break
+
+            if new_A is None:
+                # edge case - the content is completely wrong (patch will not work)
+                return diff_lines
 
             new_C = new_A + delta
             new_B = minus_count
