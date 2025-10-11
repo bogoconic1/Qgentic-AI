@@ -90,6 +90,7 @@ ipython_config.py
 *.ipynb
 catboost_test.py
 code_16_v2.py
+kaggle.json
 web_search/
 logs/
 

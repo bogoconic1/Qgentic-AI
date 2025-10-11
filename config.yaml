@@ -30,5 +30,5 @@ guardrails:
   leakage_review: true
 tracking:
   wandb:
-    entity: null # replace with your W&B entity
-    project: null # replace with your W&B project
+    entity: bogoconic1 # replace with your W&B entity
+    project: gstar-wandb # replace with your W&B project
