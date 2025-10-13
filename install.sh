@@ -3,7 +3,7 @@ set -euo pipefail
 
 # === CONFIG ===
 KAGGLE_JSON_PATH="${KAGGLE_JSON_PATH:-kaggle.json}"
-TASK_NAME="denoising-dirty-documents"
+TASK_NAME="jigsaw-toxic-comment-classification-challenge"
 WORKDIR="${WORKDIR:-$(pwd)}"
 CACHE_DIR="/root/.cache/mle-bench/data/${TASK_NAME}/prepared"
 

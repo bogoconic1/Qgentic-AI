@@ -13,7 +13,7 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
 | Kaggle Competition | Difficulty | Type | Metric | AIDE with DeepSeek-R1 (extracted)<br>Average / Max | MLE-Star with Gemini-2.5-Pro (1 manual run)<br>- 24h time limit<br>Average / Max | Qgentic-AI with GPT-5<br>- 24h time limit<br>Average / Max |
 | --- | --- | --- | --- | --- | --- | --- |
 | us-patent-phrase-to-phrase-matching | Medium | Information Retrieval | PCC (higher) | 0.465 / 0.481 | 0.849 / 0.849 | **0.863 / 0.880** |
-| learning-agency-lab-automated-essay-scoring-2 | Medium | Text | QWK (higher) | 0.733 / 0.748 | No submission.csv generated | **0.825 / 0.828** |
+| learning-agency-lab-automated-essay-scoring-2 | Medium | Text | QWK (higher) | 0.733 / 0.748 | 0.797 / 0.797 | **0.828 / 0.840** |
 | tabular-playground-series-dec-2021 | Easy | Tabular | Accuracy % (higher) | 0.9578 / 0.9612 | 0.9627 / 0.9627 | 0.9611 / **0.9631** |
 | statoil-iceberg-classifier-challenge | Medium | Image Classification | Logloss (lower) | 0.290 / 0.270 | 0.414 / 0.414 | **0.171 / 0.140** |
 
