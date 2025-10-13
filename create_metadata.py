@@ -151,7 +151,7 @@ def summarize_code(client: OpenAI, code: str) -> dict:
     messages = [{'role': 'user', 'content': PROMPT.format(code=code)}]
     response = client.chat.completions.create(
         extra_body={},
-        model=CONFIG_LLM.get("developer_model", "google/gemini-2.5-pro"),
+        model=CONFIG_LLM.get("leakage_followup_model", "google/gemini-2.5-pro"),
         messages=messages,
     ).choices[0].message.content
 
@@ -217,6 +217,8 @@ def main() -> None:
     ]
     kernels["CurrentKernelVersionId"] = kernels["CurrentKernelVersionId"].astype("Int64")
     print(f"Extracted {len(kernels)} kernels")
+
+    if len(kernels) == 0: return
 
     def extract_code(row):
         id_str = str(int(row["CurrentKernelVersionId"]))
