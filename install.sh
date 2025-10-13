@@ -3,7 +3,7 @@ set -euo pipefail
 
 # === CONFIG ===
 KAGGLE_JSON_PATH="${KAGGLE_JSON_PATH:-kaggle.json}"
-TASK_NAME="us-patent-phrase-to-phrase-matching"
+TASK_NAME="denoising-dirty-documents"
 WORKDIR="${WORKDIR:-$(pwd)}"
 CACHE_DIR="/root/.cache/mle-bench/data/${TASK_NAME}/prepared"
 
@@ -35,10 +35,10 @@ prepare_data() {
 }
 
 copy_task_data() {
-    echo "[*] Copying prepared data into Qgentic-AI/task..."
-    mkdir -p "$WORKDIR/Qgentic-AI/task/$TASK_NAME"
-    cp -r "$CACHE_DIR/public/"* "$WORKDIR/Qgentic-AI/task/$TASK_NAME"
-    cp -r "$CACHE_DIR/private/"* "$WORKDIR/Qgentic-AI/task/$TASK_NAME"
+    echo "[*] Copying prepared data into task..."
+    mkdir -p "$WORKDIR/task/$TASK_NAME"
+    cp -r "$CACHE_DIR/public/"* "$WORKDIR/task/$TASK_NAME"
+    cp -r "$CACHE_DIR/private/"* "$WORKDIR/task/$TASK_NAME"
 }
 
 main() {
