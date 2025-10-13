@@ -3,7 +3,7 @@ set -euo pipefail
 
 # === CONFIG ===
 KAGGLE_JSON_PATH="${KAGGLE_JSON_PATH:-kaggle.json}"
-TASK_NAME="jigsaw-toxic-comment-classification-challenge"
+TASK_NAME="spooky-author-identification"
 WORKDIR="${WORKDIR:-$(pwd)}"
 CACHE_DIR="/root/.cache/mle-bench/data/${TASK_NAME}/prepared"
 
@@ -38,7 +38,6 @@ copy_task_data() {
     echo "[*] Copying prepared data into task..."
     mkdir -p "$WORKDIR/task/$TASK_NAME"
     cp -r "$CACHE_DIR/public/"* "$WORKDIR/task/$TASK_NAME"
-    cp -r "$CACHE_DIR/private/"* "$WORKDIR/task/$TASK_NAME"
 }
 
 main() {
