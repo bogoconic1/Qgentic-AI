@@ -202,6 +202,12 @@ class DeveloperAgent:
         self.benchmark_info = info
         self.gold_threshold = info.get("gold_threshold")
         self.is_lower_better = info.get("is_lower_better")
+        logger.info("is_lower_better=%s", self.is_lower_better)
+
+        if self.is_lower_better:
+            logger.info("is_lower_better=True")
+        else:
+            logger.info("is_lower_better=False")
 
     def _compose_system(self) -> str:
         logger.debug("Composing system prompt for slug=%s", self.slug)
@@ -466,6 +472,9 @@ Project structure:
                         first_valid_line = line
 
             print("First valid line:")
+            if first_valid_line is None:
+                # Edge case: no anchorable content; return original diff lines
+                return diff_lines
             print(first_valid_line.strip())
             new_A = None
             
