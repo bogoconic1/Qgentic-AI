@@ -116,7 +116,7 @@ def get_competition_and_forum_ids(meta_kaggle_path: Path, slug: str):
     df = pd.read_csv(meta_kaggle_path / "Competitions.csv", usecols=cols)
     row = df.loc[df["Slug"] == slug].iloc[0]
     competition_id = int(row["Id"]) if pd.notna(row["Id"]) else -1
-    forum_id = int(row["ForumId"])
+    forum_id = row["ForumId"] if pd.notna(row["ForumId"]) else -1
     start_ts = pd.to_datetime(row["EnabledDate"], errors="coerce", utc=True)
     cutoff_ts = pd.to_datetime(row["DeadlineDate"], errors="coerce", utc=True)
     if pd.notna(cutoff_ts):

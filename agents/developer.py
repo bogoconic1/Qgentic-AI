@@ -250,6 +250,7 @@ Return Python code only, enclosed in triple backticks with the `python` annotati
 ```python
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+BASE_DIR = "task/{self.slug}" if not os.getenv('KAGGLE_KERNEL_RUN_TYPE') else "/kaggle/input/{self.slug}"
 # <YOUR CODE>
 ```
 
