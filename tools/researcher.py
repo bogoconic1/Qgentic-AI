@@ -52,6 +52,13 @@ _EXTERNAL_DIRNAME = _PATH_CFG.get("external_data_dirname", "external-data")
 def ask_eda(question: str, description: str, data_path: str, max_attempts: int | None = None) -> str:
     """Asks a question about the data provided for exploratory data analysis (EDA)"""
     client = OpenAI(api_key=os.environ.get(_API_KEY_ENV), base_url=_BASE_URL)
+    # Prepare media directory for EDA charts and expose to executed code
+    try:
+        media_dir = (Path(data_path) / "media")
+        media_dir.mkdir(parents=True, exist_ok=True)
+        os.environ["MEDIA_DIR"] = str(media_dir)
+    except Exception:
+        logger.exception("Failed to ensure MEDIA_DIR under %s", data_path)
     directory_listing = _build_directory_listing(data_path)
     logger.debug(
         "Prepared directory listing for %s (length=%s)", data_path, len(directory_listing)
@@ -74,6 +81,10 @@ data_path = "{data_path}"
 - After executing each significant code block, validate the output in 1-2 lines and clarify next steps or corrections, if needed.
 - Ensure all answers are complete and descriptive. Rather than outputting plain numbers (e.g., "100"), explain results clearly (e.g., "There are a total of 100 records in the dataset").
 - Answers should be informative and easy to understand.
+- You may generate charts/images as part of the Python code.
+- Save all charts to the MEDIA_DIR folder (env var MEDIA_DIR is set; default path: Path(data_path)/"media").
+- Do NOT display figures interactively; save them (e.g., matplotlib: plt.savefig(os.path.join(os.environ.get("MEDIA_DIR"), "fig.png"), bbox_inches='tight'); plotly: fig.write_image(...)).
+- After saving each figure, print the absolute saved file path to stdout.
 - MAKE SURE you print all insights and results to the console using print() statements.
 
 Competition Description:
