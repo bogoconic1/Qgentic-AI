@@ -24,7 +24,10 @@ def extract_fruit(sentence: str) -> dict:
                 model="openai/gpt-5:online",
                 messages=messages,
             )
-    extracted = completion.choices[0].message.content
+    try:
+        extracted = completion.choices[0].message.content
+    except Exception:
+        extracted = ""
     return extracted
 
 weave.init('intro-example')

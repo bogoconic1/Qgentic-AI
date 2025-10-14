@@ -94,7 +94,12 @@ Competition Description:
             model=_RESEARCHER_TOOL_OFFLINE_MODEL,
             messages=all_messages,
         )
-        response_text = completion.choices[0].message.content or ""
+        try:
+            msg = completion.choices[0].message
+            response_text = msg.content or ""
+        except Exception:
+            msg = ""
+            response_text = ""
         assistant_message = {"role": "assistant", "content": response_text}
 
         matches = re.findall(pattern, response_text, re.DOTALL)
@@ -218,8 +223,12 @@ Example: when no datasets are found
                 model=_RESEARCHER_TOOL_ONLINE_MODEL,
                 messages=messages,
             )
-            msg = completion.choices[0].message
-            content = msg.content or ""
+            try:
+                msg = completion.choices[0].message
+                content = msg.content or ""
+            except Exception:
+                msg = ""
+                content = ""
 
         logger.info("Received web search response for dataset query.")
         logger.debug("Web search raw response: %s", content)
@@ -228,15 +237,47 @@ Example: when no datasets are found
         return "No relevant datasets found."
 
     completion = content
-    logger.debug("Web search completion text: %s", completion)
-    pattern = r'```json\s*(\{.*?\})\s*```'
-    matches = re.findall(pattern, completion, re.DOTALL)
-    if not matches:
-        logger.warning("No JSON block found in web search response.")
-        return "No relevant datasets found."
+    relevant_datasets = None
+    max_dataset_attempts = 3
+    for dataset_attempt in range(1, max_dataset_attempts + 1):
+        logger.debug("Web search completion text: %s", completion)
+        pattern = r'```json\s*(\{.*?\})\s*```'
+        matches = re.findall(pattern, completion, re.DOTALL)
 
-    data = json.loads(matches[0])
-    relevant_datasets = data.get("datasets", [])
+        if not matches:
+            logger.warning("No JSON block found in web search response.")
+            relevant_datasets = None
+        else:
+            data = json.loads(matches[0])
+            relevant_datasets = data.get("datasets", None)
+
+        if relevant_datasets is None and dataset_attempt < max_dataset_attempts:
+            logger.info(
+                "Datasets key is None; retrying dataset discovery (%s/%s)",
+                dataset_attempt,
+                max_dataset_attempts,
+            )
+            # Re-query for datasets and try parsing again
+            content = ""
+            while content == "":
+                completion_obj = call_llm_with_retry(
+                    client,
+                    model=_RESEARCHER_TOOL_ONLINE_MODEL,
+                    messages=messages,
+                )
+                try:
+                    msg = completion_obj.choices[0].message
+                    content = msg.content or ""
+                except Exception:
+                    msg = ""
+                    content = ""
+            completion = content
+            continue
+        break
+
+    if relevant_datasets is None:
+        logger.info("Datasets still None after %s attempts.", max_dataset_attempts)
+        return "No relevant datasets found."
     if not relevant_datasets:
         logger.info("No datasets found in web search JSON response.")
         return "No relevant datasets found."
