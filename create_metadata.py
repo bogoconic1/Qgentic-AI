@@ -153,7 +153,11 @@ def summarize_code(client: OpenAI, code: str) -> dict:
         extra_body={},
         model=CONFIG_LLM.get("leakage_followup_model", "google/gemini-2.5-pro"),
         messages=messages,
-    ).choices[0].message.content
+    )
+    try:
+        response = response.choices[0].message.content
+    except Exception:
+        response = ""
 
     try:
         return json.loads(response)

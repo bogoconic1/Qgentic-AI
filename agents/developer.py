@@ -323,8 +323,12 @@ Project structure:
                 model=_DEVELOPER_MODEL,
                 messages=messages,
             )
-            msg = completion.choices[0].message
-            content = msg.content or ""
+            try:
+                msg = completion.choices[0].message
+                content = msg.content or ""
+            except Exception:
+                msg = ""
+                content = ""
 
         logger.info("Model response received for iteration %s", self.iteration)
         logger.debug("Completion content length: %s", len(content))
