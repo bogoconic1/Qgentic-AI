@@ -94,7 +94,12 @@ Competition Description:
             model=_RESEARCHER_TOOL_OFFLINE_MODEL,
             messages=all_messages,
         )
-        response_text = completion.choices[0].message.content or ""
+        try:
+            msg = completion.choices[0].message
+            response_text = msg.content or ""
+        except Exception:
+            msg = ""
+            response_text = ""
         assistant_message = {"role": "assistant", "content": response_text}
 
         matches = re.findall(pattern, response_text, re.DOTALL)
@@ -218,8 +223,12 @@ Example: when no datasets are found
                 model=_RESEARCHER_TOOL_ONLINE_MODEL,
                 messages=messages,
             )
-            msg = completion.choices[0].message
-            content = msg.content or ""
+            try:
+                msg = completion.choices[0].message
+                content = msg.content or ""
+            except Exception:
+                msg = ""
+                content = ""
 
         logger.info("Received web search response for dataset query.")
         logger.debug("Web search raw response: %s", content)
@@ -256,8 +265,12 @@ Example: when no datasets are found
                     model=_RESEARCHER_TOOL_ONLINE_MODEL,
                     messages=messages,
                 )
-                msg = completion_obj.choices[0].message
-                content = msg.content or ""
+                try:
+                    msg = completion_obj.choices[0].message
+                    content = msg.content or ""
+                except Exception:
+                    msg = ""
+                    content = ""
             completion = content
             continue
         break

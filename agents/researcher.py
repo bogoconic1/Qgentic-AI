@@ -157,8 +157,12 @@ Note: DO NOT optimize for the efficiency prize.
 
             while "<tool_call>" in msg_content or msg_content == "" or """{"name":""" in msg_content:
                 completion = call_llm_with_retry(self.client, **llm_params)
-                msg = completion.choices[0].message
-                msg_content = msg.content
+                try:
+                    msg = completion.choices[0].message
+                    msg_content = msg.content
+                except Exception:
+                    msg = ""
+                    msg_content = ""
                 logger.debug("Model response content length: %s", len(msg_content or ""))
                 if msg.tool_calls:
                     break

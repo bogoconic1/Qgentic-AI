@@ -75,8 +75,12 @@ Do not suggest downgrading packages unless absolutely necessary, and only after 
                 model=_DEVELOPER_TOOL_MODEL,
                 messages=messages,
             )
-            msg = completion.choices[0].message
-            content = msg.content or ""
+            try:
+                msg = completion.choices[0].message
+                content = msg.content or ""
+            except Exception:
+                msg = ""
+                content = ""
             logger.debug("Web search raw response: %s", completion)
         logger.info("Received web search response for stack trace query.")
         logger.debug("Web search raw response: %s", content)
@@ -224,9 +228,13 @@ Provide a concise Python snippet (enclosed in ```python backticks) that implemen
                 model=_DEVELOPER_TOOL_MODEL,
                 messages=messages,
             )
-            msg = completion.choices[0].message
-            logger.debug("SOTA search raw response: %s", completion)
-            content = msg.content or ""
+            try:
+                msg = completion.choices[0].message
+                logger.debug("SOTA search raw response: %s", completion)
+                content = msg.content or ""
+            except Exception:
+                msg = ""
+                content = ""
         logger.debug("SOTA search raw response: %s", content)
 
         return content

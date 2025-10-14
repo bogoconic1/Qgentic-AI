@@ -198,8 +198,12 @@ Be concise and pragmatic; do not include prose outside JSON.
                 model=_LEAKAGE_REVIEW_MODEL,
                 messages=messages,
             )
-            msg = completion.choices[0].message
-            content = msg.content or ""
+            try:
+                msg = completion.choices[0].message
+                content = msg.content or ""
+            except Exception:
+                msg = ""
+                content = ""
         return content
     except Exception:
         logger.exception("Leakage LLM review failed")
@@ -244,8 +248,12 @@ Be concise; no extra prose outside JSON.
                 model=_LEAKAGE_FOLLOWUP_MODEL,
                 messages=messages,
             )
-            msg = completion.choices[0].message
-            content = msg.content or ""
+            try:
+                msg = completion.choices[0].message
+                content = msg.content or ""
+            except Exception:
+                msg = ""
+                content = ""
         return content
     except Exception:
         logger.exception("DEBUG sequence LLM review failed")
