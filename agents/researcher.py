@@ -1,6 +1,8 @@
 import json
 import logging
 import os
+import base64
+import mimetypes
 from pathlib import Path
 from typing import List
 
@@ -36,6 +38,11 @@ _TASK_ROOT = Path(_PATH_CFG.get("task_root", "task"))
 _OUTPUTS_DIRNAME = _PATH_CFG.get("outputs_dirname", "outputs")
 
 _DEFAULT_MAX_STEPS = _RUNTIME_CFG.get("researcher_max_steps", 512)
+
+# Media ingestion limits/types
+SUPPORTED_IMAGE_TYPES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+MAX_IMAGES_PER_STEP = 6
+MAX_TOTAL_BYTES = 5 * 1024 * 1024
 
 
 class ResearcherAgent:
@@ -78,6 +85,68 @@ class ResearcherAgent:
             "ResearcherAgent initialized for slug=%s iteration=%s", self.slug, self.iteration
         )
         
+    def _list_media_files(self) -> set[Path]:
+        media_dir = self.base_dir / "media"
+        if not media_dir.exists():
+            return set()
+        files: set[Path] = set()
+        for p in media_dir.rglob("*"):
+            if p.is_file() and p.suffix.lower() in SUPPORTED_IMAGE_TYPES:
+                files.add(p)
+        return files
+
+    def _encode_image_to_data_url(self, path: Path) -> str:
+        mime, _ = mimetypes.guess_type(path.name)
+        if mime is None:
+            suffix = path.suffix.lower()
+            if suffix in {".jpg", ".jpeg"}:
+                mime = "image/jpeg"
+            elif suffix == ".png":
+                mime = "image/png"
+            elif suffix == ".webp":
+                mime = "image/webp"
+            elif suffix == ".gif":
+                mime = "image/gif"
+            else:
+                return ""
+        try:
+            data = base64.b64encode(path.read_bytes()).decode("utf-8")
+        except Exception:
+            return ""
+        return f"data:{mime};base64,{data}"
+
+    def _ingest_new_media(self, before_set: set[Path]) -> None:
+        after_set = self._list_media_files()
+        new_files = list(after_set - before_set)
+        if not new_files:
+            return
+        new_files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        selected: list[Path] = []
+        total = 0
+        for p in new_files:
+            try:
+                size = p.stat().st_size
+            except Exception:
+                continue
+            if size <= 0:
+                continue
+            if len(selected) >= MAX_IMAGES_PER_STEP:
+                break
+            if total + size > MAX_TOTAL_BYTES:
+                continue
+            selected.append(p)
+            total += size
+        if not selected:
+            return
+        content: list[dict] = [{"type": "text", "text": f"Attaching {len(selected)} new EDA chart(s) from media/."}]
+        for p in selected:
+            data_url = self._encode_image_to_data_url(p)
+            if not data_url:
+                continue
+            content.append({"type": "image_url", "image_url": {"url": data_url}})
+        if len(content) > 1:
+            self.messages.append({"role": "user", "content": content})
+
     def _compose_system(self) -> str:
         base_dir = self.base_dir
         self.description = _safe_read(str(base_dir / "description.md"))
@@ -182,6 +251,7 @@ Note: DO NOT optimize for the efficiency prize.
                         if len(question) == 0:
                             tool_output = "Your question cannot be answered based on the competition discussion threads."
                         else:
+                            before_media = self._list_media_files()
                             tool_output = ask_eda(question, self.description, data_path=str(self.base_dir))
 
                         logger.info("```tool")
@@ -195,6 +265,10 @@ Note: DO NOT optimize for the efficiency prize.
                                 "content": tool_output or "Your question cannot be answered based on the competition discussion threads.",
                             }
                         )
+                        try:
+                            self._ingest_new_media(before_media)
+                        except Exception:
+                            logger.debug("No media ingested for this step.")
                     elif function_name == "download_external_datasets":
                         query = arguments.get("query", "")
                         if not query:
