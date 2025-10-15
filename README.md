@@ -14,7 +14,7 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
 
 | Kaggle Competition | Public LB score | Notebook |
 | --- | --- | --- |
-| playground-series-s5e10 | 0.05560 | [Here](https://www.kaggle.com/code/yeoyunsianggeremie/ps5e10-agentic-ai-solution) |
+| playground-series-s5e10 | 0.05555 | [Here](https://www.kaggle.com/code/yeoyunsianggeremie/ps5e10-agentic-ai-solution) |
 
 ## Past Competitions
 
@@ -26,7 +26,7 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
 | statoil-iceberg-classifier-challenge | Medium | Image Classification | Logloss (lower) | 0.290 / 0.270 | 0.414 | **0.171 / 0.140** |
 | denoising-dirty-documents | Medium | Computer Vision | RMSE (lower) | 0.1419/0.1326 | TBC | **0.01441** |
 | leaf-classification | Easy | Image Classification | Logloss (lower) | 0.0761/0.0540 | TBC | **0.0218** |
-| jigsaw-toxic-comment-classification-challenge | Easy | Text | AUC (higher) | 0.9752/0.9752 | TBC | **0.9848** |
+| jigsaw-toxic-comment-classification-challenge | Easy | Text | AUC (higher) | 0.9752/0.9752 | TBC | **0.9861/0.9874** |
 
 
 --- 

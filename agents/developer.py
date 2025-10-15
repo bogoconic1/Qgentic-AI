@@ -100,6 +100,8 @@ class DeveloperAgent:
         self.last_suggestion: Optional[str] = None
         self.last_suggestion_code: Optional[str] = None
         self.best_code: Optional[str] = None
+        self.best_version: Optional[int] = None
+        self.next_patch_base_version: Optional[int] = None
 
         self._load_benchmark_info()
         self.best_score = float("inf") if self.is_lower_better else float("-inf")
@@ -228,12 +230,13 @@ Begin with a concise checklist (3-7 bullets) of what you will do; keep items con
 - Place `logging.basicConfig()` at the very start of your code, before any other logging statements.
 - Always train with `bfloat16` when using PyTorch, transformers, or other deep learning libraries. Gradient checkpointing must be disabled.
 - Do **not** code any fallback methods.
-- **Do not** use LightGBM. You can research other alternatives like XGBoost or CatBoost.
+- If you use LightGBM, it has to be on CPU.
 - **Do not** use `transformers.Trainer` or `transformers.TrainingArguments`.
 - **Do not** use `try/except` blocks to bypass exceptions.
 - Log the **final validation results** after training.
 - Design the pipeline so it is highly customizable (i.e., it's easy to add or swap techniques, models, etc).
 - You should use pretrained models over training from scratch, whenever possible.
+- If you use external datasets, make sure you are only appending them to the training set, not the validation set.
 - **IMPORTANT:** At the very top, add a `DEBUG` flag. The pipeline must run sequentially twice: once with `DEBUG=True` (using a small subset of data, e.g., 256 samples and 1 epoch, but others unchanged) and then once with `DEBUG=False` (using the full training config). Clearly log when the script is in DEBUG or FULL mode.
 - **IMPORTANT:** For deep learning pipelines, if at the end of the 1st epoch of fold 0, the loss or metric is NaN or exactly 0, raise an Exception to stop the run immediately.
 
@@ -571,12 +574,11 @@ Project structure:
                 return None
 
         attempts: list[tuple[str, str]] = []
-        original_payload = diff_text if diff_text.endswith("\n") else diff_text + "\n"
+        # original_payload = diff_text if diff_text.endswith("\n") else diff_text + "\n"
         # attempts.append(("original", original_payload))
 
         normalized_payload = self._normalize_diff_payload(base_path, diff_text)
-        if normalized_payload and normalized_payload != original_payload:
-            attempts.append(("normalized", normalized_payload))
+        attempts.append(("normalized", normalized_payload))
 
         cmd = ["patch", "-o", output_filename, base_filename]
 
@@ -815,7 +817,19 @@ Like this
             while True:
                 generated = self._generate_code(self.messages, expect_patch=expect_patch)
                 if expect_patch:
-                    base_version = version - 1
+                    # Choose the correct base version for patch application.
+                    # Prefer an explicitly set base from the previous step; fallback to previous attempt.
+                    preferred_base = self.next_patch_base_version if self.next_patch_base_version else (version - 1)
+                    base_candidate_path = self.outputs_dir / self._code_filename(preferred_base)
+                    if not base_candidate_path.exists():
+                        logger.warning(
+                            "Configured patch base v%s not found; falling back to previous attempt v%s",
+                            preferred_base,
+                            version - 1,
+                        )
+                        preferred_base = version - 1
+                    base_version = preferred_base
+                    logger.info("Applying patch relative to base v%s -> target v%s", base_version, version)
                     code = self._apply_patch(base_version, generated, version)
                     if code is not None:
                         break
@@ -1019,13 +1033,16 @@ Like this
                     f"and produce {next_submission_path}."
                 )
                 guardrail_prompt = "\n".join(summary) + fix_instr
-                guardrail_prompt = self._append_patch_directive(guardrail_prompt, version)
+                base_version_for_next_patch = version
+                guardrail_prompt = self._append_patch_directive(guardrail_prompt, base_version_for_next_patch)
                 assistant_payload = self._build_assistant_payload(
                     code,
                     include_line_numbers=self.patch_mode_enabled,
                 )
                 self.messages.append({"role": "assistant", "content": assistant_payload})
                 self.messages.append({"role": "user", "content": guardrail_prompt})
+                self.next_patch_base_version = base_version_for_next_patch
+                logger.info("Next patch will be based on v%s due to guardrail block", base_version_for_next_patch)
                 logger.info("User prompt with guardrail feedback: %s", guardrail_prompt)
                 # continue to next attempt without execution
                 continue
@@ -1105,6 +1122,7 @@ Like this
                         previous_best,
                     )
                     self.best_score = run_score
+                    self.best_version = version
                     if self.gold_threshold is not None:
                         target_text = f"Let's push further to reach {self.gold_threshold}."
                     else:
@@ -1149,12 +1167,7 @@ Like this
 
                 logger.info("SOTA suggestion: %s", sota_suggestions)
 
-                (
-                    suggestion_text,
-                    code_snippet,
-                    blacklist_flag,
-                    blacklist_reason,
-                ) = self._parse_sota_response(sota_suggestions)
+                suggestion_text, code_snippet, blacklist_flag, blacklist_reason = self._parse_sota_response(sota_suggestions)
 
                 if blacklist_flag and self.last_suggestion:
                     self._register_blacklist(self.last_suggestion, blacklist_reason)
@@ -1207,7 +1220,12 @@ Like this
                     f"Remember:\n- write logs to {next_log_path}\n- and produce the next submission at {next_submission_path}"
                 )
 
-                next_instr = self._append_patch_directive(next_instr, version)
+                # Choose consistent base for the next patch: use best when blacklisted, else current version.
+                if blacklist_flag and self.best_code:
+                    base_version_for_next_patch = self.best_version if self.best_version is not None else version
+                else:
+                    base_version_for_next_patch = version
+                next_instr = self._append_patch_directive(next_instr, base_version_for_next_patch)
 
                 self.messages = self.messages[:2]
                 if blacklist_flag and self.best_code:
@@ -1220,6 +1238,8 @@ Like this
                 )
                 self.messages.append({'role': 'assistant', 'content': assistant_payload})
                 self.messages.append({'role': 'user', 'content': next_instr})
+                self.next_patch_base_version = base_version_for_next_patch
+                logger.info("Next patch will be based on v%s (blacklist=%s)", base_version_for_next_patch, blacklist_flag)
 
             else:
                 next_log_path = self.outputs_dir / self._log_filename(version + 1)
@@ -1235,13 +1255,16 @@ Like this
                 - write logs to {next_log_path}
                 - and produce the next submission at {next_submission_path}"
                 """
-                next_instr = self._append_patch_directive(next_instr, version)
+                base_version_for_next_patch = version
+                next_instr = self._append_patch_directive(next_instr, base_version_for_next_patch)
                 assistant_payload = self._build_assistant_payload(
                     code,
                     include_line_numbers=self.patch_mode_enabled,
                 )
                 self.messages.append({'role': 'assistant', 'content': assistant_payload})
                 self.messages.append({'role': 'user', 'content': next_instr})
+                self.next_patch_base_version = base_version_for_next_patch
+                logger.info("Next patch will be based on v%s due to execution failure", base_version_for_next_patch)
 
             logger.info("previous runs count: %s", len(self.previous_runs))
 
