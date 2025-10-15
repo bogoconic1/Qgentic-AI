@@ -54,9 +54,13 @@ def ask_eda(question: str, description: str, data_path: str, max_attempts: int |
     client = OpenAI(api_key=os.environ.get(_API_KEY_ENV), base_url=_BASE_URL)
     # Prepare media directory for EDA charts and expose to executed code
     try:
-        media_dir = (Path(data_path) / "media")
+        preset_media = os.environ.get("MEDIA_DIR", "").strip()
+        if preset_media:
+            media_dir = Path(preset_media)
+        else:
+            media_dir = (Path(data_path) / "media")
+            os.environ["MEDIA_DIR"] = str(media_dir)
         media_dir.mkdir(parents=True, exist_ok=True)
-        os.environ["MEDIA_DIR"] = str(media_dir)
     except Exception:
         logger.exception("Failed to ensure MEDIA_DIR under %s", data_path)
     directory_listing = _build_directory_listing(data_path)
@@ -293,8 +297,13 @@ Example: when no datasets are found
         logger.info("No datasets found in web search JSON response.")
         return "No relevant datasets found."
     logger.info("Found %s relevant datasets from web search.", len(relevant_datasets))
-    dest_path = comp_dir
-    external_root = dest_path / _EXTERNAL_DIRNAME
+    external_root_env = os.environ.get("EXTERNAL_DATA_DIR", "").strip()
+    if external_root_env:
+        external_root = Path(external_root_env)
+        dest_path = external_root
+    else:
+        dest_path = comp_dir
+        external_root = dest_path / _EXTERNAL_DIRNAME
     external_root.mkdir(parents=True, exist_ok=True)
     for dataset in relevant_datasets:
         try:

@@ -53,17 +53,41 @@ class ResearcherAgent:
     (no further tool calls), or the tool-call budget is exhausted.
     """
 
-    def __init__(self, slug: str, iteration: int):
+    def __init__(self, slug: str, iteration: int, run_id: int | None = None):
         load_dotenv()
         self.slug = slug
         self.iteration = iteration
+        self.run_id = run_id
         os.environ["TASK_SLUG"] = slug
         self.client = OpenAI(api_key=os.environ.get(_API_KEY_ENV), base_url=_BASE_URL)
         self.messages: List[dict] = []
         self.base_dir = _TASK_ROOT / self.slug
         self.outputs_dir = self.base_dir / _OUTPUTS_DIRNAME / str(self.iteration)
         self.outputs_dir.mkdir(parents=True, exist_ok=True)
-        self.researcher_log_path = self.outputs_dir / "researcher.txt"
+        # Configure per-run output dirs for media/external data under outputs/<iter>
+        if self.run_id is not None:
+            self.media_dir = self.outputs_dir / f"media_{self.run_id}"
+            self.external_dir = self.outputs_dir / f"external_data_{self.run_id}"
+            try:
+                self.media_dir.mkdir(parents=True, exist_ok=True)
+                self.external_dir.mkdir(parents=True, exist_ok=True)
+                os.environ["MEDIA_DIR"] = str(self.media_dir)
+                os.environ["EXTERNAL_DATA_DIR"] = str(self.external_dir)
+            except Exception:
+                pass
+            per_run_log_dir = self.outputs_dir / "researcher" / f"run_{self.run_id}"
+            per_run_log_dir.mkdir(parents=True, exist_ok=True)
+            self.researcher_log_path = per_run_log_dir / f"researcher_{self.run_id}.txt"
+        else:
+            # Single-run defaults (backward compatible)
+            self.media_dir = self.base_dir / "media"
+            self.external_dir = self.base_dir / _PATH_CFG.get("external_data_dirname", "external-data")
+            try:
+                self.media_dir.mkdir(parents=True, exist_ok=True)
+                self.external_dir.mkdir(parents=True, exist_ok=True)
+            except Exception:
+                pass
+            self.researcher_log_path = self.outputs_dir / "researcher.txt"
         self._configure_logger()
 
     def _configure_logger(self) -> None:
@@ -86,7 +110,7 @@ class ResearcherAgent:
         )
         
     def _list_media_files(self) -> set[Path]:
-        media_dir = self.base_dir / "media"
+        media_dir = self.media_dir
         if not media_dir.exists():
             return set()
         files: set[Path] = set()
