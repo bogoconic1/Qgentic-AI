@@ -118,6 +118,7 @@ def search_sota_suggestions(
     failed_to_improve_score: bool,
     failed_ideas: list[str],
     executed_code: str | None = None,
+    plans: list[str] | None = None,
 ) -> str:
     """Use web search to surface potential SOTA improvements for the competition."""
     logger.info("Dispatching SOTA web search")
@@ -128,6 +129,14 @@ def search_sota_suggestions(
         filtered = [idea for idea in failed_ideas if idea][-10:]
         if filtered:
             failed_ideas_text = "\n".join(f"- {idea}" for idea in filtered)
+
+    plans_section = ""
+    if plans:
+        blocks = []
+        for idx, p in enumerate(plans, start=1):
+            text = p if len(p) <= 30000 else p[-30000:]
+            blocks.append(f"<plan id=\"{idx}\">\n{text}\n</plan>")
+        plans_section = "\n<researcher_plans>\n" + "\n\n".join(blocks) + "\n</researcher_plans>\n"
 
     prompt = f"""
 You will receive a Kaggle competition description, an initial script, and its logs for analysis.
@@ -150,6 +159,8 @@ You will receive a Kaggle competition description, an initial script, and its lo
 
 {context}
 
+{plans_section}
+
 Outcome status: {"No improvement" if failed_to_improve_score else "Improved or matched"}
 
 ### Checklist
@@ -157,10 +168,11 @@ Outcome status: {"No improvement" if failed_to_improve_score else "Improved or m
 - Checklist: If fewer than three meaningful points arise, include as many as possible and explicitly state: "Fewer than 3 high-level red flags or strategies identified."
 
 ### Research and Suggestion
+- You MUST consult <researcher_plans> first (if present). Prefer data-centric improvements (feature engineering, CV design, external-data usage) that are explicitly motivated by the plans' evidence. Only if none are viable should you propose new model families or ensembling/stacking.
 - Before any web search or external query, briefly state the purpose and the minimal search terms you will use.
-- Perform a web search for recent, effective models, architectures, techniques or hyperparameters relevant to this competition or similar tasks, addressing the identified red flags.
-- Before recommending any approach, clearly state its purpose and justification, referencing the competition description and context.
-- Propose one high-impact suggestion to improve performance for the competition's metric, along with an approximately 100-word explanation of its benefits.
+- Perform a web search for recent, effective techniques relevant to this competition or similar tasks, addressing the identified red flags and grounded by the plans.
+- For each proposed idea, clearly state its purpose and justification, citing specific plan evidence using numbered references like [Plan #1], [Plan #2], etc.
+- Propose up to five high-impact, non-duplicate suggestions that together cover different angles (e.g., data/features, CV, external-data, model/HP, ensembling). For each suggestion, include a short (≤100 words) rationale.
 
 ### Validation
 - After offering your suggestion, validate its relevance to the competition details and metric in 1-2 sentences.
@@ -189,25 +201,27 @@ Decide whether the most recently executed suggestion (see <previous suggestion e
 
 Output your decision in the following strict JSON format, enclosed in backticks:
 ```json
-{{
+{
     "blacklist": <true or false>,
     "reason": "<succinct justification; use empty string if blacklist is false>"
-}}
+}
 ```
 
-### New Suggestion Summary
-Propose the single best next idea for improving the competition score. Do not repeat blacklisted ideas or the previous suggestion.
+### New Suggestions Summary
+Propose up to five non-duplicate ideas for improving the competition score, prioritized and diverse (data/CV/external/model/ensemble). Do not repeat blacklisted ideas or the previous suggestion. If you have fewer than five, return as many as you can (including zero).
 
-Output your new idea in the following strict JSON format, enclosed in backticks:
+Output the list in the following strict JSON format, enclosed in backticks:
 ```json
-{{
-    "suggestion": "<your suggestion here>"
-}}
+{
+  "suggestions": [
+    {"suggestion": "<idea #1>", "category": "data|cv|external|model|hp|ensemble", "evidence": "[Plan #i] ..."},
+    {"suggestion": "<idea #2>", "category": "...", "evidence": "..."}
+  ]
+}
 ```
-If you have no viable suggestion, leave the value as an empty string.
 
 ### Code
-Provide a concise Python snippet (enclosed in ```python backticks) that implements the suggested best next idea for improving the competition score. If no suggestion is provided, leave this section empty.
+Provide a concise Python snippet (enclosed in ```python backticks) that implements the top-priority suggestion in your list. If no suggestions are provided, leave this section empty.
 
 - Never repeat any idea from <previous failed ideas>.
 - If blacklist is true, ensure the new suggestion avoids that approach.

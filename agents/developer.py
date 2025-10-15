@@ -1153,6 +1153,18 @@ Like this
                 self.previous_runs.append((code, run_score))
 
                 try:
+                    plan_texts: list[str] = []
+                    try:
+                        if self.plan_path.exists():
+                            plan_texts.append(_safe_read(str(self.plan_path)))
+                    except Exception:
+                        pass
+                    try:
+                        for extra_plan in sorted(self.outputs_dir.glob("plan_*.md")):
+                            plan_texts.append(_safe_read(str(extra_plan)))
+                    except Exception:
+                        pass
+
                     sota_suggestions = search_sota_suggestions(
                         self.description,
                         code_with_logs,
@@ -1160,6 +1172,7 @@ Like this
                         failed_to_improve_score=not improvement,
                         failed_ideas=self.blacklisted_ideas,
                         executed_code=self.last_suggestion_code,
+                        plans=plan_texts,
                     )
                 except Exception:
                     logger.exception("Failed to fetch SOTA suggestions for attempt %s", attempt)
