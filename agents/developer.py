@@ -25,6 +25,13 @@ from guardrails.developer import (
     llm_leakage_review,
 )
 from tools.helpers import call_llm_with_retry, _build_directory_listing
+from prompts.developer_agent import (
+    build_system as prompt_build_system,
+    build_user as prompt_build_user,
+    patch_mode_directive as prompt_patch_mode_directive,
+    guardrail_fix_suffix as prompt_guardrail_fix_suffix,
+    execution_failure_suffix as prompt_execution_failure_suffix,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -219,46 +226,12 @@ class DeveloperAgent:
         logger.debug(
             "Directory listing prepared for %s (length=%s)", self.base_dir, len(directory_listing)
         )
-        return f"""Role: Lead Developer for Machine-Learning Competition Team. Your task is to produce a single, self-contained Python script, specifically targeted at developing a solution for a Kaggle Competition.
-
-Begin with a concise checklist (3-7 bullets) of what you will do; keep items conceptual, not implementation-level.
-
-**Hard Constraints:**
-- Deliver a single-file script.
-- Utilize CUDA wherever possible.
-- Insert detailed `logging.info` statements only for validation results (every fold, every model used, overall OOF). Only log other code sections (such as data loading or config setup) if they're directly relevant to validation.
-- Place `logging.basicConfig()` at the very start of your code, before any other logging statements.
-- Always train with `bfloat16` when using PyTorch, transformers, or other deep learning libraries. Gradient checkpointing must be disabled.
-- Do **not** code any fallback methods.
-- If you use LightGBM, it has to be on CPU.
-- **Do not** use `transformers.Trainer` or `transformers.TrainingArguments`.
-- **Do not** use `try/except` blocks to bypass exceptions.
-- Log the **final validation results** after training.
-- Design the pipeline so it is highly customizable (i.e., it's easy to add or swap techniques, models, etc).
-- You should use pretrained models over training from scratch, whenever possible.
-- If you use external datasets, make sure you are only appending them to the training set, not the validation set.
-- **IMPORTANT:** At the very top, add a `DEBUG` flag. The pipeline must run sequentially twice: once with `DEBUG=True` (using a small subset of data, e.g., 256 samples and 1 epoch, but others unchanged) and then once with `DEBUG=False` (using the full training config). Clearly log when the script is in DEBUG or FULL mode.
-- **IMPORTANT:** For deep learning pipelines, if at the end of the 1st epoch of fold 0, the loss or metric is NaN or exactly 0, raise an Exception to stop the run immediately.
-
-**Additional Context**
-- Competition Description:
-  {self.description}
-- Directory structure for {self.base_dir}:
-  {directory_listing}
-- Score to beat:
-  {self.gold_threshold}
-
-**Output Format**
-Return Python code only, enclosed in triple backticks with the `python` annotation:
-```python
-import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-BASE_DIR = "task/{self.slug}" if not os.getenv('KAGGLE_KERNEL_RUN_TYPE') else "/kaggle/input/{self.slug}"
-# <YOUR CODE>
-```
-
-Implement the best possible solution for this task, with the goal of maximizing the test metric and surpassing the gold threshold in as few iterations as possible.
-"""
+        return prompt_build_system(
+            description=self.description,
+            directory_listing=directory_listing,
+            gold_threshold=self.gold_threshold,
+            slug=self.slug,
+        )
 
     def _build_user_prompt(self, plan_markdown: str, version: int) -> str:
         logger.debug("Building user prompt")
@@ -266,25 +239,14 @@ Implement the best possible solution for this task, with the goal of maximizing 
         outputs_dir_display = self.outputs_dir
         log_path_display = self.outputs_dir / self._log_filename(version)
         submission_path_display = self.outputs_dir / self._submission_filename(version)
-        base = f"""
-Researcher Technical Plan (Markdown):
-{plan_markdown}
-
-Project structure:
-- Base data dir: {base_dir_display}
-- Outputs dir: {outputs_dir_display}
-- The logs should be written to a file named {log_path_display}
-- Required output: {submission_path_display}
-"""
-        base += (
-            "\nReturn the complete Python script that, when run, writes logs to "
-            f"{log_path_display} "
-            "and produces a submission CSV at "
-            f"{submission_path_display}."
+        return prompt_build_user(
+            plan_markdown=plan_markdown,
+            base_dir=base_dir_display,
+            outputs_dir=outputs_dir_display,
+            log_path=log_path_display,
+            submission_path=submission_path_display,
+            threshold_directive=self.threshold_directive,
         )
-        if self.threshold_directive:
-            base += f"\n{self.threshold_directive}"
-        return base
 
     def _extract_code(self, content: str) -> str:
         logger.debug("Extracting code from completion content. Content length: %s", len(content))
@@ -547,32 +509,7 @@ Project structure:
         instruction = instruction.replace("Please modify your code to fix the error!", "Please write a git diff within ```diff to fix the error!")
         instruction = instruction.replace("Please regenerate the script addressing the above guardrail issues.", "Please write a git diff within ```diff to fix the above issues.")
         base_filename = self._code_filename(version)
-        directive = textwrap.dedent(
-            f"""
-**IMPORTANT**: Please write a git diff (patch) within ```diff to fix the above issues!
-- Produce a unified diff (apply patch format) that updates {base_filename}. Do not include any prefixes in the diff other than {base_filename}.
-- Return only the diff enclosed in ```diff fences; do not resend the full script.
-- Ensure the diff applies cleanly with the `patch` utility using the file names above.
-- Use standard hunk headers with explicit line numbers, e.g. @@ -12,7 +12,9 @@.
-- Refer to the <previous_code_with_line_numbers> section above when calculating line numbers.
-
-Like this
-```diff
---- {base_filename}
-+++ {base_filename}
-@@ -1,3 +1,3 @@
- start
--first change
-+new first change
- middle
-@@ -7,4 +7,4 @@
- some content
--second change
-+new second change
- more content
- end
- ```
-""").strip()
+        directive = prompt_patch_mode_directive(base_filename)
         return f"{instruction}\n\n{directive}"
 
     def _write_code(self, code: str, version: int) -> Path:
@@ -921,11 +858,7 @@ Like this
                         pass
                 next_log_path = self.outputs_dir / self._log_filename(version + 1)
                 next_submission_path = self.outputs_dir / self._submission_filename(version + 1)
-                fix_instr = (
-                    "\nPlease regenerate the script addressing the above guardrail issues. "
-                    f"Write logs to {next_log_path} "
-                    f"and produce {next_submission_path}."
-                )
+                fix_instr = prompt_guardrail_fix_suffix(next_log_path, next_submission_path)
                 guardrail_prompt = "\n".join(summary) + fix_instr
                 base_version_for_next_patch = version
                 guardrail_prompt = self._append_patch_directive(guardrail_prompt, base_version_for_next_patch)
@@ -1157,11 +1090,7 @@ Like this
                 This is the stack trace and advice on how to fix the error:
                 {output}
 
-                Please modify your code to fix the error!
-
-                Remember:
-                - write logs to {next_log_path}
-                - and produce the next submission at {next_submission_path}"
+                {prompt_execution_failure_suffix(next_log_path, next_submission_path)}
                 """
                 base_version_for_next_patch = version
                 next_instr = self._append_patch_directive(next_instr, base_version_for_next_patch)
