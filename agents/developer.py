@@ -31,6 +31,7 @@ from utils.diffs import (
     normalize_diff_payload,
     apply_patch as util_apply_patch,
 )
+from utils.grade import run_grade, parse_grade_output
 from prompts.developer_agent import (
     build_system as prompt_build_system,
     build_user as prompt_build_user,
@@ -159,19 +160,7 @@ class DeveloperAgent:
     def _submission_filename(self, version: int) -> str:
         return _SUBMISSION_TEMPLATE.format(iteration=self.iteration, version=version)
 
-    @staticmethod
-    def _get_grade_report_json(stdout: str) -> Optional[dict]:
-        try:
-            start = stdout.index("{")
-            end = stdout.rindex("}") + 1
-            stdout = stdout[start:end]
-            logger.debug("stdout JSON snippet: %s", stdout)
-            info = json.loads(stdout)
-        except json.JSONDecodeError:
-            logger.warning("Baseline grading output was not valid JSON: %s", stdout[:500])
-            return
-
-        return info
+    
 
     def _load_benchmark_info(self) -> None:
         self.benchmark_info = None
@@ -183,35 +172,18 @@ class DeveloperAgent:
             )
             return
 
-        grade_cmd = [
-            "mlebench",
-            "grade-sample",
-            str(sample_submission),
-            self.slug,
-        ]
-
-        logger.info("Fetching grading baseline via: %s", " ".join(grade_cmd))
+        info, stdout, returncode, stderr = run_grade(str(sample_submission), self.slug)
         try:
-            result = subprocess.run(
-                grade_cmd,
-                capture_output=True,
-                text=True,
-                check=False,
-            )
+            logger.info("Baseline grade feedback: %s", stdout)
         except Exception:
-            logger.exception("Failed to execute mlebench grade-sample for baseline")
-            return
-
-        stdout = (result.stdout or "").strip()
-        if result.returncode != 0:
+            logger.debug("Failed to log baseline grade feedback")
+        if returncode != 0:
             logger.warning(
                 "Baseline grading command returned non-zero exit (%s). stderr=\n%s",
-                result.returncode,
-                (result.stderr or "").strip(),
+                returncode,
+                stderr,
             )
             return
-
-        info = self._get_grade_report_json(stdout)
         self.benchmark_info = info
         self.gold_threshold = info.get("gold_threshold")
         self.is_lower_better = info.get("is_lower_better")
@@ -610,29 +582,20 @@ class DeveloperAgent:
                 )
                 grade_feedback = ""
                 try:
-                    grade_cmd = [
-                        "mlebench",
-                        "grade-sample",
-                        str(submission_path),
-                        self.slug,
-                    ]
-                    grade_result = subprocess.run(
-                        grade_cmd,
-                        capture_output=True,
-                        text=True,
-                        check=False,
-                    )
-                    grade_feedback = (grade_result.stdout or "").strip()
-                    if grade_result.returncode != 0:
+                    info, grade_feedback, returncode, stderr = run_grade(str(submission_path), self.slug)
+                    try:
+                        logger.info("Grade feedback: %s", grade_feedback)
+                    except Exception:
+                        logger.debug("Failed to log grade feedback for version %s", version)
+                    if returncode != 0:
                         logger.warning(
                             "Grading command returned non-zero exit (%s). stderr=\n%s",
-                            grade_result.returncode,
-                            (grade_result.stderr or "").strip(),
+                            returncode,
+                            stderr,
                         )
                     else:
                         logger.info("Grading command completed successfully for version %s", version)
-                        info = self._get_grade_report_json(grade_feedback)
-                        run_score = info.get('score')
+                        run_score = info.get('score') if info else None
                         self._log_attempt_score(attempt, run_score)
                         logger.info("Your result on the test set is %s", run_score)
                 except Exception as exc:
