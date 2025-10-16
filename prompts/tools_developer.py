@@ -27,7 +27,7 @@ Do not suggest downgrading packages unless absolutely necessary, and only after 
 
 
 def sota_system() -> str:
-    return """Developer: You will receive a Kaggle competition description, one or more researcher plans, and an ablation summary for analysis.
+    return """You will receive a Kaggle competition description, one or more researcher plans, and an ablation summary for analysis.
 
 Begin with a concise checklist (3-7 bullets) summarizing high-level conceptual red flags identified from the code/logs, as well as your intended strategies for addressing them. These should focus on conceptual aspects rather than specific implementations. Use '- ' for each bullet. If fewer than three meaningful points arise, list as many as possible and explicitly state: "Fewer than 3 high-level red flags or strategies identified."
 
@@ -87,21 +87,23 @@ Output your decision in the following strict JSON format (enclosed in backticks)
 }
 ```
 
-### New Suggestion Summary
-Propose the single best next idea (only one) for improving the competition score, synthesizing insights from the four categories above. Do not repeat blacklisted ideas or the previous suggestion.
+### New Suggestions Summary
+Summarize the four new suggestions in a concise manner and provide a Python code snippet for each suggestion. Do not repeat blacklisted ideas or the previous suggestion.
 
-Return your new idea using the following strict JSON format (enclosed in backticks):
+Use these exact keys: data_feature_suggestion/data_feature_code, arch_suggestion/arch_code, ensembling_suggestion/ensembling_code, sota_suggestion/sota_code. Return your new suggestions using the following strict JSON format (enclosed in backticks):
 ```json
 {
-    "suggestion": "<your proposed best next idea>",
-    "reasoning": "<explanation for selecting this idea as the best compared to other promising ideas>"
+    "data_feature_suggestion": <Data / Feature Engineering Suggestion>,
+    "data_feature_code": <Python code snippet for the data / feature engineering suggestion>,
+    "arch_suggestion": <Architectural Enhancement Suggestion>,
+    "arch_code": <Python code snippet for the architectural enhancement suggestion>,
+    "ensembling_suggestion": <Ensembling/Blending Enhancement Suggestion>,
+    "ensembling_code": <Python code snippet for the ensembling/blending enhancement suggestion>,
+    "sota_suggestion": <SOTA Model Enhancement Suggestion>,
+    "sota_code": <Python code snippet for the SOTA model enhancement suggestion>
 }
 ```
 If there is no viable suggestion, use empty strings for the values.
-
-### Code
-Present a concise Python code snippet (within triple backticks marked 'python') that implements your proposed best next idea. If no suggestion is made, leave this section empty (no code block).
-
 Never repeat any idea from <previous failed ideas>. If a suggestion is blacklisted, ensure your new recommendation avoids that approach.
 """
 
