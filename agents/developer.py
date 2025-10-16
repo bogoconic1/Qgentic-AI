@@ -392,15 +392,14 @@ class DeveloperAgent:
             return "N/A"
         return f"{value}"
 
-    def _parse_sota_response(self, raw: str) -> tuple[str, str, bool, str]:
-        """Extract new suggestion, code snippet, blacklist decision, and rationale."""
+    def _parse_sota_response(self, raw: str) -> tuple[str, str, list[str]]:
+        """Extract new suggestion, code snippet, and list of blacklisted ideas."""
         suggestion_text = ""
         code_snippet = ""
-        blacklist_flag = False
-        blacklist_reason = ""
+        blacklist_list: list[str] = []
 
         if not raw:
-            return suggestion_text, code_snippet, blacklist_flag, blacklist_reason
+            return suggestion_text, code_snippet, blacklist_list
 
         json_blocks = []
         try:
@@ -422,8 +421,11 @@ class DeveloperAgent:
             except Exception:
                 logger.debug("Failed to parse suggestion JSON block.")
 
-        blacklist_flag = bool(decision_payload.get("blacklist", False))
-        blacklist_reason = (decision_payload.get("reason") or "").strip()
+        try:
+            if isinstance(decision_payload.get("blacklist"), list):
+                blacklist_list = [str(x).strip() for x in decision_payload.get("blacklist") if str(x).strip()]
+        except Exception:
+            pass
         suggestion_text = (suggestion_payload.get("suggestion") or "").strip()
         if not suggestion_text:
             suggestion_text = (decision_payload.get("suggestion") or "").strip()
@@ -432,7 +434,7 @@ class DeveloperAgent:
         if code_match:
             code_snippet = code_match.group(1).strip()
 
-        return suggestion_text, code_snippet, blacklist_flag, blacklist_reason
+        return suggestion_text, code_snippet, blacklist_list
 
     def _register_blacklist(self, suggestion: str, reason: str | None = None) -> None:
         if not suggestion:
@@ -673,12 +675,9 @@ class DeveloperAgent:
 
                     sota_suggestions = search_sota_suggestions(
                         self.description,
-                        code_with_logs,
-                        executed_suggestion=self.last_suggestion,
-                        failed_to_improve_score=not improvement,
                         failed_ideas=self.blacklisted_ideas,
-                        executed_code=self.last_suggestion_code,
                         plans=plan_texts,
+                        ablation_summary=self.latest_ablation_summary if hasattr(self, 'latest_ablation_summary') else None,
                     )
                 except Exception:
                     logger.exception("Failed to fetch SOTA suggestions for attempt %s", attempt)
@@ -686,15 +685,16 @@ class DeveloperAgent:
 
                 logger.info("SOTA suggestion: %s", sota_suggestions)
 
-                suggestion_text, code_snippet, blacklist_flag, blacklist_reason = self._parse_sota_response(sota_suggestions)
+                suggestion_text, code_snippet, blacklist_list = self._parse_sota_response(sota_suggestions)
 
-                if blacklist_flag and self.last_suggestion:
-                    self._register_blacklist(self.last_suggestion, blacklist_reason)
-                    logger.info(
-                        "Previous suggestion marked as blacklisted: %s (reason: %s)",
-                        self.last_suggestion,
-                        blacklist_reason or "N/A",
-                    )
+                # Register any blacklisted ideas
+                if blacklist_list:
+                    for idea in blacklist_list:
+                        self._register_blacklist(idea, None)
+                    try:
+                        logger.info("Ideas blacklisted: %s", "; ".join(blacklist_list))
+                    except Exception:
+                        logger.info("Ideas blacklisted: %s", len(blacklist_list))
 
                 if suggestion_text:
                     logger.info("Summary of SOTA suggestion: %s", suggestion_text)
@@ -703,8 +703,8 @@ class DeveloperAgent:
 
                 if suggestion_text:
                     self.last_suggestion = suggestion_text
-                elif blacklist_flag:
-                    # if suggestion missing but blacklist decision made, reset last suggestion
+                elif blacklist_list:
+                    # if suggestion missing but blacklist entries were provided, reset last suggestion
                     self.last_suggestion = None
 
                 self.last_suggestion_code = code_snippet if code_snippet else None
@@ -739,15 +739,15 @@ class DeveloperAgent:
                     f"Remember:\n- write logs to {next_log_path}\n- and produce the next submission at {next_submission_path}"
                 )
 
-                # Choose consistent base for the next patch: use best when blacklisted, else current version.
-                if blacklist_flag and self.best_code:
+                # Choose consistent base for the next patch: use best when any blacklist present, else current version.
+                if blacklist_list and self.best_code:
                     base_version_for_next_patch = self.best_version if self.best_version is not None else version
                 else:
                     base_version_for_next_patch = version
                 next_instr = self._append_patch_directive(next_instr, base_version_for_next_patch)
 
                 self.messages = self.messages[:2]
-                if blacklist_flag and self.best_code:
+                if blacklist_list and self.best_code:
                     base_code = self.best_code
                 else:
                     base_code = code
@@ -758,7 +758,7 @@ class DeveloperAgent:
                 self.messages.append({'role': 'assistant', 'content': assistant_payload})
                 self.messages.append({'role': 'user', 'content': next_instr})
                 self.next_patch_base_version = base_version_for_next_patch
-                logger.info("Next patch will be based on v%s (blacklist=%s)", base_version_for_next_patch, blacklist_flag)
+                logger.info("Next patch will be based on v%s (blacklisted_n=%s)", base_version_for_next_patch, len(blacklist_list))
 
             else:
                 next_log_path = self.outputs_dir / self._log_filename(version + 1)

@@ -27,11 +27,11 @@ Do not suggest downgrading packages unless absolutely necessary, and only after 
 
 
 def sota_system() -> str:
-    return """Developer: You will receive a Kaggle competition description, one or more researcher plans, an initial script, and its logs for analysis.
+    return """Developer: You will receive a Kaggle competition description, one or more researcher plans, and an ablation summary for analysis.
 
 Begin with a concise checklist (3-7 bullets) summarizing high-level conceptual red flags identified from the code/logs, as well as your intended strategies for addressing them. These should focus on conceptual aspects rather than specific implementations. Use '- ' for each bullet. If fewer than three meaningful points arise, list as many as possible and explicitly state: "Fewer than 3 high-level red flags or strategies identified."
 
-Always review the <researcher_plans> first, if provided. Set reasoning_effort = medium to ensure thoughtful but efficient analysis. For any web search or external query, briefly state the purpose and the minimal search terms you will use before proceeding. Use only approved resources and provide a one-line preamble before significant information-sourcing steps, referencing the competition context.
+Always review the <researcher_plans> and <ablation_summary> first, if provided. Set reasoning_effort = medium to ensure thoughtful but efficient analysis. For any web search or external query, briefly state the purpose and the minimal search terms you will use before proceeding. Use only approved resources and provide a one-line preamble before significant information-sourcing steps, referencing the competition context.
 
 Conduct a web search for recent, effective models, architectures, techniques, or hyperparameters relevant to the competition or similar tasks, directly addressing the outlined red flags. Clearly explain the purpose of every recommended approach and justify its relevance by referencing the competition description and context.
 
@@ -77,13 +77,13 @@ Your output MUST include the following sections in order:
 - ... (validation statements for each suggestion, or "No suggestions.")
 
 ### Previous Suggestion Review
-Determine whether the most recent suggestion (see <previous suggestion executed>) should be blacklisted, based on validation outcomes and logs provided in context.
+Identify any previously tried ideas from <ablation_summary> that should remain blacklisted or be newly blacklisted. Provide a list of exact idea strings to blacklist and a corresponding list of reasons aligned by index.
 
 Output your decision in the following strict JSON format (enclosed in backticks):
 ```json
 {
-    "blacklist": <true or false>,
-    "reason": "<succinct justification; if blacklist is false, use empty string>"
+    "blacklist": ["<idea to blacklist>", "<another idea to blacklist>", ...],
+    "reasons": ["<reason for first idea>", "<reason for second idea>", ...]
 }
 ```
 
@@ -110,32 +110,110 @@ def sota_user(
     description: str,
     plans_section: str,
     failed_ideas_text: str,
-    executed_suggestion_text: str,
-    executed_code_text: str,
-    context: str,
-    outcome_status: str,
+    ablation_summary: str | None = None,
 ) -> str:
+    ablation_block = f"\n<ablation_summary>\n{ablation_summary}\n</ablation_summary>\n" if ablation_summary else ""
     return f"""<competition description>
 {description}
 </competition description>
+
+{ablation_block}
 
 {plans_section}
 
 <previous failed ideas> DO NOT TRY THESE AGAIN
 {failed_ideas_text}
 </previous failed ideas>
-
-<previous suggestion executed>
-{executed_suggestion_text}
-</previous suggestion executed>
-
-<previous code snippet applied>
-{executed_code_text}
-</previous code snippet applied>
-
-{context}
-
-Outcome status: {outcome_status}
 """
+
+
+def ablation_baseline_prompt() -> str:
+    return """You will receive a structured input:
+
+<baseline>: The baseline run, with a 'score' field (preferably numeric; if not, provide a text description).
+
+Begin with a concise checklist (3-7 bullets) outlining your intended approach before drafting the steer.
+
+Draft a concise steer (maximum 180 words) covering:
+- Baseline score
+- Notes on stability
+- 3-5 brief bullet points (each on its own line, starting with '-') offering takeaways or next steps for the next iteration
+
+Set reasoning_effort = minimal, as appropriate for a summary-focused task.
+Before extracting or reporting key results, verify their presence and format in the provided baseline data.
+Respond using only plain text.
+
+## Output Format
+Return your answer strictly in the following JSON format:
+```
+{
+  "checklist": [
+    "your first checklist item",
+    "your second checklist item",
+    ...(3-7 items)
+  ],
+  "steer": {
+    "baseline_score": <numeric or string, as found in <baseline>>,
+    "stability_notes": "1-3 sentences on stability (keep it brief)",
+    "takeaways": [
+      "- recommended next step or insight",
+      "- another key takeaway (3-5 total)",
+      ...
+    ]
+  }
+}
+```
+- Use the data format (numeric, float, or string) for "baseline_score" as appears in <baseline>.
+- Output strictly the structured JSON. Do not add explanations or narrative outside the JSON structure."""
+
+
+def ablation_batch_prompt() -> str:
+    return """You will receive two structured inputs:
+- <baseline>: The baseline run, with a 'score' field (preferably numeric; if not, provide a text description).
+- <batch_results>: An array of four candidate runs, each with at least:
+    - identifier: A unique string or integer (may be named 'id', 'name', etc.; use as provided).
+    - score: Numeric value when available (if absent or not numeric, report as 'missing').
+    - status: String indicating run outcome (use as provided, e.g., 'success', 'failure').
+
+Begin with a concise checklist (3-7 conceptual bullets) outlining your intended steps; keep items conceptual and do not include implementation details.
+
+When reviewing candidates, if a significant data or field issue arises—such as missing identifiers, scores, or statuses—briefly state the nature of the problem and suggest next actions or verification as appropriate.
+
+Produce a concise ablation summary in JSON output (maximum 220 words in the summary fields), including:
+- The baseline score (or a descriptive text if unavailable or not numeric) in a field called 'baseline_score'.
+- For each candidate (in order as per batch_results), provide an object with its identifier (or 'identifier missing'), score ('missing' if absent), and status. If identifier is missing, write 'identifier missing'. Each object should also include an analysis of the candidate's effect (positive, negative, or neutral) under the key 'effect' with 1-2 reasons for each candidate under 'reasons'.
+- Conclude with a 'guidance' field, containing a 1-2 sentence recommendation for the next iteration.
+
+After completing the summary, review for completeness and clarity; validate that all requested elements are addressed, and self-correct for any omissions or unclear points.
+
+Highlight as a data issue if a candidate has both a missing score and a status not marked as 'success'; advise verification in such cases.
+
+If critical input fields are missing or malformed (e.g., baseline missing score, or a candidate missing identifier, score, and status), clearly state this in the summary (in a 'data_issues' field) and propose corrective action. If the score is non-numeric, display it as-is and specify its type or explain the reason for non-numeric status (in a 'notes' or similar field).
+
+Restrict output to JSON only; do not use extra formatting, markdown, or informal conversation.
+
+Template for output:
+
+{
+  "baseline_score": [numeric value, or text if unavailable/malformed],
+  "candidates": [
+    {
+      "identifier": [value or 'identifier missing'],
+      "score": [numeric value or 'missing'],
+      "status": [status],
+      "effect": [positive/negative/neutral],
+      "reasons": [list of 1-2 concise rationales]
+    },
+    ...
+  ],
+  "guidance": [concise recommendation for next steps],
+  "data_issues": [list of data issues if present],
+  "notes": [list of explanatory notes if applicable]
+}
+
+- If baseline score is missing or non-numeric, display it as-is and note this in 'notes'.
+- If a candidate is missing an identifier, use 'identifier missing' in 'identifier'.
+- If both score and status are missing or unclear, specify the malformed entry in 'data_issues' and recommend correction.
+- All output must be valid JSON, no extra formatting, markdown, or conversational elements."""
 
 

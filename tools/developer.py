@@ -8,6 +8,7 @@ import subprocess
 import traceback
 
 from dotenv import load_dotenv
+from typing import List, Dict, Optional
 from openai import OpenAI
 from project_config import get_config
 from tools.helpers import call_llm_with_retry
@@ -15,6 +16,8 @@ from prompts.tools_developer import (
     build_stack_trace_prompt as prompt_stack_trace,
     sota_system as prompt_sota_system,
     sota_user as prompt_sota_user,
+    ablation_baseline_prompt,
+    ablation_batch_prompt,
 )
 import weave
 
@@ -97,18 +100,13 @@ def web_search_stack_trace(query: str) -> str:
 @weave.op()
 def search_sota_suggestions(
     description: str,
-    context: str,
-    executed_suggestion: str | None,
-    failed_to_improve_score: bool,
     failed_ideas: list[str],
-    executed_code: str | None = None,
     plans: list[str] | None = None,
+    ablation_summary: str | None = None,
 ) -> str:
-    """Use web search to surface potential SOTA improvements for the competition."""
-    logger.info("Dispatching SOTA web search")
+    """Request four categorized SOTA suggestions using minimal context blocks."""
+    logger.info("Dispatching SOTA suggestion request (minimal prompt)")
     failed_ideas_text = "No prior ideas are blacklisted."
-    executed_suggestion_text = executed_suggestion or "No previous suggestion executed; this is the first attempt."
-    executed_code_text = executed_code or "No explicit code snippet was provided for the last attempt."
     if failed_ideas:
         filtered = [idea for idea in failed_ideas if idea][-10:]
         if filtered:
@@ -125,16 +123,11 @@ def search_sota_suggestions(
         plans_section = "\n<researcher_plans>\n" + "\n\n".join(blocks) + "\n</researcher_plans>\n"
 
     system_prompt = prompt_sota_system()
-
-    outcome_status = "No improvement" if failed_to_improve_score else "Improved or matched"
     prompt = prompt_sota_user(
         description=description,
         plans_section=plans_section,
         failed_ideas_text=failed_ideas_text,
-        executed_suggestion_text=executed_suggestion_text,
-        executed_code_text=executed_code_text,
-        context=context,
-        outcome_status=outcome_status,
+        ablation_summary=ablation_summary,
     )
 
     messages = [
@@ -164,6 +157,55 @@ def search_sota_suggestions(
     except Exception:
         logger.exception("SOTA suggestions web search failed")
         return ""
+
+
+@weave.op()
+def ablation_summarize_baseline(baseline: Dict) -> str:
+    """Summarize the baseline run as a concise steer for next steps."""
+    logger.info("Summarizing baseline for ablation")
+    system_prompt = ablation_baseline_prompt()
+    user_prompt = (
+        "<baseline>\n" + json.dumps(baseline, ensure_ascii=False) + "\n</baseline>"
+    )
+    try:
+        completion = call_llm_with_retry(
+            client,
+            model=_DEVELOPER_TOOL_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        )
+        msg = completion.choices[0].message
+        return (msg.content or "").strip()
+    except Exception:
+        logger.exception("Baseline ablation summarize failed")
+        return "Baseline summary unavailable."
+
+
+@weave.op()
+def ablation_summarize_batch(baseline: Dict, batch_results: List[Dict]) -> str:
+    """Summarize outcomes of a batch (four suggestions) relative to baseline."""
+    logger.info("Summarizing batch results for ablation")
+    system_prompt = ablation_batch_prompt()
+    user_prompt = (
+        "<baseline>\n" + json.dumps(baseline, ensure_ascii=False) + "\n</baseline>\n\n"
+        "<batch_results>\n" + json.dumps(batch_results, ensure_ascii=False) + "\n</batch_results>"
+    )
+    try:
+        completion = call_llm_with_retry(
+            client,
+            model=_DEVELOPER_TOOL_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        )
+        msg = completion.choices[0].message
+        return (msg.content or "").strip()
+    except Exception:
+        logger.exception("Batch ablation summarize failed")
+        return "Batch summary unavailable."
 
 @weave.op()
 def execute_code(filepath: str) -> str:
