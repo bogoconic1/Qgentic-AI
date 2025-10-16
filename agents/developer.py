@@ -19,6 +19,7 @@ from tools.developer import (
     execute_code,
     search_sota_suggestions,
 )
+from agents.ablation import AblationAgent
 from guardrails.developer import (
     check_logging_basicconfig_order,
     llm_debug_sequence_review,
@@ -49,9 +50,9 @@ _DEVELOPER_MODEL = _LLM_CFG.get("developer_model", "google/gemini-2.5-pro")
 
 _TASK_ROOT = Path(_PATH_CFG.get("task_root", "task"))
 _OUTPUTS_DIRNAME = _PATH_CFG.get("outputs_dirname", "outputs")
-_CODE_TEMPLATE = _PATH_CFG.get("code_filename_template", "code_{iteration}_v{version}.py")
-_LOG_TEMPLATE = _PATH_CFG.get("log_filename_template", "code_{iteration}_v{version}.txt")
-_SUBMISSION_TEMPLATE = _PATH_CFG.get("submission_filename_template", "submission_{version}.csv")
+_CODE_TEMPLATE = _PATH_CFG.get("code_filename_template", "code_{iteration}_v{version}_{suffix}_{version}.py")
+_LOG_TEMPLATE = _PATH_CFG.get("log_filename_template", "code_{iteration}_v{version}_{suffix}_{version}.txt")
+_SUBMISSION_TEMPLATE = _PATH_CFG.get("submission_filename_template", "submission_{version}_{suffix}.csv")
 _HARDWARE_DESCRIPTION = _HARDWARE_CFG.get("description", "A single A100 80GB GPU")
 _DEFAULT_MAX_TRIES = _RUNTIME_CFG.get("developer_max_tries", 50)
 
@@ -103,6 +104,22 @@ class DeveloperAgent:
         self.best_version: Optional[int] = None
         self.next_patch_base_version: Optional[int] = None
 
+        # Suggestion and naming state
+        self.suffix_by_type: dict[str, str] = {
+            "baseline": "base",
+            "data_feature_engineering": "data",
+            "sota_model_or_github_repo": "sota",
+            "architectural_enhancement": "arch",
+            "ensembling_or_blending": "ens",
+        }
+        self.attempt_to_suffix: dict[int, str] = {}
+        self.current_suffix: str = "base"
+        self.pending_suggestions: list[dict] = []  # list of {type, text, code}
+        self.batch_results: list[dict] = []
+        self.ablation_summary: str = ""
+        self.ablation_agent = AblationAgent()
+        self.batch_counter: int = 0
+
         self._load_benchmark_info()
         self.best_score = float("inf") if self.is_lower_better else float("-inf")
 
@@ -140,13 +157,16 @@ class DeveloperAgent:
         logger.setLevel(logging.DEBUG)
 
     def _code_filename(self, version: int) -> str:
-        return _CODE_TEMPLATE.format(iteration=self.iteration, version=version)
+        suffix = self.attempt_to_suffix.get(version, self.current_suffix)
+        return _CODE_TEMPLATE.format(iteration=self.iteration, version=version, suffix=suffix)
 
     def _log_filename(self, version: int) -> str:
-        return _LOG_TEMPLATE.format(iteration=self.iteration, version=version)
+        suffix = self.attempt_to_suffix.get(version, self.current_suffix)
+        return _LOG_TEMPLATE.format(iteration=self.iteration, version=version, suffix=suffix)
 
     def _submission_filename(self, version: int) -> str:
-        return _SUBMISSION_TEMPLATE.format(iteration=self.iteration, version=version)
+        suffix = self.attempt_to_suffix.get(version, self.current_suffix)
+        return _SUBMISSION_TEMPLATE.format(iteration=self.iteration, version=version, suffix=suffix)
 
     @staticmethod
     def _get_grade_report_json(stdout: str) -> Optional[dict]:
@@ -622,6 +642,45 @@ Like this
             return "N/A"
         return f"{value}"
 
+    def _write_json(self, rel_path: str, payload: dict) -> None:
+        try:
+            target = self.outputs_dir / rel_path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with open(target, "w", encoding="utf-8") as f:
+                json.dump(payload, f, ensure_ascii=False, indent=2)
+        except Exception:
+            logger.exception("Failed to write JSON to %s", rel_path)
+
+    def _parse_sota_four(self, raw: str) -> list[dict]:
+        """Parse four-category suggestions + code from SOTA output.
+        Expected JSON keys:
+          data_feature_suggestion, data_feature_code,
+          arch_suggestion, arch_code,
+          ensembling_suggestion, ensembling_code,
+          sota_suggestion, sota_code
+        Returns list of {type, text, code} with full type names.
+        """
+        results: list[dict] = []
+        if not raw:
+            return results
+        try:
+            blocks = re.findall(r"```json\s*(\{.*?\})\s*```", raw, re.DOTALL | re.IGNORECASE)
+            payload = json.loads(blocks[-1]) if blocks else json.loads(raw)
+        except Exception:
+            return results
+        mapping = [
+            ("data_feature_engineering", payload.get("data_feature_suggestion"), payload.get("data_feature_code")),
+            ("architectural_enhancement", payload.get("arch_suggestion"), payload.get("arch_code")),
+            ("ensembling_or_blending", payload.get("ensembling_suggestion"), payload.get("ensembling_code")),
+            ("sota_model_or_github_repo", payload.get("sota_suggestion"), payload.get("sota_code")),
+        ]
+        for t, txt, code in mapping:
+            text = (txt or "").strip()
+            code_s = (code or "").strip()
+            if text:
+                results.append({"type": t, "text": text, "code": code_s or None})
+        return results
+
     def _parse_sota_response(self, raw: str) -> tuple[str, str, bool, str]:
         """Extract new suggestion, code snippet, blacklist decision, and rationale."""
         suggestion_text = ""
@@ -697,7 +756,17 @@ Like this
         user_prompt = self._build_user_prompt(plan_markdown, version=1)
         self.messages.append({"role": "system", "content": system_prompt})
         self.messages.append({"role": "user", "content": user_prompt})
-        
+
+        # Orchestration state
+        in_baseline_phase = True
+        self.current_suffix = self.suffix_by_type["baseline"]
+        self.attempt_to_suffix = {}
+        self.pending_suggestions = []
+        self.current_suggestion_index = -1
+        self.current_subattempt = 0
+        self.ablation_summary = ""
+        batch_scores: list[dict] = []
+
         for attempt in range(1, max_tries + 1):
 
             artifact = wandb.Artifact(f'{self.iteration}-{self.slug}', type='files')
@@ -707,7 +776,9 @@ Like this
 
             logger.info("Attempt %s/%s for developer run", attempt, max_tries)
             version = attempt
-            expect_patch = self.patch_mode_enabled and attempt > 1
+            # Map this attempt to the current suggestion suffix for naming
+            self.attempt_to_suffix[version] = self.current_suffix
+            expect_patch = self.patch_mode_enabled and (self.current_subattempt > 0)
             while True:
                 generated = self._generate_code(self.messages, expect_patch=expect_patch)
                 if expect_patch:
@@ -1046,57 +1117,136 @@ Like this
                     self.best_code = code
                 self.previous_runs.append((code, run_score))
 
-                try:
-                    # Collect all researcher plans in outputs dir: plan.md, plan_*.md
+                # Orchestration for baseline/suggestions
+                # Determine suggestion text/code to show for next instruction
+                suggestion_text = ""
+                code_snippet = ""
+                if in_baseline_phase:
+                    # Build baseline dict and summarize
+                    baseline_info = {
+                        "score": run_score,
+                        "version": version,
+                        "guardrail_notes": "",
+                        "cv_lb_gap": "",
+                        "key_findings": [],
+                    }
+                    try:
+                        baseline_summary_obj = self.ablation_agent.summarize_baseline(baseline_info)
+                        self.ablation_summary = baseline_summary_obj.get("summary", "")
+                        self._write_json("ablation/baseline.json", {
+                            "baseline": baseline_info,
+                            "summary": self.ablation_summary,
+                        })
+                    except Exception:
+                        logger.exception("Baseline ablation summarization failed")
+                        self.ablation_summary = ""
+
+                    # Fetch plans and request four suggestions
                     plan_texts: list[str] = []
                     try:
                         if self.plan_path.exists():
                             plan_texts.append(_safe_read(str(self.plan_path)))
-                    except Exception:
-                        pass
-                    try:
                         for extra_plan_path in sorted(self.outputs_dir.glob("plan_*.md")):
                             plan_texts.append(_safe_read(str(extra_plan_path)))
                     except Exception:
                         pass
 
-                    sota_suggestions = search_sota_suggestions(
-                        self.description,
-                        code_with_logs,
-                        executed_suggestion=self.last_suggestion,
-                        failed_to_improve_score=not improvement,
-                        failed_ideas=self.blacklisted_ideas,
-                        executed_code=self.last_suggestion_code,
-                        plans=plan_texts,
-                    )
-                except Exception:
-                    logger.exception("Failed to fetch SOTA suggestions for attempt %s", attempt)
-                    sota_suggestions = ""
-
-                logger.info("SOTA suggestion: %s", sota_suggestions)
-
-                suggestion_text, code_snippet, blacklist_flag, blacklist_reason = self._parse_sota_response(sota_suggestions)
-
-                if blacklist_flag and self.last_suggestion:
-                    self._register_blacklist(self.last_suggestion, blacklist_reason)
-                    logger.info(
-                        "Previous suggestion marked as blacklisted: %s (reason: %s)",
-                        self.last_suggestion,
-                        blacklist_reason or "N/A",
-                    )
-
-                if suggestion_text:
-                    logger.info("Summary of SOTA suggestion: %s", suggestion_text)
+                    try:
+                        sota_raw = search_sota_suggestions(
+                            self.description,
+                            code_with_logs,
+                            executed_suggestion=self.last_suggestion,
+                            failed_to_improve_score=not improvement,
+                            failed_ideas=self.blacklisted_ideas,
+                            executed_code=self.last_suggestion_code,
+                            plans=plan_texts,
+                            ablation_summary=self.ablation_summary,
+                        )
+                    except Exception:
+                        logger.exception("Failed to fetch SOTA suggestions for attempt %s", attempt)
+                        sota_raw = ""
+                    four = self._parse_sota_four(sota_raw)
+                    self.pending_suggestions = four
+                    self.current_suggestion_index = 0 if four else -1
+                    in_baseline_phase = False
+                    self.current_subattempt = 0
+                    if self.current_suggestion_index >= 0:
+                        s = self.pending_suggestions[self.current_suggestion_index]
+                        self.current_suffix = self.suffix_by_type.get(s["type"], "data")
+                        suggestion_text = s["text"]
+                        code_snippet = s.get("code") or ""
                 else:
-                    logger.info("SOTA response did not include a new suggestion summary.")
+                    # Record success result for this suggestion
+                    if self.current_suggestion_index >= 0 and self.current_suggestion_index < len(self.pending_suggestions):
+                        s = self.pending_suggestions[self.current_suggestion_index]
+                        batch_scores.append({
+                            "type": s["type"],
+                            "attempt": attempt,
+                            "score": run_score,
+                            "version": version,
+                        })
+                        # Move to next suggestion in batch
+                        self.current_suggestion_index += 1
+                        self.current_subattempt = 0
+                        if self.current_suggestion_index >= len(self.pending_suggestions):
+                            # Batch done -> ablate batch, request next four
+                            baseline_info = {
+                                "score": self.best_score,
+                                "version": self.best_version,
+                            }
+                            try:
+                                batch_summary_obj = self.ablation_agent.summarize_batch(baseline_info, batch_scores)
+                                self.ablation_summary = batch_summary_obj.get("summary", "")
+                                self.batch_counter += 1
+                                self._write_json(f"ablation/batch_{self.batch_counter}.json", {
+                                    "baseline": baseline_info,
+                                    "results": batch_scores,
+                                    "summary": self.ablation_summary,
+                                })
+                            except Exception:
+                                logger.exception("Batch ablation summarization failed")
+                                self.ablation_summary = ""
+                            # reset scores for next batch
+                            batch_scores = []
+                            # request next
+                            plan_texts: list[str] = []
+                            try:
+                                if self.plan_path.exists():
+                                    plan_texts.append(_safe_read(str(self.plan_path)))
+                                for extra_plan_path in sorted(self.outputs_dir.glob("plan_*.md")):
+                                    plan_texts.append(_safe_read(str(extra_plan_path)))
+                            except Exception:
+                                pass
+                            try:
+                                sota_raw = search_sota_suggestions(
+                                    self.description,
+                                    code_with_logs,
+                                    executed_suggestion=self.last_suggestion,
+                                    failed_to_improve_score=not improvement,
+                                    failed_ideas=self.blacklisted_ideas,
+                                    executed_code=self.last_suggestion_code,
+                                    plans=plan_texts,
+                                    ablation_summary=self.ablation_summary,
+                                )
+                            except Exception:
+                                logger.exception("Failed to fetch SOTA suggestions for attempt %s", attempt)
+                                sota_raw = ""
+                            self.pending_suggestions = self._parse_sota_four(sota_raw)
+                            self.current_suggestion_index = 0 if self.pending_suggestions else -1
 
-                if suggestion_text:
-                    self.last_suggestion = suggestion_text
-                elif blacklist_flag:
-                    # if suggestion missing but blacklist decision made, reset last suggestion
-                    self.last_suggestion = None
+                        # Prepare next suggestion text/code if available
+                        if self.current_suggestion_index >= 0 and self.current_suggestion_index < len(self.pending_suggestions):
+                            s = self.pending_suggestions[self.current_suggestion_index]
+                            self.current_suffix = self.suffix_by_type.get(s["type"], "data")
+                            suggestion_text = s["text"]
+                            code_snippet = s.get("code") or ""
+                        else:
+                            suggestion_text = ""
+                            code_snippet = ""
 
-                self.last_suggestion_code = code_snippet if code_snippet else None
+                # Decide suffix for the NEXT attempt before constructing next paths
+                next_suffix = self.current_suffix
+                self.current_suffix = next_suffix
 
                 next_log_path = self.outputs_dir / self._log_filename(version + 1)
                 next_submission_path = self.outputs_dir / self._submission_filename(version + 1)
@@ -1129,17 +1279,11 @@ Like this
                 )
 
                 # Choose consistent base for the next patch: use best when blacklisted, else current version.
-                if blacklist_flag and self.best_code:
-                    base_version_for_next_patch = self.best_version if self.best_version is not None else version
-                else:
-                    base_version_for_next_patch = version
+                base_version_for_next_patch = version
                 next_instr = self._append_patch_directive(next_instr, base_version_for_next_patch)
 
                 self.messages = self.messages[:2]
-                if blacklist_flag and self.best_code:
-                    base_code = self.best_code
-                else:
-                    base_code = code
+                base_code = code
                 assistant_payload = self._build_assistant_payload(
                     base_code,
                     include_line_numbers=self.patch_mode_enabled,
@@ -1147,7 +1291,22 @@ Like this
                 self.messages.append({'role': 'assistant', 'content': assistant_payload})
                 self.messages.append({'role': 'user', 'content': next_instr})
                 self.next_patch_base_version = base_version_for_next_patch
-                logger.info("Next patch will be based on v%s (blacklist=%s)", base_version_for_next_patch, blacklist_flag)
+                self.current_subattempt += 1
+                logger.info("Next patch will be based on v%s (suffix=%s)", base_version_for_next_patch, self.current_suffix)
+
+                # Enforce per-suggestion subattempt cap (100). If exceeded, advance to next suggestion.
+                if (not in_baseline_phase) and self.current_suggestion_index >= 0:
+                    if self.current_subattempt >= 100:
+                        logger.info("Subattempt cap reached for type suffix=%s; advancing to next suggestion", self.current_suffix)
+                        self.current_suggestion_index += 1
+                        self.current_subattempt = 0
+                        if self.current_suggestion_index < len(self.pending_suggestions):
+                            s_next = self.pending_suggestions[self.current_suggestion_index]
+                            self.current_suffix = self.suffix_by_type.get(s_next["type"], "data")
+                        else:
+                            # End of batch: request new batch via ablation + SOTA next attempt cycle
+                            # Defer batch refresh to success branch where we have clean metrics
+                            pass
 
             else:
                 next_log_path = self.outputs_dir / self._log_filename(version + 1)

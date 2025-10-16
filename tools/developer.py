@@ -119,6 +119,7 @@ def search_sota_suggestions(
     failed_ideas: list[str],
     executed_code: str | None = None,
     plans: list[str] | None = None,
+    ablation_summary: str | None = None,
 ) -> str:
     """Use web search to surface potential SOTA improvements for the competition."""
     logger.info("Dispatching SOTA web search")
@@ -142,9 +143,9 @@ def search_sota_suggestions(
 
     system_prompt = f"""Developer: You will receive a Kaggle competition description, one or more researcher plans, an initial script, and its logs for analysis.
 
-Begin with a concise checklist (3-7 bullets) summarizing high-level conceptual red flags identified from the code/logs, as well as your intended strategies for addressing them. These should focus on conceptual aspects rather than specific implementations. Use '- ' for each bullet. If fewer than three meaningful points arise, list as many as possible and explicitly state: "Fewer than 3 high-level red flags or strategies identified."
+Begin with a concise checklist (3-7 bullets) summarizing high-level conceptual red flags identified from the ablation summary, as well as your intended strategies for addressing them. These should focus on conceptual aspects rather than specific implementations. Use '- ' for each bullet. If fewer than three meaningful points arise, list as many as possible and explicitly state: "Fewer than 3 high-level red flags or strategies identified."
 
-Always review the <researcher_plans> first, if provided. Set reasoning_effort = medium to ensure thoughtful but efficient analysis. For any web search or external query, briefly state the purpose and the minimal search terms you will use before proceeding. Use only approved resources and provide a one-line preamble before significant information-sourcing steps, referencing the competition context.
+Always review the <researcher_plans> first, if provided. If <ablation_summary> is present, treat it as the authoritative summary of prior runs and results; prioritize novelty and avoid repetition based on it and <previous failed ideas>. Set reasoning_effort = medium to ensure thoughtful but efficient analysis. For any web search or external query, briefly state the purpose and the minimal search terms you will use before proceeding. Use only approved resources and provide a one-line preamble before significant information-sourcing steps, referencing the competition context.
 
 Conduct a web search for recent, effective models, architectures, techniques, or hyperparameters relevant to the competition or similar tasks, directly addressing the outlined red flags. Clearly explain the purpose of every recommended approach and justify its relevance by referencing the competition description and context.
 
@@ -152,7 +153,7 @@ Generate FOUR distinct suggestions, each from a separate strategic category:
 1. Data / Feature Engineering Enhancement - focuses on improving input representation or data quality.
 2. Architectural Enhancement - proposes improvements to the model backbone or design.
 3. Ensembling Enhancement - addresses model aggregation, stacking, blending, or bagging.
-4. SOTA Model Enhancement - highlights a recent effective model from an arXiv paper/GitHub repository/Blog Post that has been successfully applied on similar tasks.
+4. SOTA Model / GitHub Repository Enhancement - highlights a recent effective model from an arXiv paper/GitHub repository/Blog Post that has been successfully applied on similar tasks.
 
 For each category:
 - Provide one high-impact suggestion for improving performance on the competition task and metric, with an explanation of approximately 100 words outlining its benefits.
@@ -200,45 +201,37 @@ Output your decision in the following strict JSON format (enclosed in backticks)
 }}
 ```
 
-### New Suggestion Summary
-Propose the single best next idea (only one) for improving the competition score, synthesizing insights from the four categories above. Do not repeat blacklisted ideas or the previous suggestion.
+### New Suggestions Summary
+Summarize the four new suggestions in a concise manner and provide a Python code snippet for each suggestion. Do not repeat blacklisted ideas or the previous suggestion.
 
-Return your new idea using the following strict JSON format (enclosed in backticks):
+Use these exact keys: data_feature_suggestion/data_feature_code, arch_suggestion/arch_code, ensembling_suggestion/ensembling_code, sota_suggestion/sota_code. Return your new suggestions using the following strict JSON format (enclosed in backticks):
 ```json
 {{
-    "suggestion": "<your proposed best next idea>",
-    "reasoning": "<explanation for selecting this idea as the best compared to other promising ideas>"
+    "data_feature_suggestion": <Data / Feature Engineering Suggestion>,
+    "data_feature_code": <Python code snippet for the data / feature engineering suggestion>,
+    "arch_suggestion": <Architectural Enhancement Suggestion>,
+    "arch_code": <Python code snippet for the architectural enhancement suggestion>,
+    "ensembling_suggestion": <Ensembling/Blending Enhancement Suggestion>,
+    "ensembling_code": <Python code snippet for the ensembling/blending enhancement suggestion>,
+    "sota_suggestion": <SOTA Model Enhancement Suggestion>,
+    "sota_code": <Python code snippet for the SOTA model enhancement suggestion>
 }}
 ```
 If there is no viable suggestion, use empty strings for the values.
-
-### Code
-Present a concise Python code snippet (within triple backticks marked 'python') that implements your proposed best next idea. If no suggestion is made, leave this section empty (no code block).
-
 Never repeat any idea from <previous failed ideas>. If a suggestion is blacklisted, ensure your new recommendation avoids that approach.
 """
+
+    # Minimal user prompt: keep only description, ablation summary (if any), plans, and previous failed ideas
+    ablation_block = f"\n<ablation_summary>\n{ablation_summary}\n</ablation_summary>\n" if ablation_summary else ""
 
     prompt = f"""<competition description>
 {description}
 </competition description>
-
+{ablation_block}
 {plans_section}
-
 <previous failed ideas> DO NOT TRY THESE AGAIN
 {failed_ideas_text}
 </previous failed ideas>
-
-<previous suggestion executed>
-{executed_suggestion_text}
-</previous suggestion executed>
-
-<previous code snippet applied>
-{executed_code_text}
-</previous code snippet applied>
-
-{context}
-
-Outcome status: {"No improvement" if failed_to_improve_score else "Improved or matched"}
 """
         
     messages = [
