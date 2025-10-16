@@ -76,6 +76,9 @@ def _fix_hunk_headers(base_lines: list[str], diff_lines: list[str]) -> list[str]
 
 
 def normalize_diff_payload(base_path: Path, diff_text: str) -> Optional[str]:
+    import os
+    print(os.getcwd())
+    print(os.listdir(os.getcwd()))
     try:
         base_lines = base_path.read_text().splitlines()
     except Exception:

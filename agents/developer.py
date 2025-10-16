@@ -296,14 +296,21 @@ class DeveloperAgent:
     def _normalize_diff_payload(base_path: Path, diff_text: str) -> Optional[str]:
         return normalize_diff_payload(base_path, diff_text)
 
-    def _apply_patch(self, base_version: int, diff_payload: str, target_version: int) -> Optional[str]:
-        """Apply diff payload to the previous source file and return updated code."""
+    def _apply_patch(self, base_version: int, diff_payload: str, target_version: int, base_sub_attempt: int, target_sub_attempt: int) -> Optional[str]:
+        """Apply diff payload to previous file (explicit base/target sub-attempts)."""
         if base_version <= 0:
             logger.warning("Patch requested but base version is invalid: %s", base_version)
             return None
 
+        # Compute filenames for base and output using provided sub-attempts
+        restore_sub = self.current_sub_attempt
+        self.current_sub_attempt = base_sub_attempt
         base_filename = self._code_filename(base_version)
         base_path = self.outputs_dir / base_filename
+        self.current_sub_attempt = target_sub_attempt
+        output_filename = self._code_filename(target_version)
+        self.current_sub_attempt = restore_sub
+
         if not base_path.exists():
             logger.warning("Patch requested but base file does not exist: %s", base_path)
             return None
@@ -313,7 +320,6 @@ class DeveloperAgent:
             logger.warning("Patch payload was empty after extraction.")
             return None
 
-        output_filename = self._code_filename(target_version)
         output_path = self.outputs_dir / output_filename
         if output_path.exists():
             try:
@@ -326,14 +332,11 @@ class DeveloperAgent:
                 return None
 
         attempts: list[tuple[str, str]] = []
-        # original_payload = diff_text if diff_text.endswith("\n") else diff_text + "\n"
-        # attempts.append(("original", original_payload))
-
         normalized_payload = self._normalize_diff_payload(base_path, diff_text)
         attempts.append(("normalized", normalized_payload))
 
         for label, payload in attempts:
-            logger.debug("Attempting to apply %s diff for version %s", label, target_version)
+            logger.debug("Attempting to apply %s diff for attempt %s", label, target_version)
             logger.debug("Payload: %s", payload)
             updated_code = util_apply_patch(
                 outputs_dir=self.outputs_dir,
@@ -343,15 +346,17 @@ class DeveloperAgent:
             )
             if updated_code is not None:
                 logger.info(
-                    "Successfully applied %s diff to generate version %s from base %s",
+                    "Successfully applied %s diff to generate %s from base %s",
                     label,
-                    target_version,
-                    base_version,
+                    output_filename,
+                    base_filename,
                 )
                 return updated_code
 
-        logger.warning("All patch attempts failed for target version %s", target_version)
+        logger.warning("All patch attempts failed for %s", output_filename)
         return None
+
+    # Removed old _apply_patch variant (DRY)
 
     def _append_patch_directive(self, instruction: str, version: int) -> str:
         if not self.patch_mode_enabled:
@@ -564,14 +569,17 @@ class DeveloperAgent:
                     expect_patch = self.patch_mode_enabled and sub_attempt > 1
                     generated = self._generate_code(self.messages, expect_patch=expect_patch)
                     if expect_patch:
-                        # Use previous sub_attempt file as base by temporarily rewinding sub_attempt for filename resolution
-                        tmp_sub = self.current_sub_attempt
-                        self.current_sub_attempt = max(1, tmp_sub - 1)
+                        # Apply patch from base sub_attempt = current_sub_attempt-1 to target sub_attempt = current_sub_attempt
+                        base_sub_attempt = max(1, self.current_sub_attempt - 1)
                         base_version = version
-                        logger.info("Applying patch relative to base attempt=%s %s sub_attempt=%s -> target sub_attempt=%s", version, suggestion_type, self.current_sub_attempt, tmp_sub)
-                        code = self._apply_patch(base_version, generated, version)
-                        # restore current_sub_attempt
-                        self.current_sub_attempt = tmp_sub
+                        logger.info(
+                            "Applying patch relative to base attempt=%s %s sub_attempt=%s -> target sub_attempt=%s",
+                            version,
+                            suggestion_type,
+                            base_sub_attempt,
+                            self.current_sub_attempt,
+                        )
+                        code = self._apply_patch(base_version, generated, version, base_sub_attempt, self.current_sub_attempt)
                         if code is None:
                             logger.warning("Patch application failed; requesting full script next.")
                             if self.messages and self.messages[-1].get("role") == "user":
@@ -661,7 +669,9 @@ class DeveloperAgent:
                     {prompt_execution_failure_suffix(next_log_path, next_submission_path)}
                     """
                     base_for_directive = version
-                    next_instr = self._append_patch_directive(next_instr, base_for_directive)
+                    # Only add patch directive for sub-attempts > 1
+                    if self.patch_mode_enabled and sub_attempt > 1:
+                        next_instr = self._append_patch_directive(next_instr, base_for_directive)
                     assistant_payload = self._build_assistant_payload(
                         code,
                         include_line_numbers=self.patch_mode_enabled,
