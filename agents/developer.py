@@ -5,6 +5,7 @@ import os
 import re
 import subprocess
 import textwrap
+import time
 from pathlib import Path
 from typing import Optional
 import json
@@ -24,7 +25,21 @@ from guardrails.developer import (
     llm_debug_sequence_review,
     llm_leakage_review,
 )
+from utils.guardrails import evaluate_guardrails, build_block_summary
 from tools.helpers import call_llm_with_retry, _build_directory_listing
+from utils.diffs import (
+    extract_diff_block,
+    normalize_diff_payload,
+    apply_patch as util_apply_patch,
+)
+from utils.grade import run_grade, parse_grade_output
+from prompts.developer_agent import (
+    build_system as prompt_build_system,
+    build_user as prompt_build_user,
+    patch_mode_directive as prompt_patch_mode_directive,
+    guardrail_fix_suffix as prompt_guardrail_fix_suffix,
+    execution_failure_suffix as prompt_execution_failure_suffix,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -53,7 +68,6 @@ _CODE_TEMPLATE = _PATH_CFG.get("code_filename_template", "code_{iteration}_v{ver
 _LOG_TEMPLATE = _PATH_CFG.get("log_filename_template", "code_{iteration}_v{version}.txt")
 _SUBMISSION_TEMPLATE = _PATH_CFG.get("submission_filename_template", "submission_{version}.csv")
 _HARDWARE_DESCRIPTION = _HARDWARE_CFG.get("description", "A single A100 80GB GPU")
-_DEFAULT_MAX_TRIES = _RUNTIME_CFG.get("developer_max_tries", 50)
 
 def _safe_read(path: str) -> str:
     try:
@@ -65,15 +79,13 @@ def _safe_read(path: str) -> str:
         logger.exception("Failed to read file: %s", path)
         return ""
 
-# NOTE: I am aware that this code will not work if self.is_lower_better is True (to be fixed)
 class DeveloperAgent:
     """Turns the Researcher plan into a runnable single-file solution.
 
     - Generates a single python file: code_{iteration}_v{version}.py
-    - Executes it and iterates on failures up to max_tries
+    - Executes it and iterates while within a time budget
     - Success condition: writes submission.csv at
       <task_root>/<slug>/<outputs_dir>/<iteration>/submission.csv
-    - Ensures Torch MPS fallback flags for Apple Silicon
     """
 
     def __init__(self, slug: str, iteration: int):
@@ -148,19 +160,7 @@ class DeveloperAgent:
     def _submission_filename(self, version: int) -> str:
         return _SUBMISSION_TEMPLATE.format(iteration=self.iteration, version=version)
 
-    @staticmethod
-    def _get_grade_report_json(stdout: str) -> Optional[dict]:
-        try:
-            start = stdout.index("{")
-            end = stdout.rindex("}") + 1
-            stdout = stdout[start:end]
-            logger.debug("stdout JSON snippet: %s", stdout)
-            info = json.loads(stdout)
-        except json.JSONDecodeError:
-            logger.warning("Baseline grading output was not valid JSON: %s", stdout[:500])
-            return
-
-        return info
+    
 
     def _load_benchmark_info(self) -> None:
         self.benchmark_info = None
@@ -172,35 +172,18 @@ class DeveloperAgent:
             )
             return
 
-        grade_cmd = [
-            "mlebench",
-            "grade-sample",
-            str(sample_submission),
-            self.slug,
-        ]
-
-        logger.info("Fetching grading baseline via: %s", " ".join(grade_cmd))
+        info, stdout, returncode, stderr = run_grade(str(sample_submission), self.slug)
         try:
-            result = subprocess.run(
-                grade_cmd,
-                capture_output=True,
-                text=True,
-                check=False,
-            )
+            logger.info("Baseline grade feedback: %s", stdout)
         except Exception:
-            logger.exception("Failed to execute mlebench grade-sample for baseline")
-            return
-
-        stdout = (result.stdout or "").strip()
-        if result.returncode != 0:
+            logger.debug("Failed to log baseline grade feedback")
+        if returncode != 0:
             logger.warning(
                 "Baseline grading command returned non-zero exit (%s). stderr=\n%s",
-                result.returncode,
-                (result.stderr or "").strip(),
+                returncode,
+                stderr,
             )
             return
-
-        info = self._get_grade_report_json(stdout)
         self.benchmark_info = info
         self.gold_threshold = info.get("gold_threshold")
         self.is_lower_better = info.get("is_lower_better")
@@ -219,46 +202,12 @@ class DeveloperAgent:
         logger.debug(
             "Directory listing prepared for %s (length=%s)", self.base_dir, len(directory_listing)
         )
-        return f"""Role: Lead Developer for Machine-Learning Competition Team. Your task is to produce a single, self-contained Python script, specifically targeted at developing a solution for a Kaggle Competition.
-
-Begin with a concise checklist (3-7 bullets) of what you will do; keep items conceptual, not implementation-level.
-
-**Hard Constraints:**
-- Deliver a single-file script.
-- Utilize CUDA wherever possible.
-- Insert detailed `logging.info` statements only for validation results (every fold, every model used, overall OOF). Only log other code sections (such as data loading or config setup) if they're directly relevant to validation.
-- Place `logging.basicConfig()` at the very start of your code, before any other logging statements.
-- Always train with `bfloat16` when using PyTorch, transformers, or other deep learning libraries. Gradient checkpointing must be disabled.
-- Do **not** code any fallback methods.
-- If you use LightGBM, it has to be on CPU.
-- **Do not** use `transformers.Trainer` or `transformers.TrainingArguments`.
-- **Do not** use `try/except` blocks to bypass exceptions.
-- Log the **final validation results** after training.
-- Design the pipeline so it is highly customizable (i.e., it's easy to add or swap techniques, models, etc).
-- You should use pretrained models over training from scratch, whenever possible.
-- If you use external datasets, make sure you are only appending them to the training set, not the validation set.
-- **IMPORTANT:** At the very top, add a `DEBUG` flag. The pipeline must run sequentially twice: once with `DEBUG=True` (using a small subset of data, e.g., 256 samples and 1 epoch, but others unchanged) and then once with `DEBUG=False` (using the full training config). Clearly log when the script is in DEBUG or FULL mode.
-- **IMPORTANT:** For deep learning pipelines, if at the end of the 1st epoch of fold 0, the loss or metric is NaN or exactly 0, raise an Exception to stop the run immediately.
-
-**Additional Context**
-- Competition Description:
-  {self.description}
-- Directory structure for {self.base_dir}:
-  {directory_listing}
-- Score to beat:
-  {self.gold_threshold}
-
-**Output Format**
-Return Python code only, enclosed in triple backticks with the `python` annotation:
-```python
-import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-BASE_DIR = "task/{self.slug}" if not os.getenv('KAGGLE_KERNEL_RUN_TYPE') else "/kaggle/input/{self.slug}"
-# <YOUR CODE>
-```
-
-Implement the best possible solution for this task, with the goal of maximizing the test metric and surpassing the gold threshold in as few iterations as possible.
-"""
+        return prompt_build_system(
+            description=self.description,
+            directory_listing=directory_listing,
+            gold_threshold=self.gold_threshold,
+            slug=self.slug,
+        )
 
     def _build_user_prompt(self, plan_markdown: str, version: int) -> str:
         logger.debug("Building user prompt")
@@ -266,25 +215,14 @@ Implement the best possible solution for this task, with the goal of maximizing 
         outputs_dir_display = self.outputs_dir
         log_path_display = self.outputs_dir / self._log_filename(version)
         submission_path_display = self.outputs_dir / self._submission_filename(version)
-        base = f"""
-Researcher Technical Plan (Markdown):
-{plan_markdown}
-
-Project structure:
-- Base data dir: {base_dir_display}
-- Outputs dir: {outputs_dir_display}
-- The logs should be written to a file named {log_path_display}
-- Required output: {submission_path_display}
-"""
-        base += (
-            "\nReturn the complete Python script that, when run, writes logs to "
-            f"{log_path_display} "
-            "and produces a submission CSV at "
-            f"{submission_path_display}."
+        return prompt_build_user(
+            plan_markdown=plan_markdown,
+            base_dir=base_dir_display,
+            outputs_dir=outputs_dir_display,
+            log_path=log_path_display,
+            submission_path=submission_path_display,
+            threshold_directive=self.threshold_directive,
         )
-        if self.threshold_directive:
-            base += f"\n{self.threshold_directive}"
-        return base
 
     def _extract_code(self, content: str) -> str:
         logger.debug("Extracting code from completion content. Content length: %s", len(content))
@@ -312,16 +250,7 @@ Project structure:
 
     @staticmethod
     def _extract_diff_block(content: str) -> str:
-        """Extract unified diff payload from the completion content."""
-        if not content:
-            return ""
-        fenced = re.search(r"```diff\s*(.*?)\s*```", content, re.DOTALL | re.IGNORECASE)
-        if fenced:
-            return fenced.group(1).strip()
-        generic = re.search(r"```\s*(.*?)\s*```", content, re.DOTALL)
-        if generic:
-            return generic.group(1).strip()
-        return content.strip()
+        return extract_diff_block(content)
 
     @weave.op()
     def _generate_code(self, messages: list[dict[str, str]], expect_patch: bool = False) -> str:
@@ -348,95 +277,7 @@ Project structure:
 
     @staticmethod
     def _normalize_diff_payload(base_path: Path, diff_text: str) -> Optional[str]:
-        try:
-            base_lines = base_path.read_text().splitlines()
-        except Exception:
-            logger.exception("Failed to read base file while normalizing diff: %s", base_path)
-            return None
-        diff_lines = diff_text.splitlines()
-        fixed_lines = DeveloperAgent._fix_hunk_headers(base_lines, diff_lines)
-        return "\n".join(fixed_lines) + "\n"
-
-    @staticmethod
-    def _fix_hunk_headers(base_lines: list[str], diff_lines: list[str]) -> list[str]:
-        """Fix incorrect @@ hunk headers to be consistent with the diff body and the base file.
-
-        Rules implemented:
-        - Split the patch into hunks on lines starting with "@@".
-        - For each hunk body, count minus/plus/context lines to set b and d.
-        - Recompute a (old start) by locating the first non-added line (" " or "-") in base_lines,
-          choosing the occurrence closest to the previous hunk's a (if any), otherwise earliest.
-        - Maintain running delta (initially 0) so c = a + delta; then delta += (plus_count - minus_count).
-        - Pure-additions first hunk: assume a=1 and c=1. If a later hunk has no non-added lines,
-          fall back to earliest valid match (a=1).
-        - Rebuild header as: @@ -{a},{b} +{c},{d} @@ and keep body lines unchanged.
-        """
-
-        header_re = re.compile(r"^@@\s*-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s+@@")
-
-        output_lines = []
-        i = 0
-        delta = 0
-        hunks = []
-
-        for i in range(len(diff_lines)):
-            if re.match(header_re, diff_lines[i]):
-                A, B, C, D = map(int, header_re.match(diff_lines[i]).groups())
-                hunks.append([i, A, B, C, D])
-
-        hunks.append([len(diff_lines), 0, 0, 0, 0])
-
-        for i in range(len(hunks)-1):
-            # within this hunk
-            diff_hunk_l, old_A, old_B, old_C, old_D = hunks[i]
-            diff_hunk_r, _, _, _, _ = hunks[i+1]
-            hunk_lines = diff_lines[diff_hunk_l+1:diff_hunk_r]
-            minus_count = 0
-            plus_count = 0
-            first_valid_line = None
-            for line in hunk_lines:
-                assert not re.match(header_re, line)
-                if line.startswith("-"):
-                    minus_count += 1
-                    if first_valid_line is None:
-                        first_valid_line = line[1:]
-                elif line.startswith("+"):
-                    plus_count += 1
-                else:
-                    # in old and new file
-                    minus_count += 1
-                    plus_count += 1
-                    if first_valid_line is None:
-                        first_valid_line = line
-
-            print("First valid line:")
-            if first_valid_line is None:
-                # Edge case: no anchorable content; return original diff lines
-                return diff_lines
-            print(first_valid_line.strip())
-            new_A = None
-            
-            for line_no in range(old_A - 15, old_A + 15):
-                if line_no < 0:
-                    continue
-                if line_no >= len(base_lines):
-                    continue
-                if base_lines[line_no].strip() == first_valid_line.strip():
-                    new_A = line_no + 1
-                    break
-
-            if new_A is None:
-                # edge case - the content is completely wrong (patch will not work)
-                return diff_lines
-
-            new_C = new_A + delta
-            new_B = minus_count
-            new_D = plus_count
-
-            delta += (plus_count - minus_count)
-            diff_lines[diff_hunk_l] = f"@@ -{new_A},{new_B} +{new_C},{new_D} @@"
-
-        return diff_lines
+        return normalize_diff_payload(base_path, diff_text)
 
     def _apply_patch(self, base_version: int, diff_payload: str, target_version: int) -> Optional[str]:
         """Apply diff payload to the previous source file and return updated code."""
@@ -474,69 +315,23 @@ Project structure:
         normalized_payload = self._normalize_diff_payload(base_path, diff_text)
         attempts.append(("normalized", normalized_payload))
 
-        cmd = ["patch", "-o", output_filename, base_filename]
-
         for label, payload in attempts:
             logger.debug("Attempting to apply %s diff for version %s", label, target_version)
             logger.debug("Payload: %s", payload)
-            # print(payload)
-            if output_path.exists():
-                try:
-                    output_path.unlink()
-                except Exception:
-                    logger.exception(
-                        "Failed to remove existing output file before applying %s diff: %s",
-                        label,
-                        output_path,
-                    )
-                    return None
-            try:
-                result = subprocess.run(
-                    cmd,
-                    input=payload,
-                    text=True,
-                    capture_output=True,
-                    cwd=self.outputs_dir,
-                    check=False,
-                )
-            except FileNotFoundError:
-                logger.exception("`patch` utility not available on system path.")
-                return None
-            except Exception:
-                logger.exception("Unexpected failure while applying patch command.")
-                return None
-
-            if result.returncode != 0:
-                logger.warning(
-                    "Patch command (%s diff) returned non-zero exit code %s. stderr=\n%s",
-                    label,
-                    result.returncode,
-                    (result.stderr or "").strip(),
-                )
-                if output_path.exists():
-                    try:
-                        output_path.unlink()
-                    except Exception:
-                        logger.debug(
-                            "Failed to clean up partial patched file after %s diff attempt: %s",
-                            label,
-                            output_path,
-                        )
-                continue
-
-            try:
-                updated_code = output_path.read_text()
-            except Exception:
-                logger.exception("Failed to read patched file at %s", output_path)
-                return None
-
-            logger.info(
-                "Successfully applied %s diff to generate version %s from base %s",
-                label,
-                target_version,
-                base_version,
+            updated_code = util_apply_patch(
+                outputs_dir=self.outputs_dir,
+                base_filename=base_filename,
+                output_filename=output_filename,
+                payload=payload,
             )
-            return updated_code
+            if updated_code is not None:
+                logger.info(
+                    "Successfully applied %s diff to generate version %s from base %s",
+                    label,
+                    target_version,
+                    base_version,
+                )
+                return updated_code
 
         logger.warning("All patch attempts failed for target version %s", target_version)
         return None
@@ -547,32 +342,7 @@ Project structure:
         instruction = instruction.replace("Please modify your code to fix the error!", "Please write a git diff within ```diff to fix the error!")
         instruction = instruction.replace("Please regenerate the script addressing the above guardrail issues.", "Please write a git diff within ```diff to fix the above issues.")
         base_filename = self._code_filename(version)
-        directive = textwrap.dedent(
-            f"""
-**IMPORTANT**: Please write a git diff (patch) within ```diff to fix the above issues!
-- Produce a unified diff (apply patch format) that updates {base_filename}. Do not include any prefixes in the diff other than {base_filename}.
-- Return only the diff enclosed in ```diff fences; do not resend the full script.
-- Ensure the diff applies cleanly with the `patch` utility using the file names above.
-- Use standard hunk headers with explicit line numbers, e.g. @@ -12,7 +12,9 @@.
-- Refer to the <previous_code_with_line_numbers> section above when calculating line numbers.
-
-Like this
-```diff
---- {base_filename}
-+++ {base_filename}
-@@ -1,3 +1,3 @@
- start
--first change
-+new first change
- middle
-@@ -7,4 +7,4 @@
- some content
--second change
-+new second change
- more content
- end
- ```
-""").strip()
+        directive = prompt_patch_mode_directive(base_filename)
         return f"{instruction}\n\n{directive}"
 
     def _write_code(self, code: str, version: int) -> Path:
@@ -676,14 +446,14 @@ Like this
             self.blacklisted_ideas = self.blacklisted_ideas[-10:]
 
     @weave.op()
-    def run(self, plan_markdown: str, max_tries: Optional[int] = None) -> bool:
-        max_tries = max_tries or _DEFAULT_MAX_TRIES
+    def run(self, plan_markdown: str, max_time_seconds: Optional[int] = 6 * 3600) -> bool:
         logger.info(
-            "Starting developer run for slug=%s iteration=%s with max_tries=%s",
+            "Starting developer run for slug=%s iteration=%s",
             self.slug,
             self.iteration,
-            max_tries,
         )
+        start_time = time.time()
+        deadline = start_time + (max_time_seconds or 6 * 3600)
         try:
             with open(self.plan_path, "w") as f:
                 f.write(plan_markdown)
@@ -698,14 +468,25 @@ Like this
         self.messages.append({"role": "system", "content": system_prompt})
         self.messages.append({"role": "user", "content": user_prompt})
         
-        for attempt in range(1, max_tries + 1):
+        attempt = 0
+        while True:
+            now = time.time()
+            if max_time_seconds is not None and now >= deadline:
+                logger.info("Time budget exhausted (%.2f minutes)", (deadline - start_time) / 60.0)
+                break
+
+            attempt += 1
 
             artifact = wandb.Artifact(f'{self.iteration}-{self.slug}', type='files')
 
             if len(self.messages) > 6:
                 self.messages = self.messages[:2] + self.messages[-4:]
 
-            logger.info("Attempt %s/%s for developer run", attempt, max_tries)
+            minutes_left = ((deadline - now) / 60.0) if max_time_seconds is not None else float('inf')
+            try:
+                logger.info("Attempt %s (time left ~%.1f min)", attempt, minutes_left)
+            except Exception:
+                logger.info("Attempt %s", attempt)
             version = attempt
             expect_patch = self.patch_mode_enabled and attempt > 1
             while True:
@@ -746,124 +527,13 @@ Like this
             # ---------------------------
             # Pre-exec guardrail checks
             # ---------------------------
-            guard_report = {
-                "logging_check": {},
-                "debug_sequence_check": {},
-                "leakage_check": {},
-                "decision": "proceed",
-            }
-
-            # 1 AST logging.basicConfig order
-            log_check = {"status": "skipped", "reason": "disabled in config"}
-            if _ENABLE_LOGGING_GUARD:
-                try:
-                    log_check = check_logging_basicconfig_order(str(code_path))
-                except Exception:
-                    logger.exception("Logging AST check failed")
-                    log_check = {"status": "error", "error": "exception in logging check"}
-                guard_report["logging_check"] = log_check
-                try:
-                    logger.info(
-                        "Guardrail[logging] v%s: status=%s, violations=%s, basic_line=%s",
-                        version,
-                        log_check.get("status"),
-                        len(log_check.get("violations", [])),
-                        log_check.get("basicConfig_line"),
-                    )
-                except Exception:
-                    logger.debug("Failed to log logging guardrail status for v%s", version)
-                if log_check.get("status") == "fail":
-                    guard_report["decision"] = "block"
-            else:
-                guard_report["logging_check"] = log_check
-                try:
-                    logger.info(
-                        "Guardrail[logging] v%s: skipped (disabled in config)",
-                        version,
-                    )
-                except Exception:
-                    logger.debug("Failed to log logging guardrail skip status for v%s", version)
-
-            # 2 DEBUG sequencing + NaN guard review (LLM)
-            if guard_report["decision"] != "block":
-                if _ENABLE_NAN_GUARD:
-                    try:
-                        debug_json_text = llm_debug_sequence_review(_safe_read(str(code_path)))
-                    except Exception:
-                        logger.exception("DEBUG sequencing guardrail call failed")
-                        debug_json_text = '{"severity":"warn","findings":[{"rule_id":"llm_error","snippet":"N/A","rationale":"LLM call failed","suggestion":"Manually ensure DEBUG runs before FULL and loss/metric NaN or zero values raise exceptions."}]}'
-                    guard_report["debug_sequence_check"] = debug_json_text
-                    try:
-                        parsed = json.loads(debug_json_text)
-                        try:
-                            logger.info(
-                                "Guardrail[debug_seq] v%s: severity=%s, findings=%s",
-                                version,
-                                parsed.get("severity"),
-                                len(parsed.get("findings", [])),
-                            )
-                        except Exception:
-                            logger.debug("Failed to log DEBUG sequencing guardrail status for v%s", version)
-                        if parsed.get("severity") == "block":
-                            guard_report["decision"] = "block"
-                    except Exception:
-                        logger.warning(
-                            "Guardrail[debug_seq] v%s: malformed JSON from reviewer; proceeding as warn",
-                            version,
-                        )
-                else:
-                    guard_report["debug_sequence_check"] = {
-                        "status": "skipped",
-                        "reason": "disabled in config",
-                    }
-                    try:
-                        logger.info(
-                            "Guardrail[debug_seq] v%s: skipped (disabled in config)",
-                            version,
-                        )
-                    except Exception:
-                        logger.debug("Failed to log DEBUG sequencing guardrail skip status for v%s", version)
-
-            # 3 LLM-based leakage review (only if not already blocked)
-            if guard_report["decision"] != "block":
-                if _ENABLE_LEAKAGE_GUARD:
-                    try:
-                        leakage_json_text = llm_leakage_review(self.description, _safe_read(str(code_path)))
-                    except Exception:
-                        logger.exception("LLM leakage review call failed")
-                        leakage_json_text = '{"severity":"warn","findings":[{"rule_id":"llm_error","snippet":"N/A","rationale":"LLM call failed","suggestion":"Proceed with caution"}]}'
-                    guard_report["leakage_check"] = leakage_json_text
-                    try:
-                        parsed = json.loads(leakage_json_text)
-                        try:
-                            logger.info(
-                                "Guardrail[leakage] v%s: severity=%s, findings=%s",
-                                version,
-                                parsed.get("severity"),
-                                len(parsed.get("findings", [])),
-                            )
-                        except Exception:
-                            logger.debug("Failed to log leakage guardrail status for v%s", version)
-                        if parsed.get("severity") == "block":
-                            guard_report["decision"] = "block"
-                    except Exception:
-                        # If JSON malformed, treat as warn but proceed
-                        logger.warning(
-                            "Guardrail[leakage] v%s: malformed JSON from reviewer; proceeding as warn",
-                            version,
-                        )
-                else:
-                    guard_report["leakage_check"] = {
-                        "status": "skipped",
-                        "reason": "disabled in config",
-                    }
-                    try:
-                        logger.info(
-                            "Guardrail[leakage] v%s: skipped (disabled in config)",
-                            version,
-                        )
-                    except Exception:
-                        logger.debug("Failed to log leakage guardrail skip status for v%s", version)
+            guard_report = evaluate_guardrails(
+                description=self.description,
+                code_text=_safe_read(str(code_path)),
+                enable_logging_guard=_ENABLE_LOGGING_GUARD,
+                enable_nan_guard=_ENABLE_NAN_GUARD,
+                enable_leakage_guard=_ENABLE_LEAKAGE_GUARD,
+            )
 
             try:
                 logger.info("Guardrail decision v%s: %s", version, guard_report.get("decision"))
@@ -872,61 +542,11 @@ Like this
 
             if guard_report.get("decision") == "block":
                 # Build feedback and ask for a corrected script without executing
-                summary = ["Guardrail checks failed:"]
-                if log_check.get("status") == "fail":
-                    summary.append("- logging.basicConfig must be called before any top-level logging usage.")
-                try:
-                    raw_debug = guard_report.get("debug_sequence_check", "{}")
-                    parsed_debug = json.loads(raw_debug.strip()) if isinstance(raw_debug, str) else (raw_debug or {})
-                    if parsed_debug.get("severity") == "block":
-                        summary.append(
-                            "- Ensure the script runs DEBUG mode before FULL mode and raises an Exception when loss/metric is NaN or 0."
-                        )
-                        findings = parsed_debug.get("findings", [])
-                        if findings:
-                            summary.append("\nDEBUG sequencing findings:")
-                            for idx, finding in enumerate(findings, start=1):
-                                summary.append(
-                                    f"{idx}. rule_id={finding.get('rule_id', 'unknown')}\n   - snippet: {finding.get('snippet', '')}\n   - rationale: {finding.get('rationale', '')}\n   - suggestion: {finding.get('suggestion', '')}"
-                                )
-                except Exception:
-                    try:
-                        summary.append("- DEBUG sequencing reviewer returned non-JSON content:")
-                        summary.append(str(guard_report.get("debug_sequence_check")))
-                    except Exception:
-                        pass
-                try:
-                    raw_leak = guard_report.get("leakage_check", "{}")
-                    parsed = json.loads(raw_leak.strip()) if isinstance(raw_leak, str) else (raw_leak or {})
-                    sev = parsed.get("severity")
-                    if sev == "block":
-                        summary.append("- Potential data leakage risks detected. Please fix as suggested.")
-                        findings = parsed.get("findings", [])
-                        if findings:
-                            summary.append("\nLeakage reviewer findings:")
-                            for idx, f in enumerate(findings, start=1):
-                                rule_id = f.get("rule_id", "unknown")
-                                snippet = f.get("snippet", "")
-                                rationale = f.get("rationale", "")
-                                suggestion = f.get("suggestion", "")
-                                summary.append(
-                                    f"{idx}. rule_id={rule_id}\n   - snippet: {snippet}\n   - rationale: {rationale}\n   - suggestion: {suggestion}"
-                                )
-                except Exception:
-                    # Could not parse JSON; include raw reviewer text for context
-                    try:
-                        summary.append("- Data leakage reviewer returned non-JSON content:")
-                        summary.append(str(guard_report.get("leakage_check")))
-                    except Exception:
-                        pass
+                summary_text = build_block_summary(guard_report)
                 next_log_path = self.outputs_dir / self._log_filename(version + 1)
                 next_submission_path = self.outputs_dir / self._submission_filename(version + 1)
-                fix_instr = (
-                    "\nPlease regenerate the script addressing the above guardrail issues. "
-                    f"Write logs to {next_log_path} "
-                    f"and produce {next_submission_path}."
-                )
-                guardrail_prompt = "\n".join(summary) + fix_instr
+                fix_instr = prompt_guardrail_fix_suffix(next_log_path, next_submission_path)
+                guardrail_prompt = summary_text + fix_instr
                 base_version_for_next_patch = version
                 guardrail_prompt = self._append_patch_directive(guardrail_prompt, base_version_for_next_patch)
                 assistant_payload = self._build_assistant_payload(
@@ -973,29 +593,20 @@ Like this
                 )
                 grade_feedback = ""
                 try:
-                    grade_cmd = [
-                        "mlebench",
-                        "grade-sample",
-                        str(submission_path),
-                        self.slug,
-                    ]
-                    grade_result = subprocess.run(
-                        grade_cmd,
-                        capture_output=True,
-                        text=True,
-                        check=False,
-                    )
-                    grade_feedback = (grade_result.stdout or "").strip()
-                    if grade_result.returncode != 0:
+                    info, grade_feedback, returncode, stderr = run_grade(str(submission_path), self.slug)
+                    try:
+                        logger.info("Grade feedback: %s", grade_feedback)
+                    except Exception:
+                        logger.debug("Failed to log grade feedback for version %s", version)
+                    if returncode != 0:
                         logger.warning(
                             "Grading command returned non-zero exit (%s). stderr=\n%s",
-                            grade_result.returncode,
-                            (grade_result.stderr or "").strip(),
+                            returncode,
+                            stderr,
                         )
                     else:
                         logger.info("Grading command completed successfully for version %s", version)
-                        info = self._get_grade_report_json(grade_feedback)
-                        run_score = info.get('score')
+                        run_score = info.get('score') if info else None
                         self._log_attempt_score(attempt, run_score)
                         logger.info("Your result on the test set is %s", run_score)
                 except Exception as exc:
@@ -1157,11 +768,7 @@ Like this
                 This is the stack trace and advice on how to fix the error:
                 {output}
 
-                Please modify your code to fix the error!
-
-                Remember:
-                - write logs to {next_log_path}
-                - and produce the next submission at {next_submission_path}"
+                {prompt_execution_failure_suffix(next_log_path, next_submission_path)}
                 """
                 base_version_for_next_patch = version
                 next_instr = self._append_patch_directive(next_instr, base_version_for_next_patch)
@@ -1185,7 +792,8 @@ Like this
             artifact.save()
 
         logger.warning(
-            "Developer run exhausted all attempts without creating submission: %s",
-            self.outputs_dir / self._submission_filename(max_tries),
+            "Developer run ended without creating submission (last attempt v%s): %s",
+            attempt,
+            self.outputs_dir / self._submission_filename(attempt),
         )
         return True

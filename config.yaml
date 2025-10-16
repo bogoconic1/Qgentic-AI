@@ -11,7 +11,6 @@ llm:
 runtime:
   ask_eda_max_attempts: 5
   researcher_max_steps: 512
-  developer_max_tries: 50
   llm_max_retries: 3
   directory_listing_max_files: 10
   patch_mode_enabled: true # this needs improvement - patch success rate is low

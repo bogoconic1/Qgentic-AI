@@ -8,6 +8,10 @@ from openai import OpenAI
 from project_config import get_config
 
 from tools.helpers import call_llm_with_retry
+from prompts.guardrails import (
+    leakage_review as prompt_leakage_review,
+    debug_sequence_review as prompt_debug_sequence_review,
+)
 
 
 load_dotenv()
@@ -156,35 +160,7 @@ def llm_leakage_review(task_description: str, code: str) -> str:
     Ask an LLM to review potential data leakage risks in the generated code.
     Uses the configured leakage review model via OpenRouter. Returns raw model text.
     """
-    PROMPT = """
-You are a senior ML engineer auditing a training script for data leakage.
-
-Goals:
-- Identify any train/test contamination risks (explicit or implicit), including:
-  - Fitting transforms on combined train+test (scalers/encoders/PCA/imputers/etc.)
-  - Using test labels or label-derived features anywhere
-  - Feature selection or target encoding trained outside CV/OOF
-  - Leaks via merges/aggregations that use future/test information
-  - Wrong split strategy (e.g., random splits for time series)
-  - Using KFold for classification when label is imbalanced (should prefer StratifiedKFold)
-- Point to specific snippets and explain the rationale succinctly.
-
-Output strictly as JSON with this schema:
-{
-  "findings": [
-    {"rule_id": "<short_id>", "snippet": "<inline snippet or description>", "rationale": "<why this is risky>", "suggestion": "<how to fix>"}
-  ],
-  "severity": "block" | "warn" | "none",
-}
-
-Be concise and pragmatic; do not include prose outside JSON.
-    """
-
-    content_payload = (
-        f"{PROMPT}\n\n"
-        f"Task Description:\n" + "\"\"\"" + f"\n{task_description}\n" + "\"\"\"" + "\n\n"
-        f"Code:\n" + "\"\"\"" + f"\n{code}\n" + "\"\"\""
-    )
+    content_payload = prompt_leakage_review(task_description, code)
 
     messages = [
         {"role": "user", "content": content_payload}
@@ -212,29 +188,7 @@ Be concise and pragmatic; do not include prose outside JSON.
 
 def llm_debug_sequence_review(code: str) -> str:
     """Ensure generated code runs DEBUG then FULL modes and guards against NaNs/zeros."""
-
-    PROMPT = """
-You are reviewing a Python training pipeline for compliance with two runtime rules:
-1. The script must execute with DEBUG=True (using a tiny subset/config) before it executes with DEBUG=False (full run). Both executions should happen sequentially in the same process.
-2. For deep learning pipelines, if at the end of the 1st epoch of fold 0, the loss or metric is NaN or exactly 0, raise an Exception to stop the run immediately.
-
-Examine the code and determine whether both requirements are satisfied.
-
-Output strictly as JSON in this schema:
-{
-  "findings": [
-    {"rule_id": "debug_sequence" | "nan_guard", "snippet": "<excerpt>", "rationale": "<why non-compliant>", "suggestion": "<how to fix>"}
-  ],
-  "severity": "block" | "warn" | "none",
-}
-
-Set severity="block" if either requirement is missing or incorrect. Use severity="warn" if unsure. Use severity="none" only when both requirements (including the NaN/zero safeguard) are clearly implemented.
-Be concise; no extra prose outside JSON.
-    """
-
-    content_payload = (
-        f"{PROMPT}\n\nCode:\n" + "\"\"\"" + f"\n{code}\n" + "\"\"\""
-    )
+    content_payload = prompt_debug_sequence_review(code)
 
     messages = [
         {"role": "user", "content": content_payload}

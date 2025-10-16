@@ -25,7 +25,6 @@ _DEFAULT_CONFIG: dict[str, Any] = {
     "runtime": {
         "ask_eda_max_attempts": 5,
         "researcher_max_steps": 512,
-        "developer_max_tries": 50,
         "llm_max_retries": 3,
         "directory_listing_max_files": 10,
         "researcher_parallel_runs": 3,

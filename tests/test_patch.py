@@ -6,6 +6,7 @@ import pytest
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from agents.developer import DeveloperAgent
+from utils.diffs import extract_diff_block, normalize_diff_payload, apply_patch as util_apply_patch
 
 
 EXACT_PATCH = """--- code_16_v2.py
@@ -253,8 +254,10 @@ def test_exact_patch_application_writes_patched_file(tmp_path, monkeypatch):
     if out_path.exists():
         out_path.unlink()
 
-    # Apply patch using EXACT_PATCH
-    result = agent._apply_patch(base_version=2, diff_payload=EXACT_PATCH, target_version=3)
+    # Apply patch using EXACT_PATCH via utility
+    diff_text = EXACT_PATCH
+    normalized_payload = normalize_diff_payload(work_dir / base_filename, extract_diff_block(diff_text))
+    result = util_apply_patch(work_dir, base_filename, out_filename, normalized_payload)
 
     assert out_path.exists(), "Patched file was not written"
     assert result is not None

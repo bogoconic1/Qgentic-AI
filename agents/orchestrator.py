@@ -44,7 +44,7 @@ class Orchestrator:
         self.outputs_dir = self.base_dir / _OUTPUTS_DIRNAME / str(iteration)
 
     @weave.op()
-    def run(self, max_code_tries: int = 50) -> Tuple[bool, str]:
+    def run(self, max_time_seconds: int | None = 6 * 3600) -> Tuple[bool, str]:
         # if plan exists, don't run the researcher agent
         plan_path = self.outputs_dir / "plan.md"
         if plan_path.exists():
@@ -81,7 +81,7 @@ class Orchestrator:
                 else:
                     plan = self.researcher.build_plan()
         
-        success = self.developer.run(plan, max_tries=max_code_tries)
+        success = self.developer.run(plan, max_time_seconds=max_time_seconds)
 
         return success, plan
     
