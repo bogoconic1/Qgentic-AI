@@ -34,9 +34,6 @@ _DEFAULT_CONFIG: dict[str, Any] = {
         "task_root": "task",
         "outputs_dirname": "outputs",
         "external_data_dirname": "external-data",
-        "code_filename_template": "code_{iteration}_v{version}.py",
-        "log_filename_template": "code_{iteration}_v{version}.txt",
-        "submission_filename_template": "submission_{version}.csv",
     },
     "hardware": {
         "description": "A single A100 80GB GPU",

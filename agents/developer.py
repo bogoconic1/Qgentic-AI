@@ -19,6 +19,8 @@ import wandb
 from tools.developer import (
     execute_code,
     search_sota_suggestions,
+    ablation_summarize_baseline,
+    ablation_summarize_batch,
 )
 from guardrails.developer import (
     check_logging_basicconfig_order,
@@ -64,9 +66,9 @@ _DEVELOPER_MODEL = _LLM_CFG.get("developer_model", "google/gemini-2.5-pro")
 
 _TASK_ROOT = Path(_PATH_CFG.get("task_root", "task"))
 _OUTPUTS_DIRNAME = _PATH_CFG.get("outputs_dirname", "outputs")
-_CODE_TEMPLATE = _PATH_CFG.get("code_filename_template", "code_{iteration}_v{version}.py")
-_LOG_TEMPLATE = _PATH_CFG.get("log_filename_template", "code_{iteration}_v{version}.txt")
-_SUBMISSION_TEMPLATE = _PATH_CFG.get("submission_filename_template", "submission_{version}.csv")
+_CODE_TEMPLATE = "code_v{attempt}_{suggestion_type}_{sub_attempt}.py"
+_LOG_TEMPLATE = "code_v{attempt}_{suggestion_type}_{sub_attempt}.txt"
+_SUBMISSION_TEMPLATE = "submission_v{attempt}_{suggestion_type}_{sub_attempt}.csv"
 _HARDWARE_DESCRIPTION = _HARDWARE_CFG.get("description", "A single A100 80GB GPU")
 
 def _safe_read(path: str) -> str:
@@ -99,6 +101,9 @@ class DeveloperAgent:
         self.outputs_dir = self.base_dir / self.outputs_dirname / str(iteration)
         self.outputs_dir.mkdir(parents=True, exist_ok=True)
         self.developer_log_path = self.outputs_dir / "developer.txt"
+        # Default suggestion metadata used for filename decoration
+        self.current_suggestion_type = "baseline"
+        self.current_sub_attempt = 1
         self._configure_logger()
 
         # Metric-related defaults; overwritten once benchmark info is available
@@ -152,13 +157,25 @@ class DeveloperAgent:
         logger.setLevel(logging.DEBUG)
 
     def _code_filename(self, version: int) -> str:
-        return _CODE_TEMPLATE.format(iteration=self.iteration, version=version)
+        return _CODE_TEMPLATE.format(
+            attempt=version,
+            suggestion_type=self.current_suggestion_type,
+            sub_attempt=self.current_sub_attempt,
+        )
 
     def _log_filename(self, version: int) -> str:
-        return _LOG_TEMPLATE.format(iteration=self.iteration, version=version)
-
+        return _LOG_TEMPLATE.format(
+            attempt=version,
+            suggestion_type=self.current_suggestion_type,
+            sub_attempt=self.current_sub_attempt,
+        )
+        
     def _submission_filename(self, version: int) -> str:
-        return _SUBMISSION_TEMPLATE.format(iteration=self.iteration, version=version)
+        return _SUBMISSION_TEMPLATE.format(
+            attempt=version,
+            suggestion_type=self.current_suggestion_type,
+            sub_attempt=self.current_sub_attempt,
+        )
 
     
 
@@ -463,14 +480,17 @@ class DeveloperAgent:
         except Exception:
             logger.exception("Failed to persist plan markdown to %s", self.plan_path)
 
-        run_score = 0
-
+        # Compose initial conversation for baseline
         system_prompt = self._compose_system()
         user_prompt = self._build_user_prompt(plan_markdown, version=1)
-        self.messages.append({"role": "system", "content": system_prompt})
-        self.messages.append({"role": "user", "content": user_prompt})
-        
+        self.messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
+
+        # Suggestions schedule: start with baseline only
+        suggestions: list[tuple[str, Optional[str], Optional[str]]] = [("baseline", None, None)]
         attempt = 0
+        baseline_result: dict = {}
+        batch_index = 0
+
         while True:
             now = time.time()
             if max_time_seconds is not None and now >= deadline:
@@ -478,322 +498,284 @@ class DeveloperAgent:
                 break
 
             attempt += 1
-
+            version = attempt
+            logger.info("Starting attempt(batch) %s with %s suggestion(s)", attempt, len(suggestions))
             artifact = wandb.Artifact(f'{self.iteration}-{self.slug}', type='files')
 
-            if len(self.messages) > 6:
-                self.messages = self.messages[:2] + self.messages[-4:]
+            # scores for ablation after this batch
+            batch_scores: list[dict] = []
 
-            minutes_left = ((deadline - now) / 60.0) if max_time_seconds is not None else float('inf')
-            try:
-                logger.info("Attempt %s (time left ~%.1f min)", attempt, minutes_left)
-            except Exception:
-                logger.info("Attempt %s", attempt)
-            version = attempt
-            expect_patch = self.patch_mode_enabled and attempt > 1
-            while True:
-                generated = self._generate_code(self.messages, expect_patch=expect_patch)
-                if expect_patch:
-                    # Choose the correct base version for patch application.
-                    # Prefer an explicitly set base from the previous step; fallback to previous attempt.
-                    preferred_base = self.next_patch_base_version if self.next_patch_base_version else (version - 1)
-                    base_candidate_path = self.outputs_dir / self._code_filename(preferred_base)
-                    if not base_candidate_path.exists():
-                        logger.warning(
-                            "Configured patch base v%s not found; falling back to previous attempt v%s",
-                            preferred_base,
-                            version - 1,
-                        )
-                        preferred_base = version - 1
-                    base_version = preferred_base
-                    logger.info("Applying patch relative to base v%s -> target v%s", base_version, version)
-                    code = self._apply_patch(base_version, generated, version)
-                    if code is not None:
-                        break
-                    logger.warning(
-                        "Patch generation failed for attempt %s; requesting full script instead.",
-                        attempt,
-                    )
-                    if self.messages and self.messages[-1].get("role") == "user":
-                        self.messages[-1]["content"] += (
-                            "\n\nPatch application failed. Ignore the diff request and return the complete updated script enclosed in triple backticks with the `python` annotation."
-                        )
-                    expect_patch = False
-                    continue
-                else:
-                    code = generated
+            for (suggestion_type, suggestion_text, suggestion_code) in suggestions:
+                # Manage time budget
+                now = time.time()
+                if max_time_seconds is not None and now >= deadline:
+                    logger.info("Time budget exhausted before suggestion=%s", suggestion_type)
                     break
 
-            code_path = self._write_code(code, version)
+                # Set filename decorations for this suggestion
+                self.current_suggestion_type = suggestion_type
+                self.current_sub_attempt = 0
 
-            # ---------------------------
-            # Pre-exec guardrail checks
-            # ---------------------------
-            guard_report = evaluate_guardrails(
-                description=self.description,
-                code_text=_safe_read(str(code_path)),
-                enable_logging_guard=_ENABLE_LOGGING_GUARD,
-                enable_nan_guard=_ENABLE_NAN_GUARD,
-                enable_leakage_guard=_ENABLE_LEAKAGE_GUARD,
-            )
+                graded = False
+                while True:
+                    now = time.time()
+                    if max_time_seconds is not None and now >= deadline:
+                        logger.info("Time budget exhausted before sub-attempt for %s", suggestion_type)
+                        break
 
-            try:
-                logger.info("Guardrail decision v%s: %s", version, guard_report.get("decision"))
-            except Exception:
-                logger.debug("Failed to log final guardrail decision for v%s", version)
+                    self.current_sub_attempt += 1
+                    sub_attempt = self.current_sub_attempt
+                    logger.info("Attempt %s | %s sub_attempt %s", attempt, suggestion_type, sub_attempt)
 
-            if guard_report.get("decision") == "block":
-                # Build feedback and ask for a corrected script without executing
-                summary_text = build_block_summary(guard_report)
-                next_log_path = self.outputs_dir / self._log_filename(version + 1)
-                next_submission_path = self.outputs_dir / self._submission_filename(version + 1)
-                fix_instr = prompt_guardrail_fix_suffix(next_log_path, next_submission_path)
-                guardrail_prompt = summary_text + fix_instr
-                base_version_for_next_patch = version
-                guardrail_prompt = self._append_patch_directive(guardrail_prompt, base_version_for_next_patch)
-                assistant_payload = self._build_assistant_payload(
-                    code,
-                    include_line_numbers=self.patch_mode_enabled,
-                )
-                self.messages.append({"role": "assistant", "content": assistant_payload})
-                self.messages.append({"role": "user", "content": guardrail_prompt})
-                self.next_patch_base_version = base_version_for_next_patch
-                logger.info("Next patch will be based on v%s due to guardrail block", base_version_for_next_patch)
-                logger.info("User prompt with guardrail feedback: %s", guardrail_prompt)
-                # continue to next attempt without execution
-                continue
+                    # Trim conversation if too large
+                    if len(self.messages) > 6:
+                        self.messages = self.messages[:2] + self.messages[-4:]
 
-            # Execute the code (inherits current env with MPS flags)
-            output = execute_code(str(code_path))
-            logger.info("Execution output captured for version v%s", version)
-            logger.debug("Execution output: %s", output)
+                    # Build next instruction if we have a specific suggestion to implement
+                    if suggestion_text:
+                        next_log_path = self.outputs_dir / self._log_filename(version)
+                        next_submission_path = self.outputs_dir / self._submission_filename(version)
+                        instr = (
+                            f"Implement the following idea for this batch: \n<suggestion>\n{suggestion_text}\n</suggestion>\n"
+                        )
+                        if suggestion_code:
+                            instr += "Suggested code snippet:\n```python\n" + suggestion_code + "\n```\n"
+                        instr += (
+                            f"Remember:\n- write logs to {next_log_path}\n- and produce the next submission at {next_submission_path}"
+                        )
+                        # Only append patch directive for sub_attempt > 1
+                        if self.patch_mode_enabled and sub_attempt > 1:
+                            base_for_directive = version
+                            instr = self._append_patch_directive(instr, base_for_directive)
+                        # Reset conversation to system+user, then add assistant base and user instruction
+                        self.messages = self.messages[:2]
+                        if self.best_code:
+                            base_code_payload = self.best_code
+                        else:
+                            base_code_payload = ""
+                        assistant_payload = self._build_assistant_payload(
+                            base_code_payload,
+                            include_line_numbers=self.patch_mode_enabled,
+                        )
+                        self.messages.append({'role': 'assistant', 'content': assistant_payload})
+                        self.messages.append({'role': 'user', 'content': instr})
 
-            log_path = self.outputs_dir / self._log_filename(version)
-            log_content = ""
-            try:
-                if log_path.exists():
-                    log_content = log_path.read_text().strip()
-                    logger.debug(
-                        "Loaded execution log from %s (length=%s)",
-                        log_path,
-                        len(log_content),
+                    # Generate code (patch for sub_attempt>1)
+                    expect_patch = self.patch_mode_enabled and sub_attempt > 1
+                    generated = self._generate_code(self.messages, expect_patch=expect_patch)
+                    if expect_patch:
+                        # Use previous sub_attempt file as base by temporarily rewinding sub_attempt for filename resolution
+                        tmp_sub = self.current_sub_attempt
+                        self.current_sub_attempt = max(1, tmp_sub - 1)
+                        base_version = version
+                        logger.info("Applying patch relative to base attempt=%s %s sub_attempt=%s -> target sub_attempt=%s", version, suggestion_type, self.current_sub_attempt, tmp_sub)
+                        code = self._apply_patch(base_version, generated, version)
+                        # restore current_sub_attempt
+                        self.current_sub_attempt = tmp_sub
+                        if code is None:
+                            logger.warning("Patch application failed; requesting full script next.")
+                            if self.messages and self.messages[-1].get("role") == "user":
+                                self.messages[-1]["content"] += (
+                                    "\n\nPatch application failed. Ignore the diff request and return the complete updated script enclosed in triple backticks with the `python` annotation."
+                                )
+                            # Try full script next iteration
+                            continue
+                    else:
+                        code = generated
+
+                    # Write code and guardrails
+                    code_path = self._write_code(code, version)
+                    guard_report = evaluate_guardrails(
+                        description=self.description,
+                        code_text=_safe_read(str(code_path)),
+                        enable_logging_guard=_ENABLE_LOGGING_GUARD,
+                        enable_nan_guard=_ENABLE_NAN_GUARD,
+                        enable_leakage_guard=_ENABLE_LEAKAGE_GUARD,
                     )
-            except Exception:
-                logger.exception("Failed to read execution log at %s", log_path)
+                    if guard_report.get("decision") == "block":
+                        summary_text = build_block_summary(guard_report)
+                        next_log_path = self.outputs_dir / self._log_filename(version)
+                        next_submission_path = self.outputs_dir / self._submission_filename(version)
+                        fix_instr = prompt_guardrail_fix_suffix(next_log_path, next_submission_path)
+                        guardrail_prompt = summary_text + fix_instr
+                        base_for_directive = version
+                        guardrail_prompt = self._append_patch_directive(guardrail_prompt, base_for_directive)
+                        assistant_payload = self._build_assistant_payload(
+                            code,
+                            include_line_numbers=self.patch_mode_enabled,
+                        )
+                        self.messages.append({"role": "assistant", "content": assistant_payload})
+                        self.messages.append({"role": "user", "content": guardrail_prompt})
+                        logger.info("Guardrail blocked; continuing to next sub-attempt for %s", suggestion_type)
+                        continue
 
-            submission_path = self.outputs_dir / self._submission_filename(version)
-            code_with_logs = "<code>\n" + code + "\n</code>\n"
-            if log_content:
-                code_with_logs += f"<validation_log>\n{log_content[-30000:]}\n</validation_log>\n"  # to avoid token limit issues
+                    # Execute
+                    output = execute_code(str(code_path))
+                    log_path = self.outputs_dir / self._log_filename(version)
+                    log_content = ""
+                    try:
+                        if log_path.exists():
+                            log_content = log_path.read_text().strip()
+                    except Exception:
+                        logger.exception("Failed to read execution log at %s", log_path)
 
-            run_score = float("inf") if self.is_lower_better else float("-inf")
+                    submission_path = self.outputs_dir / self._submission_filename(version)
+                    run_score = None
+                    if submission_path.exists():
+                        self.latest_submission_path = submission_path
+                        try:
+                            info, grade_feedback, returncode, stderr = run_grade(str(submission_path), self.slug)
+                            if returncode == 0:
+                                run_score = info.get('score') if info else None
+                                self._log_attempt_score(attempt, run_score)
+                                logger.info("Score for %s/%s sub_attempt %s: %s", attempt, suggestion_type, sub_attempt, run_score)
+                            else:
+                                logger.warning("Grader returned non-zero: %s\n%s", returncode, stderr)
+                        except Exception as exc:
+                            logger.exception("Grading failed: %s", exc)
 
-            if submission_path.exists():
-                self.latest_submission_path = submission_path
-                logger.info(
-                    "Submission detected at %s after attempt %s", submission_path, attempt
-                )
-                grade_feedback = ""
+                    # If graded, record and break out of this suggestion
+                    if run_score is not None:
+                        graded = True
+                        # Track best
+                        if self._is_improvement(run_score, self.best_score):
+                            self.best_score = run_score
+                            self.best_version = version
+                            self.best_code = code
+                        # Append ablation row
+                        batch_scores.append({
+                            "suggestion_type": suggestion_type,
+                            "idea": suggestion_text or "baseline",
+                            "score": run_score,
+                        })
+                        break
+
+                    # Otherwise, construct next-instruction for failure path and continue sub-attempts
+                    next_log_path = self.outputs_dir / self._log_filename(version)
+                    next_submission_path = self.outputs_dir / self._submission_filename(version)
+                    next_instr = f"""
+                    Your code FAILED during execution!
+                    This is the stack trace and advice on how to fix the error:
+                    {output}
+
+                    {prompt_execution_failure_suffix(next_log_path, next_submission_path)}
+                    """
+                    base_for_directive = version
+                    next_instr = self._append_patch_directive(next_instr, base_for_directive)
+                    assistant_payload = self._build_assistant_payload(
+                        code,
+                        include_line_numbers=self.patch_mode_enabled,
+                    )
+                    self.messages.append({'role': 'assistant', 'content': assistant_payload})
+                    self.messages.append({'role': 'user', 'content': next_instr})
+                    # continue to next sub_attempt
+
+                # End while sub-attempts
+                if not graded:
+                    logger.info("Suggestion %s ended without a graded submission", suggestion_type)
+
+                # Log artifacts for this suggestion
+                for path in self.outputs_dir.iterdir():
+                    if path.is_file():
+                        artifact.add_file(str(path), overwrite=True)
+                artifact.save()
+
+            # End for suggestions in batch
+
+            # Run ablation
+            if attempt == 1:
+                # Baseline ablation
+                baseline_result = batch_scores[0] if batch_scores else {"suggestion_type": "baseline", "score": None}
                 try:
-                    info, grade_feedback, returncode, stderr = run_grade(str(submission_path), self.slug)
-                    try:
-                        logger.info("Grade feedback: %s", grade_feedback)
-                    except Exception:
-                        logger.debug("Failed to log grade feedback for version %s", version)
-                    if returncode != 0:
-                        logger.warning(
-                            "Grading command returned non-zero exit (%s). stderr=\n%s",
-                            returncode,
-                            stderr,
-                        )
-                    else:
-                        logger.info("Grading command completed successfully for version %s", version)
-                        run_score = info.get('score') if info else None
-                        self._log_attempt_score(attempt, run_score)
-                        logger.info("Your result on the test set is %s", run_score)
-                except Exception as exc:
-                    grade_feedback = f"Failed to run grading tool: {exc}"
-                    logger.exception("Grading command failed for version %s", version)
-
-                code_with_logs += f"<leaderboard_score>\n{run_score}\n</leaderboard_score>\n"
-
-                previous_best = self.best_score
-                run_score_display = self._format_score_value(run_score)
-                previous_best_display = self._format_score_value(previous_best)
-                improvement = self._is_improvement(run_score, previous_best)
-
-                if improvement:
-                    logger.info(
-                        "New best score achieved: %s (previous best was %s)",
-                        run_score,
-                        previous_best,
-                    )
-                    self.best_score = run_score
-                    self.best_version = version
-                    if self.gold_threshold is not None:
-                        target_text = f"Let's push further to reach {self.gold_threshold}."
-                    else:
-                        target_text = "Let's push further to reach an even stronger result."
-                    analysis_msg = (
-                        f"Nice work! The score has improved to {run_score_display}. "
-                        f"{target_text}"
-                    )
-                else:
-                    logger.info(
-                        "No improvement over previous best score of %s; current score is %s",
-                        previous_best,
-                        run_score,
-                    )
-                    if previous_best_display != "N/A" and run_score_display != "N/A":
-                        analysis_msg = (
-                            f"The latest run scored {run_score_display}, but the best remains {previous_best_display}. "
-                            "Please investigate the regression before proceeding."
-                        )
-                    else:
-                        analysis_msg = (
-                            "The latest run did not improve the benchmark. Please investigate the reasons before continuing."
-                        )
-
-                code_with_logs += f"<analysis>\n{analysis_msg}\n</analysis>\n"
-                if improvement:
-                    self.best_code = code
-                self.previous_runs.append((code, run_score))
-
-                try:
-                    # Collect all researcher plans in outputs dir: plan.md, plan_*.md
-                    plan_texts: list[str] = []
-                    try:
-                        if self.plan_path.exists():
-                            plan_texts.append(_safe_read(str(self.plan_path)))
-                    except Exception:
-                        pass
-                    try:
-                        for extra_plan_path in sorted(self.outputs_dir.glob("plan_*.md")):
-                            plan_texts.append(_safe_read(str(extra_plan_path)))
-                    except Exception:
-                        pass
-
-                    sota_suggestions = search_sota_suggestions(
-                        self.description,
-                        failed_ideas=self.blacklisted_ideas,
-                        plans=plan_texts,
-                        ablation_summary=self.latest_ablation_summary if hasattr(self, 'latest_ablation_summary') else None,
-                    )
+                    summary_text = ablation_summarize_baseline(baseline_result)
                 except Exception:
-                    logger.exception("Failed to fetch SOTA suggestions for attempt %s", attempt)
-                    sota_suggestions = ""
-
-                logger.info("SOTA suggestion: %s", sota_suggestions)
-
-                suggestion_text, code_snippet, blacklist_list = self._parse_sota_response(sota_suggestions)
-
-                # Register any blacklisted ideas
-                if blacklist_list:
-                    for idea in blacklist_list:
-                        self._register_blacklist(idea, None)
-                    try:
-                        logger.info("Ideas blacklisted: %s", "; ".join(blacklist_list))
-                    except Exception:
-                        logger.info("Ideas blacklisted: %s", len(blacklist_list))
-
-                if suggestion_text:
-                    logger.info("Summary of SOTA suggestion: %s", suggestion_text)
-                else:
-                    logger.info("SOTA response did not include a new suggestion summary.")
-
-                if suggestion_text:
-                    self.last_suggestion = suggestion_text
-                elif blacklist_list:
-                    # if suggestion missing but blacklist entries were provided, reset last suggestion
-                    self.last_suggestion = None
-
-                self.last_suggestion_code = code_snippet if code_snippet else None
-
-                next_log_path = self.outputs_dir / self._log_filename(version + 1)
-                next_submission_path = self.outputs_dir / self._submission_filename(version + 1)
-
-                suggestion_block = ""
-                if suggestion_text:
-                    suggestion_block += f"<suggestion>\n{suggestion_text}\n</suggestion>\n"
-                else:
-                    suggestion_block += "<suggestion>\nNo suggestion provided.\n</suggestion>\n"
-
-                if code_snippet:
-                    suggestion_block += "Suggested code snippet:\n```python\n" + code_snippet + "\n```\n"
-                else:
-                    suggestion_block += "Suggested code snippet: No code provided.\n"
-
-                if improvement:
-                    summary_line = "The latest attempt improved the score; refine the approach with the guidance below."
-                else:
-                    summary_line = "The latest attempt did not improve the score; address the issues flagged below."
-
-                if previous_best_display != "N/A" and run_score_display != "N/A":
-                    summary_line += (
-                        f" Previous best: {previous_best_display}. Current score: {run_score_display}."
-                    )
-
-                next_instr = (
-                    f"{summary_line}\n\n"
-                    f"{suggestion_block}\n"
-                    f"Remember:\n- write logs to {next_log_path}\n- and produce the next submission at {next_submission_path}"
-                )
-
-                # Choose consistent base for the next patch: use best when any blacklist present, else current version.
-                if blacklist_list and self.best_code:
-                    base_version_for_next_patch = self.best_version if self.best_version is not None else version
-                else:
-                    base_version_for_next_patch = version
-                next_instr = self._append_patch_directive(next_instr, base_version_for_next_patch)
-
-                self.messages = self.messages[:2]
-                if blacklist_list and self.best_code:
-                    base_code = self.best_code
-                else:
-                    base_code = code
-                assistant_payload = self._build_assistant_payload(
-                    base_code,
-                    include_line_numbers=self.patch_mode_enabled,
-                )
-                self.messages.append({'role': 'assistant', 'content': assistant_payload})
-                self.messages.append({'role': 'user', 'content': next_instr})
-                self.next_patch_base_version = base_version_for_next_patch
-                logger.info("Next patch will be based on v%s (blacklisted_n=%s)", base_version_for_next_patch, len(blacklist_list))
-
+                    logger.exception("Baseline ablation summarize failed")
+                    summary_text = ""
+                self.latest_ablation_summary = summary_text
+                try:
+                    ablation_dir = self.outputs_dir / "ablation"
+                    ablation_dir.mkdir(parents=True, exist_ok=True)
+                    (ablation_dir / "baseline.json").write_text(json.dumps({"summary": summary_text, "baseline": baseline_result}, ensure_ascii=False, indent=2))
+                except Exception:
+                    logger.exception("Failed to persist baseline ablation summary")
             else:
-                next_log_path = self.outputs_dir / self._log_filename(version + 1)
-                next_submission_path = self.outputs_dir / self._submission_filename(version + 1)
-                next_instr = f"""
-                Your code FAILED during execution!
-                This is the stack trace and advice on how to fix the error:
-                {output}
+                try:
+                    summary_text = ablation_summarize_batch(baseline_result, batch_scores)
+                except Exception:
+                    logger.exception("Batch ablation summarize failed")
+                    summary_text = ""
+                self.latest_ablation_summary = summary_text
+                try:
+                    batch_index += 1
+                    ablation_dir = self.outputs_dir / "ablation"
+                    ablation_dir.mkdir(parents=True, exist_ok=True)
+                    (ablation_dir / f"batch_{batch_index}.json").write_text(json.dumps({"summary": summary_text, "results": batch_scores}, ensure_ascii=False, indent=2))
+                except Exception:
+                    logger.exception("Failed to persist batch ablation summary")
 
-                {prompt_execution_failure_suffix(next_log_path, next_submission_path)}
-                """
-                base_version_for_next_patch = version
-                next_instr = self._append_patch_directive(next_instr, base_version_for_next_patch)
-                assistant_payload = self._build_assistant_payload(
-                    code,
-                    include_line_numbers=self.patch_mode_enabled,
+            # Prepare next suggestions via SOTA (skip after baseline if no time)
+            now = time.time()
+            if max_time_seconds is not None and now >= deadline:
+                logger.info("Time exhausted after ablation")
+                break
+
+            # Collect plans
+            plan_texts: list[str] = []
+            try:
+                if self.plan_path.exists():
+                    plan_texts.append(_safe_read(str(self.plan_path)))
+            except Exception:
+                pass
+            try:
+                for extra_plan_path in sorted(self.outputs_dir.glob("plan_*.md")):
+                    plan_texts.append(_safe_read(str(extra_plan_path)))
+            except Exception:
+                pass
+
+            # Fetch multi-suggestions
+            try:
+                raw = search_sota_suggestions(
+                    self.description,
+                    failed_ideas=self.blacklisted_ideas,
+                    plans=plan_texts,
+                    ablation_summary=self.latest_ablation_summary if hasattr(self, 'latest_ablation_summary') else None,
                 )
-                self.messages.append({'role': 'assistant', 'content': assistant_payload})
-                self.messages.append({'role': 'user', 'content': next_instr})
-                self.next_patch_base_version = base_version_for_next_patch
-                logger.info("Next patch will be based on v%s due to execution failure", base_version_for_next_patch)
+            except Exception:
+                logger.exception("SOTA search failed; ending run")
+                break
 
-            logger.info("previous runs count: %s", len(self.previous_runs))
+            # Parse JSON with four categories
+            parsed = None
+            try:
+                parsed = json.loads(raw)
+            except Exception:
+                try:
+                    m = re.search(r"```json\s*(\{[\s\S]*?\})\s*```", raw, re.IGNORECASE)
+                    if m:
+                        parsed = json.loads(m.group(1))
+                except Exception:
+                    parsed = None
 
-            for path in self.outputs_dir.iterdir():
-                if path.is_file():
-                    artifact.add_file(str(path), overwrite=True)
-                else:
-                    logger.debug("Skipping non-file path when logging artifact: %s", path)
+            next_suggestions: list[tuple[str, Optional[str], Optional[str]]] = []
+            if isinstance(parsed, dict):
+                for key in ["data", "architecture", "ensembling", "sota"]:
+                    block = parsed.get(key)
+                    if isinstance(block, dict):
+                        idea = block.get("idea") or ""
+                        code_snippet = block.get("code") or None
+                        next_suggestions.append((key, idea, code_snippet))
 
-            artifact.save()
+                # Register blacklist if present
+                bl = parsed.get("blacklist") if isinstance(parsed, dict) else None
+                if isinstance(bl, list):
+                    for idea in bl:
+                        self._register_blacklist(str(idea), None)
 
-        logger.warning(
-            "Developer run ended without creating submission (last attempt v%s): %s",
-            attempt,
-            self.outputs_dir / self._submission_filename(attempt),
-        )
+            if not next_suggestions:
+                logger.info("No valid multi-suggestions parsed; ending run")
+                break
+
+            suggestions = next_suggestions
+
+        logger.info("Developer run finished for iteration=%s", self.iteration)
         return True
