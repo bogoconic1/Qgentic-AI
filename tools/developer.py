@@ -140,67 +140,82 @@ def search_sota_suggestions(
             blocks.append(f"<plan id=\"{idx}\">\n{text}\n</plan>")
         plans_section = "\n<researcher_plans>\n" + "\n\n".join(blocks) + "\n</researcher_plans>\n"
 
-    system_prompt = f"""You will receive a Kaggle competition description, one or more researcher plans, an initial script, and its logs for analysis.
+    system_prompt = f"""Developer: You will receive a Kaggle competition description, one or more researcher plans, an initial script, and its logs for analysis.
+
+Begin with a concise checklist (3-7 bullets) summarizing high-level conceptual red flags identified from the code/logs, as well as your intended strategies for addressing them. These should focus on conceptual aspects rather than specific implementations. Use '- ' for each bullet. If fewer than three meaningful points arise, list as many as possible and explicitly state: "Fewer than 3 high-level red flags or strategies identified."
+
+Always review the <researcher_plans> first, if provided. Set reasoning_effort = medium to ensure thoughtful but efficient analysis. For any web search or external query, briefly state the purpose and the minimal search terms you will use before proceeding. Use only approved resources and provide a one-line preamble before significant information-sourcing steps, referencing the competition context.
+
+Conduct a web search for recent, effective models, architectures, techniques, or hyperparameters relevant to the competition or similar tasks, directly addressing the outlined red flags. Clearly explain the purpose of every recommended approach and justify its relevance by referencing the competition description and context.
+
+Generate FOUR distinct suggestions, each from a separate strategic category:
+1. Data / Feature Engineering Enhancement - focuses on improving input representation or data quality.
+2. Architectural Enhancement - proposes improvements to the model backbone or design.
+3. Ensembling Enhancement - addresses model aggregation, stacking, blending, or bagging.
+4. SOTA Model Enhancement - highlights a recent effective model from an arXiv paper/GitHub repository/Blog Post that has been successfully applied on similar tasks.
+
+For each category:
+- Provide one high-impact suggestion for improving performance on the competition task and metric, with an explanation of approximately 100 words outlining its benefits.
+- Clearly differentiate suggestions using numbered headings (e.g., '#### 1. Data / Feature Engineering Suggestion').
+- Ensure the four suggestions are complementary and not overlapping.
+
+After presenting suggestions, validate each one's relevance to the competition details and metric in 1-2 sentences. Clearly specify the criteria used for validation and reference key input details when possible. If validation cannot be performed due to missing or inadequate inputs, clearly state this and return "No suggestions."
+
+If the <competition description> or <initial script and logs> are missing or clearly inadequate, mention this before providing the checklist and return "No suggestions."
+
+After code edits or substantial analysis, validate the intended outcome or impact in 1-2 sentences and self-correct if validation fails or key requirements are unmet.
+
+Follow the exact output structure and examples outlined below for all scenarios, including missing input or error conditions:
+
+## Output Format
+Your output MUST include the following sections in order:
 
 ### Checklist
-- Begin with a concise checklist of 3-7 bullet points summarizing high-level conceptual red flags from the code/logs and your intended strategies to address them. These should be conceptual (not implementation-specific). Use "- " for each bullet.
-- Checklist: If fewer than three meaningful points arise, include as many as possible and explicitly state: "Fewer than 3 high-level red flags or strategies identified."
+- ... (3-7 high-level conceptual bullet points, see above)
 
 ### Research and Suggestion
-- Before any web search or external query, briefly state the purpose and the minimal search terms you will use.
-- Perform a web search for recent, effective models, architectures, techniques or hyperparameters relevant to this competition or similar tasks, addressing the identified red flags.
-- Before recommending any approach, clearly state its purpose and justification, referencing the competition description and context.
-- Propose one high-impact suggestion to improve performance for the competition's metric, along with an approximately 100-word explanation of its benefits.
+#### 1. Data / Feature Engineering Suggestion
+- ... (prose explanation)
 
-### Validation
-- After offering your suggestion, validate its relevance to the competition details and metric in 1-2 sentences.
-- Clearly specify the validation criteria and reference key input details where possible.
-- If you cannot validate because of missing or insufficient input, clearly state so and return "No suggestions."
+#### 2. Architectural Enhancement Suggestion
+- ... (prose explanation)
 
-### Error Handling
-- If the <competition description> or <initial script and logs> are missing or clearly inadequate, mention this before the checklist and return "No suggestions."
+#### 3. Ensembling/Blending Enhancement Suggestion
+- ... (prose explanation)
 
-Before composing your solution, set reasoning_effort = medium and ensure that your explanation is sufficiently detailed to guide a developer through both the 'why' and the 'how' of the proposed suggestion.
-
-### Output Format
-Structure your output as follows:
-
-### Checklist
-- ... (3-7 conceptual bullet points; see above)
-
-### Research and Suggestion
+#### 4. SOTA Model Enhancement
 - ... (prose explanation)
 
 ### Validation
-- ... (validation statements, or "No suggestions.")
+- ... (validation statements for each suggestion, or "No suggestions.")
 
 ### Previous Suggestion Review
-Decide whether the most recently executed suggestion (see <previous suggestion executed>) should be blacklisted. Base your decision on the validation outcomes and logs provided in the context.
+Determine whether the most recent suggestion (see <previous suggestion executed>) should be blacklisted, based on validation outcomes and logs provided in context.
 
-Output your decision in the following strict JSON format, enclosed in backticks:
+Output your decision in the following strict JSON format (enclosed in backticks):
 ```json
 {{
     "blacklist": <true or false>,
-    "reason": "<succinct justification; use empty string if blacklist is false>"
+    "reason": "<succinct justification; if blacklist is false, use empty string>"
 }}
 ```
 
 ### New Suggestion Summary
-Propose the single best next idea for improving the competition score. Do not repeat blacklisted ideas or the previous suggestion.
+Propose the single best next idea (only one) for improving the competition score, synthesizing insights from the four categories above. Do not repeat blacklisted ideas or the previous suggestion.
 
-Output your new idea in the following strict JSON format, enclosed in backticks:
+Return your new idea using the following strict JSON format (enclosed in backticks):
 ```json
 {{
-    "suggestion": "<your suggestion here>"
+    "suggestion": "<your proposed best next idea>",
+    "reasoning": "<explanation for selecting this idea as the best compared to other promising ideas>"
 }}
 ```
-If you have no viable suggestion, leave the value as an empty string.
+If there is no viable suggestion, use empty strings for the values.
 
 ### Code
-Provide a concise Python snippet (enclosed in ```python backticks) that implements the suggested best next idea for improving the competition score. If no suggestion is provided, leave this section empty.
+Present a concise Python code snippet (within triple backticks marked 'python') that implements your proposed best next idea. If no suggestion is made, leave this section empty (no code block).
 
-- Never repeat any idea from <previous failed ideas>.
-- If blacklist is true, ensure the new suggestion avoids that approach.
+Never repeat any idea from <previous failed ideas>. If a suggestion is blacklisted, ensure your new recommendation avoids that approach.
 """
 
     prompt = f"""<competition description>

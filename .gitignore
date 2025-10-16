@@ -89,6 +89,7 @@ profile_default/
 ipython_config.py
 *.ipynb
 catboost_test.py
+apply_sample_patch.py
 code_16_v2.py
 code_abc.py
 kaggle.json

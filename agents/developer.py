@@ -347,48 +347,6 @@ Project structure:
         return self._extract_code(content)
 
     @staticmethod
-    def _apply_unified_diff(base_lines: list[str], diff_lines: list[str]) -> Optional[list[str]]:
-        if not diff_lines:
-            return None
-
-        result: list[str] = []
-        base_idx = 0
-
-        for line in diff_lines:
-            if not line:
-                continue
-            if line.startswith(("diff ", "index ", "--- ", "+++ ", "@@ ")):
-                continue
-            prefix = line[0]
-            content = line[1:]
-            if prefix == ' ':
-                while base_idx < len(base_lines) and base_lines[base_idx] != content:
-                    result.append(base_lines[base_idx])
-                    base_idx += 1
-                if base_idx >= len(base_lines):
-                    return None
-                result.append(base_lines[base_idx])
-                base_idx += 1
-            elif prefix == '-':
-                while base_idx < len(base_lines) and base_lines[base_idx] != content:
-                    result.append(base_lines[base_idx])
-                    base_idx += 1
-                if base_idx >= len(base_lines):
-                    return None
-                base_idx += 1
-            elif prefix == '+':
-                result.append(content)
-            elif prefix == '\\':
-                continue
-            else:
-                return None
-
-        if base_idx < len(base_lines):
-            result.extend(base_lines[base_idx:])
-
-        return result
-
-    @staticmethod
     def _normalize_diff_payload(base_path: Path, diff_text: str) -> Optional[str]:
         try:
             base_lines = base_path.read_text().splitlines()
@@ -397,31 +355,7 @@ Project structure:
             return None
         diff_lines = diff_text.splitlines()
         fixed_lines = DeveloperAgent._fix_hunk_headers(base_lines, diff_lines)
-        new_lines = DeveloperAgent._apply_unified_diff(base_lines, fixed_lines)
-        if new_lines is None:
-            # Try applying the corrected diff via patch tool
-            corrected_text = "\n".join(fixed_lines)
-            new_lines = DeveloperAgent._apply_with_patch_tool(base_lines, corrected_text, base_path.name)
-        if new_lines is None:
-            # Fall back to attempting original payload
-            new_lines = DeveloperAgent._apply_with_patch_tool(base_lines, diff_text, base_path.name)
-        if new_lines is None:
-            return None
-        if base_lines == new_lines:
-            return None
-
-        normalized = list(
-            difflib.unified_diff(
-                base_lines,
-                new_lines,
-                fromfile=base_path.name,
-                tofile=base_path.name,
-                lineterm="",
-            )
-        )
-        if not normalized:
-            return None
-        return "\n".join(normalized) + "\n"
+        return "\n".join(fixed_lines) + "\n"
 
     @staticmethod
     def _fix_hunk_headers(base_lines: list[str], diff_lines: list[str]) -> list[str]:
@@ -502,47 +436,7 @@ Project structure:
             delta += (plus_count - minus_count)
             diff_lines[diff_hunk_l] = f"@@ -{new_A},{new_B} +{new_C},{new_D} @@"
 
-        print("Fixed diff lines:")
-        print(diff_lines)
         return diff_lines
-
-    @staticmethod
-    def _apply_with_patch_tool(base_lines: list[str], diff_text: str, base_filename: str) -> Optional[list[str]]:
-        import tempfile
-
-        try:
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                tmp_dir_path = Path(tmp_dir)
-                tmp_base = tmp_dir_path / base_filename
-                tmp_base.write_text("\n".join(base_lines) + "\n")
-                patched_path = tmp_dir_path / (base_filename + ".patched")
-                cmd = ["patch", "-o", patched_path.name, tmp_base.name]
-                try:
-                    result = subprocess.run(
-                        cmd,
-                        input=diff_text if diff_text.endswith("\n") else diff_text + "\n",
-                        text=True,
-                        capture_output=True,
-                        cwd=tmp_dir,
-                        check=False,
-                    )
-                except FileNotFoundError:
-                    return None
-                except Exception:
-                    return None
-                if not patched_path.exists():
-                    return None
-                try:
-                    patched_lines = patched_path.read_text().splitlines()
-                except Exception:
-                    return None
-                # Validate by forward diff so we don't return identical content
-                if patched_lines == base_lines:
-                    return None
-                return patched_lines
-        except Exception:
-            return None
-
 
     def _apply_patch(self, base_version: int, diff_payload: str, target_version: int) -> Optional[str]:
         """Apply diff payload to the previous source file and return updated code."""

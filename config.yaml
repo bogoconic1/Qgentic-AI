@@ -27,7 +27,7 @@ hardware:
 guardrails:
   logging_basicconfig_order: true
   nan_guard: true
-  leakage_review: true
+  leakage_review: false
 tracking:
   wandb:
     entity: bogoconic1 # replace with your W&B entity
