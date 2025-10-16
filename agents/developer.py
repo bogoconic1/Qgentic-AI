@@ -5,6 +5,7 @@ import os
 import re
 import subprocess
 import textwrap
+import time
 from pathlib import Path
 from typing import Optional
 import json
@@ -67,7 +68,6 @@ _CODE_TEMPLATE = _PATH_CFG.get("code_filename_template", "code_{iteration}_v{ver
 _LOG_TEMPLATE = _PATH_CFG.get("log_filename_template", "code_{iteration}_v{version}.txt")
 _SUBMISSION_TEMPLATE = _PATH_CFG.get("submission_filename_template", "submission_{version}.csv")
 _HARDWARE_DESCRIPTION = _HARDWARE_CFG.get("description", "A single A100 80GB GPU")
-_DEFAULT_MAX_TRIES = _RUNTIME_CFG.get("developer_max_tries", 50)
 
 def _safe_read(path: str) -> str:
     try:
@@ -83,7 +83,7 @@ class DeveloperAgent:
     """Turns the Researcher plan into a runnable single-file solution.
 
     - Generates a single python file: code_{iteration}_v{version}.py
-    - Executes it and iterates on failures up to max_tries
+    - Executes it and iterates while within a time budget
     - Success condition: writes submission.csv at
       <task_root>/<slug>/<outputs_dir>/<iteration>/submission.csv
     """
@@ -446,14 +446,14 @@ class DeveloperAgent:
             self.blacklisted_ideas = self.blacklisted_ideas[-10:]
 
     @weave.op()
-    def run(self, plan_markdown: str, max_tries: Optional[int] = None) -> bool:
-        max_tries = max_tries or _DEFAULT_MAX_TRIES
+    def run(self, plan_markdown: str, max_time_seconds: Optional[int] = 6 * 3600) -> bool:
         logger.info(
-            "Starting developer run for slug=%s iteration=%s with max_tries=%s",
+            "Starting developer run for slug=%s iteration=%s",
             self.slug,
             self.iteration,
-            max_tries,
         )
+        start_time = time.time()
+        deadline = start_time + (max_time_seconds or 6 * 3600)
         try:
             with open(self.plan_path, "w") as f:
                 f.write(plan_markdown)
@@ -468,14 +468,25 @@ class DeveloperAgent:
         self.messages.append({"role": "system", "content": system_prompt})
         self.messages.append({"role": "user", "content": user_prompt})
         
-        for attempt in range(1, max_tries + 1):
+        attempt = 0
+        while True:
+            now = time.time()
+            if max_time_seconds is not None and now >= deadline:
+                logger.info("Time budget exhausted (%.2f minutes)", (deadline - start_time) / 60.0)
+                break
+
+            attempt += 1
 
             artifact = wandb.Artifact(f'{self.iteration}-{self.slug}', type='files')
 
             if len(self.messages) > 6:
                 self.messages = self.messages[:2] + self.messages[-4:]
 
-            logger.info("Attempt %s/%s for developer run", attempt, max_tries)
+            minutes_left = ((deadline - now) / 60.0) if max_time_seconds is not None else float('inf')
+            try:
+                logger.info("Attempt %s (time left ~%.1f min)", attempt, minutes_left)
+            except Exception:
+                logger.info("Attempt %s", attempt)
             version = attempt
             expect_patch = self.patch_mode_enabled and attempt > 1
             while True:
@@ -781,7 +792,8 @@ class DeveloperAgent:
             artifact.save()
 
         logger.warning(
-            "Developer run exhausted all attempts without creating submission: %s",
-            self.outputs_dir / self._submission_filename(max_tries),
+            "Developer run ended without creating submission (last attempt v%s): %s",
+            attempt,
+            self.outputs_dir / self._submission_filename(attempt),
         )
         return True

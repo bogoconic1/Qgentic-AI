@@ -132,7 +132,7 @@ task/
 ### 5. Launch an Iteration
 
 ```bash
-python launch_agent.py --slug "enter slug" --iteration 1 --tries 50
+python launch_agent.py --slug "enter slug" --iteration 1 --time-seconds $((6*3600))
 ```
 
 - The Researcher runs first (unless `plan.md` already exists for that iteration).
