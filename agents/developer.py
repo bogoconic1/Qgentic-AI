@@ -24,6 +24,7 @@ from guardrails.developer import (
     llm_debug_sequence_review,
     llm_leakage_review,
 )
+from utils.guardrails import evaluate_guardrails, build_block_summary
 from tools.helpers import call_llm_with_retry, _build_directory_listing
 from utils.diffs import (
     extract_diff_block,
@@ -543,124 +544,13 @@ class DeveloperAgent:
             # ---------------------------
             # Pre-exec guardrail checks
             # ---------------------------
-            guard_report = {
-                "logging_check": {},
-                "debug_sequence_check": {},
-                "leakage_check": {},
-                "decision": "proceed",
-            }
-
-            # 1 AST logging.basicConfig order
-            log_check = {"status": "skipped", "reason": "disabled in config"}
-            if _ENABLE_LOGGING_GUARD:
-                try:
-                    log_check = check_logging_basicconfig_order(str(code_path))
-                except Exception:
-                    logger.exception("Logging AST check failed")
-                    log_check = {"status": "error", "error": "exception in logging check"}
-                guard_report["logging_check"] = log_check
-                try:
-                    logger.info(
-                        "Guardrail[logging] v%s: status=%s, violations=%s, basic_line=%s",
-                        version,
-                        log_check.get("status"),
-                        len(log_check.get("violations", [])),
-                        log_check.get("basicConfig_line"),
-                    )
-                except Exception:
-                    logger.debug("Failed to log logging guardrail status for v%s", version)
-                if log_check.get("status") == "fail":
-                    guard_report["decision"] = "block"
-            else:
-                guard_report["logging_check"] = log_check
-                try:
-                    logger.info(
-                        "Guardrail[logging] v%s: skipped (disabled in config)",
-                        version,
-                    )
-                except Exception:
-                    logger.debug("Failed to log logging guardrail skip status for v%s", version)
-
-            # 2 DEBUG sequencing + NaN guard review (LLM)
-            if guard_report["decision"] != "block":
-                if _ENABLE_NAN_GUARD:
-                    try:
-                        debug_json_text = llm_debug_sequence_review(_safe_read(str(code_path)))
-                    except Exception:
-                        logger.exception("DEBUG sequencing guardrail call failed")
-                        debug_json_text = '{"severity":"warn","findings":[{"rule_id":"llm_error","snippet":"N/A","rationale":"LLM call failed","suggestion":"Manually ensure DEBUG runs before FULL and loss/metric NaN or zero values raise exceptions."}]}'
-                    guard_report["debug_sequence_check"] = debug_json_text
-                    try:
-                        parsed = json.loads(debug_json_text)
-                        try:
-                            logger.info(
-                                "Guardrail[debug_seq] v%s: severity=%s, findings=%s",
-                                version,
-                                parsed.get("severity"),
-                                len(parsed.get("findings", [])),
-                            )
-                        except Exception:
-                            logger.debug("Failed to log DEBUG sequencing guardrail status for v%s", version)
-                        if parsed.get("severity") == "block":
-                            guard_report["decision"] = "block"
-                    except Exception:
-                        logger.warning(
-                            "Guardrail[debug_seq] v%s: malformed JSON from reviewer; proceeding as warn",
-                            version,
-                        )
-                else:
-                    guard_report["debug_sequence_check"] = {
-                        "status": "skipped",
-                        "reason": "disabled in config",
-                    }
-                    try:
-                        logger.info(
-                            "Guardrail[debug_seq] v%s: skipped (disabled in config)",
-                            version,
-                        )
-                    except Exception:
-                        logger.debug("Failed to log DEBUG sequencing guardrail skip status for v%s", version)
-
-            # 3 LLM-based leakage review (only if not already blocked)
-            if guard_report["decision"] != "block":
-                if _ENABLE_LEAKAGE_GUARD:
-                    try:
-                        leakage_json_text = llm_leakage_review(self.description, _safe_read(str(code_path)))
-                    except Exception:
-                        logger.exception("LLM leakage review call failed")
-                        leakage_json_text = '{"severity":"warn","findings":[{"rule_id":"llm_error","snippet":"N/A","rationale":"LLM call failed","suggestion":"Proceed with caution"}]}'
-                    guard_report["leakage_check"] = leakage_json_text
-                    try:
-                        parsed = json.loads(leakage_json_text)
-                        try:
-                            logger.info(
-                                "Guardrail[leakage] v%s: severity=%s, findings=%s",
-                                version,
-                                parsed.get("severity"),
-                                len(parsed.get("findings", [])),
-                            )
-                        except Exception:
-                            logger.debug("Failed to log leakage guardrail status for v%s", version)
-                        if parsed.get("severity") == "block":
-                            guard_report["decision"] = "block"
-                    except Exception:
-                        # If JSON malformed, treat as warn but proceed
-                        logger.warning(
-                            "Guardrail[leakage] v%s: malformed JSON from reviewer; proceeding as warn",
-                            version,
-                        )
-                else:
-                    guard_report["leakage_check"] = {
-                        "status": "skipped",
-                        "reason": "disabled in config",
-                    }
-                    try:
-                        logger.info(
-                            "Guardrail[leakage] v%s: skipped (disabled in config)",
-                            version,
-                        )
-                    except Exception:
-                        logger.debug("Failed to log leakage guardrail skip status for v%s", version)
+            guard_report = evaluate_guardrails(
+                description=self.description,
+                code_text=_safe_read(str(code_path)),
+                enable_logging_guard=_ENABLE_LOGGING_GUARD,
+                enable_nan_guard=_ENABLE_NAN_GUARD,
+                enable_leakage_guard=_ENABLE_LEAKAGE_GUARD,
+            )
 
             try:
                 logger.info("Guardrail decision v%s: %s", version, guard_report.get("decision"))
@@ -669,57 +559,11 @@ class DeveloperAgent:
 
             if guard_report.get("decision") == "block":
                 # Build feedback and ask for a corrected script without executing
-                summary = ["Guardrail checks failed:"]
-                if log_check.get("status") == "fail":
-                    summary.append("- logging.basicConfig must be called before any top-level logging usage.")
-                try:
-                    raw_debug = guard_report.get("debug_sequence_check", "{}")
-                    parsed_debug = json.loads(raw_debug.strip()) if isinstance(raw_debug, str) else (raw_debug or {})
-                    if parsed_debug.get("severity") == "block":
-                        summary.append(
-                            "- Ensure the script runs DEBUG mode before FULL mode and raises an Exception when loss/metric is NaN or 0."
-                        )
-                        findings = parsed_debug.get("findings", [])
-                        if findings:
-                            summary.append("\nDEBUG sequencing findings:")
-                            for idx, finding in enumerate(findings, start=1):
-                                summary.append(
-                                    f"{idx}. rule_id={finding.get('rule_id', 'unknown')}\n   - snippet: {finding.get('snippet', '')}\n   - rationale: {finding.get('rationale', '')}\n   - suggestion: {finding.get('suggestion', '')}"
-                                )
-                except Exception:
-                    try:
-                        summary.append("- DEBUG sequencing reviewer returned non-JSON content:")
-                        summary.append(str(guard_report.get("debug_sequence_check")))
-                    except Exception:
-                        pass
-                try:
-                    raw_leak = guard_report.get("leakage_check", "{}")
-                    parsed = json.loads(raw_leak.strip()) if isinstance(raw_leak, str) else (raw_leak or {})
-                    sev = parsed.get("severity")
-                    if sev == "block":
-                        summary.append("- Potential data leakage risks detected. Please fix as suggested.")
-                        findings = parsed.get("findings", [])
-                        if findings:
-                            summary.append("\nLeakage reviewer findings:")
-                            for idx, f in enumerate(findings, start=1):
-                                rule_id = f.get("rule_id", "unknown")
-                                snippet = f.get("snippet", "")
-                                rationale = f.get("rationale", "")
-                                suggestion = f.get("suggestion", "")
-                                summary.append(
-                                    f"{idx}. rule_id={rule_id}\n   - snippet: {snippet}\n   - rationale: {rationale}\n   - suggestion: {suggestion}"
-                                )
-                except Exception:
-                    # Could not parse JSON; include raw reviewer text for context
-                    try:
-                        summary.append("- Data leakage reviewer returned non-JSON content:")
-                        summary.append(str(guard_report.get("leakage_check")))
-                    except Exception:
-                        pass
+                summary_text = build_block_summary(guard_report)
                 next_log_path = self.outputs_dir / self._log_filename(version + 1)
                 next_submission_path = self.outputs_dir / self._submission_filename(version + 1)
                 fix_instr = prompt_guardrail_fix_suffix(next_log_path, next_submission_path)
-                guardrail_prompt = "\n".join(summary) + fix_instr
+                guardrail_prompt = summary_text + fix_instr
                 base_version_for_next_patch = version
                 guardrail_prompt = self._append_patch_directive(guardrail_prompt, base_version_for_next_patch)
                 assistant_payload = self._build_assistant_payload(
