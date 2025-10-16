@@ -152,10 +152,10 @@ Generate FOUR distinct suggestions, each from a separate strategic category:
 1. Data / Feature Engineering Enhancement - focuses on improving input representation or data quality.
 2. Architectural Enhancement - proposes improvements to the model backbone or design.
 3. Ensembling Enhancement - addresses model aggregation, stacking, blending, or bagging.
-4. SOTA Model / GitHub Repository Enhancement - highlights a high-performing public solution or repository suitable for similar tasks.
+4. SOTA Model Enhancement - highlights a recent effective model from an arXiv paper/GitHub repository/Blog Post that has been successfully applied on similar tasks.
 
 For each category:
-- Provide one high-impact suggestion for improving performance on the competition's metric, with an explanation of approximately 100 words outlining its benefits.
+- Provide one high-impact suggestion for improving performance on the competition task and metric, with an explanation of approximately 100 words outlining its benefits.
 - Clearly differentiate suggestions using numbered headings (e.g., '#### 1. Data / Feature Engineering Suggestion').
 - Ensure the four suggestions are complementary and not overlapping.
 
@@ -180,10 +180,10 @@ Your output MUST include the following sections in order:
 #### 2. Architectural Enhancement Suggestion
 - ... (prose explanation)
 
-#### 3. Ensembling Enhancement Suggestion
+#### 3. Ensembling/Blending Enhancement Suggestion
 - ... (prose explanation)
 
-#### 4. SOTA Model / GitHub Repository Enhancement
+#### 4. SOTA Model Enhancement
 - ... (prose explanation)
 
 ### Validation
@@ -207,7 +207,7 @@ Return your new idea using the following strict JSON format (enclosed in backtic
 ```json
 {{
     "suggestion": "<your proposed best next idea>",
-    "reasoning": "<explanation for selecting this idea as the best from the four categories above>"
+    "reasoning": "<explanation for selecting this idea as the best compared to other promising ideas>"
 }}
 ```
 If there is no viable suggestion, use empty strings for the values.
