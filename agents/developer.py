@@ -25,6 +25,11 @@ from guardrails.developer import (
     llm_leakage_review,
 )
 from tools.helpers import call_llm_with_retry, _build_directory_listing
+from utils.diffs import (
+    extract_diff_block,
+    normalize_diff_payload,
+    apply_patch as util_apply_patch,
+)
 from prompts.developer_agent import (
     build_system as prompt_build_system,
     build_user as prompt_build_user,
@@ -72,7 +77,6 @@ def _safe_read(path: str) -> str:
         logger.exception("Failed to read file: %s", path)
         return ""
 
-# NOTE: I am aware that this code will not work if self.is_lower_better is True (to be fixed)
 class DeveloperAgent:
     """Turns the Researcher plan into a runnable single-file solution.
 
@@ -80,7 +84,6 @@ class DeveloperAgent:
     - Executes it and iterates on failures up to max_tries
     - Success condition: writes submission.csv at
       <task_root>/<slug>/<outputs_dir>/<iteration>/submission.csv
-    - Ensures Torch MPS fallback flags for Apple Silicon
     """
 
     def __init__(self, slug: str, iteration: int):
@@ -274,16 +277,7 @@ class DeveloperAgent:
 
     @staticmethod
     def _extract_diff_block(content: str) -> str:
-        """Extract unified diff payload from the completion content."""
-        if not content:
-            return ""
-        fenced = re.search(r"```diff\s*(.*?)\s*```", content, re.DOTALL | re.IGNORECASE)
-        if fenced:
-            return fenced.group(1).strip()
-        generic = re.search(r"```\s*(.*?)\s*```", content, re.DOTALL)
-        if generic:
-            return generic.group(1).strip()
-        return content.strip()
+        return extract_diff_block(content)
 
     @weave.op()
     def _generate_code(self, messages: list[dict[str, str]], expect_patch: bool = False) -> str:
@@ -310,95 +304,7 @@ class DeveloperAgent:
 
     @staticmethod
     def _normalize_diff_payload(base_path: Path, diff_text: str) -> Optional[str]:
-        try:
-            base_lines = base_path.read_text().splitlines()
-        except Exception:
-            logger.exception("Failed to read base file while normalizing diff: %s", base_path)
-            return None
-        diff_lines = diff_text.splitlines()
-        fixed_lines = DeveloperAgent._fix_hunk_headers(base_lines, diff_lines)
-        return "\n".join(fixed_lines) + "\n"
-
-    @staticmethod
-    def _fix_hunk_headers(base_lines: list[str], diff_lines: list[str]) -> list[str]:
-        """Fix incorrect @@ hunk headers to be consistent with the diff body and the base file.
-
-        Rules implemented:
-        - Split the patch into hunks on lines starting with "@@".
-        - For each hunk body, count minus/plus/context lines to set b and d.
-        - Recompute a (old start) by locating the first non-added line (" " or "-") in base_lines,
-          choosing the occurrence closest to the previous hunk's a (if any), otherwise earliest.
-        - Maintain running delta (initially 0) so c = a + delta; then delta += (plus_count - minus_count).
-        - Pure-additions first hunk: assume a=1 and c=1. If a later hunk has no non-added lines,
-          fall back to earliest valid match (a=1).
-        - Rebuild header as: @@ -{a},{b} +{c},{d} @@ and keep body lines unchanged.
-        """
-
-        header_re = re.compile(r"^@@\s*-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s+@@")
-
-        output_lines = []
-        i = 0
-        delta = 0
-        hunks = []
-
-        for i in range(len(diff_lines)):
-            if re.match(header_re, diff_lines[i]):
-                A, B, C, D = map(int, header_re.match(diff_lines[i]).groups())
-                hunks.append([i, A, B, C, D])
-
-        hunks.append([len(diff_lines), 0, 0, 0, 0])
-
-        for i in range(len(hunks)-1):
-            # within this hunk
-            diff_hunk_l, old_A, old_B, old_C, old_D = hunks[i]
-            diff_hunk_r, _, _, _, _ = hunks[i+1]
-            hunk_lines = diff_lines[diff_hunk_l+1:diff_hunk_r]
-            minus_count = 0
-            plus_count = 0
-            first_valid_line = None
-            for line in hunk_lines:
-                assert not re.match(header_re, line)
-                if line.startswith("-"):
-                    minus_count += 1
-                    if first_valid_line is None:
-                        first_valid_line = line[1:]
-                elif line.startswith("+"):
-                    plus_count += 1
-                else:
-                    # in old and new file
-                    minus_count += 1
-                    plus_count += 1
-                    if first_valid_line is None:
-                        first_valid_line = line
-
-            print("First valid line:")
-            if first_valid_line is None:
-                # Edge case: no anchorable content; return original diff lines
-                return diff_lines
-            print(first_valid_line.strip())
-            new_A = None
-            
-            for line_no in range(old_A - 15, old_A + 15):
-                if line_no < 0:
-                    continue
-                if line_no >= len(base_lines):
-                    continue
-                if base_lines[line_no].strip() == first_valid_line.strip():
-                    new_A = line_no + 1
-                    break
-
-            if new_A is None:
-                # edge case - the content is completely wrong (patch will not work)
-                return diff_lines
-
-            new_C = new_A + delta
-            new_B = minus_count
-            new_D = plus_count
-
-            delta += (plus_count - minus_count)
-            diff_lines[diff_hunk_l] = f"@@ -{new_A},{new_B} +{new_C},{new_D} @@"
-
-        return diff_lines
+        return normalize_diff_payload(base_path, diff_text)
 
     def _apply_patch(self, base_version: int, diff_payload: str, target_version: int) -> Optional[str]:
         """Apply diff payload to the previous source file and return updated code."""
@@ -436,69 +342,23 @@ class DeveloperAgent:
         normalized_payload = self._normalize_diff_payload(base_path, diff_text)
         attempts.append(("normalized", normalized_payload))
 
-        cmd = ["patch", "-o", output_filename, base_filename]
-
         for label, payload in attempts:
             logger.debug("Attempting to apply %s diff for version %s", label, target_version)
             logger.debug("Payload: %s", payload)
-            # print(payload)
-            if output_path.exists():
-                try:
-                    output_path.unlink()
-                except Exception:
-                    logger.exception(
-                        "Failed to remove existing output file before applying %s diff: %s",
-                        label,
-                        output_path,
-                    )
-                    return None
-            try:
-                result = subprocess.run(
-                    cmd,
-                    input=payload,
-                    text=True,
-                    capture_output=True,
-                    cwd=self.outputs_dir,
-                    check=False,
-                )
-            except FileNotFoundError:
-                logger.exception("`patch` utility not available on system path.")
-                return None
-            except Exception:
-                logger.exception("Unexpected failure while applying patch command.")
-                return None
-
-            if result.returncode != 0:
-                logger.warning(
-                    "Patch command (%s diff) returned non-zero exit code %s. stderr=\n%s",
-                    label,
-                    result.returncode,
-                    (result.stderr or "").strip(),
-                )
-                if output_path.exists():
-                    try:
-                        output_path.unlink()
-                    except Exception:
-                        logger.debug(
-                            "Failed to clean up partial patched file after %s diff attempt: %s",
-                            label,
-                            output_path,
-                        )
-                continue
-
-            try:
-                updated_code = output_path.read_text()
-            except Exception:
-                logger.exception("Failed to read patched file at %s", output_path)
-                return None
-
-            logger.info(
-                "Successfully applied %s diff to generate version %s from base %s",
-                label,
-                target_version,
-                base_version,
+            updated_code = util_apply_patch(
+                outputs_dir=self.outputs_dir,
+                base_filename=base_filename,
+                output_filename=output_filename,
+                payload=payload,
             )
-            return updated_code
+            if updated_code is not None:
+                logger.info(
+                    "Successfully applied %s diff to generate version %s from base %s",
+                    label,
+                    target_version,
+                    base_version,
+                )
+                return updated_code
 
         logger.warning("All patch attempts failed for target version %s", target_version)
         return None
