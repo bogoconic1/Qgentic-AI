@@ -118,6 +118,7 @@ def search_sota_suggestions(
     failed_to_improve_score: bool,
     failed_ideas: list[str],
     executed_code: str | None = None,
+    plans: list[str] | None = None,
 ) -> str:
     """Use web search to surface potential SOTA improvements for the competition."""
     logger.info("Dispatching SOTA web search")
@@ -129,28 +130,17 @@ def search_sota_suggestions(
         if filtered:
             failed_ideas_text = "\n".join(f"- {idea}" for idea in filtered)
 
-    prompt = f"""
-You will receive a Kaggle competition description, an initial script, and its logs for analysis.
+    # Optional: include researcher plans as a separate section for plan-aware suggestions
+    plans_section = ""
+    if plans:
+        blocks: list[str] = []
+        for idx, p in enumerate(plans, start=1):
+            # Truncate to avoid excessive token usage
+            text = p if len(p) <= 30000 else p[-30000:]
+            blocks.append(f"<plan id=\"{idx}\">\n{text}\n</plan>")
+        plans_section = "\n<researcher_plans>\n" + "\n\n".join(blocks) + "\n</researcher_plans>\n"
 
-<competition description>
-{description}
-</competition description>
-
-<previous failed ideas> DO NOT TRY THESE AGAIN
-{failed_ideas_text}
-</previous failed ideas>
-
-<previous suggestion executed>
-{executed_suggestion_text}
-</previous suggestion executed>
-
-<previous code snippet applied>
-{executed_code_text}
-</previous code snippet applied>
-
-{context}
-
-Outcome status: {"No improvement" if failed_to_improve_score else "Improved or matched"}
+    system_prompt = f"""You will receive a Kaggle competition description, one or more researcher plans, an initial script, and its logs for analysis.
 
 ### Checklist
 - Begin with a concise checklist of 3-7 bullet points summarizing high-level conceptual red flags from the code/logs and your intended strategies to address them. These should be conceptual (not implementation-specific). Use "- " for each bullet.
@@ -212,12 +202,33 @@ Provide a concise Python snippet (enclosed in ```python backticks) that implemen
 - Never repeat any idea from <previous failed ideas>.
 - If blacklist is true, ensure the new suggestion avoids that approach.
 """
+
+    prompt = f"""<competition description>
+{description}
+</competition description>
+
+{plans_section}
+
+<previous failed ideas> DO NOT TRY THESE AGAIN
+{failed_ideas_text}
+</previous failed ideas>
+
+<previous suggestion executed>
+{executed_suggestion_text}
+</previous suggestion executed>
+
+<previous code snippet applied>
+{executed_code_text}
+</previous code snippet applied>
+
+{context}
+
+Outcome status: {"No improvement" if failed_to_improve_score else "Improved or matched"}
+"""
         
     messages = [
-        {
-            "role": "user",
-            "content": prompt
-        }
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": prompt}
     ]
 
     try:
