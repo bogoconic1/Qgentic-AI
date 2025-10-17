@@ -206,7 +206,7 @@ class DeveloperAgent:
 
     def _compose_system(self) -> str:
         logger.debug("Composing system prompt for slug=%s", self.slug)
-        self.description = _safe_read(str(self.base_dir / "description.md"))
+        self.description = _safe_read(str(self.base_dir / "description_obfuscated.md"))
         logger.debug("Description length: %s characters", len(self.description))
         directory_listing = _build_directory_listing(self.base_dir)
         logger.debug(

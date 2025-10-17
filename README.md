@@ -60,7 +60,7 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
   - `config.yaml` overrides project defaults (model endpoints, runtime limits, etc.).
 
 - **Task Bundles (`task/<slug>/`)**
-  - Expected layout: Kaggle metadata, `description.md`, `plan.md`, `outputs/<iteration>/`
+  - Expected layout: Kaggle metadata, `description_obfuscated.md`, `plan.md`, `outputs/<iteration>/`
     (logs, generated code, submissions), and optional external-data caches.
 
 # Sample Logs
@@ -127,7 +127,7 @@ You will see something like this
 ```
 task/
 └─ "enter slug"/
-   ├─ description.md
+   ├─ description_obfuscated.md
    ├─ public_insights.md
    ├─ sample_submission.csv
    ├─ comp_metadata.yaml   
