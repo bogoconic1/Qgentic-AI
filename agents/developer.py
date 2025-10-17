@@ -650,7 +650,7 @@ class DeveloperAgent:
                         # Append ablation row
                         batch_scores.append({
                             "suggestion_type": suggestion_type,
-                            "idea": suggestion_text or "baseline",
+                            "idea": suggestion_text or code,
                             "score": run_score,
                         })
                         break
@@ -767,7 +767,7 @@ class DeveloperAgent:
                 for key in ["data", "architecture", "ensembling", "sota"]:
                     block = parsed.get(key)
                     if isinstance(block, dict):
-                        idea = block.get("idea") or ""
+                        idea = block.get("suggestion") or ""
                         code_snippet = block.get("code") or None
                         next_suggestions.append((key, idea, code_snippet))
 

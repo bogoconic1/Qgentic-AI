@@ -93,14 +93,22 @@ Summarize the four new suggestions in a concise manner and provide a Python code
 Use these exact keys: data_feature_suggestion/data_feature_code, arch_suggestion/arch_code, ensembling_suggestion/ensembling_code, sota_suggestion/sota_code. Return your new suggestions using the following strict JSON format (enclosed in backticks):
 ```json
 {
-    "data_feature_suggestion": <Data / Feature Engineering Suggestion>,
-    "data_feature_code": <Python code snippet for the data / feature engineering suggestion>,
-    "arch_suggestion": <Architectural Enhancement Suggestion>,
-    "arch_code": <Python code snippet for the architectural enhancement suggestion>,
-    "ensembling_suggestion": <Ensembling/Blending Enhancement Suggestion>,
-    "ensembling_code": <Python code snippet for the ensembling/blending enhancement suggestion>,
-    "sota_suggestion": <SOTA Model Enhancement Suggestion>,
-    "sota_code": <Python code snippet for the SOTA model enhancement suggestion>
+    "data": {
+        "suggestion": <Data / Feature Engineering Suggestion>,
+        "code": <Python code snippet for the data / feature engineering suggestion>
+    },
+    "architecture": {
+        "suggestion": <Architectural Enhancement Suggestion>,
+        "code": <Python code snippet for the architectural enhancement suggestion>
+    },
+    "ensembling": {
+        "suggestion": <Ensembling/Blending Enhancement Suggestion>,
+        "code": <Python code snippet for the ensembling/blending enhancement suggestion>
+    },
+    "sota": {
+        "suggestion": <SOTA Model Enhancement Suggestion>,
+        "code": <Python code snippet for the SOTA model enhancement suggestion>
+    }
 }
 ```
 If there is no viable suggestion, use empty strings for the values.

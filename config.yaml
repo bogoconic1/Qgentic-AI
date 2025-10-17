@@ -13,7 +13,7 @@ runtime:
   researcher_max_steps: 512
   llm_max_retries: 3
   directory_listing_max_files: 10
-  patch_mode_enabled: true
+  patch_mode_enabled: false
 paths:
   task_root: "task"
   outputs_dirname: "outputs"
@@ -22,7 +22,7 @@ hardware:
   description: "A single NVIDIA H100 80GB HBM3"
 guardrails:
   logging_basicconfig_order: true
-  nan_guard: true
+  nan_guard: false
   leakage_review: false
 tracking:
   wandb:
