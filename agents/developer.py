@@ -298,10 +298,6 @@ class DeveloperAgent:
         deadline: float,
     ) -> dict:
         """Run one suggestion track sequentially (sub-attempt loop) and return outcome."""
-        try:
-            plan_text = _safe_read(str(self.plan_path)) if self.plan_path.exists() else ""
-        except Exception:
-            plan_text = ""
 
         sub_attempt = 0
         outcome: dict = {
@@ -318,14 +314,11 @@ class DeveloperAgent:
             if now >= deadline:
                 break
 
+            if len(messages) >= 8:
+                messages = messages[:4] + messages[-4:]
+
             sub_attempt += 1
 
-            user_prompt = self._build_user_prompt(
-                plan_text,
-                attempt=attempt,
-                suggestion_type=suggestion_type,
-                sub_attempt=sub_attempt,
-            )
             log_path_display = self.outputs_dir / self._log_filename(attempt, suggestion_type, sub_attempt)
             submission_path_display = self.outputs_dir / self._submission_filename(attempt, suggestion_type, sub_attempt)
 
@@ -339,17 +332,13 @@ class DeveloperAgent:
                 instr += (
                     f"Remember:\n- write logs to {log_path_display}\n- and produce the next submission at {submission_path_display}"
                 )
-
-            # Rebuild messages for this turn
-            messages = messages[:1]
-            messages.append({"role": "user", "content": user_prompt})
-            assistant_payload = self._build_assistant_payload(
-                self.best_code or "",
-                include_line_numbers=self.patch_mode_enabled,
-            )
-            messages.append({"role": "assistant", "content": assistant_payload})
-            if instr:
-                messages.append({"role": "user", "content": instr})
+                assistant_payload = self._build_assistant_payload(
+                    self.best_code or "",
+                    include_line_numbers=self.patch_mode_enabled,
+                )
+                messages.append({"role": "assistant", "content": assistant_payload})
+                if instr:
+                    messages.append({"role": "user", "content": instr})
 
             expect_patch = self.patch_mode_enabled and sub_attempt > 1
             generated = self._generate_code(messages, expect_patch=expect_patch)
@@ -678,10 +667,20 @@ class DeveloperAgent:
                     try:
                         res = fut.result()
                         if isinstance(res, dict):
-                            ablation_summaries.append(res)
+                            ablation_summaries.append({
+                                "score": res.get("score") or None,
+                                "suggestion_type": res.get("suggestion_type") or "",
+                                "idea": res.get("idea") or "",
+                                "code_summary": res.get("code_summary") or "",
+                                "logs_summary": res.get("logs_summary") or "",
+                            })
+                            logger.info("Ablation summary: %s", str(ablation_summaries[-1]))
                             score = res.get("score")
+                            if score is not None:
+                                self._log_attempt_score(attempt, score)
                             code = res.get("best_code_for_suggestion")
                             if score is not None and self._is_improvement(score, self.best_score):
+                                logger.info("New best score: %s", score)
                                 self.best_score = score
                                 self.best_attempt = attempt
                                 if code:
