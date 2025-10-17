@@ -17,7 +17,6 @@ from prompts.tools_developer import (
     sota_system as prompt_sota_system,
     sota_user as prompt_sota_user,
     ablation_baseline_prompt,
-    ablation_batch_prompt,
 )
 import weave
 
@@ -160,13 +159,16 @@ def search_sota_suggestions(
 
 
 @weave.op()
-def ablation_summarize_baseline(baseline: Dict) -> str:
+def ablation_summarize_baseline(code: str, logs: str) -> str:
     """Summarize the baseline run as a concise steer for next steps."""
     logger.info("Summarizing baseline for ablation")
     system_prompt = ablation_baseline_prompt()
-    user_prompt = (
-        "<baseline>\n" + json.dumps(baseline, ensure_ascii=False) + "\n</baseline>"
-    )
+    user_prompt = f"""<code>
+    {code}
+    </code>
+    <logs>
+    {logs}
+    </logs>"""
     try:
         completion = call_llm_with_retry(
             client,
@@ -177,35 +179,24 @@ def ablation_summarize_baseline(baseline: Dict) -> str:
             ],
         )
         msg = completion.choices[0].message
-        return (msg.content or "").strip()
+        content = (msg.content or "").strip()
     except Exception:
         logger.exception("Baseline ablation summarize failed")
-        return "Baseline summary unavailable."
+        content = ""
 
-
-@weave.op()
-def ablation_summarize_batch(baseline: Dict, batch_results: List[Dict]) -> str:
-    """Summarize outcomes of a batch (four suggestions) relative to baseline."""
-    logger.info("Summarizing batch results for ablation")
-    system_prompt = ablation_batch_prompt()
-    user_prompt = (
-        "<baseline>\n" + json.dumps(baseline, ensure_ascii=False) + "\n</baseline>\n\n"
-        "<batch_results>\n" + json.dumps(batch_results, ensure_ascii=False) + "\n</batch_results>"
-    )
+    parsed_payload = None
     try:
-        completion = call_llm_with_retry(
-            client,
-            model=_DEVELOPER_TOOL_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-        )
-        msg = completion.choices[0].message
-        return (msg.content or "").strip()
-    except Exception:
-        logger.exception("Batch ablation summarize failed")
-        return "Batch summary unavailable."
+        parsed_payload = json.loads(content)
+    except json.JSONDecodeError:
+        logger.debug("Raw response is not bare JSON; attempting fenced-block extraction.")
+        try:
+            match = re.search(r"```json\s*(\{.*?\})\s*```", content, re.DOTALL | re.IGNORECASE)
+            if match:
+                parsed_payload = json.loads(match.group(1))
+        except json.JSONDecodeError:
+            logger.debug("Failed to parse JSON from fenced block in baseline summary response.")
+            return ""
+    return parsed_payload
 
 @weave.op()
 def execute_code(filepath: str) -> str:

@@ -1,10 +1,7 @@
-import difflib
 import logging
 import math
 import os
 import re
-import subprocess
-import textwrap
 import time
 from pathlib import Path
 from typing import Optional
@@ -20,12 +17,6 @@ from tools.developer import (
     execute_code,
     search_sota_suggestions,
     ablation_summarize_baseline,
-    ablation_summarize_batch,
-)
-from guardrails.developer import (
-    check_logging_basicconfig_order,
-    llm_debug_sequence_review,
-    llm_leakage_review,
 )
 from utils.guardrails import evaluate_guardrails, build_block_summary
 from tools.helpers import call_llm_with_retry, _build_directory_listing
@@ -34,7 +25,7 @@ from utils.diffs import (
     normalize_diff_payload,
     apply_patch as util_apply_patch,
 )
-from utils.grade import run_grade, parse_grade_output
+from utils.grade import run_grade
 from prompts.developer_agent import (
     build_system as prompt_build_system,
     build_user as prompt_build_user,
@@ -493,8 +484,6 @@ class DeveloperAgent:
         # Suggestions schedule: start with baseline only
         suggestions: list[tuple[str, Optional[str], Optional[str]]] = [("baseline", None, None)]
         attempt = 0
-        baseline_result: dict = {}
-        batch_index = 0
 
         while True:
             now = time.time()
@@ -508,9 +497,10 @@ class DeveloperAgent:
             artifact = wandb.Artifact(f'{self.iteration}-{self.slug}', type='files')
 
             # scores for ablation after this batch
-            batch_scores: list[dict] = []
+            ablation_summaries: list[dict] = []
 
             for (suggestion_type, suggestion_text, suggestion_code) in suggestions:
+                if suggestion_type not in ['baseline', 'data', 'sota']: continue # debugging
                 # Manage time budget
                 now = time.time()
                 if max_time_seconds is not None and now >= deadline:
@@ -647,11 +637,15 @@ class DeveloperAgent:
                             self.best_score = run_score
                             self.best_attempt = attempt
                             self.best_code = code
-                        # Append ablation row
-                        batch_scores.append({
+                        # summarize the code and logs
+
+                        code_and_logs_summary = ablation_summarize_baseline(code, log_content)
+                        ablation_summaries.append({
                             "suggestion_type": suggestion_type,
-                            "idea": suggestion_text or code,
+                            "idea": suggestion_text or "baseline",
                             "score": run_score,
+                            "code_summary": code_and_logs_summary.get("code_summary") or "",
+                            "logs_summary": code_and_logs_summary.get("logs_summary") or "",
                         })
                         break
 
@@ -685,40 +679,8 @@ class DeveloperAgent:
                     if path.is_file():
                         artifact.add_file(str(path), overwrite=True)
                 artifact.save()
-
-            # End for suggestions in batch
-
-            # Run ablation
-            if attempt == 1:
-                # Baseline ablation
-                baseline_result = batch_scores[0] if batch_scores else {"suggestion_type": "baseline", "score": None}
-                try:
-                    summary_text = ablation_summarize_baseline(baseline_result)
-                except Exception:
-                    logger.exception("Baseline ablation summarize failed")
-                    summary_text = ""
-                self.latest_ablation_summary = summary_text
-                try:
-                    ablation_dir = self.outputs_dir / "ablation"
-                    ablation_dir.mkdir(parents=True, exist_ok=True)
-                    (ablation_dir / "baseline.json").write_text(json.dumps({"summary": summary_text, "baseline": baseline_result}, ensure_ascii=False, indent=2))
-                except Exception:
-                    logger.exception("Failed to persist baseline ablation summary")
-            else:
-                try:
-                    summary_text = ablation_summarize_batch(baseline_result, batch_scores)
-                except Exception:
-                    logger.exception("Batch ablation summarize failed")
-                    summary_text = ""
-                self.latest_ablation_summary = summary_text
-                try:
-                    batch_index += 1
-                    ablation_dir = self.outputs_dir / "ablation"
-                    ablation_dir.mkdir(parents=True, exist_ok=True)
-                    (ablation_dir / f"batch_{batch_index}.json").write_text(json.dumps({"summary": summary_text, "results": batch_scores}, ensure_ascii=False, indent=2))
-                except Exception:
-                    logger.exception("Failed to persist batch ablation summary")
-
+            
+            self.latest_ablation_summary = ablation_summaries
             # Prepare next suggestions via SOTA (skip after baseline if no time)
             now = time.time()
             if max_time_seconds is not None and now >= deadline:

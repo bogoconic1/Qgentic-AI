@@ -138,92 +138,33 @@ def sota_user(
 
 
 def ablation_baseline_prompt() -> str:
-    return """You will receive a structured input:
+    return """You will be provided with a piece of code and its corresponding logs.
 
-<baseline>: The baseline run, with a 'score' field (preferably numeric; if not, provide a text description).
+Inputs:
+- <code>: The code to analyze.
+- <logs>: The logs to analyze.
 
-Begin with a concise checklist (3-7 bullets) outlining your intended approach before drafting the steer.
+Begin with a concise checklist (3-7 bullets) of what you will do; keep items conceptual, not implementation-level.
 
-Draft a concise steer (maximum 180 words) covering:
-- Baseline score
-- Notes on stability
-- 3-5 brief bullet points (each on its own line, starting with '-') offering takeaways or next steps for the next iteration
+Instructions:
+1. Summarize both the code and the logs concisely.
+2. Output the result in JSON format as specified below.
+3. Incorporate all relevant key findings and takeaways from both the code and the logs.
+4. If either the code or the logs is missing, return an empty string ('') in the respective summary field.
+5. Do not return null values or omit any keys from the output.
+6. If the provided code or logs are excessively long or malformed, summarize using the available information and clearly note any limitations due to input quality.
 
-Set reasoning_effort = minimal, as appropriate for a summary-focused task.
-Before extracting or reporting key results, verify their presence and format in the provided baseline data.
-Respond using only plain text.
+After generating the summaries, verify that both summary fields are present, use empty strings where required, and that all JSON keys match the output schema exactly. If any issues are found, self-correct and revalidate before outputting the final response.
 
 ## Output Format
-Return your answer strictly in the following JSON format:
-```
+Return your answer strictly in the following JSON structure:
+
+```json
 {
-  "checklist": [
-    "your first checklist item",
-    "your second checklist item",
-    ...(3-7 items)
-  ],
-  "steer": {
-    "baseline_score": <numeric or string, as found in <baseline>>,
-    "stability_notes": "1-3 sentences on stability (keep it brief)",
-    "takeaways": [
-      "- recommended next step or insight",
-      "- another key takeaway (3-5 total)",
-      ...
-    ]
-  }
+  "code_summary": "Summary of the code or '' if code is absent",
+  "logs_summary": "Summary of the logs or '' if logs are absent"
 }
 ```
-- Use the data format (numeric, float, or string) for "baseline_score" as appears in <baseline>.
-- Output strictly the structured JSON. Do not add explanations or narrative outside the JSON structure."""
-
-
-def ablation_batch_prompt() -> str:
-    return """You will receive two structured inputs:
-- <baseline>: The baseline run, with a 'score' field (preferably numeric; if not, provide a text description).
-- <batch_results>: An array of four candidate runs, each with at least:
-    - identifier: A unique string or integer (may be named 'id', 'name', etc.; use as provided).
-    - score: Numeric value when available (if absent or not numeric, report as 'missing').
-    - status: String indicating run outcome (use as provided, e.g., 'success', 'failure').
-
-Begin with a concise checklist (3-7 conceptual bullets) outlining your intended steps; keep items conceptual and do not include implementation details.
-
-When reviewing candidates, if a significant data or field issue arises—such as missing identifiers, scores, or statuses—briefly state the nature of the problem and suggest next actions or verification as appropriate.
-
-Produce a concise ablation summary in JSON output (maximum 220 words in the summary fields), including:
-- The baseline score (or a descriptive text if unavailable or not numeric) in a field called 'baseline_score'.
-- For each candidate (in order as per batch_results), provide an object with its identifier (or 'identifier missing'), score ('missing' if absent), and status. If identifier is missing, write 'identifier missing'. Each object should also include an analysis of the candidate's effect (positive, negative, or neutral) under the key 'effect' with 1-2 reasons for each candidate under 'reasons'.
-- Conclude with a 'guidance' field, containing a 1-2 sentence recommendation for the next iteration.
-
-After completing the summary, review for completeness and clarity; validate that all requested elements are addressed, and self-correct for any omissions or unclear points.
-
-Highlight as a data issue if a candidate has both a missing score and a status not marked as 'success'; advise verification in such cases.
-
-If critical input fields are missing or malformed (e.g., baseline missing score, or a candidate missing identifier, score, and status), clearly state this in the summary (in a 'data_issues' field) and propose corrective action. If the score is non-numeric, display it as-is and specify its type or explain the reason for non-numeric status (in a 'notes' or similar field).
-
-Restrict output to JSON only; do not use extra formatting, markdown, or informal conversation.
-
-Template for output:
-
-{
-  "baseline_score": [numeric value, or text if unavailable/malformed],
-  "candidates": [
-    {
-      "identifier": [value or 'identifier missing'],
-      "score": [numeric value or 'missing'],
-      "status": [status],
-      "effect": [positive/negative/neutral],
-      "reasons": [list of 1-2 concise rationales]
-    },
-    ...
-  ],
-  "guidance": [concise recommendation for next steps],
-  "data_issues": [list of data issues if present],
-  "notes": [list of explanatory notes if applicable]
-}
-
-- If baseline score is missing or non-numeric, display it as-is and note this in 'notes'.
-- If a candidate is missing an identifier, use 'identifier missing' in 'identifier'.
-- If both score and status are missing or unclear, specify the malformed entry in 'data_issues' and recommend correction.
-- All output must be valid JSON, no extra formatting, markdown, or conversational elements."""
+"""
 
 
