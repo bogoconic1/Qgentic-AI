@@ -8,6 +8,7 @@ import subprocess
 import traceback
 
 from dotenv import load_dotenv
+from typing import List, Dict, Optional, Any, Union
 from openai import OpenAI
 from project_config import get_config
 from tools.helpers import call_llm_with_retry
@@ -15,6 +16,7 @@ from prompts.tools_developer import (
     build_stack_trace_prompt as prompt_stack_trace,
     sota_system as prompt_sota_system,
     sota_user as prompt_sota_user,
+    ablation_baseline_prompt,
 )
 import weave
 
@@ -97,18 +99,13 @@ def web_search_stack_trace(query: str) -> str:
 @weave.op()
 def search_sota_suggestions(
     description: str,
-    context: str,
-    executed_suggestion: str | None,
-    failed_to_improve_score: bool,
     failed_ideas: list[str],
-    executed_code: str | None = None,
     plans: list[str] | None = None,
+    ablation_summary: Union[str, Dict[str, Any], List[Dict[str, Any]], None] = None,
 ) -> str:
-    """Use web search to surface potential SOTA improvements for the competition."""
-    logger.info("Dispatching SOTA web search")
+    """Request four categorized SOTA suggestions using minimal context blocks."""
+    logger.info("Dispatching SOTA suggestion request (minimal prompt)")
     failed_ideas_text = "No prior ideas are blacklisted."
-    executed_suggestion_text = executed_suggestion or "No previous suggestion executed; this is the first attempt."
-    executed_code_text = executed_code or "No explicit code snippet was provided for the last attempt."
     if failed_ideas:
         filtered = [idea for idea in failed_ideas if idea][-10:]
         if filtered:
@@ -124,17 +121,22 @@ def search_sota_suggestions(
             blocks.append(f"<plan id=\"{idx}\">\n{text}\n</plan>")
         plans_section = "\n<researcher_plans>\n" + "\n\n".join(blocks) + "\n</researcher_plans>\n"
 
-    system_prompt = prompt_sota_system()
+    # Normalize ablation summary (dict/list -> compact JSON string)
+    ablation_summary_text: Optional[str] = ""
+    for summary in ablation_summary:
+        summary_text = f"""Suggestion Type: {summary.get("suggestion_type")}
+Idea: {summary.get("idea")}
+Code Summary: {summary.get("code_summary")}
+Logs Summary: {summary.get("logs_summary")}
+Score: {summary.get("score")}"""
+        ablation_summary_text += summary_text + "\n\n"
 
-    outcome_status = "No improvement" if failed_to_improve_score else "Improved or matched"
+    system_prompt = prompt_sota_system()
     prompt = prompt_sota_user(
         description=description,
         plans_section=plans_section,
         failed_ideas_text=failed_ideas_text,
-        executed_suggestion_text=executed_suggestion_text,
-        executed_code_text=executed_code_text,
-        context=context,
-        outcome_status=outcome_status,
+        ablation_summary=ablation_summary_text,
     )
 
     messages = [
@@ -164,6 +166,47 @@ def search_sota_suggestions(
     except Exception:
         logger.exception("SOTA suggestions web search failed")
         return ""
+
+
+@weave.op()
+def ablation_summarize_baseline(code: str, logs: str) -> str:
+    """Summarize the baseline run as a concise steer for next steps."""
+    logger.info("Summarizing baseline for ablation")
+    system_prompt = ablation_baseline_prompt()
+    user_prompt = f"""<code>
+    {code}
+    </code>
+    <logs>
+    {logs}
+    </logs>"""
+    try:
+        completion = call_llm_with_retry(
+            client,
+            model=_DEVELOPER_TOOL_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        )
+        msg = completion.choices[0].message
+        content = (msg.content or "").strip()
+    except Exception:
+        logger.exception("Baseline ablation summarize failed")
+        content = ""
+
+    parsed_payload = None
+    try:
+        parsed_payload = json.loads(content)
+    except json.JSONDecodeError:
+        logger.debug("Raw response is not bare JSON; attempting fenced-block extraction.")
+        try:
+            match = re.search(r"```json\s*(\{.*?\})\s*```", content, re.DOTALL | re.IGNORECASE)
+            if match:
+                parsed_payload = json.loads(match.group(1))
+        except json.JSONDecodeError:
+            logger.debug("Failed to parse JSON from fenced block in baseline summary response.")
+            return ""
+    return parsed_payload
 
 @weave.op()
 def execute_code(filepath: str) -> str:

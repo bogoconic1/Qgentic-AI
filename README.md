@@ -7,8 +7,15 @@ technical plan, generate code, run it locally, analyse the results, and keep ref
 solution. Guardrails and supporting tools keep the loop grounded, reproducible, and safe.
 
 ---
+## News
 
-## Results (Updated 2025/10/14)
+**[2025/10/17]** Updated evals for recent SOTA submissions to MLE-Bench repo. Chose competitions where the variation between the latest solutions are high.
+
+**[2025/10/17]** Enabled SOTA suggestion to provide 4 suggestions (data, architecture, ensembling, recent model) and execute them in parallel to create an ablation study.
+
+**[2025/10/14]** Updated results of ongoing competition evaluation
+
+## Preliminary Results
 
 ## Present Competitions
 
@@ -18,17 +25,15 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
 
 ## Past Competitions
 
-| Kaggle Competition | Difficulty | Type | Metric | AIDE with DeepSeek-R1 (extracted)<br>Average / Max | MLE-Star with Gemini-2.5-Pro (1 manual run)<br>- 24h time limit<br>Average / Max | Qgentic-AI with GPT-5<br>- 24h time limit<br>Average / Max |
-| --- | --- | --- | --- | --- | --- | --- |
-| us-patent-phrase-to-phrase-matching | Medium | Information Retrieval | PCC (higher) | 0.465 / 0.481 | 0.849 | **0.863 / 0.880** |
-| learning-agency-lab-automated-essay-scoring-2 | Medium | Text | QWK (higher) | 0.733 / 0.748 | 0.797 | **0.828 / 0.840** |
-| tabular-playground-series-dec-2021 | Easy | Tabular | Accuracy % (higher) | 0.9578 / 0.9612 | 0.9627 | 0.9611 / **0.9631** |
-| statoil-iceberg-classifier-challenge | Medium | Image Classification | Logloss (lower) | 0.290 / 0.270 | 0.414 | **0.171 / 0.140** |
-| denoising-dirty-documents | Medium | Computer Vision | RMSE (lower) | 0.1419/0.1326 | TBC | **0.01441** |
-| leaf-classification | Easy | Image Classification | Logloss (lower) | 0.0761/0.0540 | TBC | **0.0218** |
-| jigsaw-toxic-comment-classification-challenge | Easy | Text | AUC (higher) | 0.9752/0.9752 | TBC | **0.9861/0.9874** |
-
-
+| Kaggle Competition | Difficulty | Type | Metric | FM Agent | InternAgent | Operand | R&D-Agent | Qgentic-AI |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| us-patent-phrase-to-phrase-matching | Medium | Information Retrieval | PCC (higher) | [0.87466, 0.84211, 0.86829] | [0.86864, 0.8647, 0.87046] | [0.45894, 0.7729, 0.84507] | [0.75307, 0.80521, 0.84449] | TBC |
+| learning-agency-lab-automated-essay-scoring-2 | Medium | Text | QWK (higher) | [0.8384, 0.84839, 0.84733] | [0.83995, 0.82771, 0.82221] | [0.83013] | [0.83751, 0.82051, 0.81547] | TBC |
+| tabular-playground-series-dec-2021 | Easy | Tabular | Accuracy % (higher) | [0.96137, 0.95822, 0.96004] | [0.96216, 0.96302, 0.96286] | [0.96194, 0.96335, 0.96269] | [0.96295, 0.96312, 0.96276] | TBC |
+| statoil-iceberg-classifier-challenge | Medium | Image Classification | Logloss (lower) | [0.71993, 0.6963, 2.35887] | [0.20956, 0.19655, 0.20297] | Failed | Failed | TBC |
+| denoising-dirty-documents | Medium | Computer Vision | RMSE (lower) | [0.02779, 0.01785, 0.01311] | [0.0116, 0.01509, 0.0418] | [0.01884, 0.01081, 0.03939] | [0.01221, 0.01135, 0.01009] | TBC |
+| whale-categorization-playground | Medium | Computer Vision | MAP@5 (higher) | [0.46374, 0.50367, 0.43165] | [0.31698, 0.19513, 0.03771] | [0.40842, 0.24289, 0.43053] | [0.25507, 0.25628, 0.27506] | TBC |
+| google-quest-challenge | Medium | Text | Spearman Correlation (higher) | [0.3863, 0.38017, 0.41448] | [0.39183, 0.41797, 0.4164] | [0.4105, 0.39704, 0.38652] | [0.41739, 0.42004, 0.4072] | TBC |
 --- 
 
 ## Architecture at a Glance

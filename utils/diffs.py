@@ -76,6 +76,9 @@ def _fix_hunk_headers(base_lines: list[str], diff_lines: list[str]) -> list[str]
 
 
 def normalize_diff_payload(base_path: Path, diff_text: str) -> Optional[str]:
+    import os
+    print(os.getcwd())
+    print(os.listdir(os.getcwd()))
     try:
         base_lines = base_path.read_text().splitlines()
     except Exception:
@@ -129,7 +132,11 @@ def apply_patch(outputs_dir: Path, base_filename: str, output_filename: str, pay
         return None
 
     try:
-        return output_path.read_text()
+        patched_text =output_path.read_text()
+        if "```diff" in patched_text[:300]:
+            logger.warning("Patched file contains ```diff block. Returning None.")
+            return None
+        return patched_text
     except Exception:
         logger.exception("Failed to read patched file at %s", output_path)
         return None
