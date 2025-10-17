@@ -523,11 +523,11 @@ class DeveloperAgent:
                     logger.info("Attempt %s | %s sub_attempt %s", attempt, suggestion_type, sub_attempt)
 
                     # Trim conversation if too large
-                    if len(self.messages) > 6:
-                        self.messages = self.messages[:2] + self.messages[-4:]
+                    if len(self.messages) > 8:
+                        self.messages = self.messages[:4] + self.messages[-4:]
 
                     # Build next instruction if we have a specific suggestion to implement
-                    if suggestion_text:
+                    if suggestion_text and self.current_sub_attempt == 1:
                         next_log_path = self.outputs_dir / self._log_filename(attempt, suggestion_type, sub_attempt)
                         next_submission_path = self.outputs_dir / self._submission_filename(attempt, suggestion_type, sub_attempt)
                         instr = (
@@ -674,11 +674,11 @@ class DeveloperAgent:
                 if not graded:
                     logger.info("Suggestion %s ended without a graded submission", suggestion_type)
 
-                # Log artifacts for this suggestion
-                for path in self.outputs_dir.iterdir():
-                    if path.is_file():
-                        artifact.add_file(str(path), overwrite=True)
-                artifact.save()
+            # Log artifacts for this suggestion
+            for path in self.outputs_dir.iterdir():
+                if path.is_file():
+                    artifact.add_file(str(path), overwrite=True)
+            artifact.save()
             
             self.latest_ablation_summary = ablation_summaries
             # Prepare next suggestions via SOTA (skip after baseline if no time)
