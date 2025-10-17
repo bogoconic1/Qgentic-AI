@@ -122,15 +122,14 @@ def search_sota_suggestions(
         plans_section = "\n<researcher_plans>\n" + "\n\n".join(blocks) + "\n</researcher_plans>\n"
 
     # Normalize ablation summary (dict/list -> compact JSON string)
-    ablation_summary_text: Optional[str] = None
-    if ablation_summary is not None:
-        if isinstance(ablation_summary, str):
-            ablation_summary_text = ablation_summary
-        else:
-            try:
-                ablation_summary_text = json.dumps(ablation_summary, ensure_ascii=False, indent=2)
-            except Exception:
-                ablation_summary_text = str(ablation_summary)
+    ablation_summary_text: Optional[str] = ""
+    for summary in ablation_summary:
+        summary_text = f"""Suggestion Type: {summary.get("suggestion_type")}
+Idea: {summary.get("idea")}
+Code Summary: {summary.get("code_summary")}
+Logs Summary: {summary.get("logs_summary")}
+Score: {summary.get("score")}"""
+        ablation_summary_text += summary_text + "\n\n"
 
     system_prompt = prompt_sota_system()
     prompt = prompt_sota_user(

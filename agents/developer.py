@@ -13,6 +13,7 @@ from openai import OpenAI
 from project_config import get_config
 import weave
 import wandb
+from copy import deepcopy
 
 from tools.developer import (
     execute_code,
@@ -325,7 +326,7 @@ class DeveloperAgent:
             instr = None
             if suggestion_text and sub_attempt == 1:
                 instr = (
-                    f"Implement the following idea for this batch: \n<suggestion>\n{suggestion_text}\n</suggestion>\n"
+                    f"YOU MUST IMPLEMENT EXACTLY THIS SUGGESTION: \n<suggestion>\n{suggestion_text}\n</suggestion>\n"
                 )
                 if suggestion_code:
                     instr += "Suggested code snippet:\n```python\n" + suggestion_code + "\n```\n"
@@ -635,7 +636,6 @@ class DeveloperAgent:
         attempt = 0
 
         while True:
-            attempt_messages = self.messages.copy()
             now = time.time()
             if max_time_seconds is not None and now >= deadline:
                 logger.info("Time budget exhausted (%.2f minutes)", (deadline - start_time) / 60.0)
@@ -659,7 +659,7 @@ class DeveloperAgent:
                             suggestion_type,
                             suggestion_text,
                             suggestion_code,
-                            attempt_messages,
+                            deepcopy(self.messages[:2]),
                             deadline,
                         )
                     )
