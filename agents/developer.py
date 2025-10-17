@@ -156,25 +156,25 @@ class DeveloperAgent:
             logger.addHandler(file_handler)
         logger.setLevel(logging.DEBUG)
 
-    def _code_filename(self, version: int) -> str:
+    def _code_filename(self, attempt: int, suggestion_type: str, sub_attempt: int) -> str:
         return _CODE_TEMPLATE.format(
-            attempt=version,
-            suggestion_type=self.current_suggestion_type,
-            sub_attempt=self.current_sub_attempt,
+            attempt=attempt,
+            suggestion_type=suggestion_type,
+            sub_attempt=sub_attempt,
         )
 
-    def _log_filename(self, version: int) -> str:
+    def _log_filename(self, attempt: int, suggestion_type: str, sub_attempt: int) -> str:
         return _LOG_TEMPLATE.format(
-            attempt=version,
-            suggestion_type=self.current_suggestion_type,
-            sub_attempt=self.current_sub_attempt,
+            attempt=attempt,
+            suggestion_type=suggestion_type,
+            sub_attempt=sub_attempt,
         )
         
-    def _submission_filename(self, version: int) -> str:
+    def _submission_filename(self, attempt: int, suggestion_type: str, sub_attempt: int) -> str:
         return _SUBMISSION_TEMPLATE.format(
-            attempt=version,
-            suggestion_type=self.current_suggestion_type,
-            sub_attempt=self.current_sub_attempt,
+            attempt=attempt,
+            suggestion_type=suggestion_type,
+            sub_attempt=sub_attempt,
         )
 
     
@@ -226,12 +226,12 @@ class DeveloperAgent:
             slug=self.slug,
         )
 
-    def _build_user_prompt(self, plan_markdown: str, version: int) -> str:
+    def _build_user_prompt(self, plan_markdown: str, attempt: int, suggestion_type: str, sub_attempt: int) -> str:
         logger.debug("Building user prompt")
         base_dir_display = self.base_dir
         outputs_dir_display = self.outputs_dir
-        log_path_display = self.outputs_dir / self._log_filename(version)
-        submission_path_display = self.outputs_dir / self._submission_filename(version)
+        log_path_display = self.outputs_dir / self._log_filename(attempt, suggestion_type, sub_attempt)
+        submission_path_display = self.outputs_dir / self._submission_filename(attempt, suggestion_type, sub_attempt)
         return prompt_build_user(
             plan_markdown=plan_markdown,
             base_dir=base_dir_display,
@@ -296,7 +296,7 @@ class DeveloperAgent:
     def _normalize_diff_payload(base_path: Path, diff_text: str) -> Optional[str]:
         return normalize_diff_payload(base_path, diff_text)
 
-    def _apply_patch(self, base_version: int, diff_payload: str, target_version: int, base_sub_attempt: int, target_sub_attempt: int) -> Optional[str]:
+    def _apply_patch(self, base_version: int, diff_payload: str, target_version: int, base_sub_attempt: int, current_suggestion_type: str, target_sub_attempt: int) -> Optional[str]:
         """Apply diff payload to previous file (explicit base/target sub-attempts)."""
         if base_version <= 0:
             logger.warning("Patch requested but base version is invalid: %s", base_version)
@@ -305,10 +305,10 @@ class DeveloperAgent:
         # Compute filenames for base and output using provided sub-attempts
         restore_sub = self.current_sub_attempt
         self.current_sub_attempt = base_sub_attempt
-        base_filename = self._code_filename(base_version)
+        base_filename = self._code_filename(base_version, current_suggestion_type, base_sub_attempt)
         base_path = self.outputs_dir / base_filename
         self.current_sub_attempt = target_sub_attempt
-        output_filename = self._code_filename(target_version)
+        output_filename = self._code_filename(target_version, current_suggestion_type, target_sub_attempt)
         self.current_sub_attempt = restore_sub
 
         if not base_path.exists():
@@ -367,8 +367,8 @@ class DeveloperAgent:
         directive = prompt_patch_mode_directive(base_filename)
         return f"{instruction}\n\n{directive}"
 
-    def _write_code(self, code: str, version: int) -> Path:
-        code_path = self.outputs_dir / self._code_filename(version)
+    def _write_code(self, code: str, attempt: int, suggestion_type: str, sub_attempt: int) -> Path:
+        code_path = self.outputs_dir / self._code_filename(attempt, suggestion_type, sub_attempt)
         logger.info("Writing generated code to %s", code_path)
         with open(code_path, "w") as f:
             f.write(code)
@@ -487,7 +487,7 @@ class DeveloperAgent:
 
         # Compose initial conversation for baseline
         system_prompt = self._compose_system()
-        user_prompt = self._build_user_prompt(plan_markdown, version=1)
+        user_prompt = self._build_user_prompt(plan_markdown, attempt=1, suggestion_type="baseline", sub_attempt=1)
         self.messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
 
         # Suggestions schedule: start with baseline only
@@ -538,8 +538,8 @@ class DeveloperAgent:
 
                     # Build next instruction if we have a specific suggestion to implement
                     if suggestion_text:
-                        next_log_path = self.outputs_dir / self._log_filename(version)
-                        next_submission_path = self.outputs_dir / self._submission_filename(version)
+                        next_log_path = self.outputs_dir / self._log_filename(version, suggestion_type, sub_attempt)
+                        next_submission_path = self.outputs_dir / self._submission_filename(version, suggestion_type, sub_attempt)
                         instr = (
                             f"Implement the following idea for this batch: \n<suggestion>\n{suggestion_text}\n</suggestion>\n"
                         )
@@ -551,7 +551,9 @@ class DeveloperAgent:
                         # Only append patch directive for sub_attempt > 1
                         if self.patch_mode_enabled and sub_attempt > 1:
                             base_for_directive = version
-                            instr = self._append_patch_directive(instr, base_for_directive)
+                            patch_instr = self._append_patch_directive(instr, base_for_directive)
+                        else:
+                            patch_instr = None
                         # Reset conversation to system+user, then add assistant base and user instruction
                         self.messages = self.messages[:2]
                         if self.best_code:
@@ -563,7 +565,7 @@ class DeveloperAgent:
                             include_line_numbers=self.patch_mode_enabled,
                         )
                         self.messages.append({'role': 'assistant', 'content': assistant_payload})
-                        self.messages.append({'role': 'user', 'content': instr})
+                        self.messages.append({'role': 'user', 'content': patch_instr or instr})
 
                     # Generate code (patch for sub_attempt>1)
                     expect_patch = self.patch_mode_enabled and sub_attempt > 1
@@ -583,16 +585,13 @@ class DeveloperAgent:
                         if code is None:
                             logger.warning("Patch application failed; requesting full script next.")
                             if self.messages and self.messages[-1].get("role") == "user":
-                                self.messages[-1]["content"] += (
-                                    "\n\nPatch application failed. Ignore the diff request and return the complete updated script enclosed in triple backticks with the `python` annotation."
-                                )
-                            # Try full script next iteration
-                            continue
-                    else:
-                        code = generated
+                                self.messages[-1]["content"] = instr
+                            generated = self._generate_code(self.messages, expect_patch=False)
+
+                    code = generated
 
                     # Write code and guardrails
-                    code_path = self._write_code(code, version)
+                    code_path = self._write_code(code, version, suggestion_type, sub_attempt)
                     guard_report = evaluate_guardrails(
                         description=self.description,
                         code_text=_safe_read(str(code_path)),
@@ -602,8 +601,8 @@ class DeveloperAgent:
                     )
                     if guard_report.get("decision") == "block":
                         summary_text = build_block_summary(guard_report)
-                        next_log_path = self.outputs_dir / self._log_filename(version)
-                        next_submission_path = self.outputs_dir / self._submission_filename(version)
+                        next_log_path = self.outputs_dir / self._log_filename(version, suggestion_type, sub_attempt + 1)
+                        next_submission_path = self.outputs_dir / self._submission_filename(version, suggestion_type, sub_attempt + 1)
                         fix_instr = prompt_guardrail_fix_suffix(next_log_path, next_submission_path)
                         guardrail_prompt = summary_text + fix_instr
                         base_for_directive = version
@@ -619,7 +618,7 @@ class DeveloperAgent:
 
                     # Execute
                     output = execute_code(str(code_path))
-                    log_path = self.outputs_dir / self._log_filename(version)
+                    log_path = self.outputs_dir / self._log_filename(version, suggestion_type, sub_attempt)
                     log_content = ""
                     try:
                         if log_path.exists():
@@ -627,7 +626,7 @@ class DeveloperAgent:
                     except Exception:
                         logger.exception("Failed to read execution log at %s", log_path)
 
-                    submission_path = self.outputs_dir / self._submission_filename(version)
+                    submission_path = self.outputs_dir / self._submission_filename(version, suggestion_type, sub_attempt)
                     run_score = None
                     if submission_path.exists():
                         self.latest_submission_path = submission_path
@@ -659,8 +658,8 @@ class DeveloperAgent:
                         break
 
                     # Otherwise, construct next-instruction for failure path and continue sub-attempts
-                    next_log_path = self.outputs_dir / self._log_filename(version)
-                    next_submission_path = self.outputs_dir / self._submission_filename(version)
+                    next_log_path = self.outputs_dir / self._log_filename(version, suggestion_type, sub_attempt + 1)
+                    next_submission_path = self.outputs_dir / self._submission_filename(version, suggestion_type, sub_attempt + 1)
                     next_instr = f"""
                     Your code FAILED during execution!
                     This is the stack trace and advice on how to fix the error:
