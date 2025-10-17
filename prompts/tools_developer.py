@@ -34,6 +34,7 @@ Begin with a concise checklist (3-7 bullets) summarizing high-level conceptual r
 Always review the <researcher_plans> and <ablation_summary> first, if provided. Set reasoning_effort = medium to ensure thoughtful but efficient analysis. For any web search or external query, briefly state the purpose and the minimal search terms you will use before proceeding. Use only approved resources and provide a one-line preamble before significant information-sourcing steps, referencing the competition context.
 
 Conduct a web search for recent, effective models, architectures, techniques, or hyperparameters relevant to the competition or similar tasks, directly addressing the outlined red flags. Clearly explain the purpose of every recommended approach and justify its relevance by referencing the competition description and context.
+**IMPORTANT**: YOU ARE NOT ALLOWED TO SEARCH FOR WINNING SOLUTIONS TO THIS COMPETITION.
 
 Generate FOUR distinct suggestions, each from a separate strategic category:
 1. Data / Feature Engineering Enhancement - focuses on improving input representation or data quality.
@@ -113,6 +114,7 @@ Use these exact keys: data_feature_suggestion/data_feature_code, arch_suggestion
 ```
 If there is no viable suggestion, use empty strings for the values.
 Never repeat any idea from <previous failed ideas>. If a suggestion is blacklisted, ensure your new recommendation avoids that approach.
+**IMPORTANT**: YOU ARE NOT ALLOWED TO SEARCH FOR WINNING SOLUTIONS TO THIS COMPETITION.
 """
 
 
@@ -138,32 +140,33 @@ def sota_user(
 
 
 def ablation_baseline_prompt() -> str:
-    return """You will be provided with a piece of code and its corresponding logs.
+    return """Developer: You will receive a piece of code and its corresponding logs for analysis.
 
-Inputs:
-- <code>: The code to analyze.
-- <logs>: The logs to analyze.
+**Inputs:**
+- `<code>`: The code to analyze.
+- `<logs>`: The logs to analyze.
 
-Begin with a concise checklist (3-7 bullets) of what you will do; keep items conceptual, not implementation-level.
+**Requirements:**
+- Begin with a concise Markdown bullet list (3-7 items) summarizing the conceptual analysis steps you will take before proceeding.
+- Summarize the code's approach and the validation outcomes from the logs, each summary under 100 words.
+- If either code or logs is missing, represent its summary as an empty string (`''`).
+- If code or logs are excessively long or malformed, summarize as thoroughly as possible and flag any input quality limitations.
+- Output must strictly follow the specified JSON format, include all required keys, and never use null values or omit keys.
+- After drafting summaries, validate the output for format compliance and completeness of summary fields, and self-correct if necessary before finalizing the response.
 
-Instructions:
-1. Summarize both the code and the logs concisely.
-2. Output the result in JSON format as specified below.
-3. Incorporate all relevant key findings and takeaways from both the code and the logs.
-4. If either the code or the logs is missing, return an empty string ('') in the respective summary field.
-5. Do not return null values or omit any keys from the output.
-6. If the provided code or logs are excessively long or malformed, summarize using the available information and clearly note any limitations due to input quality.
-
-After generating the summaries, verify that both summary fields are present, use empty strings where required, and that all JSON keys match the output schema exactly. If any issues are found, self-correct and revalidate before outputting the final response.
-
-## Output Format
-Your output MUST include the following sections in order:
+**Instructions:**
+1. Present your checklist as a Markdown bullet list (`-` bullets), focusing exclusively on conceptual analysis steps and not implementation details.
+2. Compose two concise summaries (each under 100 words): one for the code's approach, one for the logs' validation/FULL run results.
+3. If code or logs are missing, use an empty string for the respective summary.
+4. If inputs are excessively long or malformed, clearly state any summarization limitations.
+5. Before providing the final output, explicitly verify that your output strictly matches the required format and includes all fields; self-correct if necessary.
+6. Output the following structure:
 
 ### Checklist
-- ... (3-7 high-level conceptual bullet points, see above)
+- Markdown bullet list
 
 ### Code and Logs Summary
-Output your summaries in the following strict JSON format (enclosed in backticks):
+Return both summaries in the exact JSON format below (enclosed in triple backticks):
 ```json
 {
   "code_summary": "Summary of the code or '' if code is absent",
