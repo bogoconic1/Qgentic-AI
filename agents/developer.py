@@ -712,32 +712,45 @@ class DeveloperAgent:
                 logger.exception("SOTA search failed; ending run")
                 break
 
-            # Parse JSON with four categories
-            parsed = None
+            # Parse two JSON blocks: first for blacklist, second for multi-suggestions
+            parsed_blacklist = None
+            parsed_suggestions = None
             try:
-                parsed = json.loads(raw)
+                blocks = re.findall(r"```json\s*(\{[\s\S]*?\})\s*```", raw, re.IGNORECASE)
+                if len(blocks) >= 1:
+                    try:
+                        parsed_blacklist = json.loads(blocks[0])
+                    except Exception:
+                        parsed_blacklist = None
+                if len(blocks) >= 2:
+                    try:
+                        parsed_suggestions = json.loads(blocks[1])
+                    except Exception:
+                        parsed_suggestions = None
+                # Fallback: one block contains both fields
+                if parsed_suggestions is None and isinstance(parsed_blacklist, dict) and all(k in parsed_blacklist for k in ["data","architecture","ensembling","sota"]):
+                    parsed_suggestions = parsed_blacklist
+                    parsed_blacklist = None
             except Exception:
-                try:
-                    m = re.search(r"```json\s*(\{[\s\S]*?\})\s*```", raw, re.IGNORECASE)
-                    if m:
-                        parsed = json.loads(m.group(1))
-                except Exception:
-                    parsed = None
+                parsed_blacklist = None
+                parsed_suggestions = None
 
+            # Apply blacklist
+            if isinstance(parsed_blacklist, dict):
+                bl = parsed_blacklist.get("blacklist")
+                if isinstance(bl, list):
+                    for idea in bl:
+                        self._register_blacklist(str(idea), None)
+
+            # Build next suggestions from the second JSON
             next_suggestions: list[tuple[str, Optional[str], Optional[str]]] = []
-            if isinstance(parsed, dict):
+            if isinstance(parsed_suggestions, dict):
                 for key in ["data", "architecture", "ensembling", "sota"]:
-                    block = parsed.get(key)
+                    block = parsed_suggestions.get(key)
                     if isinstance(block, dict):
                         idea = block.get("suggestion") or ""
                         code_snippet = block.get("code") or None
                         next_suggestions.append((key, idea, code_snippet))
-
-                # Register blacklist if present
-                bl = parsed.get("blacklist") if isinstance(parsed, dict) else None
-                if isinstance(bl, list):
-                    for idea in bl:
-                        self._register_blacklist(str(idea), None)
 
             if not next_suggestions:
                 logger.info("No valid multi-suggestions parsed; ending run")

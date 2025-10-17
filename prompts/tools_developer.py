@@ -157,8 +157,13 @@ Instructions:
 After generating the summaries, verify that both summary fields are present, use empty strings where required, and that all JSON keys match the output schema exactly. If any issues are found, self-correct and revalidate before outputting the final response.
 
 ## Output Format
-Return your answer strictly in the following JSON structure:
+Your output MUST include the following sections in order:
 
+### Checklist
+- ... (3-7 high-level conceptual bullet points, see above)
+
+### Code and Logs Summary
+Output your summaries in the following strict JSON format (enclosed in backticks):
 ```json
 {
   "code_summary": "Summary of the code or '' if code is absent",
