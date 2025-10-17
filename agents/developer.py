@@ -84,7 +84,7 @@ def _safe_read(path: str) -> str:
 class DeveloperAgent:
     """Turns the Researcher plan into a runnable single-file solution.
 
-    - Generates a single python file: code_{iteration}_v{version}.py
+    - Generates a single python file: code_v{attempt}_{suggestion_type}_{sub_attempt}.py
     - Executes it and iterates while within a time budget
     - Success condition: writes submission.csv at
       <task_root>/<slug>/<outputs_dir>/<iteration>/submission.csv
@@ -117,7 +117,7 @@ class DeveloperAgent:
         self.last_suggestion: Optional[str] = None
         self.last_suggestion_code: Optional[str] = None
         self.best_code: Optional[str] = None
-        self.best_version: Optional[int] = None
+        self.best_attempt: Optional[int] = None
         self.next_patch_base_version: Optional[int] = None
 
         self._load_benchmark_info()
@@ -296,19 +296,19 @@ class DeveloperAgent:
     def _normalize_diff_payload(base_path: Path, diff_text: str) -> Optional[str]:
         return normalize_diff_payload(base_path, diff_text)
 
-    def _apply_patch(self, base_version: int, diff_payload: str, target_version: int, base_sub_attempt: int, current_suggestion_type: str, target_sub_attempt: int) -> Optional[str]:
+    def _apply_patch(self, base_attempt: int, diff_payload: str, target_attempt: int, base_sub_attempt: int, suggestion_type: str, target_sub_attempt: int) -> Optional[str]:
         """Apply diff payload to previous file (explicit base/target sub-attempts)."""
-        if base_version <= 0:
-            logger.warning("Patch requested but base version is invalid: %s", base_version)
+        if base_attempt <= 0:
+            logger.warning("Patch requested but base attempt is invalid: %s", base_attempt)
             return None
 
         # Compute filenames for base and output using provided sub-attempts
         restore_sub = self.current_sub_attempt
         self.current_sub_attempt = base_sub_attempt
-        base_filename = self._code_filename(base_version, current_suggestion_type, base_sub_attempt)
+        base_filename = self._code_filename(base_attempt, suggestion_type, base_sub_attempt)
         base_path = self.outputs_dir / base_filename
         self.current_sub_attempt = target_sub_attempt
-        output_filename = self._code_filename(target_version, current_suggestion_type, target_sub_attempt)
+        output_filename = self._code_filename(target_attempt, suggestion_type, target_sub_attempt)
         self.current_sub_attempt = restore_sub
 
         if not base_path.exists():
@@ -336,7 +336,7 @@ class DeveloperAgent:
         attempts.append(("normalized", normalized_payload))
 
         for label, payload in attempts:
-            logger.debug("Attempting to apply %s diff for attempt %s", label, target_version)
+            logger.debug("Attempting to apply %s diff for attempt %s", label, target_attempt)
             logger.debug("Payload: %s", payload)
             updated_code = util_apply_patch(
                 outputs_dir=self.outputs_dir,
@@ -358,12 +358,12 @@ class DeveloperAgent:
 
     # Removed old _apply_patch variant (DRY)
 
-    def _append_patch_directive(self, instruction: str, version: int) -> str:
+    def _append_patch_directive(self, instruction: str, attempt: int, suggestion_type: str, sub_attempt: int) -> str:
         if not self.patch_mode_enabled:
             return instruction
         instruction = instruction.replace("Please modify your code to fix the error!", "Please write a git diff within ```diff to fix the error!")
         instruction = instruction.replace("Please regenerate the script addressing the above guardrail issues.", "Please write a git diff within ```diff to fix the above issues.")
-        base_filename = self._code_filename(version)
+        base_filename = self._code_filename(attempt, suggestion_type, sub_attempt)
         directive = prompt_patch_mode_directive(base_filename)
         return f"{instruction}\n\n{directive}"
 
@@ -503,7 +503,7 @@ class DeveloperAgent:
                 break
 
             attempt += 1
-            version = attempt
+            # attempt index for filenames and patch anchors
             logger.info("Starting attempt(batch) %s with %s suggestion(s)", attempt, len(suggestions))
             artifact = wandb.Artifact(f'{self.iteration}-{self.slug}', type='files')
 
@@ -538,8 +538,8 @@ class DeveloperAgent:
 
                     # Build next instruction if we have a specific suggestion to implement
                     if suggestion_text:
-                        next_log_path = self.outputs_dir / self._log_filename(version, suggestion_type, sub_attempt)
-                        next_submission_path = self.outputs_dir / self._submission_filename(version, suggestion_type, sub_attempt)
+                        next_log_path = self.outputs_dir / self._log_filename(attempt, suggestion_type, sub_attempt)
+                        next_submission_path = self.outputs_dir / self._submission_filename(attempt, suggestion_type, sub_attempt)
                         instr = (
                             f"Implement the following idea for this batch: \n<suggestion>\n{suggestion_text}\n</suggestion>\n"
                         )
@@ -550,8 +550,7 @@ class DeveloperAgent:
                         )
                         # Only append patch directive for sub_attempt > 1
                         if self.patch_mode_enabled and sub_attempt > 1:
-                            base_for_directive = version
-                            patch_instr = self._append_patch_directive(instr, base_for_directive)
+                            patch_instr = self._append_patch_directive(instr, attempt=attempt, suggestion_type=suggestion_type, sub_attempt=sub_attempt)
                         else:
                             patch_instr = None
                         # Reset conversation to system+user, then add assistant base and user instruction
@@ -573,15 +572,15 @@ class DeveloperAgent:
                     if expect_patch:
                         # Apply patch from base sub_attempt = current_sub_attempt-1 to target sub_attempt = current_sub_attempt
                         base_sub_attempt = max(1, self.current_sub_attempt - 1)
-                        base_version = version
+                        base_attempt = attempt
                         logger.info(
                             "Applying patch relative to base attempt=%s %s sub_attempt=%s -> target sub_attempt=%s",
-                            version,
+                            base_attempt,
                             suggestion_type,
                             base_sub_attempt,
                             self.current_sub_attempt,
                         )
-                        code = self._apply_patch(base_version, generated, version, base_sub_attempt, self.current_sub_attempt)
+                        code = self._apply_patch(base_attempt, generated, attempt, base_sub_attempt, suggestion_type, self.current_sub_attempt)
                         if code is None:
                             logger.warning("Patch application failed; requesting full script next.")
                             if self.messages and self.messages[-1].get("role") == "user":
@@ -591,7 +590,7 @@ class DeveloperAgent:
                     code = generated
 
                     # Write code and guardrails
-                    code_path = self._write_code(code, version, suggestion_type, sub_attempt)
+                    code_path = self._write_code(code, attempt, suggestion_type, sub_attempt)
                     guard_report = evaluate_guardrails(
                         description=self.description,
                         code_text=_safe_read(str(code_path)),
@@ -601,12 +600,11 @@ class DeveloperAgent:
                     )
                     if guard_report.get("decision") == "block":
                         summary_text = build_block_summary(guard_report)
-                        next_log_path = self.outputs_dir / self._log_filename(version, suggestion_type, sub_attempt + 1)
-                        next_submission_path = self.outputs_dir / self._submission_filename(version, suggestion_type, sub_attempt + 1)
+                        next_log_path = self.outputs_dir / self._log_filename(attempt, suggestion_type, sub_attempt + 1)
+                        next_submission_path = self.outputs_dir / self._submission_filename(attempt, suggestion_type, sub_attempt + 1)
                         fix_instr = prompt_guardrail_fix_suffix(next_log_path, next_submission_path)
                         guardrail_prompt = summary_text + fix_instr
-                        base_for_directive = version
-                        guardrail_prompt = self._append_patch_directive(guardrail_prompt, base_for_directive)
+                        guardrail_prompt = self._append_patch_directive(guardrail_prompt, attempt=attempt, suggestion_type=suggestion_type, sub_attempt=sub_attempt)
                         assistant_payload = self._build_assistant_payload(
                             code,
                             include_line_numbers=self.patch_mode_enabled,
@@ -618,7 +616,7 @@ class DeveloperAgent:
 
                     # Execute
                     output = execute_code(str(code_path))
-                    log_path = self.outputs_dir / self._log_filename(version, suggestion_type, sub_attempt)
+                    log_path = self.outputs_dir / self._log_filename(attempt, suggestion_type, sub_attempt)
                     log_content = ""
                     try:
                         if log_path.exists():
@@ -626,7 +624,7 @@ class DeveloperAgent:
                     except Exception:
                         logger.exception("Failed to read execution log at %s", log_path)
 
-                    submission_path = self.outputs_dir / self._submission_filename(version, suggestion_type, sub_attempt)
+                    submission_path = self.outputs_dir / self._submission_filename(attempt, suggestion_type, sub_attempt)
                     run_score = None
                     if submission_path.exists():
                         self.latest_submission_path = submission_path
@@ -647,7 +645,7 @@ class DeveloperAgent:
                         # Track best
                         if self._is_improvement(run_score, self.best_score):
                             self.best_score = run_score
-                            self.best_version = version
+                            self.best_attempt = attempt
                             self.best_code = code
                         # Append ablation row
                         batch_scores.append({
@@ -658,8 +656,8 @@ class DeveloperAgent:
                         break
 
                     # Otherwise, construct next-instruction for failure path and continue sub-attempts
-                    next_log_path = self.outputs_dir / self._log_filename(version, suggestion_type, sub_attempt + 1)
-                    next_submission_path = self.outputs_dir / self._submission_filename(version, suggestion_type, sub_attempt + 1)
+                    next_log_path = self.outputs_dir / self._log_filename(attempt, suggestion_type, sub_attempt + 1)
+                    next_submission_path = self.outputs_dir / self._submission_filename(attempt, suggestion_type, sub_attempt + 1)
                     next_instr = f"""
                     Your code FAILED during execution!
                     This is the stack trace and advice on how to fix the error:
@@ -667,10 +665,9 @@ class DeveloperAgent:
 
                     {prompt_execution_failure_suffix(next_log_path, next_submission_path)}
                     """
-                    base_for_directive = version
                     # Only add patch directive for sub-attempts > 1
                     if self.patch_mode_enabled and sub_attempt > 1:
-                        next_instr = self._append_patch_directive(next_instr, base_for_directive)
+                        next_instr = self._append_patch_directive(next_instr, attempt=attempt, suggestion_type=suggestion_type, sub_attempt=sub_attempt)
                     assistant_payload = self._build_assistant_payload(
                         code,
                         include_line_numbers=self.patch_mode_enabled,
