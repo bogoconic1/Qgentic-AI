@@ -294,6 +294,7 @@ class DeveloperAgent:
         suggestion_type: str,
         suggestion_text: Optional[str],
         suggestion_code: Optional[str],
+        messages: list[dict],
         deadline: float,
     ) -> dict:
         """Run one suggestion track sequentially (sub-attempt loop) and return outcome."""
@@ -301,10 +302,6 @@ class DeveloperAgent:
             plan_text = _safe_read(str(self.plan_path)) if self.plan_path.exists() else ""
         except Exception:
             plan_text = ""
-
-        messages: list[dict] = []
-        system_prompt = self._compose_system()
-        messages.append({"role": "system", "content": system_prompt})
 
         sub_attempt = 0
         outcome: dict = {
@@ -649,6 +646,7 @@ class DeveloperAgent:
         attempt = 0
 
         while True:
+            attempt_messages = self.messages.copy()
             now = time.time()
             if max_time_seconds is not None and now >= deadline:
                 logger.info("Time budget exhausted (%.2f minutes)", (deadline - start_time) / 60.0)
@@ -672,6 +670,7 @@ class DeveloperAgent:
                             suggestion_type,
                             suggestion_text,
                             suggestion_code,
+                            attempt_messages,
                             deadline,
                         )
                     )
