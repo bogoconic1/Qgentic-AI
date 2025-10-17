@@ -8,7 +8,7 @@ import subprocess
 import traceback
 
 from dotenv import load_dotenv
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any, Union
 from openai import OpenAI
 from project_config import get_config
 from tools.helpers import call_llm_with_retry
@@ -101,7 +101,7 @@ def search_sota_suggestions(
     description: str,
     failed_ideas: list[str],
     plans: list[str] | None = None,
-    ablation_summary: str | None = None,
+    ablation_summary: Union[str, Dict[str, Any], List[Dict[str, Any]], None] = None,
 ) -> str:
     """Request four categorized SOTA suggestions using minimal context blocks."""
     logger.info("Dispatching SOTA suggestion request (minimal prompt)")
@@ -121,12 +121,23 @@ def search_sota_suggestions(
             blocks.append(f"<plan id=\"{idx}\">\n{text}\n</plan>")
         plans_section = "\n<researcher_plans>\n" + "\n\n".join(blocks) + "\n</researcher_plans>\n"
 
+    # Normalize ablation summary (dict/list -> compact JSON string)
+    ablation_summary_text: Optional[str] = None
+    if ablation_summary is not None:
+        if isinstance(ablation_summary, str):
+            ablation_summary_text = ablation_summary
+        else:
+            try:
+                ablation_summary_text = json.dumps(ablation_summary, ensure_ascii=False, indent=2)
+            except Exception:
+                ablation_summary_text = str(ablation_summary)
+
     system_prompt = prompt_sota_system()
     prompt = prompt_sota_user(
         description=description,
         plans_section=plans_section,
         failed_ideas_text=failed_ideas_text,
-        ablation_summary=ablation_summary,
+        ablation_summary=ablation_summary_text,
     )
 
     messages = [
