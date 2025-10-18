@@ -60,7 +60,7 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
   - `config.yaml` overrides project defaults (model endpoints, runtime limits, etc.).
 
 - **Task Bundles (`task/<slug>/`)**
-  - Expected layout: Kaggle metadata, `description_obfuscated.md`, `plan.md`, `outputs/<iteration>/`
+  - Expected layout: Kaggle metadata, `description.md`, `plan.md`, `outputs/<iteration>/`
     (logs, generated code, submissions), and optional external-data caches.
 
 # Sample Logs
@@ -75,6 +75,9 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
 - Optional: CUDA-enabled GPU for training scripts that request GPU resources.
 
 ```
+conda create --name qgentic-ai python=3.12 -y
+conda activate qgentic-ai
+
 git clone https://github.com/bogoconic1/Qgentic-AI.git
 cd Qgentic-AI
 bash install.sh
@@ -102,6 +105,7 @@ ANTHROPIC_API_KEY=...
 EXA_API_KEY=...
 OPENROUTER_API_KEY=...
 E2B_API_KEY=...
+FIRECRAWL_API_KEY=...
 ```
 
 These keys are loaded via `python-dotenv`. Adjust the environment variables listed in
@@ -127,7 +131,7 @@ You will see something like this
 ```
 task/
 └─ "enter slug"/
-   ├─ description_obfuscated.md
+   ├─ description.md
    ├─ public_insights.md
    ├─ sample_submission.csv
    ├─ comp_metadata.yaml   

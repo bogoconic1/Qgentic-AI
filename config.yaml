@@ -26,5 +26,5 @@ guardrails:
   leakage_review: false
 tracking:
   wandb:
-    entity: bogoconic1 # replace with your W&B entity
-    project: gstar-wandb # replace with your W&B project
+    entity: 520f8592abc # replace with your W&B entity
+    project: qgentic-ai # replace with your W&B project
