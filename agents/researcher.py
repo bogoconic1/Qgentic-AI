@@ -57,7 +57,7 @@ class ResearcherAgent:
     (no further tool calls), or the tool-call budget is exhausted.
     """
 
-    def __init__(self, slug: str, iteration: int, run_id: int | None = None):
+    def __init__(self, slug: str, iteration: int, run_id: int = 1):
         load_dotenv()
         self.slug = slug
         self.iteration = iteration
@@ -69,29 +69,19 @@ class ResearcherAgent:
         self.outputs_dir = self.base_dir / _OUTPUTS_DIRNAME / str(self.iteration)
         self.outputs_dir.mkdir(parents=True, exist_ok=True)
         # Configure per-run output dirs for media/external data under outputs/<iter>
-        if self.run_id is not None:
-            self.media_dir = self.outputs_dir / f"media_{self.run_id}"
-            self.external_dir = self.outputs_dir / f"external_data_{self.run_id}"
-            try:
-                self.media_dir.mkdir(parents=True, exist_ok=True)
-                self.external_dir.mkdir(parents=True, exist_ok=True)
-                os.environ["MEDIA_DIR"] = str(self.media_dir)
-                os.environ["EXTERNAL_DATA_DIR"] = str(self.external_dir)
-            except Exception:
-                pass
-            per_run_log_dir = self.outputs_dir / "researcher" / f"run_{self.run_id}"
-            per_run_log_dir.mkdir(parents=True, exist_ok=True)
-            self.researcher_log_path = per_run_log_dir / f"researcher_{self.run_id}.txt"
-        else:
-            # Single-run defaults (backward compatible)
-            self.media_dir = self.base_dir / "media"
-            self.external_dir = self.base_dir / _PATH_CFG.get("external_data_dirname", "external-data")
-            try:
-                self.media_dir.mkdir(parents=True, exist_ok=True)
-                self.external_dir.mkdir(parents=True, exist_ok=True)
-            except Exception:
-                pass
-            self.researcher_log_path = self.outputs_dir / "researcher.txt"
+        assert self.run_id is not None, "run_id is required"
+        self.media_dir = self.outputs_dir / f"media_{self.run_id}"
+        self.external_dir = self.outputs_dir / f"external_data_{self.run_id}"
+        try:
+            self.media_dir.mkdir(parents=True, exist_ok=True)
+            self.external_dir.mkdir(parents=True, exist_ok=True)
+            os.environ["MEDIA_DIR"] = str(self.media_dir)
+            os.environ["EXTERNAL_DATA_DIR"] = str(self.external_dir)
+        except Exception:
+            pass
+        per_run_log_dir = self.outputs_dir / "researcher" / f"run_{self.run_id}"
+        per_run_log_dir.mkdir(parents=True, exist_ok=True)
+        self.researcher_log_path = per_run_log_dir / f"researcher_{self.run_id}.txt"
         self._configure_logger()
 
     def _configure_logger(self) -> None:

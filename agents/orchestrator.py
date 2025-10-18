@@ -52,36 +52,22 @@ class Orchestrator:
                 plan = f.read()
         else:
             parallel = int(os.environ.get("RESEARCHER_PARALLEL_RUNS", _DEFAULT_PARALLEL) or _DEFAULT_PARALLEL)
-            if parallel <= 1:
-                plan = self.researcher.build_plan()
-                with open(plan_path, "w") as f:
-                    f.write(plan)
-            else:
-                results: list[tuple[int, str, int]] = []
-                with ProcessPoolExecutor(max_workers=parallel) as ex:
-                    futures = [ex.submit(_run_researcher_once, self.slug, self.iteration, i + 1) for i in range(parallel)]
-                    for fut in as_completed(futures):
-                        try:
-                            results.append(fut.result())
-                        except Exception:
-                            continue
-                # Prefer the first run's plan.md; fall back to any available plan file; else single-run
-                plan_md_path = self.outputs_dir / "plan.md"
-                if plan_md_path.exists():
-                    with open(plan_md_path, "r") as f:
-                        plan = f.read()
-                elif results:
-                    # Use the first returned plan path
-                    _, p, _ = results[0]
+            results: list[tuple[int, str, int]] = []
+            with ProcessPoolExecutor(max_workers=parallel) as ex:
+                futures = [ex.submit(_run_researcher_once, self.slug, self.iteration, i + 1) for i in range(parallel)]
+                for fut in as_completed(futures):
                     try:
-                        with open(p, "r") as f:
-                            plan = f.read()
+                        results.append(fut.result())
                     except Exception:
-                        plan = self.researcher.build_plan()
-                else:
-                    plan = self.researcher.build_plan()
-        
-        success = self.developer.run(plan, max_time_seconds=max_time_seconds)
+                        continue
+            # Prefer the first run's plan.md; fall back to any available plan file; else single-run
+            plan_md_path = self.outputs_dir / "plan.md"
+            if plan_md_path.exists():
+                with open(plan_md_path, "r") as f:
+                    plan = f.read()
+            else:
+                raise RuntimeError("No plan found")
+        # success = self.developer.run(plan, max_time_seconds=max_time_seconds)
 
-        return success, plan
+        # return success, plan
     

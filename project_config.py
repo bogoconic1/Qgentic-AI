@@ -27,7 +27,7 @@ _DEFAULT_CONFIG: dict[str, Any] = {
         "researcher_max_steps": 512,
         "llm_max_retries": 3,
         "directory_listing_max_files": 10,
-        "researcher_parallel_runs": 3,
+        "researcher_parallel_runs": 1,
         "patch_mode_enabled": False,
     },
     "paths": {
