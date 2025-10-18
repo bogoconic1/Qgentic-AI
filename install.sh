@@ -20,11 +20,12 @@ clone_repos() {
     echo "[*] Cloning repositories..."
     mkdir -p "$WORKDIR"
     cd "$WORKDIR"
+    uv pip install -r requirements.txt
 
     if [[ ! -d mle-bench ]]; then
         git clone https://github.com/bogoconic1/mle-bench.git
         sudo apt update && sudo apt install -y git-lfs
-        (cd mle-bench && git lfs fetch --all && git lfs pull && pip install -e .)
+        (cd mle-bench && git lfs fetch --all && git lfs pull && uv pip install -e .)
     fi
 }
 

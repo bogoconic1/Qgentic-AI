@@ -167,7 +167,7 @@ class ResearcherAgent:
 
     def _compose_system(self) -> str:
         base_dir = self.base_dir
-        self.description = _safe_read(str(base_dir / "description_obfuscated.md"))
+        self.description = _safe_read(str(base_dir / "description.md"))
         public_insights = _safe_read(str(base_dir / "public_insights.md"))
         return prompt_build_system(str(base_dir), self.description, public_insights)
 

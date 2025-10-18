@@ -100,7 +100,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--task-path",
         type=Path,
-        default=Path("/workspace/gstar-project/task"),
+        default=Path("/workspace/Qgentic-AI/task"),
         help="Path to the task output directory.",
     )
     parser.add_argument(

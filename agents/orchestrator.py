@@ -17,7 +17,7 @@ _TASK_ROOT = Path(_PATH_CFG.get("task_root", "task"))
 _OUTPUTS_DIRNAME = _PATH_CFG.get("outputs_dirname", "outputs")
 _DEFAULT_PARALLEL = int(_RUNTIME_CFG.get("researcher_parallel_runs", 1) or 1)
 
-
+@weave.op()
 def _run_researcher_once(slug: str, iteration: int, run_id: int) -> tuple[int, str, int]:
     agent = ResearcherAgent(slug, iteration, run_id=run_id)
     plan = agent.build_plan()
