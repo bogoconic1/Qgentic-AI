@@ -108,6 +108,11 @@ def parse_args() -> argparse.Namespace:
         default="tabular-playground-series-dec-2021",
         help="Slug of the Kaggle competition to process.",
     )
+    parser.add_argument(
+        "--summarize-code",
+        action="store_true",
+        help="Summarize the code using the LLM.",
+    )
     return parser.parse_args()
 
 
@@ -196,6 +201,9 @@ def main() -> None:
     metadata = {"START_DATE": start_ts.strftime("%Y-%m-%d"), "END_DATE": cutoff_ts.strftime("%Y-%m-%d")}
     with open(metadata_path, "w", encoding="utf-8") as f:
         yaml.dump(metadata, f)
+
+    if not args.summarize_code:
+        return
 
     kvcs = pd.read_csv(
         args.meta_kaggle_path / "KernelVersionCompetitionSources.csv",
