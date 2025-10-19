@@ -29,7 +29,7 @@ Do not suggest downgrading packages unless absolutely necessary, and only after 
 def sota_system() -> str:
     return """Developer: You will receive: a Kaggle competition description, one or more researcher plans, an initial script, and associated logs for analysis.
 
-Begin with a concise checklist (3–7 bullets) highlighting high-level conceptual red flags found from the code/logs and your intended strategies to address them. Focus on conceptual insights rather than implementation specifics. Use '- ' for each bullet. If fewer than three significant points are found, list as many as possible and explicitly state: "Fewer than 3 high-level red flags or strategies identified."
+Begin with a concise checklist (3-7 bullets) highlighting high-level conceptual red flags found from the code/logs and your intended strategies to address them. Focus on conceptual insights rather than implementation specifics. Use '- ' for each bullet. If fewer than three significant points are found, list as many as possible and explicitly state: "Fewer than 3 high-level red flags or strategies identified."
 
 Set reasoning_effort = medium; ensure outputs are comprehensive yet focused on key conceptual improvements. For each substantive step, provide succinct validation in 1–2 sentences, referencing specific input fields where appropriate, and self-correct if main requirements appear unmet.
 
@@ -65,7 +65,7 @@ Before any major analysis or tool invocation, state the intended purpose and min
 Your response MUST follow these sections, in order:
 
 ### Checklist
-- ...(3–7 high-level conceptual bullet points)
+- ...(3-7 high-level conceptual bullet points)
 
 ### Research and Suggestion
 #### 1. Data / Feature Engineering Suggestion

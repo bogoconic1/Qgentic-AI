@@ -60,8 +60,8 @@ class Orchestrator:
             with open(plan_path, "r") as f:
                 plan = f.read()
         else:
-            starter = StarterAgent(self.slug, self.iteration)
-            starter_summary = starter.run()
+            # starter = StarterAgent(self.slug, self.iteration)
+            # starter_summary = starter.run()
             parallel = int(os.environ.get("RESEARCHER_PARALLEL_RUNS", _DEFAULT_PARALLEL) or _DEFAULT_PARALLEL)
             results: list[tuple[int, str, int]] = []
             _, _, _ = _run_researcher_once(self.slug, self.iteration, 1)
@@ -118,6 +118,5 @@ class Orchestrator:
                 except Exception:
                     pass
         except Exception:
-            # Baseline stage is best-effort; do not block main developer run
             pass
     

@@ -68,6 +68,7 @@ class ResearcherAgent:
         self.base_dir = _TASK_ROOT / self.slug
         self.outputs_dir = self.base_dir / _OUTPUTS_DIRNAME / str(self.iteration)
         self.outputs_dir.mkdir(parents=True, exist_ok=True)
+        self.description = _safe_read(str(self.base_dir / "description.md"))
         # Configure per-run output dirs for media/external data under outputs/<iter>
         assert self.run_id is not None, "run_id is required"
         self.media_dir = self.outputs_dir / f"media_{self.run_id}"
@@ -166,33 +167,22 @@ class ResearcherAgent:
             self.messages.append({"role": "user", "content": content})
 
     def _compose_system(self) -> str:
-        # Description is read here for reuse in initial user message
-        self.description = _safe_read(str(self.base_dir / "description.md"))
         return prompt_build_system(str(self.base_dir))
 
-    def _read_starter_summary(self) -> str:
+    def _read_models_summary(self) -> str:
         # Prefer raw starter_suggestions.txt; fallback to JSON; else 'None'
-        try:
-            txt_path = self.outputs_dir / "starter_suggestions.txt"
-            if txt_path.exists():
-                return _safe_read(str(txt_path))
-        except Exception:
-            pass
-        try:
-            json_path = self.outputs_dir / "starter_suggestions.json"
-            if json_path.exists():
-                return _safe_read(str(json_path))
-        except Exception:
-            pass
-        return "None"
+        json_path = self.outputs_dir / "starter_suggestions.json"
+        with open(json_path, "r") as f:
+            models = json.load(f)
+        return "\n".join([f"- {model['suggestion']}" for model in models.values()])
 
     @weave.op()
     def build_plan(self, max_steps: int | None = None) -> str:
         system_prompt = self._compose_system()
-        starter_summary = self._read_starter_summary()
+        models_summary = self._read_models_summary()
         self.messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": prompt_initial_user(self.description or "", starter_summary)},
+            {"role": "user", "content": prompt_initial_user(self.description, models_summary)},
         ]
 
         max_steps = max_steps or _DEFAULT_MAX_STEPS

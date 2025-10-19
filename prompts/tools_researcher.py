@@ -31,24 +31,13 @@ Competition Description:
 
 
 def datasets_prompt(query: str) -> str:
-    return f"""Begin with a concise checklist (3-7 bullets) of the approach to finding Kaggle datasets relevant to the provided query: {query}. Search for and identify up to three relevant Kaggle dataset URLs. Datasets should be ordered by relevance to the query (most relevant first), and by recency if multiple datasets have equal relevance.
+    return f"""Search for and identify up to three relevant Kaggle datasets for the following query: {query} 
 
-After completing your reasoning or explanation, output your results in strict JSON format, enclosed in code fences.
+The dataset URLs should begin with "https://www.kaggle.com/datasets/".
 
-## Output Format
-- The JSON response must contain a single key, "datasets", with a value that is a list (array) of up to three Kaggle dataset URLs as strings.
-- If there are fewer than three relevant datasets, include as many URLs as are available (from zero up to three).
-- If no relevant datasets are found, return an empty array for the "datasets" key.
-- Datasets should be ordered by relevance to the query (most relevant first); if multiple datasets have equal relevance, order them by recency.
-
-Example: successful output
+Output the dataset URLs in the below JSON format within ```json backticks:
 ```json
 {{"datasets": ["https://www.kaggle.com/datasets/exampleuser/first-dataset", "https://www.kaggle.com/datasets/exampleuser/second-dataset"]}}
-```
-
-Example: when no datasets are found
-```json
-{{"datasets": []}}
 ```
 """
 

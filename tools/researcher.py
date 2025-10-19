@@ -210,7 +210,7 @@ def download_external_datasets(query: str, slug: str) -> str:
         return "No relevant datasets found."
 
     completion = content
-    relevant_datasets = None
+    relevant_datasets = []
     max_dataset_attempts = 3
     for dataset_attempt in range(1, max_dataset_attempts + 1):
         logger.debug("Web search completion text: %s", completion)
@@ -219,14 +219,14 @@ def download_external_datasets(query: str, slug: str) -> str:
 
         if not matches:
             logger.warning("No JSON block found in web search response.")
-            relevant_datasets = None
+            relevant_datasets = []
         else:
             data = json.loads(matches[0])
-            relevant_datasets = data.get("datasets", None)
+            relevant_datasets = data.get("datasets", [])
 
-        if relevant_datasets is None and dataset_attempt < max_dataset_attempts:
+        if len(relevant_datasets) == 0 and dataset_attempt < max_dataset_attempts:
             logger.info(
-                "Datasets key is None; retrying dataset discovery (%s/%s)",
+                "Datasets key is empty; retrying dataset discovery (%s/%s)",
                 dataset_attempt,
                 max_dataset_attempts,
             )
