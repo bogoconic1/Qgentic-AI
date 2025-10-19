@@ -88,7 +88,7 @@ class DeveloperAgent:
       <task_root>/<slug>/<outputs_dir>/<iteration>/submission.csv
     """
 
-    def __init__(self, slug: str, iteration: int):
+    def __init__(self, slug: str, iteration: int, model_name: Optional[str] = None, example_code: Optional[str] = None):
         load_dotenv()
         self.slug = slug
         self.iteration = iteration
@@ -98,7 +98,7 @@ class DeveloperAgent:
         self.base_dir = self.task_root / slug
         self.outputs_dir = self.base_dir / self.outputs_dirname / str(iteration)
         self.outputs_dir.mkdir(parents=True, exist_ok=True)
-        self.developer_log_path = self.outputs_dir / "developer.txt"
+        self.developer_log_path = self.outputs_dir / f"developer_{iteration}.txt"
         self._configure_logger()
 
         # Metric-related defaults; overwritten once benchmark info is available
@@ -131,6 +131,10 @@ class DeveloperAgent:
 
         # Patch mode configuration
         self.patch_mode_enabled = _PATCH_MODE_ENABLED
+
+        # Optional model constraints for the developer system prompt
+        self.model_name: Optional[str] = model_name
+        self.example_code: Optional[str] = example_code
 
         logger.info(
             "Initialized DeveloperAgent for slug=%s iteration=%s", self.slug, self.iteration
@@ -205,7 +209,8 @@ class DeveloperAgent:
         return prompt_build_system(
             description=self.description,
             directory_listing=directory_listing,
-            gold_threshold=self.gold_threshold,
+            model_name=self.model_name or "baseline-model",
+            example_code=self.example_code or "",
             slug=self.slug,
         )
 

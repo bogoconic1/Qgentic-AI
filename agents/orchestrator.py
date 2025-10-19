@@ -2,6 +2,7 @@ from typing import Tuple
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import os
+import json
 
 from agents.researcher import ResearcherAgent
 from agents.developer import DeveloperAgent
@@ -34,6 +35,13 @@ def _run_researcher_once(slug: str, iteration: int, run_id: int) -> tuple[int, s
     except Exception:
         pass
     return run_id, str(plan_path), len(plan or "")
+
+@weave.op()
+def _run_developer_baseline(slug: str, iteration_suffix: str, plan: str, model_name: str, example_code: str, key: str):
+    """Run a single baseline DeveloperAgent and return (key, best_score, best_code)."""
+    dev = DeveloperAgent(slug, iteration_suffix, model_name=model_name, example_code=example_code)
+    best_score, best_code = dev.run(plan, max_time_seconds=3600)
+    return key, best_score, best_code
 
 class Orchestrator:
     def __init__(self, slug: str, iteration: int):
@@ -72,7 +80,44 @@ class Orchestrator:
                     plan = f.read()
             else:
                 raise RuntimeError("No plan found")
-        success = self.developer.run(plan, max_time_seconds=max_time_seconds)
+        # Baseline stage: evaluate 5 starter suggestions with constrained developer runs
+        try:
+            suggestions_path = self.outputs_dir / "starter_suggestions.json"
+            if suggestions_path.exists():
+                with open(suggestions_path, "r") as f:
+                    suggestions = json.load(f) or {}
 
-        return success, plan
+                # Dispatch runs in parallel using ProcessPoolExecutor
+                tasks = []
+                with ProcessPoolExecutor(max_workers=5) as ex:
+                    for i in range(1, 6):
+                        key = f"model_{i}"
+                        entry = suggestions.get(key)
+                        if not isinstance(entry, dict):
+                            continue
+                        model_name = entry.get("suggestion", "")
+                        example_code = entry.get("code", "")
+                        dev_iter = f"{self.iteration}_{i}"
+                        fut = ex.submit(_run_developer_baseline, self.slug, dev_iter, plan, model_name, example_code, key)
+                        tasks.append(fut)
+
+                    for fut in as_completed(tasks):
+                        try:
+                            key, best_score, best_code = fut.result()
+                            if isinstance(suggestions.get(key), dict):
+                                suggestions[key]["best_score"] = best_score
+                                suggestions[key]["best_code"] = best_code or ""
+                        except Exception:
+                            continue
+
+                # Persist combined results alongside original suggestions
+                baseline_path = self.outputs_dir / "baseline_results.json"
+                try:
+                    with open(baseline_path, "w") as f:
+                        json.dump(suggestions, f, indent=2)
+                except Exception:
+                    pass
+        except Exception:
+            # Baseline stage is best-effort; do not block main developer run
+            pass
     
