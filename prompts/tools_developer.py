@@ -174,5 +174,3 @@ Return both summaries in the exact JSON format below (enclosed in triple backtic
 }
 ```
 """
-
-

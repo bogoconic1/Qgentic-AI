@@ -20,5 +20,5 @@ wandb.init(entity='520f8592abc', project='qgentic-ai', name=f'test_download_data
 weave.init(project_name='520f8592abc/qgentic-ai')
 
 slug = "us-patent-phrase-to-phrase-matching"
-query = "Fetch CPC 2021.05 Cooperative Patent Classification code to description mapping (e.g., CSV with columns code, title/definition) suitable for mapping 3-character codes like B60, H04 to short titles and/or descriptions."
+query = f"Give me datasets which are shared in the {slug} competition and is widely used by the community. Make sure the datasets are published before the competition end date."
 print(researcher.download_external_datasets(query=query, slug=slug))
