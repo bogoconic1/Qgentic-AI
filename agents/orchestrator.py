@@ -52,9 +52,8 @@ class Orchestrator:
             with open(plan_path, "r") as f:
                 plan = f.read()
         else:
-            # starter = StarterAgent(self.slug, self.iteration)
-            # starter_summary = starter.run()
-            # print(1 / 0)
+            starter = StarterAgent(self.slug, self.iteration)
+            starter_summary = starter.run()
             parallel = int(os.environ.get("RESEARCHER_PARALLEL_RUNS", _DEFAULT_PARALLEL) or _DEFAULT_PARALLEL)
             results: list[tuple[int, str, int]] = []
             _, _, _ = _run_researcher_once(self.slug, self.iteration, 1)
@@ -73,7 +72,7 @@ class Orchestrator:
                     plan = f.read()
             else:
                 raise RuntimeError("No plan found")
-        # success = self.developer.run(plan, max_time_seconds=max_time_seconds)
+        success = self.developer.run(plan, max_time_seconds=max_time_seconds)
 
-        # return success, plan
+        return success, plan
     

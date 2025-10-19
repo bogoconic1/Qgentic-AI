@@ -10,7 +10,8 @@ Objective:
 - Focus exclusively on data understanding, feature reasoning, and evidence gathering, explicitly avoiding the suggestion, discussion, or assessment of modeling methods or algorithms.
 
 Instructions:
-- Begin with a concise checklist (3-7 bullets) summarizing your planned analytical steps conceptually, avoiding implementation-level detail.
+- Begin with a concise, conceptual checklist (3-7 bullet points) summarizing your planned analytical steps—avoid implementation-level details. Summarize the task type and models mentioned in <starter_summary> to facilitate clear research questions and hypotheses for modeling.
+- Before you begin, set reasoning_effort = medium, suitable for comprehensive, dataset-level exploration. If critical contextual information (such as <competition_description> or <starter_summary>) is missing, highlight this and request the user to provide it before proceeding.
 - Formulate and test hypotheses using only the available tools, iterating between analytical questioning and data inspection to substantiate your conclusions. Set reasoning_effort = medium, suitable for dataset-level exploration.
 - Ensure every conclusion is derived directly from the data; disregard prior intuition, memory, or assumptions if the dataset provides sufficient evidence.
 - Before each tool invocation, explicitly state its purpose and the minimum required inputs. Afterward, provide a 1-2 line result summary; if results are inconclusive, propose a targeted follow-up analysis and document any blockers or new questions.
@@ -57,7 +58,7 @@ Provide the plan within a code block using the following template:
 <string or bullet list—summarize unresolved questions, blockers, or inconclusive/incomplete analyses>
 
 ## Modeling Recommendations
-<string or bullet list—note only allowable high-level modeling factors (e.g., loss/metric selection), avoiding any reference to model types, architectures, or training strategies>
+<string or bullet list—note high-level modeling factors (e.g., max length/input dimension/loss function suggestion/metric selection), avoiding any reference to exact model names>
 ```
 
 - All six template sections must always be included, even if a section has no current recommendations (note with 'None at this stage.').

@@ -27,94 +27,100 @@ Do not suggest downgrading packages unless absolutely necessary, and only after 
 
 
 def sota_system() -> str:
-    return """You will receive a Kaggle competition description, one or more researcher plans, and an ablation summary for analysis.
+    return """Developer: You will receive: a Kaggle competition description, one or more researcher plans, an initial script, and associated logs for analysis.
 
-Begin with a concise checklist (3-7 bullets) summarizing high-level conceptual red flags identified from the code/logs, as well as your intended strategies for addressing them. These should focus on conceptual aspects rather than specific implementations. Use '- ' for each bullet. If fewer than three meaningful points arise, list as many as possible and explicitly state: "Fewer than 3 high-level red flags or strategies identified."
+Begin with a concise checklist (3–7 bullets) highlighting high-level conceptual red flags found from the code/logs and your intended strategies to address them. Focus on conceptual insights rather than implementation specifics. Use '- ' for each bullet. If fewer than three significant points are found, list as many as possible and explicitly state: "Fewer than 3 high-level red flags or strategies identified."
 
-Always review the <researcher_plans> and <ablation_summary> first, if provided. Set reasoning_effort = medium to ensure thoughtful but efficient analysis. For any web search or external query, briefly state the purpose and the minimal search terms you will use before proceeding. Use only approved resources and provide a one-line preamble before significant information-sourcing steps, referencing the competition context.
+Set reasoning_effort = medium; ensure outputs are comprehensive yet focused on key conceptual improvements. For each substantive step, provide succinct validation in 1–2 sentences, referencing specific input fields where appropriate, and self-correct if main requirements appear unmet.
 
-Conduct a web search for recent, effective models, architectures, techniques, or hyperparameters relevant to the competition or similar tasks, directly addressing the outlined red flags. Clearly explain the purpose of every recommended approach and justify its relevance by referencing the competition description and context.
-**IMPORTANT**: YOU ARE NOT ALLOWED TO SEARCH FOR WINNING SOLUTIONS TO THIS COMPETITION.
+Conduct a web search to identify ways to improve the competition metric with the given model, but do not look up or rely on actual winning solutions or prior knowledge specific to this competition.
 
-Generate FOUR distinct suggestions, each from a separate strategic category:
-1. Data / Feature Engineering Enhancement - focuses on improving input representation or data quality.
-2. Architectural Enhancement - proposes improvements to the model backbone or design.
-3. Ensembling Enhancement - addresses model aggregation, stacking, blending, or bagging.
-4. SOTA Model Enhancement - highlights a recent effective model from an arXiv paper/GitHub repository/Blog Post that has been successfully applied on similar tasks.
+## Hard Constraints
+- Do NOT look up or use actual winning solutions from this competition.
+- Do NOT rely on prior knowledge of solutions for this competition.
+- Do NOT propose ensembling, blending, or stacking.
+- Do NOT modify, replace, or substitute the backbone model as specified in the initial script. Only suggest auxiliary or wraparound architecture improvements.
 
-For each category:
-- Provide one high-impact suggestion for improving performance on the competition task and metric, with an explanation of approximately 100 words outlining its benefits.
+Generate TWO distinct suggestions, each from a different strategic category:
+1. **Data / Feature Engineering Enhancement** — Improving data representation or quality.
+2. **Architectural Enhancement** — Enhancing model design without altering the backbone, such as adding auxiliary heads, applying regularization, or adjusting the training regime.
+
+For each:
+- Provide one high-impact suggestion to improve the competition metric, with an explanation (~100 words) describing its benefits.
 - Clearly differentiate suggestions using numbered headings (e.g., '#### 1. Data / Feature Engineering Suggestion').
-- Ensure the four suggestions are complementary and not overlapping.
+- Ensure suggestions are complementary and non-overlapping.
 
-After presenting suggestions, validate each one's relevance to the competition details and metric in 1-2 sentences. Clearly specify the criteria used for validation and reference key input details when possible. If validation cannot be performed due to missing or inadequate inputs, clearly state this and return "No suggestions."
+After presenting suggestions, validate the relevance of each to the competition details and metric in 1–2 sentences, precisely specifying your validation criteria and referencing key inputs where possible. If validation is not possible due to missing or insufficient inputs, state this and use "No suggestions."
 
-If the <competition description> or <initial script and logs> are missing or clearly inadequate, mention this before providing the checklist and return "No suggestions."
+If <competition description> or <initial script and logs> are missing or inadequate, note this before the checklist and use "No suggestions." for all subsequent sections, except for the error note.
 
-After code edits or substantial analysis, validate the intended outcome or impact in 1-2 sentences and self-correct if validation fails or key requirements are unmet.
+Whenever edits or substantial analysis are performed, validate the intended outcome in 1–2 sentences. If validation fails or requirements are unmet, self-correct and reassess.
 
-Follow the exact output structure and examples outlined below for all scenarios, including missing input or error conditions:
+Use the precise output structure and examples below for all scenarios, including errors or missing input.
+
+Before any major analysis or tool invocation, state the intended purpose and minimal required inputs in a one-line preamble to enhance process transparency.
 
 ## Output Format
-Your output MUST include the following sections in order:
+
+Your response MUST follow these sections, in order:
 
 ### Checklist
-- ... (3-7 high-level conceptual bullet points, see above)
+- ...(3–7 high-level conceptual bullet points)
 
 ### Research and Suggestion
 #### 1. Data / Feature Engineering Suggestion
-- ... (prose explanation)
+- ...(explanation)
 
 #### 2. Architectural Enhancement Suggestion
-- ... (prose explanation)
-
-#### 3. Ensembling/Blending Enhancement Suggestion
-- ... (prose explanation)
-
-#### 4. SOTA Model Enhancement
-- ... (prose explanation)
+- ...(explanation — improvements cannot alter the backbone model from the initial script)
 
 ### Validation
-- ... (validation statements for each suggestion, or "No suggestions.")
+- ...(validation statements for each suggestion, or "No suggestions.")
 
 ### Previous Suggestion Review
-Identify any previously tried ideas from <ablation_summary> that should remain blacklisted or be newly blacklisted. Provide a list of exact idea strings to blacklist and a corresponding list of reasons aligned by index.
-
-Output your decision in the following strict JSON format (enclosed in backticks):
+Decide if the most recent suggestion (<previous suggestion executed>) should be blacklisted based on validation results and logs. Output your decision using the following strict JSON format (within backticks):
 ```json
 {
-    "blacklist": ["<idea to blacklist>", "<another idea to blacklist>", ...],
-    "reasons": ["<reason for first idea>", "<reason for second idea>", ...]
+    "blacklist": <true or false>,
+    "reason": "<succinct justification; if blacklist is false, use empty string>"
 }
 ```
 
-### New Suggestions Summary
-Summarize the four new suggestions in a concise manner and provide a Python code snippet for each suggestion. Do not repeat blacklisted ideas or the previous suggestion.
-
-Use these exact keys: data_feature_suggestion/data_feature_code, arch_suggestion/arch_code, ensembling_suggestion/ensembling_code, sota_suggestion/sota_code. Return your new suggestions using the following strict JSON format (enclosed in backticks):
+### New Suggestion Summary
+Propose the single best new idea (just one) to improve the competition score, synthesizing insights from above. Do not repeat blacklisted or prior suggestions. Return your new proposal in this strict JSON format (within backticks):
 ```json
 {
-    "data": {
-        "suggestion": <Data / Feature Engineering Suggestion>,
-        "code": <Python code snippet for the data / feature engineering suggestion>
-    },
-    "architecture": {
-        "suggestion": <Architectural Enhancement Suggestion>,
-        "code": <Python code snippet for the architectural enhancement suggestion>
-    },
-    "ensembling": {
-        "suggestion": <Ensembling/Blending Enhancement Suggestion>,
-        "code": <Python code snippet for the ensembling/blending enhancement suggestion>
-    },
-    "sota": {
-        "suggestion": <SOTA Model Enhancement Suggestion>,
-        "code": <Python code snippet for the SOTA model enhancement suggestion>
-    }
+    "suggestion": "<your proposed best next idea>",
+    "reasoning": "<why it is the best choice now>"
 }
 ```
-If there is no viable suggestion, use empty strings for the values.
-Never repeat any idea from <previous failed ideas>. If a suggestion is blacklisted, ensure your new recommendation avoids that approach.
-**IMPORTANT**: YOU ARE NOT ALLOWED TO SEARCH FOR WINNING SOLUTIONS TO THIS COMPETITION.
+If no suggestion is viable, use empty strings for the values.
+
+### Code
+Present a concise Python code snippet (within triple backticks labeled 'python') implementing your new idea. If no suggestion is given, leave this section empty (no code block).
+
+Never repeat an idea from <previous failed ideas>, and avoid blacklisted or previous suggestions.
+
+### Input Schema
+- <competition description> (string): Detailed overview of the Kaggle competition (task, data, evaluation metric).
+- <researcher plans> (optional, list of strings): Previous plans for the task.
+- <initial script> (string): Starting code.
+- <logs> (string): Output logs from training/evaluation of the script.
+- <previous suggestion executed> (string): Most recently attempted suggestion.
+- <previous failed ideas> (optional, list of strings): Suggestions that have previously failed or been blacklisted.
+
+### Output Fields
+- Checklist (markdown list)
+- Research and Suggestion (two markdown sections)
+- Validation (markdown)
+- Previous Suggestion Review (strict JSON)
+- New Suggestion Summary (strict JSON)
+- Code (Python, if a suggestion is present)
+
+Error handling:
+- If <competition description> or <initial script and logs> are missing or inadequate, note this before the checklist and use "No suggestions." everywhere else.
+- When validating, explicitly reference relevant input fields (e.g., competition metric or logs).
+- If unable to validate due to lack of input, state this and use 'No suggestions.'
 """
 
 
@@ -122,55 +128,31 @@ def sota_user(
     description: str,
     plans_section: str,
     failed_ideas_text: str,
-    ablation_summary: str | None = None,
+    executed_suggestion_text: str,
+    executed_code_text: str,
+    context: str,
+    outcome_status: str,
 ) -> str:
-    ablation_block = f"\n<ablation_summary>\n{ablation_summary}\n</ablation_summary>\n" if ablation_summary else ""
     return f"""<competition description>
 {description}
 </competition description>
-
-{ablation_block}
 
 {plans_section}
 
 <previous failed ideas> DO NOT TRY THESE AGAIN
 {failed_ideas_text}
 </previous failed ideas>
+
+<previous suggestion executed>
+{executed_suggestion_text}
+</previous suggestion executed>
+
+<previous code snippet applied>
+{executed_code_text}
+</previous code snippet applied>
+
+{context}
+
+Outcome status: {outcome_status}
 """
 
-
-def ablation_baseline_prompt() -> str:
-    return """Developer: You will receive a piece of code and its corresponding logs for analysis.
-
-**Inputs:**
-- `<code>`: The code to analyze.
-- `<logs>`: The logs to analyze.
-
-**Requirements:**
-- Begin with a concise Markdown bullet list (3-7 items) summarizing the conceptual analysis steps you will take before proceeding.
-- Summarize the code's approach and the validation outcomes from the logs, each summary under 100 words.
-- If either code or logs is missing, represent its summary as an empty string (`''`).
-- If code or logs are excessively long or malformed, summarize as thoroughly as possible and flag any input quality limitations.
-- Output must strictly follow the specified JSON format, include all required keys, and never use null values or omit keys.
-- After drafting summaries, validate the output for format compliance and completeness of summary fields, and self-correct if necessary before finalizing the response.
-
-**Instructions:**
-1. Present your checklist as a Markdown bullet list (`-` bullets), focusing exclusively on conceptual analysis steps and not implementation details.
-2. Compose two concise summaries (each under 100 words): one for the code's approach, one for the logs' validation/FULL run results.
-3. If code or logs are missing, use an empty string for the respective summary.
-4. If inputs are excessively long or malformed, clearly state any summarization limitations.
-5. Before providing the final output, explicitly verify that your output strictly matches the required format and includes all fields; self-correct if necessary.
-6. Output the following structure:
-
-### Checklist
-- Markdown bullet list
-
-### Code and Logs Summary
-Return both summaries in the exact JSON format below (enclosed in triple backticks):
-```json
-{
-  "code_summary": "Summary of the code or '' if code is absent",
-  "logs_summary": "Summary of the logs or '' if logs are absent"
-}
-```
-"""

@@ -3,7 +3,7 @@ set -euo pipefail
 
 # === CONFIG ===
 KAGGLE_JSON_PATH="${KAGGLE_JSON_PATH:-kaggle.json}"
-TASK_NAME="us-patent-phrase-to-phrase-matching"
+TASK_NAME="whale-categorization-playground"
 WORKDIR="${WORKDIR:-$(pwd)}"
 CACHE_DIR="/root/.cache/mle-bench/data/${TASK_NAME}/prepared"
 
