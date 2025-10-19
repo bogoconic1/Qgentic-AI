@@ -57,7 +57,7 @@ class ResearcherAgent:
     (no further tool calls), or the tool-call budget is exhausted.
     """
 
-    def __init__(self, slug: str, iteration: int, run_id: int | None = None):
+    def __init__(self, slug: str, iteration: int, run_id: int = 1):
         load_dotenv()
         self.slug = slug
         self.iteration = iteration
@@ -69,29 +69,19 @@ class ResearcherAgent:
         self.outputs_dir = self.base_dir / _OUTPUTS_DIRNAME / str(self.iteration)
         self.outputs_dir.mkdir(parents=True, exist_ok=True)
         # Configure per-run output dirs for media/external data under outputs/<iter>
-        if self.run_id is not None:
-            self.media_dir = self.outputs_dir / f"media_{self.run_id}"
-            self.external_dir = self.outputs_dir / f"external_data_{self.run_id}"
-            try:
-                self.media_dir.mkdir(parents=True, exist_ok=True)
-                self.external_dir.mkdir(parents=True, exist_ok=True)
-                os.environ["MEDIA_DIR"] = str(self.media_dir)
-                os.environ["EXTERNAL_DATA_DIR"] = str(self.external_dir)
-            except Exception:
-                pass
-            per_run_log_dir = self.outputs_dir / "researcher" / f"run_{self.run_id}"
-            per_run_log_dir.mkdir(parents=True, exist_ok=True)
-            self.researcher_log_path = per_run_log_dir / f"researcher_{self.run_id}.txt"
-        else:
-            # Single-run defaults (backward compatible)
-            self.media_dir = self.base_dir / "media"
-            self.external_dir = self.base_dir / _PATH_CFG.get("external_data_dirname", "external-data")
-            try:
-                self.media_dir.mkdir(parents=True, exist_ok=True)
-                self.external_dir.mkdir(parents=True, exist_ok=True)
-            except Exception:
-                pass
-            self.researcher_log_path = self.outputs_dir / "researcher.txt"
+        assert self.run_id is not None, "run_id is required"
+        self.media_dir = self.outputs_dir / f"media_{self.run_id}"
+        self.external_dir = self.outputs_dir / f"external_data_{self.run_id}"
+        try:
+            self.media_dir.mkdir(parents=True, exist_ok=True)
+            self.external_dir.mkdir(parents=True, exist_ok=True)
+            os.environ["MEDIA_DIR"] = str(self.media_dir)
+            os.environ["EXTERNAL_DATA_DIR"] = str(self.external_dir)
+        except Exception:
+            pass
+        per_run_log_dir = self.outputs_dir / "researcher" / f"run_{self.run_id}"
+        per_run_log_dir.mkdir(parents=True, exist_ok=True)
+        self.researcher_log_path = per_run_log_dir / f"researcher_{self.run_id}.txt"
         self._configure_logger()
 
     def _configure_logger(self) -> None:
@@ -176,17 +166,33 @@ class ResearcherAgent:
             self.messages.append({"role": "user", "content": content})
 
     def _compose_system(self) -> str:
-        base_dir = self.base_dir
-        self.description = _safe_read(str(base_dir / "description_obfuscated.md"))
-        public_insights = _safe_read(str(base_dir / "public_insights.md"))
-        return prompt_build_system(str(base_dir), self.description, public_insights)
+        # Description is read here for reuse in initial user message
+        self.description = _safe_read(str(self.base_dir / "description.md"))
+        return prompt_build_system(str(self.base_dir))
+
+    def _read_starter_summary(self) -> str:
+        # Prefer raw starter_suggestions.txt; fallback to JSON; else 'None'
+        try:
+            txt_path = self.outputs_dir / "starter_suggestions.txt"
+            if txt_path.exists():
+                return _safe_read(str(txt_path))
+        except Exception:
+            pass
+        try:
+            json_path = self.outputs_dir / "starter_suggestions.json"
+            if json_path.exists():
+                return _safe_read(str(json_path))
+        except Exception:
+            pass
+        return "None"
 
     @weave.op()
     def build_plan(self, max_steps: int | None = None) -> str:
         system_prompt = self._compose_system()
+        starter_summary = self._read_starter_summary()
         self.messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": prompt_initial_user()},
+            {"role": "user", "content": prompt_initial_user(self.description or "", starter_summary)},
         ]
 
         max_steps = max_steps or _DEFAULT_MAX_STEPS

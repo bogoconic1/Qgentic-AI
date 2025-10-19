@@ -9,9 +9,9 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
 ---
 ## News
 
-**[2025/10/17]** Updated evals for recent SOTA submissions to MLE-Bench repo. Chose competitions where the variation between the latest solutions are high.
+**[2025/10/19]** Added initial study to recommend 5 potential models for experimenting -> executing them in parallel with a defined time limit
 
-**[2025/10/17]** Enabled SOTA suggestion to provide 4 suggestions (data, architecture, ensembling, recent model) and execute them in parallel to create an ablation study.
+**[2025/10/17]** Updated evals for recent SOTA submissions to MLE-Bench repo. Chose competitions where the variation between the latest solutions are high.
 
 **[2025/10/14]** Updated results of ongoing competition evaluation
 
@@ -21,7 +21,7 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
 
 | Kaggle Competition | Public LB score | Notebook |
 | --- | --- | --- |
-| playground-series-s5e10 | 0.05555 | [Here](https://www.kaggle.com/code/yeoyunsianggeremie/ps5e10-agentic-ai-solution) |
+| playground-series-s5e10 | TBC | [Here](https://www.kaggle.com/code/yeoyunsianggeremie/ps5e10-agentic-ai-solution) |
 
 ## Past Competitions
 
@@ -38,30 +38,37 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
 
 ## Architecture at a Glance
 
-![Architecture diagram showing the Researcher and Developer flow](docs/assets/architecture.png)
+![Architecture diagram showing the Researcher and Developer flow](docs/assets/architecture_v2.png)
+
+- **Starter Agent (`agents/starter.py`)**
+  - Proposes 5 starter model ideas with short example code by referencing the competition description and `docs/state_of_competitions_2024.md`.
+  - Persists `starter_suggestions.txt` and `starter_suggestions.json` in `task/<slug>/outputs/<iteration>/`.
 
 - **Researcher Agent (`agents/researcher.py`)**
   - Uses tool-calling (EDA snippets, external dataset search) to understand the task.
-  - Logs every step to `task/<slug>/outputs/<iteration>/researcher.txt`.
-  - Persists the final plan in `plan.md` – the Developer consumes this verbatim.
+  - Logs every step to `task/<slug>/outputs/<iteration>/researcher/`.
+  - Persists the final plan in `plan.md` – consumed verbatim by downstream stages.
 
 - **Developer Agent (`agents/developer.py`)**
-  - Generates a single Python training script per attempt using OpenRouter models.
-  - Executes the script, captures logs, scores the output, and iterates up to the
-    configured maximum tries.
-  - Guardrails enforce logging order, DEBUG→FULL sequencing, NaN detection, and optional
-    leakage checks.
-  - Integrates with Weave & Weights & Biases for observability.
+  - Reads `task/<slug>/outputs/<iteration>/starter_suggestions.json` (five model ideas with example code).
+  - Launches five baseline `DeveloperAgent` runs concurrently via `ProcessPoolExecutor` with iteration suffixes
+    `"<iteration>_<1..5>"`, each constrained to its model name and example code.
+  - Each baseline run returns `(best_score, best_code)`; results are merged into
+    `baseline_results.json` under the keys `model_1`..`model_5` as `best_score` and `best_code`.
+  - Baseline run time limit is configured in the orchestrator (default 3600s per baseline in this repo).
+
+- **Ensembling Agent (`agents/ensembler.py`)**
+  - work in progress
 
 - **Guardrails (`guardrails/`), Tools (`tools/`) & Shared Config (`project_config.py`)**
-  - `tools.developer` wraps code execution, stack-trace web search, and SOTA suggestion
-    lookups.
+  - `tools.developer` wraps code execution, stack-trace web search, and SOTA suggestions.
   - `tools.researcher` exposes the EDA runtime and dataset downloader.
   - `config.yaml` overrides project defaults (model endpoints, runtime limits, etc.).
 
 - **Task Bundles (`task/<slug>/`)**
-  - Expected layout: Kaggle metadata, `description_obfuscated.md`, `plan.md`, `outputs/<iteration>/`
-    (logs, generated code, submissions), and optional external-data caches.
+  - Expected layout: Kaggle metadata, `description.md`, `plan.md`, `outputs/<iteration>/`
+    (logs, generated code, submissions), baseline artifacts (`baseline_results.json`),
+    and per-baseline outputs under `outputs/<iteration>_<k>/`.
 
 # Sample Logs
 
@@ -75,6 +82,9 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
 - Optional: CUDA-enabled GPU for training scripts that request GPU resources.
 
 ```
+conda create --name qgentic-ai python=3.12 -y
+conda activate qgentic-ai
+
 git clone https://github.com/bogoconic1/Qgentic-AI.git
 cd Qgentic-AI
 bash install.sh
@@ -102,6 +112,7 @@ ANTHROPIC_API_KEY=...
 EXA_API_KEY=...
 OPENROUTER_API_KEY=...
 E2B_API_KEY=...
+FIRECRAWL_API_KEY=...
 ```
 
 These keys are loaded via `python-dotenv`. Adjust the environment variables listed in
@@ -127,7 +138,7 @@ You will see something like this
 ```
 task/
 └─ "enter slug"/
-   ├─ description_obfuscated.md
+   ├─ description.md
    ├─ public_insights.md
    ├─ sample_submission.csv
    ├─ comp_metadata.yaml   
@@ -141,7 +152,9 @@ python launch_agent.py --slug "enter slug" --iteration 1 --time-seconds $((6*360
 ```
 
 - The Researcher runs first (unless `plan.md` already exists for that iteration).
-- The Developer then cycles through code generations, writing artifacts to
+- Baseline Evaluator: five concurrent Developer runs using starter suggestions; results written to
+  `baseline_results.json` and `outputs/<iteration>_<k>/`.
+- The main Developer then cycles through code generations, writing artifacts to
   `task/<slug>/outputs/<iteration>/`.
 - `submission.csv` (or the configured `submission_{version}.csv`) is produced on success.
 
