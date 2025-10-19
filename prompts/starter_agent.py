@@ -78,6 +78,4 @@ def build_user(description: str) -> str:
 <documented recent approaches to win AI competitions>
 {reference}
 </documented recent approaches to win AI competitions>
-
-**IMPORTANT**: If you think external data is useful, use `download_external_datasets` to download the data and use `ask_eda` to analyze the data.
 """

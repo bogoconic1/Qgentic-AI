@@ -76,5 +76,7 @@ def initial_user_for_build_plan(description: str, starter_summary: str) -> str:
 <starter summary>
 {starter_summary}
 </starter summary>
+
+**IMPORTANT**: If you think external data is useful, use `download_external_datasets` to download the data and use `ask_eda` to analyze the data.
 """
 
