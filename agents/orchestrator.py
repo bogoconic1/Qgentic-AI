@@ -5,6 +5,7 @@ import os
 
 from agents.researcher import ResearcherAgent
 from agents.developer import DeveloperAgent
+from agents.starter import StarterAgent
 from project_config import get_config
 import weave
 import wandb
@@ -51,15 +52,20 @@ class Orchestrator:
             with open(plan_path, "r") as f:
                 plan = f.read()
         else:
+            # starter = StarterAgent(self.slug, self.iteration)
+            # starter_summary = starter.run()
+            # print(1 / 0)
             parallel = int(os.environ.get("RESEARCHER_PARALLEL_RUNS", _DEFAULT_PARALLEL) or _DEFAULT_PARALLEL)
             results: list[tuple[int, str, int]] = []
+            _, _, _ = _run_researcher_once(self.slug, self.iteration, 1)
+            '''
             with ProcessPoolExecutor(max_workers=parallel) as ex:
                 futures = [ex.submit(_run_researcher_once, self.slug, self.iteration, i + 1) for i in range(parallel)]
                 for fut in as_completed(futures):
                     try:
                         results.append(fut.result())
                     except Exception:
-                        continue
+                        continue'''
             # Prefer the first run's plan.md; fall back to any available plan file; else single-run
             plan_md_path = self.outputs_dir / "plan.md"
             if plan_md_path.exists():

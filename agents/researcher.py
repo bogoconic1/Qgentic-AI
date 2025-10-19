@@ -166,17 +166,33 @@ class ResearcherAgent:
             self.messages.append({"role": "user", "content": content})
 
     def _compose_system(self) -> str:
-        base_dir = self.base_dir
-        self.description = _safe_read(str(base_dir / "description.md"))
-        public_insights = _safe_read(str(base_dir / "public_insights.md"))
-        return prompt_build_system(str(base_dir), self.description, public_insights)
+        # Description is read here for reuse in initial user message
+        self.description = _safe_read(str(self.base_dir / "description.md"))
+        return prompt_build_system(str(self.base_dir))
+
+    def _read_starter_summary(self) -> str:
+        # Prefer raw starter_suggestions.txt; fallback to JSON; else 'None'
+        try:
+            txt_path = self.outputs_dir / "starter_suggestions.txt"
+            if txt_path.exists():
+                return _safe_read(str(txt_path))
+        except Exception:
+            pass
+        try:
+            json_path = self.outputs_dir / "starter_suggestions.json"
+            if json_path.exists():
+                return _safe_read(str(json_path))
+        except Exception:
+            pass
+        return "None"
 
     @weave.op()
     def build_plan(self, max_steps: int | None = None) -> str:
         system_prompt = self._compose_system()
+        starter_summary = self._read_starter_summary()
         self.messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": prompt_initial_user()},
+            {"role": "user", "content": prompt_initial_user(self.description or "", starter_summary)},
         ]
 
         max_steps = max_steps or _DEFAULT_MAX_STEPS

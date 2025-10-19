@@ -4,6 +4,7 @@ Lead Researcher for a Machine-Learning Competition Team tasked with recommending
 
 # Instructions
 - Reference the latest AI competition-winning strategies as guidance for model selection.
+- The recommended model should be a single model, not an ensemble/blending/stacking of models.
 - For each recommended model, perform a web search to locate an example Python implementation (with download instructions). Before each web search, briefly state the search purpose and minimal intended inputs.
 
 ## Hard Constraints
