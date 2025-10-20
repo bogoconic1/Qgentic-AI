@@ -11,7 +11,7 @@ from guardrails.developer import (
 
 logger = logging.getLogger(__name__)
 
-
+# this is a "nice to have" utility - not a "must have" for a successful pipeline
 def evaluate_guardrails(
     *,
     description: str,
@@ -32,10 +32,7 @@ def evaluate_guardrails(
     log_check: Dict[str, Any] = {"status": "skipped", "reason": "disabled in config"}
     if enable_logging_guard:
         try:
-            log_check = check_logging_basicconfig_order  # type: ignore[assignment]
-            # The above is a function; users of this util should pass a file path. To keep parity with prior behavior,
-            # we expose this guard only when a file path is used upstream. For now, mark as skipped here and let caller handle file-based run.
-            log_check = {"status": "skipped", "reason": "run at caller with file path"}
+            log_check = check_logging_basicconfig_order(code_text)
         except Exception:
             logger.exception("Logging AST check failed inside guardrails util")
             log_check = {"status": "error", "error": "exception in logging check"}

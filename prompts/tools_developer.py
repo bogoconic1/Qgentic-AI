@@ -1,37 +1,52 @@
 from __future__ import annotations
 
 
-def build_stack_trace_prompt(query: str) -> str:
-    return f"""Begin by generating a concise checklist (3-7 items) of the high-level conceptual actions you will take to address the bug report. Present this checklist as a JSON array of strings, focusing on core debugging steps rather than low-level implementation details.
-You will receive a bug description in the "query" field. This field contains a plain text description of the encountered bug, which may include a stack trace or error message.
-When a stack trace or error message is present in the query, perform a web search using relevant keywords extracted from the stack trace or error message. Incorporate findings from the web search into your reasoning and solution, citing any particularly useful information or community guidance that directly informs your debugging approach or proposed fix.
+def build_stack_trace_prompt() -> str:
+    return """Developer: # Role and Objective
+Guide the assistant in generating a structured and actionable debugging workflow based on a Python traceback, leveraging web search for supporting information and ensuring the resolution is validated.
 
-{{
-"query": "{query}"
-}}
+# Instructions
+- Begin with a concise checklist (3-7 bullets) of conceptual steps required to address the provided bug report; do not cover code or implementation-level details.
+- The Python traceback will be provided in the `<query>` field.
+- Extract key search terms from the traceback and explain briefly why the web search will be performed and what inputs are being used.
+- Conduct a web search using the extracted terms, integrating relevant insights and referencing key community or documentation sources if they inform the solution.
+- Maintain reasoning_effort = medium and provide a clear, sufficiently detailed reasoning that teaches both 'why' and 'how' the proposed solution works.
+- After presenting the solution, validate in 1-2 sentences whether your proposed fix addresses the exact error/stack trace from `<query>`, and proceed to self-correct if validation fails.
+- Outline any remaining steps if necessary, or confirm resolution if complete.
+- Do not recommend downgrading packages except as a last resort after all other solutions have been explored.
 
-Before composing your solution, set reasoning_effort = medium and ensure that your explanation is sufficiently detailed to guide a developer through both the 'why' and the 'how' of the proposed fix. After presenting the solution, validate in 1-2 lines that your recommendation specifically addresses any stack trace or error message found in the query. Clearly outline additional steps if required, or confirm that your resolution is sufficient and that the issue should now be considered resolved.
-Do not suggest downgrading packages unless absolutely necessary, and only after exploring all other avenues.
+# Output Format
+Return a single JSON object within ```json backticks with the following fields (in this order):
+- `checklist`: JSON array (3-7 high-level debugging steps as strings).
+- `web_search_findings`: Brief summary of the most relevant insights from the web search, mentioning key community/documentation sources if directly used.
+- `reasoning_and_solution`: Clear, detailed description explaining both the reasoning ('why') and the fix ('how').
+- `validation`: 1-2 lines confirming your recommendation addresses the specific error or stack trace. If the recommendation does not fully resolve the error based on validation, provide a minimal self-correction and re-validate.
+- `further_steps`: Any additional required actions, or a confirmation that the issue should now be resolved.
 
-{{
-"checklist": [
-"Conceptual step #1",
-"Conceptual step #2",
-"..."
-],
-"solution": "Detailed explanation of steps to resolve the issue, with clear reasoning to help a developer understand both the why and the how. Incorporate any relevant insights or advice acquired from the web search. Avoid overly terse answers.",
-"validation": "Explicit analysis demonstrating how your solution resolves the bug or handles all aspects of the stack trace, plus any further action or confirmation of completion. Reference web search findings if they directly impact the resolution."
-}}
-
+# Example Output
+{
+  "checklist": [
+    "Examine the error message to find the failing module or function.",
+    "Pinpoint relevant code locations from the stack trace.",
+    "Identify search keywords based on the exception and context.",
+    "Research known issues and solutions via documentation and communities.",
+    "Formulate a suitable fix or workaround.",
+    "Test your changes to confirm resolution."
+  ],
+  "web_search_findings": "Stack Overflow threads highlight that this error commonly stems from mismatched input types; official docs recommend checking input shapes.",
+  "reasoning_and_solution": "The function expects a NumPy array, but a list was provided. Convert the list to numpy.array before calling the function as a fix.",
+  "validation": "This approach resolves the ValueError by ensuring input type compatibility as per the stack trace.",
+  "further_steps": "No further action needed; confirm resolution post-fix."
+}
 """
 
 
 def sota_system() -> str:
-    return """Developer: You will receive: a Kaggle competition description, one or more researcher plans, an initial script, and associated logs for analysis.
+    return """You will receive: a Kaggle competition description, one or more researcher plans, an initial script, and associated logs for analysis.
 
 Begin with a concise checklist (3-7 bullets) highlighting high-level conceptual red flags found from the code/logs and your intended strategies to address them. Focus on conceptual insights rather than implementation specifics. Use '- ' for each bullet. If fewer than three significant points are found, list as many as possible and explicitly state: "Fewer than 3 high-level red flags or strategies identified."
 
-Set reasoning_effort = medium; ensure outputs are comprehensive yet focused on key conceptual improvements. For each substantive step, provide succinct validation in 1–2 sentences, referencing specific input fields where appropriate, and self-correct if main requirements appear unmet.
+Set reasoning_effort = medium; ensure outputs are comprehensive yet focused on key conceptual improvements. For each substantive step, provide succinct validation in 1-2 sentences, referencing specific input fields where appropriate, and self-correct if main requirements appear unmet.
 
 Conduct a web search to identify ways to improve the competition metric with the given model, but do not look up or rely on actual winning solutions or prior knowledge specific to this competition.
 
@@ -39,7 +54,7 @@ Conduct a web search to identify ways to improve the competition metric with the
 - Do NOT look up or use actual winning solutions from this competition.
 - Do NOT rely on prior knowledge of solutions for this competition.
 - Do NOT propose ensembling, blending, stacking, or calibration.
-- Do NOT modify, replace, or substitute the backbone model as specified in the initial script. Only suggest auxiliary or wraparound architecture improvements.
+- Do NOT change the model family used in the initial script; only suggest enhancements around it.
 
 Generate TWO distinct suggestions, each from a different strategic category:
 1. **Data / Feature Engineering Enhancement** — Improving data representation or quality.
@@ -50,11 +65,11 @@ For each:
 - Clearly differentiate suggestions using numbered headings (e.g., '#### 1. Data / Feature Engineering Suggestion').
 - Ensure suggestions are complementary and non-overlapping.
 
-After presenting suggestions, validate the relevance of each to the competition details and metric in 1–2 sentences, precisely specifying your validation criteria and referencing key inputs where possible. If validation is not possible due to missing or insufficient inputs, state this and use "No suggestions."
+After presenting suggestions, validate the relevance of each to the competition details and metric in 1-2 sentences, precisely specifying your validation criteria and referencing key inputs where possible. If validation is not possible due to missing or insufficient inputs, state this and use "No suggestions."
 
 If <competition description> or <initial script and logs> are missing or inadequate, note this before the checklist and use "No suggestions." for all subsequent sections, except for the error note.
 
-Whenever edits or substantial analysis are performed, validate the intended outcome in 1–2 sentences. If validation fails or requirements are unmet, self-correct and reassess.
+Whenever edits or substantial analysis are performed, validate the intended outcome in 1-2 sentences. If validation fails or requirements are unmet, self-correct and reassess.
 
 Use the precise output structure and examples below for all scenarios, including errors or missing input.
 

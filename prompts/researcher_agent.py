@@ -14,6 +14,7 @@ Hard Constraints:
 - DO NOT stop using tools until all relevant datasets are downloaded and sufficient evidence is obtained to make recommendations for every section in the plan. Validate the results of each tool call or dataset analysis in 1-2 lines, and, if validation fails or evidence is insufficient, self-correct or gather additional information before moving on.
 - DO NOT search for or use actual winning solutions from this specific competition.
 - DO NOT rely on prior memory of this competition's solutions.
+- DO NOT recommend ensembling/blending/stacking/calibration techniques.
 
 Tooling:
 - `ask_eda(question)`: Perform Python-based exploratory data analysis (EDA) on the local dataset. Use this tool to examine variable distributions, assess data quality, detect potential leakage, explore correlations, and validate assumptions.

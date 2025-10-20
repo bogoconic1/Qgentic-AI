@@ -29,48 +29,31 @@ logger = logging.getLogger(__name__)
 
 
 _CONFIG = get_config()
-_LLM_CFG = _CONFIG.get("llm", {}) if isinstance(_CONFIG, dict) else {}
-_BASE_URL = _LLM_CFG.get("base_url", "https://openrouter.ai/api/v1")
-_API_KEY_ENV = _LLM_CFG.get("api_key_env", "OPENROUTER_API_KEY")
-_DEVELOPER_MODEL = _LLM_CFG.get("developer_model", "google/gemini-2.5-pro")
-_DEVELOPER_TOOL_MODEL = _LLM_CFG.get("developer_tool_model", _DEVELOPER_MODEL)
-
-client = OpenAI(api_key=os.environ.get(_API_KEY_ENV), base_url=_BASE_URL)
+_LLM_CFG = _CONFIG.get("llm")
+_DEVELOPER_TOOL_MODEL = _LLM_CFG.get("developer_tool_model")
 
 @weave.op()
 def web_search_stack_trace(query: str) -> str:
     """Research how to fix a bug based on the stack trace and error message."""
     logger.info("Dispatching web search for stack trace remediation guidance.")
+    trace_index = query.find("Traceback (most recent call last)")
+    if trace_index != -1: query = query[trace_index:]
     logger.debug("Stack trace query: %s", query)
 
-    messages = [
-        {
-            "role": "user",
-            "content": prompt_stack_trace(query),
-        }
-    ]
+    system_prompt = prompt_stack_trace()
+
+    messages = [{"role": "user", "content": "<query>\n" + query + "\n</query>"}]
     logger.debug("Web search messages: %s", messages)
 
-    try:
-        content = ""
-        while content == "":
-            completion = call_llm_with_retry(
-                client,
-                model=_DEVELOPER_TOOL_MODEL,
-                messages=messages,
-            )
-            try:
-                msg = completion.choices[0].message
-                content = msg.content or ""
-            except Exception:
-                msg = ""
-                content = ""
-            logger.debug("Web search raw response: %s", completion)
-        logger.info("Received web search response for stack trace query.")
-        logger.debug("Web search raw response: %s", content)
-    except Exception:
-        logger.exception("Web search request for stack trace failed.")
-        return "Please try to fix the bug yourself."
+    response = call_llm_with_retry(
+        model=_DEVELOPER_TOOL_MODEL,
+        instructions=system_prompt,
+        tools=[],
+        messages=messages,
+        web_search_enabled=True
+    )
+
+    content = response.output_text or ""
 
     solution_text = content
     parsed_payload = None
@@ -89,10 +72,10 @@ def web_search_stack_trace(query: str) -> str:
         solution_candidate = parsed_payload.get("solution")
         if isinstance(solution_candidate, str) and solution_candidate.strip():
             logger.debug("Returning solution field extracted from web search response.")
-            return solution_candidate.strip()
+            return query + "\n" + "This is how you can fix the error: \n" + solution_candidate.strip()
         logger.debug("Solution field missing or empty in parsed payload.")
-
-    return solution_text
+    
+    return query + "\n" + "This is how you can fix the error: \n" + solution_text
 
 @weave.op()
 def search_sota_suggestions(
@@ -109,10 +92,7 @@ def search_sota_suggestions(
     failed_ideas_text = "No prior ideas are blacklisted."
     executed_suggestion_text = executed_suggestion or "No previous suggestion executed; this is the first attempt."
     executed_code_text = executed_code or "No explicit code snippet was provided for the last attempt."
-    if failed_ideas:
-        filtered = [idea for idea in failed_ideas if idea][-10:]
-        if filtered:
-            failed_ideas_text = "\n".join(f"- {idea}" for idea in filtered)
+    failed_ideas_text = "\n".join(f"- {idea}" for idea in failed_ideas)
 
     # Optional: include researcher plans as a separate section for plan-aware suggestions
     plans_section = ""
@@ -137,33 +117,15 @@ def search_sota_suggestions(
         outcome_status=outcome_status,
     )
 
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": prompt}
-    ]
+    response = call_llm_with_retry(
+        model=_DEVELOPER_TOOL_MODEL,
+        instructions=system_prompt,
+        tools=[],
+        messages=[{"role": "user", "content": prompt}],
+        web_search_enabled=True
+    )
 
-    try:
-        content = ""
-        while content == "":
-            completion = call_llm_with_retry(
-                client,
-                model=_DEVELOPER_TOOL_MODEL,
-                messages=messages,
-            )
-            try:
-                msg = completion.choices[0].message
-                logger.debug("SOTA search raw response: %s", completion)
-                content = msg.content or ""
-            except Exception:
-                msg = ""
-                content = ""
-        logger.debug("SOTA search raw response: %s", content)
-
-        return content
-
-    except Exception:
-        logger.exception("SOTA suggestions web search failed")
-        return ""
+    return response.output_text or ""
 
 @weave.op()
 def execute_code(filepath: str) -> str:
@@ -188,10 +150,10 @@ def execute_code(filepath: str) -> str:
         )
         logger.debug("Execution stderr: %s", trace)
         search_result = web_search_stack_trace(trace)
-        return trace + "\n" + search_result
+        return search_result
 
     except Exception:
         trace = traceback.format_exc()
         logger.exception("Unexpected error while executing %s", filepath)
         search_result = web_search_stack_trace(trace)
-        return trace + "\n" + search_result
+        return search_result

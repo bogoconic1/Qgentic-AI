@@ -38,8 +38,8 @@ def _run_researcher_once(slug: str, iteration: int, run_id: int) -> tuple[int, s
 def _run_developer_baseline(slug: str, iteration_suffix: str, plan: str, model_name: str, example_code: str, key: str):
     """Run a single baseline DeveloperAgent and return (key, best_score, best_code)."""
     dev = DeveloperAgent(slug, iteration_suffix, model_name=model_name, example_code=example_code)
-    best_score, best_code = dev.run(plan, max_time_seconds=3600)
-    return key, best_score, best_code
+    best_score, best_code, blacklisted_ideas = dev.run(plan, max_time_seconds=3600)
+    return key, best_score, best_code, blacklisted_ideas
 
 class Orchestrator:
     def __init__(self, slug: str, iteration: int):
@@ -83,7 +83,7 @@ class Orchestrator:
                 raise RuntimeError("No plan found")
             
         # Baseline stage: evaluate 5 starter suggestions with constrained developer runs
-        '''
+        """
         tasks = []
         with ProcessPoolExecutor(max_workers=5) as ex:
             for i in range(1, 6):
@@ -99,15 +99,34 @@ class Orchestrator:
 
             for fut in as_completed(tasks):
                 try:
-                    key, best_score, best_code = fut.result()
+                    key, best_score, best_code, blacklisted_ideas = fut.result()
                     if isinstance(suggestions.get(key), dict):
                         suggestions[key]["best_score"] = best_score
                         suggestions[key]["best_code"] = best_code or ""
+                        suggestions[key]["blacklisted_ideas"] = blacklisted_ideas
                 except Exception:
                     continue
+            """
+        
+        for i in range(1, 2):
+            key = f"model_{i}"
+            entry = suggestions.get(key)
+            if not isinstance(entry, dict):
+                continue
+            model_name = entry.get("suggestion", "")
+            example_code = entry.get("code", "")
+            dev_iter = f"{self.iteration}_{i}"
+            try:
+                _, best_score, best_code, blacklisted_ideas = _run_developer_baseline(self.slug, dev_iter, plan, model_name, example_code, key)
+                if isinstance(suggestions.get(key), dict):
+                    suggestions[key]["best_score"] = best_score
+                    suggestions[key]["best_code"] = best_code or ""
+                    suggestions[key]["blacklisted_ideas"] = blacklisted_ideas or []
+            except Exception:
+                continue
 
             # Persist combined results alongside original suggestions
             baseline_path = self.outputs_dir / "baseline_results.json"
             with open(baseline_path, "w") as f:
-                json.dump(suggestions, f, indent=2)'''
+                json.dump(suggestions, f, indent=2)
     

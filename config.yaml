@@ -4,8 +4,8 @@ llm:
   researcher_model: "gpt-5"
   researcher_tool_offline_model: "gpt-5"
   researcher_tool_online_model: "gpt-5"
-  leakage_review_model: "gpt-4o"
-  leakage_followup_model: "gpt-4o"
+  leakage_review_model: "gpt-5-mini"
+  leakage_followup_model: "gpt-5-mini"
 runtime:
   ask_eda_max_attempts: 5
   researcher_max_steps: 512
