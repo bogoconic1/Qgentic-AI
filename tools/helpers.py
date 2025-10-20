@@ -1,7 +1,7 @@
 import logging
 import os
 import time
-
+from openai import OpenAI
 import openai
 import weave
 
@@ -9,18 +9,11 @@ from project_config import get_config
 
 def _build_directory_listing(root: str, num_files: int | None = None) -> str:
     cfg = get_config()
-    runtime_cfg = cfg.get("runtime", {}) if isinstance(cfg, dict) else {}
-    path_cfg = cfg.get("paths", {}) if isinstance(cfg, dict) else {}
-    limit = num_files if num_files is not None else runtime_cfg.get("directory_listing_max_files", 10)
-    if limit is None:
-        limit = 10
-    else:
-        try:
-            limit = int(limit)
-        except (TypeError, ValueError):
-            limit = 10
+    runtime_cfg = cfg.get("runtime")
+    path_cfg = cfg.get("paths")
+    limit = num_files if num_files is not None else runtime_cfg.get("directory_listing_max_files")
     lines: list[str] = []
-    outputs_dirname = path_cfg.get("outputs_dirname", "outputs")
+    outputs_dirname = path_cfg.get("outputs_dirname")
 
     for current_root, dirs, files in os.walk(root):
         rel_root = os.path.relpath(current_root, root)
@@ -68,28 +61,64 @@ def _build_directory_listing(root: str, num_files: int | None = None) -> str:
     return "\n".join(lines)
 
 @weave.op()
-def call_llm_with_retry(llm_client, max_retries: int | None = None, **kwargs):
-    """Call LLM with retry logic."""
+def call_llm_with_retry_helper(
+    model: str,
+    instructions: str,
+    tools: list,
+    messages: list,
+    max_retries: int | None = None,
+    web_search_enabled: bool = False
+):
+
+    client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
     cfg = get_config()
-    runtime_cfg = cfg.get("runtime", {}) if isinstance(cfg, dict) else {}
-    retries = max_retries or runtime_cfg.get("llm_max_retries", 3)
-    try:
-        retries = int(retries)
-    except (TypeError, ValueError):
-        retries = 3
-    retries = max(retries, 1)
+    runtime_cfg = cfg.get("runtime")
+    retries = max_retries or runtime_cfg.get("llm_max_retries")
+    if retries < 1: retries = 1
+    if web_search_enabled: tools.append({"type": "web_search"})
+
     for attempt in range(retries):
         try:
-            return llm_client.chat.completions.create(extra_body={}, **kwargs)
+            response = client.responses.create(
+                model=model,
+                instructions=instructions,
+                tools=tools,
+                input=messages,
+            )
+            return response
         except openai.InternalServerError as e:
             if "504" in str(e) and attempt < retries - 1:
                 wait_time = 2**attempt
-                print(f"Retry {attempt + 1}/{retries} in {wait_time}s...")
+                logging.info(f"Retry {attempt + 1}/{retries} in {wait_time}s...")
                 time.sleep(wait_time)
                 continue
             else:
+                logging.error(f"LLM call failed with error: {e}")
                 continue
         except Exception as e:
-            print(f"Error calling LLM: {e}")
+            logging.error(f"Error calling LLM: {e}")
             continue
-    return ""
+    return None
+
+@weave.op()
+def call_llm_with_retry(
+    model: str,
+    instructions: str,
+    tools: list,
+    messages: list,
+    max_retries: int | None = None,
+    web_search_enabled: bool = False
+):
+    result = None
+
+    while result is None:
+        result = call_llm_with_retry_helper(
+            model=model,
+            instructions=instructions,
+            tools=tools,
+            messages=messages,
+            max_retries=max_retries,
+            web_search_enabled=web_search_enabled
+        )
+    return result
+

@@ -39,7 +39,7 @@ Present your recommendations in a code block labeled as `plan`, following the st
 <Provide a string or bullet list summarizing modeling difficulties. Clearly enumerate all unresolved data issues, blockers, analyses yet to be completed, or any missing template fields.>
 
 ## Modeling Recommendations
-<Provide a string or bullet list with high-level modeling factors (e.g., maximum length, input dimensions, loss function suggestions, metric selection). Do not suggest ensembling/blending/stacking. If <models_summary> is absent or ambiguous, make note of informational limitations.>
+<Provide a string or bullet list with high-level modeling factors (e.g., maximum length, input dimensions, loss function suggestions, metric selection). Do not suggest ensembling/blending/stacking/calibration. If <models_summary> is absent or ambiguous, make note of informational limitations.>
 ```
 
 - Always include all six template sections, even if a section has no current recommendations (indicate 'None at this stage.' or 'Unknown at this stage.').

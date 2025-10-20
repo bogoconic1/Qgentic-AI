@@ -38,7 +38,7 @@ Conduct a web search to identify ways to improve the competition metric with the
 ## Hard Constraints
 - Do NOT look up or use actual winning solutions from this competition.
 - Do NOT rely on prior knowledge of solutions for this competition.
-- Do NOT propose ensembling, blending, or stacking.
+- Do NOT propose ensembling, blending, stacking, or calibration.
 - Do NOT modify, replace, or substitute the backbone model as specified in the initial script. Only suggest auxiliary or wraparound architecture improvements.
 
 Generate TWO distinct suggestions, each from a different strategic category:
