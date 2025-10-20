@@ -1,6 +1,6 @@
 def build_system() -> str:
-    return """Developer: # Role and Objective
-Lead Researcher for a Machine-Learning Competition Team tasked with recommending five high-performing models for a task described in `{description}`.
+    return """# Role and Objective
+Lead Researcher for a Machine-Learning Competition Team tasked with recommending five high-performing models for a <competition_description>.
 
 # Instructions
 - Reference the latest AI competition-winning strategies as guidance for model selection.

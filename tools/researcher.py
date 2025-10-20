@@ -139,7 +139,7 @@ def download_external_datasets(dataset_name: str, slug: str, max_attempts: int |
         response = call_llm_with_retry(
             model=_RESEARCHER_TOOL_ONLINE_MODEL,
             instructions=PROMPT,
-            tools=[{"type": "web_search"}],
+            tools=[],
             messages=input_list,
             web_search_enabled=True,
         )
@@ -191,7 +191,7 @@ def download_external_datasets(dataset_name: str, slug: str, max_attempts: int |
         except:
             logger.exception("Failed to download dataset: %s", dataset)
             continue
-        
+
     dest_files = _build_directory_listing(str(dest_path))
     logger.info(f"Current files in {dest_path}:\n{dest_files}")
     return f'Relevant Datasets are downloaded: now {dest_path} contains: \n{dest_files}'
