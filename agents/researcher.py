@@ -4,10 +4,8 @@ import os
 import base64
 import mimetypes
 from pathlib import Path
-from typing import List
 
 from dotenv import load_dotenv
-from openai import OpenAI
 from project_config import get_config
 
 from tools.researcher import ask_eda, download_external_datasets, get_tools
@@ -17,7 +15,6 @@ from prompts.researcher_agent import (
 )
 from tools.helpers import call_llm_with_retry
 import weave
-import wandb
 
 logger = logging.getLogger(__name__)
 
@@ -84,8 +81,8 @@ class ResearcherAgent:
             getattr(handler, "baseFilename", None)
             for handler in logger.handlers
         }
-        if str(self.developer_log_path) not in existing_paths:
-            file_handler = logging.FileHandler(self.developer_log_path)
+        if str(self.researcher_log_path) not in existing_paths:
+            file_handler = logging.FileHandler(self.researcher_log_path)
             file_handler.setFormatter(
                 logging.Formatter("%(asctime)s %(levelname)s [%(name)s] %(message)s")
             )
@@ -194,11 +191,13 @@ class ResearcherAgent:
             )
 
             input_list += response.output
+            tool_calls = False
 
             for item in response.output:
                 if item.type == "function_call":
+                    tool_calls = True
                     if item.name == "ask_eda":
-                        question = item.arguments.get("question", "")
+                        question = json.loads(item.arguments)["question"]
                         logger.info(f"{question}")
                         if len(question) == 0:
                             tool_output = "An error occurred. Please retry."
@@ -219,7 +218,7 @@ class ResearcherAgent:
                                 logger.debug("No media ingested for this step.")
                             
                     elif item.name == "download_external_datasets":
-                        dataset_name = item.arguments.get("dataset_name", "")
+                        dataset_name = json.loads(item.arguments)["dataset_name"]
                         if not dataset_name:
                             tool_output = "Dataset name missing; please provide a specific dataset name."
                         else:
@@ -235,7 +234,7 @@ class ResearcherAgent:
                             })
                         })
 
-                    continue
+            if tool_calls: continue
 
             # No tool calls -> final plan
             final_content = response.output_text or ""

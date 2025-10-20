@@ -33,9 +33,6 @@ _DEFAULT_CONFIG: dict[str, Any] = {
         "outputs_dirname": "outputs",
         "external_data_dirname": "external-data",
     },
-    "hardware": {
-        "description": "A single A100 80GB GPU",
-    },
     "guardrails": {
         "logging_basicconfig_order": True,
         "nan_guard": True,

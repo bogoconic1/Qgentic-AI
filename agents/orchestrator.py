@@ -1,7 +1,6 @@
 from typing import Tuple
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor, as_completed
-import os
 import json
 
 from agents.researcher import ResearcherAgent
@@ -9,7 +8,6 @@ from agents.developer import DeveloperAgent
 from agents.starter import StarterAgent
 from project_config import get_config
 import weave
-import wandb
 
 
 _CONFIG = get_config()
@@ -85,6 +83,7 @@ class Orchestrator:
                 raise RuntimeError("No plan found")
             
         # Baseline stage: evaluate 5 starter suggestions with constrained developer runs
+        '''
         tasks = []
         with ProcessPoolExecutor(max_workers=5) as ex:
             for i in range(1, 6):
@@ -110,5 +109,5 @@ class Orchestrator:
             # Persist combined results alongside original suggestions
             baseline_path = self.outputs_dir / "baseline_results.json"
             with open(baseline_path, "w") as f:
-                json.dump(suggestions, f, indent=2)
+                json.dump(suggestions, f, indent=2)'''
     

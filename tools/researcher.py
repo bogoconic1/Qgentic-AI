@@ -220,7 +220,7 @@ def get_tools():
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "dataset_name": {"type": "string", "description": "The dataset name to download"}
+                    "dataset_name": {"type": "string", "description": "The dataset name to download - write an English phrase describing the dataset you want to download"}
                 },
             },
             "additionalProperties": False,

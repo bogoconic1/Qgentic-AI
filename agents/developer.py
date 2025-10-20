@@ -1,17 +1,13 @@
-import difflib
 import logging
 import math
 import os
 import re
-import subprocess
-import textwrap
 import time
 from pathlib import Path
 from typing import Optional
 import json
 
 from dotenv import load_dotenv
-from openai import OpenAI
 from project_config import get_config
 import weave
 import wandb
@@ -20,11 +16,6 @@ from tools.developer import (
     execute_code,
     search_sota_suggestions,
 )
-from guardrails.developer import (
-    check_logging_basicconfig_order,
-    llm_debug_sequence_review,
-    llm_leakage_review,
-)
 from utils.guardrails import evaluate_guardrails, build_block_summary
 from tools.helpers import call_llm_with_retry, _build_directory_listing
 from utils.diffs import (
@@ -32,7 +23,7 @@ from utils.diffs import (
     normalize_diff_payload,
     apply_patch as util_apply_patch,
 )
-from utils.grade import run_grade, parse_grade_output
+from utils.grade import run_grade
 from prompts.developer_agent import (
     build_system as prompt_build_system,
     build_user as prompt_build_user,
@@ -46,38 +37,24 @@ logger = logging.getLogger(__name__)
 
 
 _CONFIG = get_config()
-_LLM_CFG = _CONFIG.get("llm", {}) if isinstance(_CONFIG, dict) else {}
-_PATH_CFG = _CONFIG.get("paths", {}) if isinstance(_CONFIG, dict) else {}
-_RUNTIME_CFG = _CONFIG.get("runtime", {}) if isinstance(_CONFIG, dict) else {}
-_HARDWARE_CFG = _CONFIG.get("hardware", {}) if isinstance(_CONFIG, dict) else {}
-_GUARDRAIL_CFG = _CONFIG.get("guardrails", {}) if isinstance(_CONFIG, dict) else {}
+_LLM_CFG = _CONFIG.get("llm")
+_PATH_CFG = _CONFIG.get("paths")
+_RUNTIME_CFG = _CONFIG.get("runtime")
+_GUARDRAIL_CFG = _CONFIG.get("guardrails")
 
-_ENABLE_LOGGING_GUARD = bool(_GUARDRAIL_CFG.get("logging_basicconfig_order", True))
-_ENABLE_NAN_GUARD = bool(_GUARDRAIL_CFG.get("nan_guard", True))
-_ENABLE_LEAKAGE_GUARD = bool(_GUARDRAIL_CFG.get("leakage_review", True))
+_ENABLE_LOGGING_GUARD = bool(_GUARDRAIL_CFG.get("logging_basicconfig_order"))
+_ENABLE_NAN_GUARD = bool(_GUARDRAIL_CFG.get("nan_guard"))
+_ENABLE_LEAKAGE_GUARD = bool(_GUARDRAIL_CFG.get("leakage_review"))
 
-_PATCH_MODE_ENABLED = bool(_RUNTIME_CFG.get("patch_mode_enabled", False))
+_PATCH_MODE_ENABLED = bool(_RUNTIME_CFG.get("patch_mode_enabled"))
 
-_BASE_URL = _LLM_CFG.get("base_url", "https://openrouter.ai/api/v1")
-_API_KEY_ENV = _LLM_CFG.get("api_key_env", "OPENROUTER_API_KEY")
-_DEVELOPER_MODEL = _LLM_CFG.get("developer_model", "google/gemini-2.5-pro")
+_DEVELOPER_MODEL = _LLM_CFG.get("developer_model")
 
-_TASK_ROOT = Path(_PATH_CFG.get("task_root", "task"))
-_OUTPUTS_DIRNAME = _PATH_CFG.get("outputs_dirname", "outputs")
-_CODE_TEMPLATE = _PATH_CFG.get("code_filename_template", "code_{iteration}_v{version}.py")
-_LOG_TEMPLATE = _PATH_CFG.get("log_filename_template", "code_{iteration}_v{version}.txt")
-_SUBMISSION_TEMPLATE = _PATH_CFG.get("submission_filename_template", "submission_{version}.csv")
-_HARDWARE_DESCRIPTION = _HARDWARE_CFG.get("description", "A single A100 80GB GPU")
-
-def _safe_read(path: str) -> str:
-    try:
-        with open(path, "r") as f:
-            content = f.read()
-            logger.debug("Successfully read file: %s", path)
-            return content
-    except Exception:
-        logger.exception("Failed to read file: %s", path)
-        return ""
+_TASK_ROOT = Path(_PATH_CFG.get("task_root"))
+_OUTPUTS_DIRNAME = _PATH_CFG.get("outputs_dirname")
+_CODE_TEMPLATE = "code_{iteration}_v{version}.py"
+_LOG_TEMPLATE = "code_{iteration}_v{version}.txt"
+_SUBMISSION_TEMPLATE = "submission_{version}.csv"
 
 class DeveloperAgent:
     """Turns the Researcher plan into a runnable single-file solution.
@@ -125,8 +102,6 @@ class DeveloperAgent:
         self.benchmark_info: Optional[dict] = None
         self.threshold_directive: str = ""
 
-        # OpenRouter client
-        self.client = OpenAI(api_key=os.environ.get(_API_KEY_ENV), base_url=_BASE_URL)
         os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
         # Patch mode configuration
@@ -200,7 +175,7 @@ class DeveloperAgent:
 
     def _compose_system(self) -> str:
         logger.debug("Composing system prompt for slug=%s", self.slug)
-        self.description = _safe_read(str(self.base_dir / "description.md"))
+        self.description = open(self.base_dir / "description.md", "r").read()
         logger.debug("Description length: %s characters", len(self.description))
         directory_listing = _build_directory_listing(self.base_dir)
         logger.debug(
@@ -534,7 +509,7 @@ class DeveloperAgent:
             # ---------------------------
             guard_report = evaluate_guardrails(
                 description=self.description,
-                code_text=_safe_read(str(code_path)),
+                code_text=open(str(code_path), "r").read(),
                 enable_logging_guard=_ENABLE_LOGGING_GUARD,
                 enable_nan_guard=_ENABLE_NAN_GUARD,
                 enable_leakage_guard=_ENABLE_LEAKAGE_GUARD,
@@ -664,15 +639,16 @@ class DeveloperAgent:
 
                 try:
                     # Collect all researcher plans in outputs dir: plan.md, plan_*.md
+                    # not an issue: no plan is acceptable
                     plan_texts: list[str] = []
                     try:
                         if self.plan_path.exists():
-                            plan_texts.append(_safe_read(str(self.plan_path)))
+                            plan_texts.append(open(self.plan_path, "r").read())
                     except Exception:
                         pass
                     try:
                         for extra_plan_path in sorted(self.outputs_dir.glob("plan_*.md")):
-                            plan_texts.append(_safe_read(str(extra_plan_path)))
+                            plan_texts.append(open(extra_plan_path, "r").read())
                     except Exception:
                         pass
 

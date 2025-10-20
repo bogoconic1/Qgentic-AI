@@ -17,8 +17,6 @@ paths:
   task_root: "task"
   outputs_dirname: "outputs"
   external_data_dirname: "external-data"
-hardware:
-  description: "A single NVIDIA H100 80GB HBM3"
 guardrails:
   logging_basicconfig_order: true
   nan_guard: false

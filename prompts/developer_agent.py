@@ -14,7 +14,7 @@ Begin with a concise checklist (3-7 bullets) of what you will do; keep items con
 - Inspect data files and schema; infer features and target.
 - Set up and configure the single required model: {model_name}.
 - Prepare an 80%/20% train/validation split (no K-Fold or Stratified splitting).
-- Integrate CUDA acceleration (wherever possible) and use `bfloat16` for deep learning models; disable gradient checkpointing.
+- Integrate CUDA acceleration (wherever possible) and use `bfloat16` for deep learning models; disable gradient checkpointing. You must cast the tensor back to float() before calling detach/cpu/numpy.
 - Implement early stopping with a high max epoch (e.g., 1000 epochs).
 - Build modular pipeline: facilitate straightforward pre/post-processing and hyperparameter updates, but keep `{model_name}` fixed.
 - Implement logging per validation fold and overall OOF; log only other parts of code if relevant to validation.

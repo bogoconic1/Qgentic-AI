@@ -1,11 +1,9 @@
 import json
 import logging
-import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
-from openai import OpenAI
 
 from project_config import get_config
 from tools.helpers import call_llm_with_retry
@@ -89,7 +87,7 @@ class StarterAgent:
     @weave.op()
     def run(self):
         """Run the starter prompt and persist outputs; return parsed suggestions."""
-        description = open(self.base_dir / "description.txt", "r").read()
+        description = open(self.base_dir / "description.md", "r").read()
         system_prompt = prompt_build_system()
         user_prompt = prompt_build_user(description=description)
 
