@@ -45,8 +45,6 @@ class Orchestrator:
     def __init__(self, slug: str, iteration: int):
         self.slug = slug
         self.iteration = iteration
-        self.researcher = ResearcherAgent(slug, iteration)
-        self.developer = DeveloperAgent(slug, iteration)
         self.base_dir = _TASK_ROOT / slug
         self.outputs_dir = self.base_dir / _OUTPUTS_DIRNAME / str(iteration)
 
@@ -108,7 +106,7 @@ class Orchestrator:
                     continue
             """
         
-        for i in range(1, 2):
+        for i in range(3, 4):
             key = f"model_{i}"
             entry = suggestions.get(key)
             if not isinstance(entry, dict):

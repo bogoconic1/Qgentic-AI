@@ -87,7 +87,8 @@ class StarterAgent:
     @weave.op()
     def run(self):
         """Run the starter prompt and persist outputs; return parsed suggestions."""
-        description = open(self.base_dir / "description.md", "r").read()
+        with open(self.base_dir / "description.md", "r") as f:
+            description = f.read()
         system_prompt = prompt_build_system()
         user_prompt = prompt_build_user(description=description)
 

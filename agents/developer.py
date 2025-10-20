@@ -171,7 +171,8 @@ class DeveloperAgent:
 
     def _compose_system(self) -> str:
         logger.debug("Composing system prompt for slug=%s", self.slug)
-        self.description = open(self.base_dir / "description.md", "r").read()
+        with open(self.base_dir / "description.md", "r") as f:
+            self.description = f.read()
         logger.debug("Description length: %s characters", len(self.description))
         directory_listing = _build_directory_listing(self.base_dir)
         logger.debug(
@@ -486,9 +487,10 @@ class DeveloperAgent:
             # ---------------------------
             # Pre-exec guardrail checks
             # ---------------------------
+            with open(str(code_path), "r") as f:
+                code_text = f.read()
             guard_report = evaluate_guardrails(
-                description=self.description,
-                code_text=open(str(code_path), "r").read(),
+                code_text=code_text,
                 enable_logging_guard=_ENABLE_LOGGING_GUARD,
                 enable_nan_guard=_ENABLE_NAN_GUARD,
                 enable_leakage_guard=_ENABLE_LEAKAGE_GUARD,
@@ -610,12 +612,14 @@ class DeveloperAgent:
                     plan_texts: list[str] = []
                     try:
                         if self.plan_path.exists():
-                            plan_texts.append(open(self.plan_path, "r").read())
+                            with open(self.plan_path, "r") as f:
+                                plan_texts.append(f.read())
                     except Exception:
                         pass
                     try:
                         for extra_plan_path in sorted(self.outputs_dir.glob("plan_*.md")):
-                            plan_texts.append(open(extra_plan_path, "r").read())
+                            with open(extra_plan_path, "r") as f:
+                                plan_texts.append(f.read())
                     except Exception:
                         pass
 

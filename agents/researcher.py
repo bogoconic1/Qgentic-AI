@@ -52,7 +52,8 @@ class ResearcherAgent:
         self.base_dir = _TASK_ROOT / self.slug
         self.outputs_dir = self.base_dir / _OUTPUTS_DIRNAME / str(self.iteration)
         self.outputs_dir.mkdir(parents=True, exist_ok=True)
-        self.description = open(str(self.base_dir / "description.md"), "r").read()
+        with open(self.base_dir / "description.md", "r") as f:
+            self.description = f.read()
         # Configure per-run output dirs for media/external data under outputs/<iter>
         assert self.run_id is not None, "run_id is required"
 

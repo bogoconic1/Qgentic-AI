@@ -40,7 +40,7 @@ Begin with a concise checklist (3-7 bullets) of what you will do; keep items con
 - LightGBM (if used): **CPU only**.
 - Prohibited: `transformers.Trainer`, `transformers.TrainingArguments`.
 - Do not use `try/except` to suppress errors.
-- Log final validation results after training.
+- Log final validation results, best epoch number and total training time after training.
 - Modular pipeline: update preprocessing/postprocessing or hyperparameters, but do not swap out `{model_name}`.
 - Prefer pretrained models if available.
 - External datasets: may be appended **only** to training set.

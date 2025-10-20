@@ -95,7 +95,9 @@ def ask_eda(question: str, description: str, data_path: str, max_attempts: int |
                 with open(f"code_abc.py", "w") as f:
                     f.write(code)
 
-                exec(open(f"code_abc.py").read(), globals())
+                with open("code_abc.py", "r") as f:
+                    code_text = f.read()
+                exec(code_text, globals())
                 output = captured_output.getvalue()
 
                 sys.stdout = old_stdout

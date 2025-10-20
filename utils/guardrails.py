@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 # this is a "nice to have" utility - not a "must have" for a successful pipeline
 def evaluate_guardrails(
     *,
-    description: str,
     code_text: str,
     enable_logging_guard: bool,
     enable_nan_guard: bool,
@@ -59,7 +58,7 @@ def evaluate_guardrails(
     leakage_json_text: str | Dict[str, Any] = {"status": "skipped", "reason": "disabled in config"}
     if enable_leakage_guard:
         try:
-            leakage_json_text = llm_leakage_review(description, code_text)
+            leakage_json_text = llm_leakage_review(code_text)
         except Exception:
             logger.exception("LLM leakage review call failed")
             leakage_json_text = '{"severity":"warn","findings":[{"rule_id":"llm_error","snippet":"N/A","rationale":"LLM call failed","suggestion":"Proceed with caution"}]}'
