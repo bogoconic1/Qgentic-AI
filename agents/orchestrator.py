@@ -38,7 +38,7 @@ def _run_researcher_once(slug: str, iteration: int, run_id: int) -> tuple[int, s
 def _run_developer_baseline(slug: str, iteration_suffix: str, plan: str, model_name: str, example_code: str, key: str):
     """Run a single baseline DeveloperAgent and return (key, best_score, best_code)."""
     dev = DeveloperAgent(slug, iteration_suffix, model_name=model_name, example_code=example_code)
-    best_score, best_code, blacklisted_ideas = dev.run(plan, max_time_seconds=3600)
+    best_score, best_code, blacklisted_ideas = dev.run(plan, max_time_seconds=1200)
     return key, best_score, best_code, blacklisted_ideas
 
 class Orchestrator:
@@ -106,7 +106,7 @@ class Orchestrator:
                     continue
             """
         
-        for i in range(3, 4):
+        for i in range(1, 2):
             key = f"model_{i}"
             entry = suggestions.get(key)
             if not isinstance(entry, dict):
