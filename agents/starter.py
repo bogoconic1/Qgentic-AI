@@ -1,11 +1,9 @@
 import json
 import logging
-import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
-from openai import OpenAI
 
 from project_config import get_config
 from tools.helpers import call_llm_with_retry
@@ -20,22 +18,13 @@ logger = logging.getLogger(__name__)
 
 
 _CONFIG = get_config()
-_LLM_CFG = _CONFIG.get("llm", {}) if isinstance(_CONFIG, dict) else {}
-_PATH_CFG = _CONFIG.get("paths", {}) if isinstance(_CONFIG, dict) else {}
+_LLM_CFG = _CONFIG.get("llm")
+_PATH_CFG = _CONFIG.get("paths")
 
-_BASE_URL = _LLM_CFG.get("base_url", "https://openrouter.ai/api/v1")
-_API_KEY_ENV = _LLM_CFG.get("api_key_env", "OPENROUTER_API_KEY")
-_STARTER_MODEL = _LLM_CFG.get("developer_tool_model", _LLM_CFG.get("developer_model", "openai/gpt-5:online"))
+_STARTER_MODEL = _LLM_CFG.get("developer_tool_model")
 
-_TASK_ROOT = Path(_PATH_CFG.get("task_root", "task"))
-_OUTPUTS_DIRNAME = _PATH_CFG.get("outputs_dirname", "outputs")
-
-
-def _safe_read(path: Path) -> str:
-    try:
-        return path.read_text()
-    except Exception:
-        return ""
+_TASK_ROOT = Path(_PATH_CFG.get("task_root"))
+_OUTPUTS_DIRNAME = _PATH_CFG.get("outputs_dirname")
 
 
 class StarterAgent:
@@ -56,7 +45,6 @@ class StarterAgent:
         self.outputs_dir = self.base_dir / self.outputs_dirname / str(iteration)
         self.outputs_dir.mkdir(parents=True, exist_ok=True)
 
-        self.client = OpenAI(api_key=os.environ.get(_API_KEY_ENV), base_url=_BASE_URL)
         self.text_path = self.outputs_dir / "starter_suggestions.txt"
         self.json_path = self.outputs_dir / "starter_suggestions.json"
 
@@ -75,9 +63,6 @@ class StarterAgent:
                 # Fallback: no-op if file handler cannot be created
                 pass
         logger.setLevel(logging.DEBUG)
-
-    def _read_description(self) -> str:
-        return _safe_read(self.base_dir / "description.md")
 
     @staticmethod
     def _extract_json_block(text: str) -> Optional[str]:
@@ -100,35 +85,24 @@ class StarterAgent:
             return None
 
     @weave.op()
-    def run(self) -> Dict[str, Any]:
+    def run(self):
         """Run the starter prompt and persist outputs; return parsed suggestions."""
-        description = self._read_description()
+        with open(self.base_dir / "description.md", "r") as f:
+            description = f.read()
         system_prompt = prompt_build_system()
         user_prompt = prompt_build_user(description=description)
 
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ]
+        messages = [{"role": "user", "content": user_prompt}]
 
         logger.info("Dispatching StarterAgent request for slug=%s iteration=%s", self.slug, self.iteration)
-        content = ""
-        try:
-            while content == "":
-                completion = call_llm_with_retry(
-                    self.client,
-                    model=_STARTER_MODEL,
-                    messages=messages,
-                )
-                try:
-                    msg = completion.choices[0].message
-                    content = msg.content or ""
-                except Exception:
-                    msg = ""
-                    content = ""
-        except Exception:
-            logger.exception("StarterAgent LLM call failed")
-            content = ""
+        response = call_llm_with_retry(
+            model=_STARTER_MODEL,
+            instructions=system_prompt,
+            tools=[],
+            messages=messages,
+            web_search_enabled=True
+        )
+        content = response.output_text or ""
 
         # Persist raw content
         try:
@@ -152,7 +126,6 @@ class StarterAgent:
             logger.debug("Failed to persist starter_suggestions.json")
 
         logger.info("StarterAgent completed with %s keys", len(suggestions) if isinstance(suggestions, dict) else 0)
-        return suggestions if isinstance(suggestions, dict) else {}
 
 
 

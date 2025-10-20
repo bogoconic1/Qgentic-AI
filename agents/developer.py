@@ -1,17 +1,13 @@
-import difflib
 import logging
 import math
 import os
 import re
-import subprocess
-import textwrap
 import time
 from pathlib import Path
 from typing import Optional
 import json
 
 from dotenv import load_dotenv
-from openai import OpenAI
 from project_config import get_config
 import weave
 import wandb
@@ -20,11 +16,6 @@ from tools.developer import (
     execute_code,
     search_sota_suggestions,
 )
-from guardrails.developer import (
-    check_logging_basicconfig_order,
-    llm_debug_sequence_review,
-    llm_leakage_review,
-)
 from utils.guardrails import evaluate_guardrails, build_block_summary
 from tools.helpers import call_llm_with_retry, _build_directory_listing
 from utils.diffs import (
@@ -32,7 +23,7 @@ from utils.diffs import (
     normalize_diff_payload,
     apply_patch as util_apply_patch,
 )
-from utils.grade import run_grade, parse_grade_output
+from utils.grade import run_grade
 from prompts.developer_agent import (
     build_system as prompt_build_system,
     build_user as prompt_build_user,
@@ -46,38 +37,24 @@ logger = logging.getLogger(__name__)
 
 
 _CONFIG = get_config()
-_LLM_CFG = _CONFIG.get("llm", {}) if isinstance(_CONFIG, dict) else {}
-_PATH_CFG = _CONFIG.get("paths", {}) if isinstance(_CONFIG, dict) else {}
-_RUNTIME_CFG = _CONFIG.get("runtime", {}) if isinstance(_CONFIG, dict) else {}
-_HARDWARE_CFG = _CONFIG.get("hardware", {}) if isinstance(_CONFIG, dict) else {}
-_GUARDRAIL_CFG = _CONFIG.get("guardrails", {}) if isinstance(_CONFIG, dict) else {}
+_LLM_CFG = _CONFIG.get("llm")
+_PATH_CFG = _CONFIG.get("paths")
+_RUNTIME_CFG = _CONFIG.get("runtime")
+_GUARDRAIL_CFG = _CONFIG.get("guardrails")
 
-_ENABLE_LOGGING_GUARD = bool(_GUARDRAIL_CFG.get("logging_basicconfig_order", True))
-_ENABLE_NAN_GUARD = bool(_GUARDRAIL_CFG.get("nan_guard", True))
-_ENABLE_LEAKAGE_GUARD = bool(_GUARDRAIL_CFG.get("leakage_review", True))
+_ENABLE_LOGGING_GUARD = bool(_GUARDRAIL_CFG.get("logging_basicconfig_order"))
+_ENABLE_NAN_GUARD = bool(_GUARDRAIL_CFG.get("nan_guard"))
+_ENABLE_LEAKAGE_GUARD = bool(_GUARDRAIL_CFG.get("leakage_review"))
 
-_PATCH_MODE_ENABLED = bool(_RUNTIME_CFG.get("patch_mode_enabled", False))
+_PATCH_MODE_ENABLED = bool(_RUNTIME_CFG.get("patch_mode_enabled"))
 
-_BASE_URL = _LLM_CFG.get("base_url", "https://openrouter.ai/api/v1")
-_API_KEY_ENV = _LLM_CFG.get("api_key_env", "OPENROUTER_API_KEY")
-_DEVELOPER_MODEL = _LLM_CFG.get("developer_model", "google/gemini-2.5-pro")
+_DEVELOPER_MODEL = _LLM_CFG.get("developer_model")
 
-_TASK_ROOT = Path(_PATH_CFG.get("task_root", "task"))
-_OUTPUTS_DIRNAME = _PATH_CFG.get("outputs_dirname", "outputs")
-_CODE_TEMPLATE = _PATH_CFG.get("code_filename_template", "code_{iteration}_v{version}.py")
-_LOG_TEMPLATE = _PATH_CFG.get("log_filename_template", "code_{iteration}_v{version}.txt")
-_SUBMISSION_TEMPLATE = _PATH_CFG.get("submission_filename_template", "submission_{version}.csv")
-_HARDWARE_DESCRIPTION = _HARDWARE_CFG.get("description", "A single A100 80GB GPU")
-
-def _safe_read(path: str) -> str:
-    try:
-        with open(path, "r") as f:
-            content = f.read()
-            logger.debug("Successfully read file: %s", path)
-            return content
-    except Exception:
-        logger.exception("Failed to read file: %s", path)
-        return ""
+_TASK_ROOT = Path(_PATH_CFG.get("task_root"))
+_OUTPUTS_DIRNAME = _PATH_CFG.get("outputs_dirname")
+_CODE_TEMPLATE = "code_{iteration}_v{version}.py"
+_LOG_TEMPLATE = "code_{iteration}_v{version}.txt"
+_SUBMISSION_TEMPLATE = "submission_{version}.csv"
 
 class DeveloperAgent:
     """Turns the Researcher plan into a runnable single-file solution.
@@ -120,13 +97,10 @@ class DeveloperAgent:
 
         # File targets
         self.plan_path = self.outputs_dir / "plan.md"
-        self.messages = []
         self.latest_submission_path: Optional[Path] = None
         self.benchmark_info: Optional[dict] = None
         self.threshold_directive: str = ""
 
-        # OpenRouter client
-        self.client = OpenAI(api_key=os.environ.get(_API_KEY_ENV), base_url=_BASE_URL)
         os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
         # Patch mode configuration
@@ -135,6 +109,8 @@ class DeveloperAgent:
         # Optional model constraints for the developer system prompt
         self.model_name: Optional[str] = model_name
         self.example_code: Optional[str] = example_code
+
+        assert self.model_name is not None and self.example_code is not None, "Both model_name and example_code must be provided"
 
         logger.info(
             "Initialized DeveloperAgent for slug=%s iteration=%s", self.slug, self.iteration
@@ -193,14 +169,10 @@ class DeveloperAgent:
         self.is_lower_better = info.get("is_lower_better")
         logger.info("is_lower_better=%s", self.is_lower_better)
 
-        if self.is_lower_better:
-            logger.info("is_lower_better=True")
-        else:
-            logger.info("is_lower_better=False")
-
     def _compose_system(self) -> str:
         logger.debug("Composing system prompt for slug=%s", self.slug)
-        self.description = _safe_read(str(self.base_dir / "description.md"))
+        with open(self.base_dir / "description.md", "r") as f:
+            self.description = f.read()
         logger.debug("Description length: %s characters", len(self.description))
         directory_listing = _build_directory_listing(self.base_dir)
         logger.debug(
@@ -209,8 +181,8 @@ class DeveloperAgent:
         return prompt_build_system(
             description=self.description,
             directory_listing=directory_listing,
-            model_name=self.model_name or "baseline-model",
-            example_code=self.example_code or "",
+            model_name=self.model_name,
+            example_code=self.example_code,
             slug=self.slug,
         )
 
@@ -244,41 +216,28 @@ class DeveloperAgent:
         lines = code.splitlines()
         return "\n".join(f"{idx:04d}: {line}" for idx, line in enumerate(lines, start=1))
 
-    def _build_assistant_payload(self, code: str, include_line_numbers: bool) -> str:
-        if include_line_numbers:
-            return (
-                "<previous_code_with_line_numbers>\n"
-                f"{self._format_with_line_numbers(code)}\n"
-                "</previous_code_with_line_numbers>"
-            )
-        return "<previous_code>\n" + code + "\n</previous_code>"
-
     @staticmethod
     def _extract_diff_block(content: str) -> str:
         return extract_diff_block(content)
 
     @weave.op()
-    def _generate_code(self, messages: list[dict[str, str]], expect_patch: bool = False) -> str:
+    def _generate_code(self, instructions: str, messages: list[dict[str, str]], expect_patch: bool = False) -> str:
         logger.info("Requesting code generation from model for iteration %s", self.iteration)
-        content = ""
-        while content == "":
-            completion = call_llm_with_retry(
-                self.client,
-                model=_DEVELOPER_MODEL,
-                messages=messages,
-            )
-            try:
-                msg = completion.choices[0].message
-                content = msg.content or ""
-            except Exception:
-                msg = ""
-                content = ""
+        response = call_llm_with_retry(
+            model=_DEVELOPER_MODEL,
+            instructions=instructions,
+            tools=[],
+            messages=messages,
+            web_search_enabled=True
+        )
+
+        content = response.output_text
 
         logger.info("Model response received for iteration %s", self.iteration)
         logger.debug("Completion content length: %s", len(content))
         if expect_patch:
             return content.strip()
-        return self._extract_code(content)
+        return response.output, self._extract_code(content)
 
     @staticmethod
     def _normalize_diff_payload(base_path: Path, diff_text: str) -> Optional[str]:
@@ -314,9 +273,6 @@ class DeveloperAgent:
                 return None
 
         attempts: list[tuple[str, str]] = []
-        # original_payload = diff_text if diff_text.endswith("\n") else diff_text + "\n"
-        # attempts.append(("original", original_payload))
-
         normalized_payload = self._normalize_diff_payload(base_path, diff_text)
         attempts.append(("normalized", normalized_payload))
 
@@ -399,6 +355,7 @@ class DeveloperAgent:
 
     def _parse_sota_response(self, raw: str) -> tuple[str, str, bool, str]:
         """Extract new suggestion, code snippet, blacklist decision, and rationale."""
+        # ok to fallback if LLM cannot give response
         suggestion_text = ""
         code_snippet = ""
         blacklist_flag = False
@@ -447,18 +404,19 @@ class DeveloperAgent:
             entry = f"{suggestion} -- {reason}"
         if entry not in self.blacklisted_ideas:
             self.blacklisted_ideas.append(entry)
-        if len(self.blacklisted_ideas) > 10:
-            self.blacklisted_ideas = self.blacklisted_ideas[-10:]
 
     @weave.op()
-    def run(self, plan_markdown: str, max_time_seconds: Optional[int] = 6 * 3600) -> bool:
+    def run(self, plan_markdown: str, max_time_seconds: int = 6 * 3600) -> bool:
         logger.info(
             "Starting developer run for slug=%s iteration=%s",
             self.slug,
             self.iteration,
         )
         start_time = time.time()
-        deadline = start_time + (max_time_seconds or 6 * 3600)
+        deadline = start_time + max_time_seconds
+        # you only keep the part within ```plan tags
+        start_index = plan_markdown.find("## External Data Recommendations")
+        if start_index != -1: plan_markdown = plan_markdown[start_index:].strip()
         try:
             with open(self.plan_path, "w") as f:
                 f.write(plan_markdown)
@@ -470,8 +428,7 @@ class DeveloperAgent:
 
         system_prompt = self._compose_system()
         user_prompt = self._build_user_prompt(plan_markdown, version=1)
-        self.messages.append({"role": "system", "content": system_prompt})
-        self.messages.append({"role": "user", "content": user_prompt})
+        input_list = [{"role": "user", "content": user_prompt}]
         
         attempt = 0
         while True:
@@ -484,8 +441,8 @@ class DeveloperAgent:
 
             artifact = wandb.Artifact(f'{self.iteration}-{self.slug}', type='files')
 
-            if len(self.messages) > 6:
-                self.messages = self.messages[:2] + self.messages[-4:]
+            # if len(input_list) > 6:s
+            #     input_list = input_list[:1] + input_list[-5:]
 
             minutes_left = ((deadline - now) / 60.0) if max_time_seconds is not None else float('inf')
             try:
@@ -495,7 +452,8 @@ class DeveloperAgent:
             version = attempt
             expect_patch = self.patch_mode_enabled and attempt > 1
             while True:
-                generated = self._generate_code(self.messages, expect_patch=expect_patch)
+                response_output, generated = self._generate_code(instructions=system_prompt, messages=input_list, expect_patch=expect_patch)
+                input_list += response_output
                 if expect_patch:
                     # Choose the correct base version for patch application.
                     # Prefer an explicitly set base from the previous step; fallback to previous attempt.
@@ -517,10 +475,7 @@ class DeveloperAgent:
                         "Patch generation failed for attempt %s; requesting full script instead.",
                         attempt,
                     )
-                    if self.messages and self.messages[-1].get("role") == "user":
-                        self.messages[-1]["content"] += (
-                            "\n\nPatch application failed. Ignore the diff request and return the complete updated script enclosed in triple backticks with the `python` annotation."
-                        )
+                    input_list.append({"role": "user", "content": "Patch application failed. Ignore the diff request and return the complete updated script enclosed within ```python backticks."})
                     expect_patch = False
                     continue
                 else:
@@ -532,9 +487,10 @@ class DeveloperAgent:
             # ---------------------------
             # Pre-exec guardrail checks
             # ---------------------------
+            with open(str(code_path), "r") as f:
+                code_text = f.read()
             guard_report = evaluate_guardrails(
-                description=self.description,
-                code_text=_safe_read(str(code_path)),
+                code_text=code_text,
                 enable_logging_guard=_ENABLE_LOGGING_GUARD,
                 enable_nan_guard=_ENABLE_NAN_GUARD,
                 enable_leakage_guard=_ENABLE_LEAKAGE_GUARD,
@@ -554,19 +510,14 @@ class DeveloperAgent:
                 guardrail_prompt = summary_text + fix_instr
                 base_version_for_next_patch = version
                 guardrail_prompt = self._append_patch_directive(guardrail_prompt, base_version_for_next_patch)
-                assistant_payload = self._build_assistant_payload(
-                    code,
-                    include_line_numbers=self.patch_mode_enabled,
-                )
-                self.messages.append({"role": "assistant", "content": assistant_payload})
-                self.messages.append({"role": "user", "content": guardrail_prompt})
+                input_list.append({"role": "user", "content": guardrail_prompt})
                 self.next_patch_base_version = base_version_for_next_patch
                 logger.info("Next patch will be based on v%s due to guardrail block", base_version_for_next_patch)
                 logger.info("User prompt with guardrail feedback: %s", guardrail_prompt)
                 # continue to next attempt without execution
                 continue
 
-            # Execute the code (inherits current env with MPS flags)
+            # Execute the code
             output = execute_code(str(code_path))
             logger.info("Execution output captured for version v%s", version)
             logger.debug("Execution output: %s", output)
@@ -637,10 +588,8 @@ class DeveloperAgent:
                         target_text = f"Let's push further to reach {self.gold_threshold}."
                     else:
                         target_text = "Let's push further to reach an even stronger result."
-                    analysis_msg = (
-                        f"Nice work! The score has improved to {run_score_display}. "
-                        f"{target_text}"
-                    )
+
+                    analysis_msg = f"Nice work! The score has improved to {run_score_display}. {target_text}"
                 else:
                     logger.info(
                         "No improvement over previous best score of %s; current score is %s",
@@ -648,14 +597,9 @@ class DeveloperAgent:
                         run_score,
                     )
                     if previous_best_display != "N/A" and run_score_display != "N/A":
-                        analysis_msg = (
-                            f"The latest run scored {run_score_display}, but the best remains {previous_best_display}. "
-                            "Please investigate the regression before proceeding."
-                        )
+                        analysis_msg = f"The latest run scored {run_score_display}, but the best remains {previous_best_display}. Please investigate the regression before proceeding."
                     else:
-                        analysis_msg = (
-                            "The latest run did not improve the benchmark. Please investigate the reasons before continuing."
-                        )
+                        analysis_msg = "The latest run did not improve the benchmark. Please investigate the reasons before continuing."
 
                 code_with_logs += f"<analysis>\n{analysis_msg}\n</analysis>\n"
                 if improvement:
@@ -664,15 +608,18 @@ class DeveloperAgent:
 
                 try:
                     # Collect all researcher plans in outputs dir: plan.md, plan_*.md
+                    # not an issue: no plan is acceptable
                     plan_texts: list[str] = []
                     try:
                         if self.plan_path.exists():
-                            plan_texts.append(_safe_read(str(self.plan_path)))
+                            with open(self.plan_path, "r") as f:
+                                plan_texts.append(f.read())
                     except Exception:
                         pass
                     try:
                         for extra_plan_path in sorted(self.outputs_dir.glob("plan_*.md")):
-                            plan_texts.append(_safe_read(str(extra_plan_path)))
+                            with open(extra_plan_path, "r") as f:
+                                plan_texts.append(f.read())
                     except Exception:
                         pass
 
@@ -751,17 +698,10 @@ class DeveloperAgent:
                     base_version_for_next_patch = version
                 next_instr = self._append_patch_directive(next_instr, base_version_for_next_patch)
 
-                self.messages = self.messages[:2]
                 if blacklist_flag and self.best_code:
-                    base_code = self.best_code
-                else:
-                    base_code = code
-                assistant_payload = self._build_assistant_payload(
-                    base_code,
-                    include_line_numbers=self.patch_mode_enabled,
-                )
-                self.messages.append({'role': 'assistant', 'content': assistant_payload})
-                self.messages.append({'role': 'user', 'content': next_instr})
+                    input_list.append({'role': 'user', 'content': 'The previous code has been blacklisted. Here is the best known working version for your reference (please start work from this version): \n' + self.best_code})
+
+                input_list.append({'role': 'user', 'content': next_instr})
                 self.next_patch_base_version = base_version_for_next_patch
                 logger.info("Next patch will be based on v%s (blacklist=%s)", base_version_for_next_patch, blacklist_flag)
 
@@ -777,12 +717,7 @@ class DeveloperAgent:
                 """
                 base_version_for_next_patch = version
                 next_instr = self._append_patch_directive(next_instr, base_version_for_next_patch)
-                assistant_payload = self._build_assistant_payload(
-                    code,
-                    include_line_numbers=self.patch_mode_enabled,
-                )
-                self.messages.append({'role': 'assistant', 'content': assistant_payload})
-                self.messages.append({'role': 'user', 'content': next_instr})
+                input_list.append({'role': 'user', 'content': next_instr})
                 self.next_patch_base_version = base_version_for_next_patch
                 logger.info("Next patch will be based on v%s due to execution failure", base_version_for_next_patch)
 
@@ -796,4 +731,4 @@ class DeveloperAgent:
 
             artifact.save()
 
-        return self.best_score, self.best_code
+        return self.best_score, self.best_code, self.blacklisted_ideas

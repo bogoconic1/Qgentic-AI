@@ -15,7 +15,6 @@ Begin with a concise checklist (3-7 bullets) of what you will do; keep items con
 - Set up and configure the single required model: {model_name}.
 - Prepare an 80%/20% train/validation split (no K-Fold or Stratified splitting).
 - Integrate CUDA acceleration (wherever possible) and use `bfloat16` for deep learning models; disable gradient checkpointing.
-- Implement early stopping with a high max epoch (e.g., 1000 epochs).
 - Build modular pipeline: facilitate straightforward pre/post-processing and hyperparameter updates, but keep `{model_name}` fixed.
 - Implement logging per validation fold and overall OOF; log only other parts of code if relevant to validation.
 - Add a top-level DEBUG flag; pipeline must run twice (DEBUG and FULL modes) and log mode clearly.
@@ -40,13 +39,13 @@ Begin with a concise checklist (3-7 bullets) of what you will do; keep items con
 - LightGBM (if used): **CPU only**.
 - Prohibited: `transformers.Trainer`, `transformers.TrainingArguments`.
 - Do not use `try/except` to suppress errors.
-- Log final validation results after training.
+- Log final validation results, best epoch number and total training time after training.
 - Modular pipeline: update preprocessing/postprocessing or hyperparameters, but do not swap out `{model_name}`.
 - Prefer pretrained models if available.
 - External datasets: may be appended **only** to training set.
 - **DEBUG flag**: At the script top, define. Pipeline runs twice: once with `DEBUG=True` (subset of data, e.g., 256 samples, 1 epoch), then with `DEBUG=False` (full config). Log which mode is running.
 - **DL Only:** After 1st epoch on fold 0, if metric/loss is NaN or 0, raise Exception to halt.
-- Split: 80% train, 20% validation. Max epochs high (e.g., 1000), stop early by monitored metric. **No K-Fold** methods.
+- Split: 80% train, 20% validation. **No K-Fold** methods.
 
 ---
 

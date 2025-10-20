@@ -12,15 +12,13 @@ import yaml
 
 _DEFAULT_CONFIG: dict[str, Any] = {
     "llm": {
-        "base_url": "https://openrouter.ai/api/v1",
-        "api_key_env": "OPENROUTER_API_KEY",
-        "developer_model": "openai/gpt-5",
-        "developer_tool_model": "openai/gpt-5:online",
-        "researcher_model": "openai/gpt-5",
-        "researcher_tool_offline_model": "openai/gpt-5",
-        "researcher_tool_online_model": "openai/gpt-5:online",
-        "leakage_review_model": "qwen/qwen3-next-80b-a3b-instruct",
-        "leakage_followup_model": "qwen/qwen3-next-80b-a3b-instruct",
+        "developer_model": "gpt-5",
+        "developer_tool_model": "gpt-5",
+        "researcher_model": "gpt-5",
+        "researcher_tool_offline_model": "gpt-5",
+        "researcher_tool_online_model": "gpt-5",
+        "leakage_review_model": "gpt-4o",
+        "leakage_followup_model": "gpt-4o",
     },
     "runtime": {
         "ask_eda_max_attempts": 5,
@@ -34,9 +32,6 @@ _DEFAULT_CONFIG: dict[str, Any] = {
         "task_root": "task",
         "outputs_dirname": "outputs",
         "external_data_dirname": "external-data",
-    },
-    "hardware": {
-        "description": "A single A100 80GB GPU",
     },
     "guardrails": {
         "logging_basicconfig_order": True,

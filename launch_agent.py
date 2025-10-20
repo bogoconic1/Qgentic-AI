@@ -79,17 +79,7 @@ def main():
     _init_tracking(args)
 
     orchestrator = Orchestrator(args.slug, args.iteration)
-    success, plan = orchestrator.run(max_time_seconds=args.time_seconds)
-
-    print("Researcher Strategic Plan (Markdown):\n")
-    print(plan)
-
-    outputs_dir = os.path.join("task", args.slug, "outputs", str(args.iteration))
-    submission = os.path.join(outputs_dir, "submission.csv")
-    if success:
-        print(f"\nSuccess. Submission generated at {submission}")
-    else:
-        print(f"\nFailed to generate submission at {submission}")
+    orchestrator.run(max_time_seconds=args.time_seconds)
 
 
 if __name__ == "__main__":
