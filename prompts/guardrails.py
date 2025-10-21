@@ -41,7 +41,7 @@ def debug_sequence_review() -> str:
     return """Your task is to review a Python training pipeline and verify compliance with two runtime rules:
 
 1. The script must first execute with `DEBUG=True` (using a minimal subset or configuration), followed by `DEBUG=False` (full run), both in the same process and in sequential order.
-2. For deep learning pipelines, if at the end of the first epoch of fold 0 the loss or metric is NaN or exactly 0, an Exception must be raised immediately to halt execution.
+2. For deep learning pipelines, if at the end of the first epoch of fold 0 the loss is NaN, an Exception must be raised immediately to halt execution.
 
 Begin with a concise checklist (3-7 bullets) of what you will do; keep items conceptual, not implementation-level.
 

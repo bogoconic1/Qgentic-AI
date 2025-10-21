@@ -65,7 +65,7 @@ class DeveloperAgent:
       <task_root>/<slug>/<outputs_dir>/<iteration>/submission.csv
     """
 
-    def __init__(self, slug: str, iteration: int, model_name: Optional[str] = None, example_code: Optional[str] = None):
+    def __init__(self, slug: str, iteration: int, model_name: Optional[str] = None, example_details: Optional[str] = None):
         load_dotenv()
         self.slug = slug
         self.iteration = iteration
@@ -108,9 +108,9 @@ class DeveloperAgent:
 
         # Optional model constraints for the developer system prompt
         self.model_name: Optional[str] = model_name
-        self.example_code: Optional[str] = example_code
+        self.example_details: Optional[str] = example_details
 
-        assert self.model_name is not None and self.example_code is not None, "Both model_name and example_code must be provided"
+        assert self.model_name is not None and self.example_details is not None, "Both model_name and example_details must be provided"
 
         logger.info(
             "Initialized DeveloperAgent for slug=%s iteration=%s", self.slug, self.iteration
@@ -169,7 +169,7 @@ class DeveloperAgent:
         self.is_lower_better = info.get("is_lower_better")
         logger.info("is_lower_better=%s", self.is_lower_better)
 
-    def _compose_system(self) -> str:
+    def _compose_system(self, plan_markdown: str) -> str:
         logger.debug("Composing system prompt for slug=%s", self.slug)
         with open(self.base_dir / "description.md", "r") as f:
             self.description = f.read()
@@ -182,18 +182,18 @@ class DeveloperAgent:
             description=self.description,
             directory_listing=directory_listing,
             model_name=self.model_name,
-            example_code=self.example_code,
+            example_details=self.example_details,
+            researcher_data_driven_recommendations=plan_markdown,
             slug=self.slug,
         )
 
-    def _build_user_prompt(self, plan_markdown: str, version: int) -> str:
+    def _build_user_prompt(self, version: int) -> str:
         logger.debug("Building user prompt")
         base_dir_display = self.base_dir
         outputs_dir_display = self.outputs_dir
         log_path_display = self.outputs_dir / self._log_filename(version)
         submission_path_display = self.outputs_dir / self._submission_filename(version)
         return prompt_build_user(
-            plan_markdown=plan_markdown,
             base_dir=base_dir_display,
             outputs_dir=outputs_dir_display,
             log_path=log_path_display,
@@ -426,8 +426,8 @@ class DeveloperAgent:
 
         run_score = 0
 
-        system_prompt = self._compose_system()
-        user_prompt = self._build_user_prompt(plan_markdown, version=1)
+        system_prompt = self._compose_system(plan_markdown)
+        user_prompt = self._build_user_prompt(version=1)
         input_list = [{"role": "user", "content": user_prompt}]
         
         attempt = 0

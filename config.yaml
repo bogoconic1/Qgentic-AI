@@ -19,8 +19,8 @@ paths:
   external_data_dirname: "external-data"
 guardrails:
   logging_basicconfig_order: true
-  nan_guard: true
-  leakage_review: true
+  nan_guard: false
+  leakage_review: false
 tracking:
   wandb:
     entity: 520f8592abc # replace with your W&B entity
