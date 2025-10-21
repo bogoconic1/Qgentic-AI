@@ -87,6 +87,7 @@ conda activate qgentic-ai
 
 git clone https://github.com/bogoconic1/Qgentic-AI.git
 cd Qgentic-AI
+pip install uv
 bash install.sh
 ```
 
@@ -118,7 +119,7 @@ FIRECRAWL_API_KEY=...
 These keys are loaded via `python-dotenv`. Adjust the environment variables listed in
 `config.yaml` if you need custom names or endpoints.
 
-### 4. Download Meta Kaggle and Meta Kaggle Code from Kaggle Datasets
+### 4. Download Meta Kaggle and Meta Kaggle Code from Kaggle Datasets (Optional - currently not used)
 ```
 sudo apt-get install unzip
 curl -L -o /workspace/meta-kaggle.zip https://www.kaggle.com/api/v1/datasets/download/kaggle/meta-kaggle
