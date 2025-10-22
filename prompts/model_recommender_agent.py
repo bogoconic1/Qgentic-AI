@@ -19,6 +19,7 @@ Begin with a concise checklist (3-7 bullets) of what you will do; keep items con
 ## Objective
 1. Examine `<competition_description>`, `<task_type>`, `<task_summary>`, `<model_name>`, and `<research_plan>`. You can perform web searches where necessary to identify the best preprocessing strategies.
 2. For each preprocessing strategy subsection (`preprocessing`, `feature_creation`, `feature_selection`, `feature_transformation`, `tokenization`, `data_augmentation`) - output a concise list of recommended strategies, explaining why each is optimal for the specified task and model.
+3. Consider data characteristics from `<research_plan>` such as missing values, outliers, data distributions, feature correlations, and any preprocessing challenges identified during EDA.
 
 ## Hard Constraints
 - Do **not** search for or use any actual winning solutions from the competition.
