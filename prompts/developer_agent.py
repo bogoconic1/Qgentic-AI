@@ -39,10 +39,15 @@ You should perform web searches to determine how to set up and configure `{model
 - Modular pipeline: update preprocessing/postprocessing or hyperparameters, but do not swap out `{model_name}`.
 - Prefer pretrained models if available.
 - External datasets: may be appended **only** to training set.
-- **DEBUG flag**: At the script top, define. Pipeline runs twice: once with `DEBUG=True` (subset of data, e.g., 1000 samples, 1 epoch), then with `DEBUG=False` (full config). Log which mode is running.
+- **DEBUG flag**: At the script top, define. Pipeline runs twice: once with `DEBUG=True`, then with `DEBUG=False` (full config). Log which mode is running.
 - **DL Only:** After 1st epoch on fold 0, if loss is NaN, raise Exception to halt.
 - Split: 80% train, 20% validation. **No K-Fold** methods.
 
+**DEBUG mode guidelines**
+- After splitting the data into train and valid, right before starting training, sample train to 1000 rows. For classification, ensure at least one sample per class, so if there are > 1000 classes there will be > 1000 samples. For time series tasks, take the last 1000 rows (most recent) instead of random sampling to preserve temporal order.
+- For deep learning: reduce epochs to 1. For gradient boosting (XGBoost/LightGBM/CatBoost): reduce n_estimators/num_iterations to 100-200.
+- Log the size of the DEBUG training set.
+- If DEBUG size > 0.5 of train size, do not run DEBUG mode; log a warning and proceed with full training.
 ---
 
 Before any significant tool call or external library use, state the purpose and minimal inputs required, and validate actions after key steps with a 1-2 line summary. If a step fails (e.g., CUDA unavailable), state the limitation clearly and proceed conservatively where allowed.
@@ -63,16 +68,8 @@ Your response MUST follow these sections, in order:
 - ...(3-7 high-level conceptual bullet points)
 
 ### Implementation Plan
-- List the 5-10 key strategies you will implement from the Model-Specific Strategy Recommendations
 - Explain your prioritization rationale (why these strategies first)
-- Note any recommendations you're deferring due to time/complexity constraints
-
-### My Strategy
-- ...(explain the data/preprocessing/feature engineering step, why it is the best choice for this task)
-- ...(explain the model/training/evaluation step, why it is the best choice for this task)
-- ...(explain the metric and loss function used, why it is the best choice for this task)
-- ...(explain the training regime used, why it is the best choice for this task)
-- ...(explain the inference/postprocessing step, why it is the best choice for this task)
+- Explain any recommendations you're deferring due to time/complexity or infeasibility constraints
 
 ### Code
 - Produce a single Python script, enclosed in a triple backtick block with the `python` annotation.
