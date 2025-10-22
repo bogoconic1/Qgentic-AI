@@ -18,6 +18,7 @@ from prompts.model_recommender_agent import (
     inference_strategy_system_prompt,
     build_user_prompt,
 )
+from constants import get_preprocessing_categories
 
 
 logger = logging.getLogger(__name__)
@@ -243,20 +244,64 @@ class ModelRecommenderAgent:
 
     def _recommend_preprocessing(self, model_name: str) -> Dict[str, Any]:
         """Get preprocessing recommendations for a model."""
-        result = self._call_llm_for_recommendation(
-            preprocessing_system_prompt(), model_name, "preprocessing"
+        # Determine relevant categories based on task type
+        task_type = self.inputs.get("task_type", "tabular")
+        categories = get_preprocessing_categories(task_type)
+
+        logger.info(
+            "[%s] Using preprocessing categories for task_type '%s': %s",
+            model_name,
+            task_type,
+            categories,
         )
-        if result is None:
-            logger.warning("[%s] Using empty preprocessing recommendations", model_name)
-            return {
-                "preprocessing": [],
-                "feature_creation": [],
-                "feature_selection": [],
-                "feature_transformation": [],
-                "tokenization": [],
-                "data_augmentation": [],
-            }
-        return result
+
+        # Build user prompt with categories
+        user_prompt = build_user_prompt(
+            description=self.inputs["description"],
+            task_type=self.inputs["task_type"],
+            task_summary=self.inputs["task_summary"],
+            model_name=model_name,
+            research_plan=self.inputs.get("research_plan"),
+            preprocessing_categories=categories,
+        )
+
+        # Call LLM
+        system_prompt = preprocessing_system_prompt()
+        messages = [{"role": "user", "content": user_prompt}]
+
+        try:
+            response = call_llm_with_retry(
+                model=_MODEL_RECOMMENDER_MODEL,
+                instructions=system_prompt,
+                tools=[],
+                messages=messages,
+                web_search_enabled=_ENABLE_WEB_SEARCH,
+            )
+            content = response.output_text or ""
+
+            # Extract JSON
+            json_text = self._extract_json_block(content)
+            if not json_text:
+                logger.warning("[%s] No JSON block found in preprocessing response", model_name)
+                return {cat: [] for cat in categories}
+
+            # Parse JSON
+            result = json.loads(json_text)
+            logger.info("[%s] Successfully parsed preprocessing recommendations", model_name)
+
+            # Ensure all expected categories are present
+            for cat in categories:
+                if cat not in result:
+                    result[cat] = []
+
+            return result
+
+        except json.JSONDecodeError as e:
+            logger.warning("[%s] JSON parsing failed for preprocessing: %s", model_name, e)
+            return {cat: [] for cat in categories}
+        except Exception as e:
+            logger.error("[%s] Error getting preprocessing recommendations: %s", model_name, e)
+            return {cat: [] for cat in categories}
 
     def _recommend_loss_function(self, model_name: str) -> Dict[str, Any]:
         """Get loss function recommendation for a model."""
