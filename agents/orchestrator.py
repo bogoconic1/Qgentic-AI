@@ -6,6 +6,7 @@ import json
 from agents.researcher import ResearcherAgent
 from agents.developer import DeveloperAgent
 from agents.starter import StarterAgent
+from agents.model_recommender import ModelRecommenderAgent
 from project_config import get_config
 import weave
 
@@ -35,11 +36,91 @@ def _run_researcher_once(slug: str, iteration: int, run_id: int) -> tuple[int, s
     return run_id, str(plan_path), len(plan or "")
 
 @weave.op()
-def _run_developer_baseline(slug: str, iteration_suffix: str, plan: str, model_name: str, example_details: str, key: str):
-    """Run a single baseline DeveloperAgent and return (key, best_score, best_code)."""
+def _run_developer_baseline(slug: str, iteration_suffix: str, plan: str, model_name: str, model_recommendations: dict, key: str):
+    """Run a single baseline DeveloperAgent and return (key, best_score, best_code).
+
+    Args:
+        slug: Competition slug
+        iteration_suffix: Iteration identifier (e.g., "1_1")
+        plan: Research plan text
+        model_name: Model name (e.g., "deberta-v3-large")
+        model_recommendations: Full recommendations dict for this model
+        key: Key for tracking results
+    """
+    # Build example_details from model recommendations
+    example_details = _build_example_details_from_recommendations(model_recommendations)
+
     dev = DeveloperAgent(slug, iteration_suffix, model_name=model_name, example_details=example_details)
-    best_score, best_code, blacklisted_ideas = dev.run(plan, max_time_seconds=3600)
+    best_score, best_code, blacklisted_ideas = dev.run(plan, max_time_seconds=9000)
     return key, best_score, best_code, blacklisted_ideas
+
+def _build_example_details_from_recommendations(recommendations: dict) -> str:
+    """Build example_details string from model recommendations.
+
+    Formats the recommendations into a readable string that can be passed
+    to DeveloperAgent as guidance.
+    """
+    details = []
+
+    # Preprocessing
+    preprocessing = recommendations.get("preprocessing", {})
+    if preprocessing:
+        details.append("## Preprocessing Strategies")
+        for category, strategies in preprocessing.items():
+            if strategies and isinstance(strategies, list):
+                details.append(f"\n### {category.replace('_', ' ').title()}")
+                for item in strategies[:3]:  # Limit to top 3 per category
+                    if isinstance(item, dict):
+                        strategy = item.get("strategy", "")
+                        explanation = item.get("explanation", "")
+                        if strategy:
+                            details.append(f"- {strategy}: {explanation}")
+
+    # Loss function
+    loss_fn = recommendations.get("loss_function", {})
+    if loss_fn:
+        details.append("\n## Loss Function")
+        loss_name = loss_fn.get("loss_function", "")
+        loss_exp = loss_fn.get("explanation", "")
+        if loss_name:
+            details.append(f"- Use {loss_name}: {loss_exp}")
+
+    # Hyperparameters
+    hyperparams = recommendations.get("hyperparameters", {})
+    if hyperparams:
+        details.append("\n## Hyperparameters")
+        hp_list = hyperparams.get("hyperparameters", [])
+        for item in hp_list[:5]:  # Top 5 hyperparameters
+            if isinstance(item, dict):
+                hp = item.get("hyperparameter", "")
+                explanation = item.get("explanation", "")
+                if hp:
+                    details.append(f"- {hp}: {explanation}")
+
+        # Architectures
+        arch_list = hyperparams.get("architectures", [])
+        if arch_list:
+            details.append("\n### Architecture Recommendations")
+            for item in arch_list[:3]:
+                if isinstance(item, dict):
+                    arch = item.get("architecture", "")
+                    explanation = item.get("explanation", "")
+                    if arch:
+                        details.append(f"- {arch}: {explanation}")
+
+    # Inference strategies
+    inference = recommendations.get("inference_strategies", {})
+    if inference:
+        details.append("\n## Inference Strategies")
+        strategies = inference.get("inference_strategies", [])
+        for item in strategies[:3]:
+            if isinstance(item, dict):
+                strategy = item.get("strategy", "")
+                explanation = item.get("explanation", "")
+                if strategy:
+                    details.append(f"- {strategy}: {explanation}")
+
+    return "\n".join(details) if details else "No specific recommendations available."
 
 class Orchestrator:
     def __init__(self, slug: str, iteration: int):
@@ -51,22 +132,22 @@ class Orchestrator:
     @weave.op()
     def run(self, max_time_seconds: int | None = 6 * 3600) -> Tuple[bool, str]:
 
-        # starter suggestions
+        # Phase 1: Starter Agent - Get task type and summary
         starter_suggestion_path = self.outputs_dir / "starter_suggestions.json"
         if starter_suggestion_path.exists():
             with open(starter_suggestion_path, "r") as f:
-                suggestions = json.load(f)
+                starter_data = json.load(f)
         else:
             starter = StarterAgent(self.slug, self.iteration)
             starter.run()
 
             if starter_suggestion_path.exists():
                 with open(starter_suggestion_path, "r") as f:
-                    suggestions = json.load(f)
+                    starter_data = json.load(f)
             else:
                 raise RuntimeError("No starter suggestions found")
-        
-        # research plan
+
+        # Phase 2: Researcher Agent - Generate research plan
         plan_path = self.outputs_dir / "plan.md"
         if plan_path.exists():
             with open(plan_path, "r") as f:
@@ -79,50 +160,64 @@ class Orchestrator:
                     plan = f.read()
             else:
                 raise RuntimeError("No plan found")
-            
-        # Baseline stage: evaluate 5 starter suggestions with constrained developer runs
+
+        # Phase 3: Model Recommender Agent - Get model-specific recommendations
+        model_rec_path = self.outputs_dir / "model_recommendations.json"
+        if model_rec_path.exists():
+            with open(model_rec_path, "r") as f:
+                model_recommendations = json.load(f)
+        else:
+            model_rec_agent = ModelRecommenderAgent(self.slug, self.iteration)
+            model_recommendations = model_rec_agent.run()  # Uses default_models from config
+
+            if model_rec_path.exists():
+                with open(model_rec_path, "r") as f:
+                    model_recommendations = json.load(f)
+            else:
+                raise RuntimeError("No model recommendations found")
+
+        # Phase 4: Baseline Developer Stage - Evaluate models with recommendations
+        baseline_results = {}
         tasks = []
-        with ProcessPoolExecutor(max_workers=5) as ex:
-            for i in range(1, 6):
-                key = f"model_{i}"
-                entry = suggestions.get(key)
-                if not isinstance(entry, dict):
-                    continue
-                model_name = entry.get("suggestion", "")
-                example_details = entry.get("details", "")
-                dev_iter = f"{self.iteration}_{i}"
-                fut = ex.submit(_run_developer_baseline, self.slug, dev_iter, plan, model_name, example_details, key)
+
+        with ProcessPoolExecutor(max_workers=min(len(model_recommendations), 5)) as ex:
+            for idx, (model_name, recommendations) in enumerate(model_recommendations.items(), start=1):
+                key = model_name  # Use model name as key instead of model_1, model_2, etc.
+                dev_iter = f"{self.iteration}_{idx}"
+                fut = ex.submit(
+                    _run_developer_baseline,
+                    self.slug,
+                    dev_iter,
+                    plan,
+                    model_name,
+                    recommendations,
+                    key
+                )
                 tasks.append(fut)
 
             for fut in as_completed(tasks):
                 try:
                     key, best_score, best_code, blacklisted_ideas = fut.result()
-                    if isinstance(suggestions.get(key), dict):
-                        suggestions[key]["best_score"] = best_score
-                        suggestions[key]["best_code"] = best_code or ""
-                        suggestions[key]["blacklisted_ideas"] = blacklisted_ideas
-                except Exception:
+                    baseline_results[key] = {
+                        "model_name": key,
+                        "best_score": best_score,
+                        "best_code": best_code or "",
+                        "blacklisted_ideas": blacklisted_ideas,
+                        "recommendations": model_recommendations.get(key, {})
+                    }
+                except Exception as e:
+                    # Log error but continue with other models
+                    import logging
+                    logging.error(f"Failed to run developer for model {key}: {e}")
                     continue
-        '''
-        for i in range(1, 2):
-            key = f"model_{i}"
-            entry = suggestions.get(key)
-            if not isinstance(entry, dict):
-                continue
-            model_name = entry.get("suggestion", "")
-            example_details = entry.get("details", "")
-            dev_iter = f"{self.iteration}_{i}"
-            try:
-                _, best_score, best_code, blacklisted_ideas = _run_developer_baseline(self.slug, dev_iter, plan, model_name, example_details, key)
-                if isinstance(suggestions.get(key), dict):
-                    suggestions[key]["best_score"] = best_score
-                    suggestions[key]["best_code"] = best_code or ""
-                    suggestions[key]["blacklisted_ideas"] = blacklisted_ideas or []
-            except Exception:
-                continue'''
 
-        # Persist combined results alongside original suggestions
+        if not baseline_results:
+            raise RuntimeError("All developer baseline runs failed")
+
+        # Persist baseline results
         baseline_path = self.outputs_dir / "baseline_results.json"
         with open(baseline_path, "w") as f:
-            json.dump(suggestions, f, indent=2)
+            json.dump(baseline_results, f, indent=2)
+
+        return True, str(baseline_path)
     

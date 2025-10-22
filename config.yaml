@@ -6,8 +6,9 @@ llm:
   researcher_tool_online_model: "gpt-5"
   leakage_review_model: "gpt-5-mini"
   leakage_followup_model: "gpt-5-mini"
+  model_recommender_model: "gpt-5"
 runtime:
-  ask_eda_max_attempts: 5
+  ask_eda_max_attempts: 3
   researcher_max_steps: 512
   llm_max_retries: 3
   directory_listing_max_files: 10
@@ -25,3 +26,6 @@ tracking:
   wandb:
     entity: 520f8592abc # replace with your W&B entity
     project: qgentic-ai # replace with your W&B project
+model_recommender:
+  default_models: ["deberta-v3-large"]  # List of models to recommend strategies for
+  enable_web_search: true  # Enable web search for finding SOTA strategies

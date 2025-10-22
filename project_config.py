@@ -19,6 +19,7 @@ _DEFAULT_CONFIG: dict[str, Any] = {
         "researcher_tool_online_model": "gpt-5",
         "leakage_review_model": "gpt-4o",
         "leakage_followup_model": "gpt-4o",
+        "model_recommender_model": "gpt-5",
     },
     "runtime": {
         "ask_eda_max_attempts": 5,
@@ -43,6 +44,10 @@ _DEFAULT_CONFIG: dict[str, Any] = {
             "entity": None,
             "project": None,
         }
+    },
+    "model_recommender": {
+        "default_models": ["deberta-v3-large"],
+        "enable_web_search": True,
     },
 }
 
