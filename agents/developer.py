@@ -65,7 +65,7 @@ class DeveloperAgent:
       <task_root>/<slug>/<outputs_dir>/<iteration>/submission.csv
     """
 
-    def __init__(self, slug: str, iteration: int, model_name: Optional[str] = None, example_details: Optional[str] = None):
+    def __init__(self, slug: str, iteration: int, model_name: Optional[str] = None, model_recommendations: Optional[str] = None):
         load_dotenv()
         self.slug = slug
         self.iteration = iteration
@@ -96,7 +96,6 @@ class DeveloperAgent:
         self.best_score = float("inf") if self.is_lower_better else float("-inf")
 
         # File targets
-        self.plan_path = self.outputs_dir / "plan.md"
         self.latest_submission_path: Optional[Path] = None
         self.benchmark_info: Optional[dict] = None
         self.threshold_directive: str = ""
@@ -106,11 +105,11 @@ class DeveloperAgent:
         # Patch mode configuration
         self.patch_mode_enabled = _PATCH_MODE_ENABLED
 
-        # Optional model constraints for the developer system prompt
+        # Model-specific strategy recommendations for the developer system prompt
         self.model_name: Optional[str] = model_name
-        self.example_details: Optional[str] = example_details
+        self.model_recommendations: Optional[str] = model_recommendations
 
-        assert self.model_name is not None and self.example_details is not None, "Both model_name and example_details must be provided"
+        assert self.model_name is not None and self.model_recommendations is not None, "Both model_name and model_recommendations must be provided"
 
         logger.info(
             "Initialized DeveloperAgent for slug=%s iteration=%s", self.slug, self.iteration
@@ -169,7 +168,7 @@ class DeveloperAgent:
         self.is_lower_better = info.get("is_lower_better")
         logger.info("is_lower_better=%s", self.is_lower_better)
 
-    def _compose_system(self, plan_markdown: str) -> str:
+    def _compose_system(self) -> str:
         logger.debug("Composing system prompt for slug=%s", self.slug)
         with open(self.base_dir / "description.md", "r") as f:
             self.description = f.read()
@@ -182,8 +181,7 @@ class DeveloperAgent:
             description=self.description,
             directory_listing=directory_listing,
             model_name=self.model_name,
-            example_details=self.example_details,
-            researcher_data_driven_recommendations=plan_markdown,
+            model_recommendations=self.model_recommendations,
             slug=self.slug,
         )
 
@@ -406,7 +404,7 @@ class DeveloperAgent:
             self.blacklisted_ideas.append(entry)
 
     @weave.op()
-    def run(self, plan_markdown: str, max_time_seconds: int = 6 * 3600) -> bool:
+    def run(self, max_time_seconds: int = 6 * 3600) -> bool:
         logger.info(
             "Starting developer run for slug=%s iteration=%s",
             self.slug,
@@ -414,19 +412,10 @@ class DeveloperAgent:
         )
         start_time = time.time()
         deadline = start_time + max_time_seconds
-        # you only keep the part within ```plan tags
-        start_index = plan_markdown.find("## External Data Recommendations")
-        if start_index != -1: plan_markdown = plan_markdown[start_index:].strip()
-        try:
-            with open(self.plan_path, "w") as f:
-                f.write(plan_markdown)
-            logger.debug("Plan markdown persisted to %s", self.plan_path)
-        except Exception:
-            logger.exception("Failed to persist plan markdown to %s", self.plan_path)
 
         run_score = 0
 
-        system_prompt = self._compose_system(plan_markdown)
+        system_prompt = self._compose_system()
         user_prompt = self._build_user_prompt(version=1)
         input_list = [{"role": "user", "content": user_prompt}]
         

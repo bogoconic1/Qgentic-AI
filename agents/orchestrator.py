@@ -36,29 +36,28 @@ def _run_researcher_once(slug: str, iteration: int, run_id: int) -> tuple[int, s
     return run_id, str(plan_path), len(plan or "")
 
 @weave.op()
-def _run_developer_baseline(slug: str, iteration_suffix: str, plan: str, model_name: str, model_recommendations: dict, key: str):
+def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, model_recommendations: dict, key: str):
     """Run a single baseline DeveloperAgent and return (key, best_score, best_code).
 
     Args:
         slug: Competition slug
         iteration_suffix: Iteration identifier (e.g., "1_1")
-        plan: Research plan text
         model_name: Model name (e.g., "deberta-v3-large")
         model_recommendations: Full recommendations dict for this model
         key: Key for tracking results
     """
-    # Build example_details from model recommendations
-    example_details = _build_example_details_from_recommendations(model_recommendations)
+    # Format recommendations for developer
+    formatted_recommendations = _format_recommendations_for_developer(model_recommendations)
 
-    dev = DeveloperAgent(slug, iteration_suffix, model_name=model_name, example_details=example_details)
-    best_score, best_code, blacklisted_ideas = dev.run(plan, max_time_seconds=9000)
+    dev = DeveloperAgent(slug, iteration_suffix, model_name=model_name, model_recommendations=formatted_recommendations)
+    best_score, best_code, blacklisted_ideas = dev.run(max_time_seconds=9000)
     return key, best_score, best_code, blacklisted_ideas
 
-def _build_example_details_from_recommendations(recommendations: dict) -> str:
-    """Build example_details string from model recommendations.
+def _format_recommendations_for_developer(recommendations: dict) -> str:
+    """Format model recommendations for DeveloperAgent.
 
     Formats the recommendations into a readable string that can be passed
-    to DeveloperAgent as guidance.
+    to DeveloperAgent as guidance. Includes ALL recommendations without filtering.
     """
     details = []
 
@@ -69,7 +68,7 @@ def _build_example_details_from_recommendations(recommendations: dict) -> str:
         for category, strategies in preprocessing.items():
             if strategies and isinstance(strategies, list):
                 details.append(f"\n### {category.replace('_', ' ').title()}")
-                for item in strategies[:3]:  # Limit to top 3 per category
+                for item in strategies:  # ALL strategies, no limit
                     if isinstance(item, dict):
                         strategy = item.get("strategy", "")
                         explanation = item.get("explanation", "")
@@ -90,7 +89,7 @@ def _build_example_details_from_recommendations(recommendations: dict) -> str:
     if hyperparams:
         details.append("\n## Hyperparameters")
         hp_list = hyperparams.get("hyperparameters", [])
-        for item in hp_list[:5]:  # Top 5 hyperparameters
+        for item in hp_list:  # ALL hyperparameters, no limit
             if isinstance(item, dict):
                 hp = item.get("hyperparameter", "")
                 explanation = item.get("explanation", "")
@@ -101,7 +100,7 @@ def _build_example_details_from_recommendations(recommendations: dict) -> str:
         arch_list = hyperparams.get("architectures", [])
         if arch_list:
             details.append("\n### Architecture Recommendations")
-            for item in arch_list[:3]:
+            for item in arch_list:  # ALL architectures, no limit
                 if isinstance(item, dict):
                     arch = item.get("architecture", "")
                     explanation = item.get("explanation", "")
@@ -113,7 +112,7 @@ def _build_example_details_from_recommendations(recommendations: dict) -> str:
     if inference:
         details.append("\n## Inference Strategies")
         strategies = inference.get("inference_strategies", [])
-        for item in strategies[:3]:
+        for item in strategies:  # ALL strategies, no limit
             if isinstance(item, dict):
                 strategy = item.get("strategy", "")
                 explanation = item.get("explanation", "")
@@ -149,19 +148,13 @@ class Orchestrator:
 
         # Phase 2: Researcher Agent - Generate research plan
         plan_path = self.outputs_dir / "plan.md"
-        if plan_path.exists():
-            with open(plan_path, "r") as f:
-                plan = f.read()
-        else:
+        if not plan_path.exists():
             _run_researcher_once(self.slug, self.iteration, 1)
-
-            if plan_path.exists():
-                with open(plan_path, "r") as f:
-                    plan = f.read()
-            else:
+            if not plan_path.exists():
                 raise RuntimeError("No plan found")
 
         # Phase 3: Model Recommender Agent - Get model-specific recommendations
+        # (ModelRecommender uses plan.md internally via research_plan input)
         model_rec_path = self.outputs_dir / "model_recommendations.json"
         if model_rec_path.exists():
             with open(model_rec_path, "r") as f:
@@ -188,7 +181,6 @@ class Orchestrator:
                     _run_developer_baseline,
                     self.slug,
                     dev_iter,
-                    plan,
                     model_name,
                     recommendations,
                     key
