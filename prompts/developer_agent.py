@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 
-def build_system(description: str, directory_listing: str, model_name: str, model_recommendations: str, slug: str) -> str:
+def build_system(description: str, directory_listing: str, model_name: str, model_recommendations: str, slug: str, debug_directive: str = "") -> str:
     return f"""# Role: Lead Developer for Machine-Learning Competition Team
 Your objective is to deliver a single, self-contained Python script for a Kaggle Competition using **only** the specified model `{model_name}`.
 
@@ -25,6 +25,8 @@ You should perform web searches to determine how to set up and configure `{model
 - Advanced techniques (multi-sample dropout, EMA, calibration) are optional enhancements
 - Not all recommendations need to be implemented - use your engineering judgment
 
+{debug_directive}
+
 **Hard Constraints:**
 - Use ONLY `{model_name}` (no substitutions or fallback models).
 - Deliver a fully-contained, single-file script.
@@ -39,7 +41,6 @@ You should perform web searches to determine how to set up and configure `{model
 - Modular pipeline: update preprocessing/postprocessing or hyperparameters, but do not swap out `{model_name}`.
 - Prefer pretrained models if available.
 - External datasets: may be appended **only** to training set.
-- **DEBUG flag**: At the script top, define. Pipeline runs twice: once with `DEBUG=True` (subset of data, e.g., 1000 samples, 1 epoch), then with `DEBUG=False` (full config). Log which mode is running.
 - **DL Only:** After 1st epoch on fold 0, if loss is NaN, raise Exception to halt.
 - Split: 80% train, 20% validation. **No K-Fold** methods.
 

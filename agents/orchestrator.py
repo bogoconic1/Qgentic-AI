@@ -7,8 +7,10 @@ from agents.researcher import ResearcherAgent
 from agents.developer import DeveloperAgent
 from agents.starter import StarterAgent
 from agents.model_recommender import ModelRecommenderAgent
+from agents.debug_data_generator import generate_debug_data
 from project_config import get_config
 import weave
+import logging
 
 
 _CONFIG = get_config()
@@ -36,7 +38,7 @@ def _run_researcher_once(slug: str, iteration: int, run_id: int) -> tuple[int, s
     return run_id, str(plan_path), len(plan or "")
 
 @weave.op()
-def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, model_recommendations: dict, key: str):
+def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, model_recommendations: dict, key: str, debug_info: dict = None):
     """Run a single baseline DeveloperAgent and return (key, best_score, best_code).
 
     Args:
@@ -45,11 +47,12 @@ def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, m
         model_name: Model name (e.g., "deberta-v3-large")
         model_recommendations: Full recommendations dict for this model
         key: Key for tracking results
+        debug_info: Debug data information from debug_data_generator
     """
     # Format recommendations for developer
     formatted_recommendations = _format_recommendations_for_developer(model_recommendations)
 
-    dev = DeveloperAgent(slug, iteration_suffix, model_name=model_name, model_recommendations=formatted_recommendations)
+    dev = DeveloperAgent(slug, iteration_suffix, model_name=model_name, model_recommendations=formatted_recommendations, debug_info=debug_info)
     best_score, best_code, blacklisted_ideas = dev.run(max_time_seconds=9000)
     return key, best_score, best_code, blacklisted_ideas
 
@@ -169,6 +172,29 @@ class Orchestrator:
             else:
                 raise RuntimeError("No model recommendations found")
 
+        # Phase 3.5: Debug Data Generator - Create debug datasets for rapid iteration
+        logger = logging.getLogger(__name__)
+        logger.info("Phase 3.5: Generating debug data...")
+
+        try:
+            debug_info = generate_debug_data(self.slug, self.iteration)
+
+            if debug_info.get("skip_debug"):
+                logger.info(f"Debug mode disabled: {debug_info.get('reason')}")
+            else:
+                logger.info(f"Debug data ready: {debug_info['metadata']}")
+        except Exception as e:
+            logger.error(f"Debug data generation failed: {e}")
+            # Don't fail the whole pipeline, just skip debug mode
+            debug_info = {
+                "skip_debug": True,
+                "reason": f"Generation failed: {str(e)}",
+                "paths": {},
+                "metadata": {}
+            }
+
+        return
+
         # Phase 4: Baseline Developer Stage - Evaluate models with recommendations
         baseline_results = {}
         tasks = []
@@ -183,7 +209,8 @@ class Orchestrator:
                     dev_iter,
                     model_name,
                     recommendations,
-                    key
+                    key,
+                    debug_info  # Pass debug info to developer
                 )
                 tasks.append(fut)
 

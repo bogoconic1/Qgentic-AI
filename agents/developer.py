@@ -65,7 +65,7 @@ class DeveloperAgent:
       <task_root>/<slug>/<outputs_dir>/<iteration>/submission.csv
     """
 
-    def __init__(self, slug: str, iteration: int, model_name: Optional[str] = None, model_recommendations: Optional[str] = None):
+    def __init__(self, slug: str, iteration: int, model_name: Optional[str] = None, model_recommendations: Optional[str] = None, debug_info: Optional[dict] = None):
         load_dotenv()
         self.slug = slug
         self.iteration = iteration
@@ -77,6 +77,11 @@ class DeveloperAgent:
         self.outputs_dir.mkdir(parents=True, exist_ok=True)
         self.developer_log_path = self.outputs_dir / f"developer_{iteration}.txt"
         self._configure_logger()
+
+        # Debug data info
+        self.debug_info = debug_info or {}
+        self.skip_debug = self.debug_info.get("skip_debug", False)
+        self.debug_paths = self.debug_info.get("paths", {})
 
         # Metric-related defaults; overwritten once benchmark info is available
         self.gold_threshold: Optional[float] = None
@@ -168,6 +173,48 @@ class DeveloperAgent:
         self.is_lower_better = info.get("is_lower_better")
         logger.info("is_lower_better=%s", self.is_lower_better)
 
+    def _build_debug_directive(self) -> str:
+        """Build debug mode directive for system prompt."""
+        if not self.debug_info:
+            return ""
+
+        if self.skip_debug:
+            return f"""
+## Debug Mode Disabled
+
+Reason: {self.debug_info.get('reason')}
+
+Train directly on full dataset (no DEBUG mode).
+"""
+
+        metadata = self.debug_info.get("metadata", {})
+        paths = self.debug_paths
+
+        return f"""
+## Debug Mode Configuration
+
+For rapid iteration, debug datasets have been prepared:
+
+**Debug Train Data:**
+- CSV: `{paths.get('train_debug_csv', 'N/A')}`
+- Images/Files: `{paths.get('train_debug_dir', 'N/A')}`
+- Size: {metadata.get('debug_train_size', 'N/A')} samples (from {metadata.get('train_size', 'N/A')} total)
+
+**Debug Test Data:**
+- CSV: `{paths.get('test_debug_csv', 'N/A')}`
+- Images/Files: `{paths.get('test_debug_dir', 'N/A')}`
+- Size: {metadata.get('debug_test_size', 'N/A')} samples
+
+**When to use:**
+- DEBUG=True: Use debug datasets for fast validation (~5-10 mins)
+- DEBUG=False: Use full datasets for final training (~2 hours)
+
+**Important:**
+- Debug mode is for error checking ONLY
+- Do NOT generate submission file in debug mode
+- Pipeline runs TWICE: DEBUG=True first (fast validation), then DEBUG=False (full training)
+"""
+
     def _compose_system(self) -> str:
         logger.debug("Composing system prompt for slug=%s", self.slug)
         with open(self.base_dir / "description.md", "r") as f:
@@ -177,12 +224,17 @@ class DeveloperAgent:
         logger.debug(
             "Directory listing prepared for %s (length=%s)", self.base_dir, len(directory_listing)
         )
+
+        # Build debug directive
+        debug_directive = self._build_debug_directive()
+
         return prompt_build_system(
             description=self.description,
             directory_listing=directory_listing,
             model_name=self.model_name,
             model_recommendations=self.model_recommendations,
             slug=self.slug,
+            debug_directive=debug_directive,
         )
 
     def _build_user_prompt(self, version: int) -> str:
