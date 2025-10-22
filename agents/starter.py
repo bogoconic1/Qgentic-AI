@@ -28,12 +28,6 @@ _OUTPUTS_DIRNAME = _PATH_CFG.get("outputs_dirname")
 
 
 class StarterAgent:
-    """Propose 5 starter model ideas with code snippets and JSON summary.
-
-    Inputs: competition description and the full 2024 report (handled in prompt).
-    Outputs: starter_suggestions.txt (raw), starter_suggestions.json (parsed JSON).
-    """
-
     def __init__(self, slug: str, iteration: int):
         load_dotenv()
         self.slug = slug
