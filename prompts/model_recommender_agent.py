@@ -10,8 +10,6 @@ Begin with a **concise checklist (3-7 conceptual bullets)** describing your reas
 ## Hard Computational Constraints
 - **Total wall-clock budget:** **≤ 3 hours** end-to-end (data loading + training + validation)
 - **GPU memory:** 24GB available
-- **Precision:** fp16 or bf16 only (no fp32)
-- **No gradient checkpointing** (developer constraint)
 
 ## Inputs
 - `<competition_description>`
@@ -23,7 +21,12 @@ Begin with a **concise checklist (3-7 conceptual bullets)** describing your reas
 1. Review all inputs to understand **data characteristics, task type, and evaluation metric**.
 2. Perform **targeted web searches** to identify **state-of-the-art models** relevant to the task, data, and metric.
 3. Evaluate each candidate model under three criteria: metric impact, implementation simplicity, and compute feasibility within the 3-hour budget.
+4. Recommend up to **10 models** that balance these criteria effectively.
 
+## Hard Constraints
+- ❌ Do **not** search for or use actual winning solutions from this specific competition.
+- ❌ Do not rely on prior knowledge of the competition.
+- ✅ All recommendations must fit the 3-hour training budget.
 
 """
 
@@ -36,8 +39,6 @@ Begin with a concise checklist (3-7 bullets) describing your *process* (conceptu
 ## Hard Computational Constraints
 - **Total wall-clock budget:** **≤ 3 hours** end-to-end (data loading + training + validation)
 - **GPU memory:** 24GB available
-- **Precision:** fp16 or bf16 only (no fp32)
-- **No gradient checkpointing** (developer constraint)
 
 ## Inputs
 - `<competition_description>`
@@ -67,7 +68,6 @@ Begin with a concise checklist (3-7 bullets) describing your *process* (conceptu
 - Do **not** rely on prior knowledge of those solutions.
 - **Do not** recommend creating features merely to prune them later—propose **top candidates only**.
 - **Do not** duplicate the same strategy across multiple categories.
-- All suggestions must respect **no gradient checkpointing** and **fp16/bf16** only.
 - Anything under ensembling/stacking/calibration/blending MUST be in the NICE_TO_HAVE section.
 
 ## Evidence & Safety
@@ -126,8 +126,6 @@ Begin with a **concise checklist (3-7 bullets)** summarizing your conceptual rea
 
 ## Hard Computational Constraints
 - **Runtime budget:** ≤ 3 hours end-to-end (data + train + validation)
-- **Precision:** fp16 / bf16 only (no fp32)
-- **No gradient checkpointing**
 - **Auxiliary or composite losses:** allowed only if justified by metric alignment or stability
 
 ---
@@ -177,7 +175,6 @@ Begin with a **concise checklist (3-7 bullets)** summarizing your conceptual rea
 When ranking or combining losses, consider:
 - **Metric alignment:** differentiable surrogates for leaderboard metric (e.g., QWK, MAP@K).
 - **Robustness:** tolerance to noise, imbalance, or label uncertainty.
-- **Convergence stability:** well-behaved under fp16/bf16 arithmetic.
 - **Compute efficiency:** feasible within time/memory constraints.
 - **Ease of implementation:** minimal code modification from the baseline loop.
 
@@ -230,7 +227,6 @@ Begin with a **concise checklist (3-7 conceptual bullets)** describing your reas
 ## Hard Computational Constraints
 - **Total runtime:** ≤ 3 hours (end-to-end: data + train + validation)
 - **Memory:** 24 GB GPU VRAM / system RAM (depending on model type)
-- **Precision:** fp16 / bf16 only  |  ❌ no fp32
 - **No gradient checkpointing** (developer constraint)
 - **All recommendations must be executable** within the runtime and memory budget.
 
@@ -292,8 +288,6 @@ Applicable to Transformers, CNNs, RNNs, and ViTs:
 - ❌ Do **not** search for or use actual winning solutions from this specific competition.
 - ❌ Do not redefine loss functions or preprocessing steps — they exist elsewhere.
 - ✅ All recommendations must fit the 3-hour training budget.
-- ✅ Deep learning: no checkpointing; use fp16/bf16 precision.
-- ⚠️ Complex techniques (e.g., layer-wise LR decay + EMA) must include runtime cost estimate.
 - Anything under ensembling/stacking/calibration/blending MUST be in the NICE_TO_HAVE section.
 
 ---
@@ -312,7 +306,7 @@ Applicable to Transformers, CNNs, RNNs, and ViTs:
 When selecting hyperparameters or architectures:
 1. **Metric impact first** - what most directly affects leaderboard metric.
 2. **Simplicity next** - minimal code change for max gain.
-3. **Compute efficiency** - ≤ 150 GPU minutes for MUST_HAVE setup to allow I/O overhead.
+3. **Compute efficiency** - ≤ 180 GPU minutes for MUST_HAVE setup to allow I/O overhead.
 4. **Stability under mixed precision** - avoid exploding gradients / NANs.
 5. **Scalability** - future tuning should reuse baseline checkpoints.
 
@@ -359,7 +353,6 @@ Begin with a **concise checklist (3-7 conceptual bullets)** describing your reas
 
 ## Hard Computational Constraints
 - **Inference time:** ≤ 30 minutes total over full test set
-- **Precision:** fp16/bf16 (no fp32) for consistency with training phase
 - **Memory:** ≤ 24 GB VRAM / RAM depending on model type
 - **No retraining** — inference only
 
@@ -447,8 +440,7 @@ When selecting inference strategies:
 1. **Metric alignment first** - Does it directly optimize leaderboard metric?
 2. **Runtime realism** - ≤ 30 minutes total inference time.
 3. **Implementation simplicity** - Prefer single-line or vectorized modifications.
-4. **Numerical stability** - Safe for fp16/bf16 inference.
-5. **Scalability** - Can extend to ensemble or multi-fold setups later.
+4. **Scalability** - Can extend to ensemble or multi-fold setups later.
 
 ---
 
