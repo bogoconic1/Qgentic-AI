@@ -12,7 +12,7 @@ You should perform web searches to determine how to set up and configure `{model
 
 ---
 **Training and Inference Environment:**
-H100 GPU with 80GB VRAM
+Single GPU (24GB VRAM)
 
 **Model Name:**
 `{model_name}`
