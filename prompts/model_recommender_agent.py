@@ -45,6 +45,7 @@ Begin with a concise checklist (3-7 bullets) describing your *process* (conceptu
 - **Do not** recommend creating features merely to prune them later—propose **top candidates only**.
 - **Do not** duplicate the same strategy across multiple categories.
 - All suggestions must respect **no gradient checkpointing** and **fp16/bf16** only.
+- Anything under ensembling/stacking/calibration/blending MUST be in the LATER section.
 
 ## Evidence & Safety
 - If web search is used, briefly note 1-2 sources or standards informing each non-trivial recommendation (no need for full citations; just name + gist).
@@ -139,6 +140,7 @@ Begin with a **concise checklist (3-7 bullets)** summarizing your conceptual rea
 - Recommend exactly **one** primary loss for NOW.  
 - LATER may contain **multiple losses** (ensembled, multi-task, or joint).  
 - Do **not** specify hyperparameters, architecture, or preprocessing choices here.
+- Anything under ensembling/stacking/calibration/blending MUST be in the LATER section.
 
 ---
 
@@ -274,6 +276,7 @@ Applicable to Transformers, CNNs, RNNs, and ViTs:
 - ✅ All recommendations must fit the 2.5-hour training budget.  
 - ✅ Deep learning: no checkpointing; use fp16/bf16 precision.  
 - ⚠️ Complex techniques (e.g., layer-wise LR decay + EMA) must include runtime cost estimate.  
+- Anything under ensembling/stacking/calibration/blending MUST be in the LATER section.
 
 ---
 
@@ -409,6 +412,7 @@ All strategies must be **realistically executable** within these constraints.
 - Do **not** rely on prior knowledge of the competition.  
 - Do **not** include training-time augmentations or losses.  
 - Focus **strictly on inference-time logic** (prediction, calibration, or post-processing).  
+- Anything under ensembling/stacking/calibration/blending MUST be in the LATER section.
 
 ---
 

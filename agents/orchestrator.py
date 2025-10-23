@@ -35,7 +35,7 @@ def _run_researcher_once(slug: str, iteration: int, run_id: int) -> tuple[int, s
     return run_id, str(plan_path), len(plan or "")
 
 @weave.op()
-def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, now_recommendations: dict, key: str):
+def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, now_recommendations: dict, later_recommendations: dict, key: str):
     """Run a single baseline DeveloperAgent and return (key, best_score, best_code).
 
     Args:
@@ -43,12 +43,19 @@ def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, n
         iteration_suffix: Iteration identifier (e.g., "1_1")
         model_name: Model name (e.g., "deberta-v3-large")
         now_recommendations: NOW-only recommendations dict for this model
+        later_recommendations: LATER-only recommendations dict for this model
         key: Key for tracking results
     """
     # Format NOW recommendations for developer
     formatted_recommendations = _format_recommendations_for_developer(now_recommendations)
 
-    dev = DeveloperAgent(slug, iteration_suffix, model_name=model_name, model_recommendations=formatted_recommendations)
+    dev = DeveloperAgent(
+        slug,
+        iteration_suffix,
+        model_name=model_name,
+        model_recommendations=formatted_recommendations,
+        later_recommendations=later_recommendations
+    )
     best_score, best_code, blacklisted_ideas = dev.run(max_time_seconds=9000)
     return key, best_score, best_code, blacklisted_ideas
 
@@ -301,6 +308,7 @@ class Orchestrator:
         for idx, (model_name, now_recommendations) in enumerate(now_recommendations_all.items(), start=1):
             key = model_name  # Use model name as key
             dev_iter = f"{self.iteration}_{idx}"
+            later_recs = later_recommendations_all.get(model_name, {})
 
             try:
                 key, best_score, best_code, blacklisted_ideas = _run_developer_baseline(
@@ -308,6 +316,7 @@ class Orchestrator:
                     dev_iter,
                     model_name,
                     now_recommendations,
+                    later_recs,
                     key
                 )
                 baseline_results[key] = {
