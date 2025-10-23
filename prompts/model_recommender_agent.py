@@ -22,22 +22,23 @@ Begin with a concise checklist (3-7 bullets) of what you will do; keep items con
 - `<task_summary>`
 - `<model_name>`
 - `<research_plan>` (optional - contains data insights from EDA)
-- `<preprocessing_categories>` - list of relevant preprocessing categories for this task type
+- `<preprocessing_categories>` - dynamically selected list of relevant preprocessing categories for this specific competition
 
 ## Objective
 1. Examine `<competition_description>`, `<task_type>`, `<task_summary>`, `<model_name>`, and `<research_plan>`. You can perform web searches where necessary to identify the best preprocessing strategies.
 2. For ONLY the categories listed in `<preprocessing_categories>`, output a concise list (3-7 items per category) of recommended strategies, explaining why each is optimal for the specified task and model.
-3. SKIP any categories not listed in `<preprocessing_categories>` - they are not relevant for this task type.
-4. Consider data characteristics from `<research_plan>` when making recommendations.
-5. Prioritize recommendations by: (1) metric impact, (2) implementation simplicity, (3) compute cost within 2.5 hour budget.
+3. SKIP any categories not listed in `<preprocessing_categories>` - they were determined to be not relevant for this specific competition.
+4. The categories provided have been intelligently selected based on the actual data characteristics, not just the task type label.
+5. Consider data characteristics from `<research_plan>` when making recommendations.
+6. Prioritize recommendations by: (1) metric impact, (2) implementation simplicity, (3) compute cost within 2.5 hour budget.
 
 ## Category Definitions
 - **preprocessing**: General data cleaning, handling missing values, normalization, input formatting
-- **feature_creation**: Creating new features from existing ones (tabular/time_series only)
-- **feature_selection**: Selecting/pruning features (tabular/time_series only)
+- **feature_creation**: Creating new features from existing data (e.g., text statistics, domain-specific features, interaction features)
+- **feature_selection**: Selecting/pruning features to improve performance or reduce overfitting
 - **feature_transformation**: Scaling, encoding, dimensionality reduction
-- **tokenization**: Text tokenization and vocabulary handling (NLP only)
-- **data_augmentation**: Data augmentation techniques
+- **tokenization**: Text tokenization and vocabulary handling
+- **data_augmentation**: Data augmentation techniques (applicable to all modalities: images, text, tabular, audio, time series)
 
 ## Hard Constraints
 - Do **not** search for or use any actual winning solutions from the competition.

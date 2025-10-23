@@ -18,7 +18,7 @@ from prompts.model_recommender_agent import (
     inference_strategy_system_prompt,
     build_user_prompt,
 )
-from constants import get_preprocessing_categories
+from constants import select_preprocessing_categories_dynamically
 
 
 logger = logging.getLogger(__name__)
@@ -244,14 +244,24 @@ class ModelRecommenderAgent:
 
     def _recommend_preprocessing(self, model_name: str) -> Dict[str, Any]:
         """Get preprocessing recommendations for a model."""
-        # Determine relevant categories based on task type
+        # Dynamically determine relevant categories based on competition characteristics
         task_type = self.inputs.get("task_type", "tabular")
-        categories = get_preprocessing_categories(task_type)
 
         logger.info(
-            "[%s] Using preprocessing categories for task_type '%s': %s",
+            "[%s] Dynamically selecting preprocessing categories based on competition characteristics",
             model_name,
-            task_type,
+        )
+
+        categories = select_preprocessing_categories_dynamically(
+            task_type=task_type,
+            competition_description=self.inputs.get("description", ""),
+            research_plan=self.inputs.get("plan"),
+            model_name=model_name,
+        )
+
+        logger.info(
+            "[%s] Dynamically selected preprocessing categories: %s",
+            model_name,
             categories,
         )
 

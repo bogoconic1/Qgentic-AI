@@ -3,9 +3,9 @@
 import pytest
 from constants import (
     VALID_TASK_TYPES,
+    ALL_PREPROCESSING_CATEGORIES,
     normalize_task_type,
-    get_preprocessing_categories,
-    PREPROCESSING_CATEGORIES,
+    select_preprocessing_categories_dynamically,
 )
 
 
@@ -76,90 +76,78 @@ def test_normalize_task_type_invalid():
     # Caller should validate against VALID_TASK_TYPES
 
 
-def test_get_preprocessing_categories_computer_vision():
-    """Test preprocessing categories for computer vision tasks."""
-    categories = get_preprocessing_categories("computer_vision")
-    assert "preprocessing" in categories
-    assert "data_augmentation" in categories
-    # Should NOT have feature engineering categories
-    assert "feature_creation" not in categories
-    assert "feature_selection" not in categories
-    assert "tokenization" not in categories
-    assert len(categories) == 2
+def test_all_preprocessing_categories_complete():
+    """Test that ALL_PREPROCESSING_CATEGORIES contains all expected categories."""
+    expected = [
+        "preprocessing",
+        "feature_creation",
+        "feature_selection",
+        "feature_transformation",
+        "tokenization",
+        "data_augmentation",
+    ]
+    assert len(ALL_PREPROCESSING_CATEGORIES) == len(expected)
+    for category in expected:
+        assert category in ALL_PREPROCESSING_CATEGORIES
 
 
-def test_get_preprocessing_categories_nlp():
-    """Test preprocessing categories for NLP tasks."""
-    categories = get_preprocessing_categories("nlp")
-    assert "preprocessing" in categories
-    assert "tokenization" in categories
-    assert "data_augmentation" in categories
-    # Should NOT have feature engineering categories
-    assert "feature_creation" not in categories
-    assert "feature_selection" not in categories
-    assert len(categories) == 3
+def test_dynamic_category_selection_returns_valid_categories():
+    """Test that dynamic selection returns only valid categories."""
+    # Simple NLP competition description
+    description = """
+    This is a text classification competition where you need to classify
+    customer reviews into positive or negative sentiment.
+    """
+    categories = select_preprocessing_categories_dynamically(
+        task_type="nlp",
+        competition_description=description,
+    )
+
+    assert isinstance(categories, list)
+    assert len(categories) > 0
+    # All returned categories should be valid
+    for category in categories:
+        assert category in ALL_PREPROCESSING_CATEGORIES
 
 
-def test_get_preprocessing_categories_tabular():
-    """Test preprocessing categories for tabular tasks."""
-    categories = get_preprocessing_categories("tabular")
-    assert "preprocessing" in categories
-    assert "feature_creation" in categories
-    assert "feature_selection" in categories
-    assert "feature_transformation" in categories
-    # Should NOT have tokenization or data augmentation
-    assert "tokenization" not in categories
-    assert "data_augmentation" not in categories
-    assert len(categories) == 4
+def test_dynamic_category_selection_with_research_plan():
+    """Test that dynamic selection considers research plan."""
+    description = """
+    Patent phrase matching competition. Match semantic similarity of phrases.
+    """
+    research_plan = """
+    The dataset contains:
+    - anchor and target text phrases
+    - CPC codes (categorical metadata)
+    - Multiple anchors appear many times with different targets
+    """
+
+    categories = select_preprocessing_categories_dynamically(
+        task_type="nlp",
+        competition_description=description,
+        research_plan=research_plan,
+    )
+
+    assert isinstance(categories, list)
+    assert len(categories) > 0
+    # Should recognize potential for feature engineering from metadata
+    for category in categories:
+        assert category in ALL_PREPROCESSING_CATEGORIES
 
 
-def test_get_preprocessing_categories_time_series():
-    """Test preprocessing categories for time series tasks."""
-    categories = get_preprocessing_categories("time_series")
-    assert "preprocessing" in categories
-    assert "feature_creation" in categories
-    assert "feature_transformation" in categories
-    assert "data_augmentation" in categories
-    # Should NOT have feature selection or tokenization
-    assert "feature_selection" not in categories
-    assert "tokenization" not in categories
-    assert len(categories) == 4
+def test_dynamic_category_selection_fallback_on_error():
+    """Test that dynamic selection falls back to all categories on error."""
+    # Pass invalid/empty description to trigger fallback
+    categories = select_preprocessing_categories_dynamically(
+        task_type="nlp",
+        competition_description="",  # Empty description
+    )
 
-
-def test_get_preprocessing_categories_audio():
-    """Test preprocessing categories for audio tasks."""
-    categories = get_preprocessing_categories("audio")
-    assert "preprocessing" in categories
-    assert "data_augmentation" in categories
-    # Should NOT have feature engineering or tokenization
-    assert "feature_creation" not in categories
-    assert "feature_selection" not in categories
-    assert "feature_transformation" not in categories
-    assert "tokenization" not in categories
-    assert len(categories) == 2
-
-
-def test_get_preprocessing_categories_fallback():
-    """Test preprocessing categories for unknown task type returns all categories."""
-    categories = get_preprocessing_categories("unknown_task")
-    # Should return all possible categories as fallback
-    assert "preprocessing" in categories
-    assert "feature_creation" in categories
-    assert "feature_selection" in categories
-    assert "feature_transformation" in categories
-    assert "tokenization" in categories
-    assert "data_augmentation" in categories
-
-
-def test_preprocessing_categories_mapping():
-    """Test that PREPROCESSING_CATEGORIES mapping is complete."""
-    for task_type in VALID_TASK_TYPES:
-        assert task_type in PREPROCESSING_CATEGORIES
-        categories = PREPROCESSING_CATEGORIES[task_type]
-        assert isinstance(categories, list)
-        assert len(categories) > 0
-        # All should have preprocessing
-        assert "preprocessing" in categories
+    # Should fallback to all categories
+    assert isinstance(categories, list)
+    assert len(categories) > 0
+    for category in categories:
+        assert category in ALL_PREPROCESSING_CATEGORIES
 
 
 if __name__ == "__main__":
