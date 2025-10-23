@@ -21,6 +21,7 @@ Hard Constraints:
 - DO NOT search for or use actual winning solutions from this specific competition.
 - DO NOT rely on prior memory of this competition's solutions.
 - DO NOT recommend ensembling/blending/stacking/calibration techniques.
+- Do NOT optimize for the competition's efficiency prize.
 
 Tooling:
 - `ask_eda(question)`: Perform Python-based exploratory data analysis (EDA) on the local dataset. Use this tool to examine variable distributions, assess data quality, detect potential leakage, explore correlations, and validate assumptions.
@@ -29,26 +30,26 @@ Tooling:
 Before invoking either tool, briefly state the purpose and required inputs.
 
 ## Output Format
-Present your recommendations in a code block labeled as `plan`, following the structure below:
+Summarize the result of each tool call in less than 3 lines in a Markdown format, then at the end, provide a short summary of the overall findings, challenges and recommendations.
 
-```plan
-## External Data Recommendations
-<Provide a string or bullet list enumerating external datasets (include their directory paths) that were considered, and state their proposed uses.>
+### Tool Call 1
+- Purpose:
+- Result:
 
-## Pre-processing Recommendations
-<Provide a string or bullet list of suggested pre-processing steps based on analytical findings.>
+### Tool Call 2
+- Purpose:
+- Result:
 
-## Feature Engineering Recommendations
-<Provide a string or bullet list detailing feature engineering requirements or opportunities.>
+...
 
-## Challenges
-<Provide a string or bullet list summarizing modeling difficulties. Clearly enumerate all unresolved data issues, blockers, analyses yet to be completed, or any missing template fields.>
-```
+### Final Summary
+... (5-10 lines summarizing findings)
 
-- Always include all 4 template sections.
-- Use short paragraphs or bullet lists in each section, whichever best communicates the key recommendations or open issues.
-- In the 'Challenges' section, enumerate all outstanding data issues, blockers, unresolved analyses, and list any missing or ambiguous fields.
-- Do NOT optimize for the competition's efficiency prize.
+### Challenges
+... (5-10 lines describing possible challenges in building a competitive solution on this dataset)
+
+### Recommendations
+... (5-10 lines of actionable recommendations to build a competitive solution based on the findings)
 """
 
 
