@@ -2,6 +2,7 @@ import logging
 import os
 import re
 import shlex
+import signal
 import sys
 import traceback
 from io import StringIO
@@ -43,9 +44,27 @@ _TASK_ROOT = Path(_PATH_CFG.get("task_root"))
 _EXTERNAL_DIRNAME = _PATH_CFG.get("external_data_dirname")
 
 
+class TimeoutException(Exception):
+    """Exception raised when code execution times out."""
+    pass
+
+
+def _timeout_handler(signum, frame):
+    """Signal handler for timeout."""
+    raise TimeoutException("Code execution timed out")
+
+
 @weave.op()
-def ask_eda(question: str, description: str, data_path: str, max_attempts: int | None = None) -> str:
-    """Asks a question about the data provided for exploratory data analysis (EDA)"""
+def ask_eda(question: str, description: str, data_path: str, max_attempts: int | None = None, timeout_seconds: int = 600) -> str:
+    """Asks a question about the data provided for exploratory data analysis (EDA)
+
+    Args:
+        question: The EDA question to answer
+        description: Competition description
+        data_path: Path to the data directory
+        max_attempts: Maximum number of attempts (default from config)
+        timeout_seconds: Timeout for code execution in seconds (default 600 = 10 minutes)
+    """
     # Prepare media directory for EDA charts and expose to executed code
     try:
         preset_media = os.environ.get("MEDIA_DIR", "").strip()
@@ -97,14 +116,37 @@ def ask_eda(question: str, description: str, data_path: str, max_attempts: int |
 
                 with open("code_abc.py", "r") as f:
                     code_text = f.read()
-                exec(code_text, globals())
-                output = captured_output.getvalue()
 
-                sys.stdout = old_stdout
+                # Set timeout
+                signal.signal(signal.SIGALRM, _timeout_handler)
+                signal.alarm(timeout_seconds)
+                logger.debug("Set execution timeout to %d seconds", timeout_seconds)
+
+                try:
+                    exec(code_text, globals())
+                    output = captured_output.getvalue()
+                finally:
+                    # Cancel the alarm
+                    signal.alarm(0)
+                    # Restore stdout
+                    sys.stdout = old_stdout
 
                 logger.info("ask_eda succeeded on attempt %s", attempt)
                 return output
+            except TimeoutException:
+                # Cancel alarm and restore stdout
+                signal.alarm(0)
+                sys.stdout = old_stdout
+                logger.error("ask_eda execution timed out after %d seconds", timeout_seconds)
+                timeout_minutes = timeout_seconds / 60
+                if timeout_minutes >= 1:
+                    return f"Your query cannot be executed within {timeout_minutes:.0f} minutes"
+                else:
+                    return f"Your query cannot be executed within {timeout_seconds} seconds"
             except Exception as e:
+                # Cancel alarm and restore stdout
+                signal.alarm(0)
+                sys.stdout = old_stdout
                 stack_trace = traceback.format_exc()
                 logger.exception("ask_eda execution failed: %s", e)
 
