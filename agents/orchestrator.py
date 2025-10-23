@@ -1,6 +1,5 @@
 from typing import Tuple
 from pathlib import Path
-from concurrent.futures import ProcessPoolExecutor, as_completed
 import json
 
 from agents.researcher import ResearcherAgent
@@ -56,68 +55,73 @@ def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, m
 def _format_recommendations_for_developer(recommendations: dict) -> str:
     """Format model recommendations for DeveloperAgent.
 
-    Formats the recommendations into a readable string that can be passed
-    to DeveloperAgent as guidance. Includes ALL recommendations without filtering.
+    Extracts NOW recommendations from the unified strategy with NOW/LATER categorization.
+    NOW recommendations form the baseline implementation.
+
+    Args:
+        recommendations: Dict with NOW/LATER structure from ModelRecommenderAgent
+
+    Returns:
+        Formatted string for DeveloperAgent prompt
     """
     details = []
 
-    # Preprocessing
+    # Preprocessing (NOW only)
     preprocessing = recommendations.get("preprocessing", {})
     if preprocessing:
-        details.append("## Preprocessing Strategies")
-        for category, strategies in preprocessing.items():
-            if strategies and isinstance(strategies, list):
-                details.append(f"\n### {category.replace('_', ' ').title()}")
-                for item in strategies:  # ALL strategies, no limit
-                    if isinstance(item, dict):
-                        strategy = item.get("strategy", "")
-                        explanation = item.get("explanation", "")
-                        if strategy:
-                            details.append(f"- {strategy}: {explanation}")
+        now_preprocessing = preprocessing.get("NOW", [])
+        if now_preprocessing:
+            details.append("## Preprocessing Strategies")
+            for item in now_preprocessing:
+                if isinstance(item, dict):
+                    strategy = item.get("strategy", "")
+                    explanation = item.get("explanation", "")
+                    if strategy:
+                        details.append(f"- {strategy}: {explanation}")
 
-    # Loss function
+    # Loss function (NOW only)
     loss_fn = recommendations.get("loss_function", {})
     if loss_fn:
-        details.append("\n## Loss Function")
-        loss_name = loss_fn.get("loss_function", "")
-        loss_exp = loss_fn.get("explanation", "")
-        if loss_name:
-            details.append(f"- Use {loss_name}: {loss_exp}")
+        now_loss = loss_fn.get("NOW", {})
+        if now_loss:
+            details.append("\n## Loss Function")
+            loss_name = now_loss.get("loss", "")
+            loss_exp = now_loss.get("explanation", "")
+            if loss_name:
+                details.append(f"- Use {loss_name}: {loss_exp}")
 
-    # Hyperparameters
+    # Hyperparameters (NOW only)
     hyperparams = recommendations.get("hyperparameters", {})
     if hyperparams:
-        details.append("\n## Hyperparameters")
-        hp_list = hyperparams.get("hyperparameters", [])
-        for item in hp_list:  # ALL hyperparameters, no limit
-            if isinstance(item, dict):
-                hp = item.get("hyperparameter", "")
-                explanation = item.get("explanation", "")
-                if hp:
-                    details.append(f"- {hp}: {explanation}")
+        now_hyperparams = hyperparams.get("NOW", {})
+        if now_hyperparams:
+            details.append("\n## Hyperparameters & Architecture")
 
-        # Architectures
-        arch_list = hyperparams.get("architectures", [])
-        if arch_list:
-            details.append("\n### Architecture Recommendations")
-            for item in arch_list:  # ALL architectures, no limit
-                if isinstance(item, dict):
-                    arch = item.get("architecture", "")
-                    explanation = item.get("explanation", "")
-                    if arch:
-                        details.append(f"- {arch}: {explanation}")
+            # Core hyperparameters
+            core_hps = now_hyperparams.get("core_hyperparameters", {})
+            if core_hps:
+                for key, value in core_hps.items():
+                    if value:
+                        details.append(f"- {key}: {value}")
 
-    # Inference strategies
-    inference = recommendations.get("inference_strategies", {})
+            # Architecture description
+            arch = now_hyperparams.get("architecture", "")
+            if arch:
+                details.append(f"\n### Architecture")
+                details.append(f"- {arch}")
+
+    # Inference strategies (NOW only)
+    inference = recommendations.get("inference", {})
     if inference:
-        details.append("\n## Inference Strategies")
-        strategies = inference.get("inference_strategies", [])
-        for item in strategies:  # ALL strategies, no limit
-            if isinstance(item, dict):
-                strategy = item.get("strategy", "")
-                explanation = item.get("explanation", "")
-                if strategy:
-                    details.append(f"- {strategy}: {explanation}")
+        now_inference = inference.get("NOW", [])
+        if now_inference:
+            details.append("\n## Inference Strategies")
+            for item in now_inference:
+                if isinstance(item, dict):
+                    strategy = item.get("strategy", "")
+                    explanation = item.get("explanation", "")
+                    if strategy:
+                        details.append(f"- {strategy}: {explanation}")
 
     return "\n".join(details) if details else "No specific recommendations available."
 
@@ -171,37 +175,30 @@ class Orchestrator:
 
         # Phase 4: Baseline Developer Stage - Evaluate models with recommendations
         baseline_results = {}
-        tasks = []
 
-        with ProcessPoolExecutor(max_workers=min(len(model_recommendations), 5)) as ex:
-            for idx, (model_name, recommendations) in enumerate(model_recommendations.items(), start=1):
-                key = model_name  # Use model name as key instead of model_1, model_2, etc.
-                dev_iter = f"{self.iteration}_{idx}"
-                fut = ex.submit(
-                    _run_developer_baseline,
+        for idx, (model_name, recommendations) in enumerate(model_recommendations.items(), start=1):
+            key = model_name  # Use model name as key instead of model_1, model_2, etc.
+            dev_iter = f"{self.iteration}_{idx}"
+            try:
+                key, best_score, best_code, blacklisted_ideas = _run_developer_baseline(
                     self.slug,
                     dev_iter,
                     model_name,
                     recommendations,
                     key
                 )
-                tasks.append(fut)
-
-            for fut in as_completed(tasks):
-                try:
-                    key, best_score, best_code, blacklisted_ideas = fut.result()
-                    baseline_results[key] = {
-                        "model_name": key,
-                        "best_score": best_score,
-                        "best_code": best_code or "",
-                        "blacklisted_ideas": blacklisted_ideas,
-                        "recommendations": model_recommendations.get(key, {})
-                    }
-                except Exception as e:
-                    # Log error but continue with other models
-                    import logging
-                    logging.error(f"Failed to run developer for model {key}: {e}")
-                    continue
+                baseline_results[key] = {
+                    "model_name": key,
+                    "best_score": best_score,
+                    "best_code": best_code or "",
+                    "blacklisted_ideas": blacklisted_ideas,
+                    "recommendations": model_recommendations.get(key, {})
+                }
+            except Exception as e:
+                # Log error but continue with other models
+                import logging
+                logging.error(f"Failed to run developer for model {key}: {e}")
+                continue
 
         if not baseline_results:
             raise RuntimeError("All developer baseline runs failed")

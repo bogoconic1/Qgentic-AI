@@ -12,13 +12,8 @@ import weave
 from project_config import get_config
 from tools.helpers import call_llm_with_retry
 from prompts.model_recommender_agent import (
-    preprocessing_system_prompt,
-    loss_function_system_prompt,
-    hyperparameter_tuning_system_prompt,
-    inference_strategy_system_prompt,
-    build_user_prompt,
+    build_unified_system_prompt,
 )
-from constants import get_preprocessing_categories
 
 
 logger = logging.getLogger(__name__)
@@ -38,13 +33,16 @@ _OUTPUTS_DIRNAME = _PATH_CFG.get("outputs_dirname")
 
 
 class ModelRecommenderAgent:
-    """Recommends model-specific strategies (preprocessing, loss, hyperparameters, inference).
+    """Generates complete, coherent ML strategies with NOW/LATER prioritization.
 
-    For each model in the provided list, generates:
-    - Preprocessing strategies (preprocessing, feature_creation, feature_selection, etc.)
-    - Loss function recommendation
-    - Hyperparameter and architecture recommendations
-    - Inference strategies
+    For each model in the provided list, generates a unified strategy covering:
+    - Preprocessing & Data Preparation (NOW: foundations, LATER: advanced)
+    - Loss Function (NOW: standard, LATER: custom variants)
+    - Hyperparameters & Architecture (NOW: simple baseline, LATER: enhancements)
+    - Inference Strategy (NOW: direct prediction, LATER: TTA/ensembling/calibration)
+
+    Uses a single unified LLM call to ensure internal consistency and coherence.
+    NOW recommendations form the baseline, LATER provide an optimization roadmap.
 
     Outputs to: task/{slug}/outputs/{iteration}/model_recommendations.json
     """
@@ -172,190 +170,76 @@ class ModelRecommenderAgent:
         except Exception:
             return None
 
-    def _call_llm_for_recommendation(
-        self, system_prompt: str, model_name: str, recommendation_type: str
-    ) -> Optional[Dict[str, Any]]:
-        """Call LLM to get a specific type of recommendation.
-
-        Args:
-            system_prompt: System prompt function output
-            model_name: Model name (e.g., "deberta-v3-large")
-            recommendation_type: Type of recommendation for logging
-
-        Returns:
-            Parsed JSON dict or None on failure
-        """
-        user_prompt = build_user_prompt(
-            description=self.inputs["description"],
-            task_type=self.inputs["task_type"],
-            task_summary=self.inputs["task_summary"],
-            model_name=model_name,
-            research_plan=self.inputs.get("plan"),
-        )
-
-        messages = [{"role": "user", "content": user_prompt}]
-
-        logger.info(
-            "[%s] Requesting %s recommendations", model_name, recommendation_type
-        )
-
-        try:
-            response = call_llm_with_retry(
-                model=_MODEL_RECOMMENDER_MODEL,
-                instructions=system_prompt,
-                tools=[],
-                messages=messages,
-                web_search_enabled=_ENABLE_WEB_SEARCH,
-            )
-            content = response.output_text or ""
-
-            # Extract JSON
-            json_text = self._extract_json_block(content)
-            if not json_text:
-                logger.warning(
-                    "[%s] No JSON block found in %s response",
-                    model_name,
-                    recommendation_type,
-                )
-                return None
-
-            # Parse JSON
-            parsed = json.loads(json_text)
-            logger.info(
-                "[%s] Successfully parsed %s recommendations",
-                model_name,
-                recommendation_type,
-            )
-            return parsed
-
-        except json.JSONDecodeError as e:
-            logger.warning(
-                "[%s] JSON parsing failed for %s: %s", model_name, recommendation_type, e
-            )
-            return None
-        except Exception as e:
-            logger.error(
-                "[%s] Error getting %s recommendations: %s",
-                model_name,
-                recommendation_type,
-                e,
-            )
-            return None
-
-    def _recommend_preprocessing(self, model_name: str) -> Dict[str, Any]:
-        """Get preprocessing recommendations for a model."""
-        # Determine relevant categories based on task type
-        task_type = self.inputs.get("task_type", "tabular")
-        categories = get_preprocessing_categories(task_type)
-
-        logger.info(
-            "[%s] Using preprocessing categories for task_type '%s': %s",
-            model_name,
-            task_type,
-            categories,
-        )
-
-        # Build user prompt with categories
-        user_prompt = build_user_prompt(
-            description=self.inputs["description"],
-            task_type=self.inputs["task_type"],
-            task_summary=self.inputs["task_summary"],
-            model_name=model_name,
-            research_plan=self.inputs.get("research_plan"),
-            preprocessing_categories=categories,
-        )
-
-        # Call LLM
-        system_prompt = preprocessing_system_prompt()
-        messages = [{"role": "user", "content": user_prompt}]
-
-        try:
-            response = call_llm_with_retry(
-                model=_MODEL_RECOMMENDER_MODEL,
-                instructions=system_prompt,
-                tools=[],
-                messages=messages,
-                web_search_enabled=_ENABLE_WEB_SEARCH,
-            )
-            content = response.output_text or ""
-
-            # Extract JSON
-            json_text = self._extract_json_block(content)
-            if not json_text:
-                logger.warning("[%s] No JSON block found in preprocessing response", model_name)
-                return {cat: [] for cat in categories}
-
-            # Parse JSON
-            result = json.loads(json_text)
-            logger.info("[%s] Successfully parsed preprocessing recommendations", model_name)
-
-            # Ensure all expected categories are present
-            for cat in categories:
-                if cat not in result:
-                    result[cat] = []
-
-            return result
-
-        except json.JSONDecodeError as e:
-            logger.warning("[%s] JSON parsing failed for preprocessing: %s", model_name, e)
-            return {cat: [] for cat in categories}
-        except Exception as e:
-            logger.error("[%s] Error getting preprocessing recommendations: %s", model_name, e)
-            return {cat: [] for cat in categories}
-
-    def _recommend_loss_function(self, model_name: str) -> Dict[str, Any]:
-        """Get loss function recommendation for a model."""
-        result = self._call_llm_for_recommendation(
-            loss_function_system_prompt(), model_name, "loss_function"
-        )
-        if result is None:
-            logger.warning("[%s] Using empty loss function recommendation", model_name)
-            return {"loss_function": "", "explanation": ""}
-        return result
-
-    def _recommend_hyperparameters(self, model_name: str) -> Dict[str, Any]:
-        """Get hyperparameter and architecture recommendations for a model."""
-        result = self._call_llm_for_recommendation(
-            hyperparameter_tuning_system_prompt(), model_name, "hyperparameters"
-        )
-        if result is None:
-            logger.warning(
-                "[%s] Using empty hyperparameter recommendations", model_name
-            )
-            return {"hyperparameters": [], "architectures": []}
-        return result
-
-    def _recommend_inference(self, model_name: str) -> Dict[str, Any]:
-        """Get inference strategy recommendations for a model."""
-        result = self._call_llm_for_recommendation(
-            inference_strategy_system_prompt(), model_name, "inference"
-        )
-        if result is None:
-            logger.warning("[%s] Using empty inference recommendations", model_name)
-            return {"inference_strategies": []}
-        return result
-
     @weave.op()
-    def _recommend_for_model(self, model_name: str) -> Dict[str, Any]:
-        """Generate all recommendations for a single model.
+    def _recommend_complete_strategy(self, model_name: str) -> Dict[str, Any]:
+        """Generate complete unified strategy for a single model using NOW/LATER approach.
 
         Args:
             model_name: Model name (e.g., "deberta-v3-large")
 
         Returns:
-            Dict containing all recommendation types
+            Dict containing all recommendation types with NOW/LATER categorization
         """
-        logger.info("[%s] Starting recommendations", model_name)
+        logger.info("[%s] Starting unified strategy generation", model_name)
 
-        recommendations = {
-            "preprocessing": self._recommend_preprocessing(model_name),
-            "loss_function": self._recommend_loss_function(model_name),
-            "hyperparameters": self._recommend_hyperparameters(model_name),
-            "inference_strategies": self._recommend_inference(model_name),
+        # Build unified system prompt
+        system_prompt = build_unified_system_prompt(
+            task_type=self.inputs.get("task_type", ""),
+            description=self.inputs.get("description", ""),
+            research_plan=self.inputs.get("plan", ""),
+            model_name=model_name,
+        )
+
+        # Simple user message to trigger generation
+        messages = [{"role": "user", "content": "Generate the complete ML strategy."}]
+
+        try:
+            response = call_llm_with_retry(
+                model=_MODEL_RECOMMENDER_MODEL,
+                instructions=system_prompt,
+                tools=[],
+                messages=messages,
+                web_search_enabled=_ENABLE_WEB_SEARCH,
+            )
+            content = response.output_text or ""
+
+            # Extract JSON
+            json_text = self._extract_json_block(content)
+            if not json_text:
+                logger.warning("[%s] No JSON block found in unified strategy response", model_name)
+                return self._empty_strategy()
+
+            # Parse JSON
+            strategy = json.loads(json_text)
+            logger.info("[%s] Successfully parsed unified strategy", model_name)
+
+            # Validate structure
+            expected_keys = ["preprocessing", "loss_function", "hyperparameters", "inference"]
+            for key in expected_keys:
+                if key not in strategy:
+                    logger.warning("[%s] Missing '%s' in strategy, adding empty", model_name, key)
+                    strategy[key] = {"NOW": [], "LATER": []}
+
+            return strategy
+
+        except json.JSONDecodeError as e:
+            logger.warning("[%s] JSON parsing failed for unified strategy: %s", model_name, e)
+            return self._empty_strategy()
+        except Exception as e:
+            logger.error("[%s] Error getting unified strategy: %s", model_name, e)
+            return self._empty_strategy()
+
+    def _empty_strategy(self) -> Dict[str, Any]:
+        """Return empty strategy structure as fallback."""
+        return {
+            "preprocessing": {"NOW": [], "LATER": []},
+            "loss_function": {"NOW": {"loss": "", "explanation": ""}, "LATER": []},
+            "hyperparameters": {
+                "NOW": {"core_hyperparameters": {}, "architecture": ""},
+                "LATER": {"training_enhancements": [], "architecture_enhancements": []}
+            },
+            "inference": {"NOW": [], "LATER": []}
         }
-
-        logger.info("[%s] All recommendations completed", model_name)
-        return recommendations
 
     @weave.op()
     def run(self, model_list: Optional[list[str]] = None) -> Dict[str, Dict[str, Any]]:
@@ -365,7 +249,7 @@ class ModelRecommenderAgent:
             model_list: List of model names. If None, uses default_models from config.
 
         Returns:
-            Dict mapping model names to their recommendations
+            Dict mapping model names to their complete strategies (with NOW/LATER categorization)
         """
         if model_list is None:
             model_list = _DEFAULT_MODELS
@@ -377,30 +261,30 @@ class ModelRecommenderAgent:
 
         logger.info("Processing %d model(s): %s", len(model_list), model_list)
 
-        all_recommendations = {}
+        all_strategies = {}
 
         for model_name in model_list:
             try:
-                recommendations = self._recommend_for_model(model_name)
-                all_recommendations[model_name] = recommendations
+                strategy = self._recommend_complete_strategy(model_name)
+                all_strategies[model_name] = strategy
             except Exception as e:
-                logger.error("[%s] Failed to get recommendations: %s", model_name, e)
+                logger.error("[%s] Failed to get strategy: %s", model_name, e)
                 # Continue with other models
                 continue
 
-        if not all_recommendations:
-            logger.error("Failed to get recommendations for any model")
-            raise RuntimeError("No model recommendations were generated successfully")
+        if not all_strategies:
+            logger.error("Failed to get strategies for any model")
+            raise RuntimeError("No model strategies were generated successfully")
 
         # Persist to JSON
         try:
             with open(self.json_path, "w") as f:
-                json.dump(all_recommendations, f, indent=2)
-            logger.info("Model recommendations saved to %s", self.json_path)
+                json.dump(all_strategies, f, indent=2)
+            logger.info("Model strategies saved to %s", self.json_path)
         except Exception as e:
-            logger.error("Failed to save model recommendations: %s", e)
+            logger.error("Failed to save model strategies: %s", e)
 
         logger.info(
-            "ModelRecommenderAgent completed for %d model(s)", len(all_recommendations)
+            "ModelRecommenderAgent completed for %d model(s)", len(all_strategies)
         )
-        return all_recommendations
+        return all_strategies
