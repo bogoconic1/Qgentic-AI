@@ -268,14 +268,14 @@ class Orchestrator:
                 raise RuntimeError("No plan found")
 
         # Phase 3: Model Recommender Agent - Get model-specific recommendations
-        # (ModelRecommender uses plan.md internally via research_plan input)
+        # First dynamically selects suitable models, then generates recommendations for each
         model_rec_path = self.outputs_dir / "model_recommendations.json"
         if model_rec_path.exists():
             with open(model_rec_path, "r") as f:
                 model_recommendations = json.load(f)
         else:
             model_rec_agent = ModelRecommenderAgent(self.slug, self.iteration)
-            model_recommendations = model_rec_agent.run()  # Uses default_models from config
+            model_recommendations = model_rec_agent.run(use_dynamic_selection=True)
 
             if model_rec_path.exists():
                 with open(model_rec_path, "r") as f:

@@ -12,6 +12,7 @@ import weave
 from project_config import get_config
 from tools.helpers import call_llm_with_retry
 from prompts.model_recommender_agent import (
+    model_selector_system_prompt,
     preprocessing_system_prompt,
     loss_function_system_prompt,
     hyperparameter_tuning_system_prompt,
@@ -340,16 +341,102 @@ class ModelRecommenderAgent:
         return recommendations
 
     @weave.op()
-    def run(self, model_list: Optional[list[str]] = None) -> Dict[str, Dict[str, Any]]:
+    def select_models(self) -> list[str]:
+        """Use LLM to dynamically select suitable models for the competition.
+
+        Returns:
+            List of up to 5 selected model names
+        """
+        logger.info("Starting dynamic model selection")
+
+        system_prompt = model_selector_system_prompt()
+
+        user_prompt = build_user_prompt(
+            description=self.inputs["description"],
+            task_type=self.inputs["task_type"],
+            task_summary=self.inputs["task_summary"],
+            model_name="",  # Not needed for model selection
+            research_plan=self.inputs.get("plan"),
+        )
+
+        messages = [{"role": "user", "content": user_prompt}]
+
+        logger.info("Requesting model selection from LLM")
+
+        response = call_llm_with_retry(
+            model=_MODEL_RECOMMENDER_MODEL,
+            instructions=system_prompt,
+            tools=[],
+            messages=messages,
+            web_search_enabled=_ENABLE_WEB_SEARCH,
+        )
+
+        content = response.output_text or ""
+        logger.debug("Model selection response length: %d", len(content))
+
+        # Extract JSON block
+        json_str = self._extract_json_block(content)
+        if not json_str:
+            logger.warning("No JSON block found in model selection response, using default models")
+            return _DEFAULT_MODELS
+
+        # Parse JSON
+        try:
+            data = json.loads(json_str)
+            recommended_models = data.get("recommended_models", [])
+
+            if not recommended_models:
+                logger.warning("No models in recommended_models array, using default models")
+                return _DEFAULT_MODELS
+
+            # Extract model names
+            model_names = []
+            for item in recommended_models:
+                if isinstance(item, dict):
+                    name = item.get("name", "").strip()
+                    if name:
+                        model_names.append(name)
+
+            if not model_names:
+                logger.warning("No valid model names extracted, using default models")
+                return _DEFAULT_MODELS
+
+            logger.info("Selected %d models: %s", len(model_names), model_names)
+
+            # Save selected models to file for reference
+            selected_models_path = self.outputs_dir / "selected_models.json"
+            try:
+                with open(selected_models_path, "w") as f:
+                    json.dump({
+                        "selected_models": model_names,
+                        "raw_response": content
+                    }, f, indent=2)
+                logger.info("Selected models saved to %s", selected_models_path)
+            except Exception as e:
+                logger.warning("Failed to save selected models: %s", e)
+
+            return model_names
+
+        except json.JSONDecodeError as e:
+            logger.warning("Failed to parse model selection JSON: %s, using default models", e)
+            return _DEFAULT_MODELS
+
+    @weave.op()
+    def run(self, model_list: Optional[list[str]] = None, use_dynamic_selection: bool = False) -> Dict[str, Dict[str, Any]]:
         """Run model recommender for all models in the list.
 
         Args:
-            model_list: List of model names. If None, uses default_models from config.
+            model_list: List of model names. If None and use_dynamic_selection=False, uses default_models from config.
+                       If use_dynamic_selection=True, dynamically selects models using LLM.
+            use_dynamic_selection: If True, use LLM to select models dynamically. Ignores model_list parameter.
 
         Returns:
             Dict mapping model names to their recommendations
         """
-        if model_list is None:
+        if use_dynamic_selection:
+            logger.info("Using dynamic model selection")
+            model_list = self.select_models()
+        elif model_list is None:
             model_list = _DEFAULT_MODELS
             logger.info("Using default models from config: %s", model_list)
 
