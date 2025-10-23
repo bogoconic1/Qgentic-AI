@@ -204,19 +204,19 @@ class DeveloperAgent:
         )
 
     def _format_later_recommendations(self) -> str:
-        """Format LATER recommendations as a string for SOTA search context."""
+        """Format NICE_TO_HAVE recommendations as a string for SOTA search context."""
         if not self.later_recommendations:
-            return "No LATER recommendations available."
+            return "No NICE_TO_HAVE recommendations available."
 
         sections = []
 
         # Preprocessing
         preprocessing = self.later_recommendations.get("preprocessing", {})
         if preprocessing:
-            sections.append("## Preprocessing LATER Recommendations")
+            sections.append("## Preprocessing NICE_TO_HAVE Recommendations")
             for category, content in preprocessing.items():
-                if isinstance(content, dict) and "LATER" in content:
-                    later_items = content["LATER"]
+                if isinstance(content, dict) and "NICE_TO_HAVE" in content:
+                    later_items = content["NICE_TO_HAVE"]
                     if later_items:
                         sections.append(f"\n### {category.replace('_', ' ').title()}")
                         for item in later_items:
@@ -230,9 +230,9 @@ class DeveloperAgent:
 
         # Loss function
         loss_fn = self.later_recommendations.get("loss_function", {})
-        if loss_fn and "LATER" in loss_fn:
-            sections.append("\n## Loss Function LATER Recommendations")
-            later_losses = loss_fn["LATER"]
+        if loss_fn and "NICE_TO_HAVE" in loss_fn:
+            sections.append("\n## Loss Function NICE_TO_HAVE Recommendations")
+            later_losses = loss_fn["NICE_TO_HAVE"]
             if isinstance(later_losses, list):
                 for item in later_losses:
                     if isinstance(item, dict):
@@ -245,12 +245,12 @@ class DeveloperAgent:
 
         # Hyperparameters
         hyperparams = self.later_recommendations.get("hyperparameters", {})
-        if hyperparams and "LATER" in hyperparams:
-            later_section = hyperparams["LATER"]
+        if hyperparams and "NICE_TO_HAVE" in hyperparams:
+            later_section = hyperparams["NICE_TO_HAVE"]
 
             hp_list = later_section.get("hyperparameters", [])
             if hp_list:
-                sections.append("\n## Hyperparameters LATER Recommendations")
+                sections.append("\n## Hyperparameters NICE_TO_HAVE Recommendations")
                 for item in hp_list:
                     if isinstance(item, dict):
                         hp = item.get("hyperparameter", "")
@@ -262,7 +262,7 @@ class DeveloperAgent:
 
             arch_list = later_section.get("architectures", [])
             if arch_list:
-                sections.append("\n### Architecture LATER Recommendations")
+                sections.append("\n### Architecture NICE_TO_HAVE Recommendations")
                 for item in arch_list:
                     if isinstance(item, dict):
                         arch = item.get("architecture", "")
@@ -274,10 +274,10 @@ class DeveloperAgent:
 
         # Inference strategies
         inference = self.later_recommendations.get("inference_strategies", {})
-        if inference and "LATER" in inference:
-            later_section = inference["LATER"]
+        if inference and "NICE_TO_HAVE" in inference:
+            later_section = inference["NICE_TO_HAVE"]
             if "inference_strategies" in later_section:
-                sections.append("\n## Inference Strategies LATER Recommendations")
+                sections.append("\n## Inference Strategies NICE_TO_HAVE Recommendations")
                 strategies = later_section["inference_strategies"]
                 if isinstance(strategies, list):
                     for item in strategies:
@@ -289,7 +289,7 @@ class DeveloperAgent:
                                 if explanation:
                                     sections.append(f"  {explanation}")
 
-        return "\n".join(sections) if sections else "No LATER recommendations available."
+        return "\n".join(sections) if sections else "No NICE_TO_HAVE recommendations available."
 
     def _extract_code(self, content: str) -> str:
         logger.debug("Extracting code from completion content. Content length: %s", len(content))

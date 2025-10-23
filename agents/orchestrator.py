@@ -60,50 +60,50 @@ def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, n
     return key, best_score, best_code, blacklisted_ideas
 
 def _extract_now_recommendations(recommendations: dict) -> dict:
-    """Extract only NOW recommendations from model recommendations.
+    """Extract only MUST_HAVE recommendations from model recommendations.
 
     Filters out citations and est_runtime_minutes_gpu fields.
-    Returns a dict with the same structure but only NOW sections.
+    Returns a dict with the same structure but only MUST_HAVE sections.
     """
     now_only = {}
 
-    # Preprocessing - each category has NOW/LATER structure
+    # Preprocessing - each category has MUST_HAVE/NICE_TO_HAVE structure
     preprocessing = recommendations.get("preprocessing", {})
     if preprocessing:
         now_only["preprocessing"] = {}
         for category, content in preprocessing.items():
-            if isinstance(content, dict) and "NOW" in content:
-                now_items = content["NOW"]
+            if isinstance(content, dict) and "MUST_HAVE" in content:
+                now_items = content["MUST_HAVE"]
                 if isinstance(now_items, list):
                     now_only["preprocessing"][category] = {
-                        "NOW": now_items
+                        "MUST_HAVE": now_items
                     }
 
-    # Loss function - NOW is an object, LATER is an array
+    # Loss function - MUST_HAVE is an object, NICE_TO_HAVE is an array
     loss_fn = recommendations.get("loss_function", {})
-    if loss_fn and "NOW" in loss_fn:
+    if loss_fn and "MUST_HAVE" in loss_fn:
         now_only["loss_function"] = {
-            "NOW": loss_fn["NOW"]
+            "MUST_HAVE": loss_fn["MUST_HAVE"]
         }
 
-    # Hyperparameters - NOW has hyperparameters and architectures arrays
+    # Hyperparameters - MUST_HAVE has hyperparameters and architectures arrays
     hyperparams = recommendations.get("hyperparameters", {})
-    if hyperparams and "NOW" in hyperparams:
-        now_section = hyperparams["NOW"]
+    if hyperparams and "MUST_HAVE" in hyperparams:
+        now_section = hyperparams["MUST_HAVE"]
         cleaned_now = {}
         if "hyperparameters" in now_section:
             cleaned_now["hyperparameters"] = now_section["hyperparameters"]
         if "architectures" in now_section:
             cleaned_now["architectures"] = now_section["architectures"]
-        now_only["hyperparameters"] = {"NOW": cleaned_now}
+        now_only["hyperparameters"] = {"MUST_HAVE": cleaned_now}
 
-    # Inference strategies - NOW has inference_strategies array
+    # Inference strategies - MUST_HAVE has inference_strategies array
     inference = recommendations.get("inference_strategies", {})
-    if inference and "NOW" in inference:
-        now_section = inference["NOW"]
+    if inference and "MUST_HAVE" in inference:
+        now_section = inference["MUST_HAVE"]
         if "inference_strategies" in now_section:
             now_only["inference_strategies"] = {
-                "NOW": {
+                "MUST_HAVE": {
                     "inference_strategies": now_section["inference_strategies"]
                 }
             }
@@ -111,50 +111,50 @@ def _extract_now_recommendations(recommendations: dict) -> dict:
     return now_only
 
 def _extract_later_recommendations(recommendations: dict) -> dict:
-    """Extract only LATER recommendations from model recommendations.
+    """Extract only NICE_TO_HAVE recommendations from model recommendations.
 
     Filters out citations and est_runtime_minutes_gpu fields.
-    Returns a dict with the same structure but only LATER sections.
+    Returns a dict with the same structure but only NICE_TO_HAVE sections.
     """
     later_only = {}
 
-    # Preprocessing - each category has NOW/LATER structure
+    # Preprocessing - each category has MUST_HAVE/NICE_TO_HAVE structure
     preprocessing = recommendations.get("preprocessing", {})
     if preprocessing:
         later_only["preprocessing"] = {}
         for category, content in preprocessing.items():
-            if isinstance(content, dict) and "LATER" in content:
-                later_items = content["LATER"]
+            if isinstance(content, dict) and "NICE_TO_HAVE" in content:
+                later_items = content["NICE_TO_HAVE"]
                 if isinstance(later_items, list):
                     later_only["preprocessing"][category] = {
-                        "LATER": later_items
+                        "NICE_TO_HAVE": later_items
                     }
 
-    # Loss function - LATER is an array
+    # Loss function - NICE_TO_HAVE is an array
     loss_fn = recommendations.get("loss_function", {})
-    if loss_fn and "LATER" in loss_fn:
+    if loss_fn and "NICE_TO_HAVE" in loss_fn:
         later_only["loss_function"] = {
-            "LATER": loss_fn["LATER"]
+            "NICE_TO_HAVE": loss_fn["NICE_TO_HAVE"]
         }
 
-    # Hyperparameters - LATER has hyperparameters and architectures arrays
+    # Hyperparameters - NICE_TO_HAVE has hyperparameters and architectures arrays
     hyperparams = recommendations.get("hyperparameters", {})
-    if hyperparams and "LATER" in hyperparams:
-        later_section = hyperparams["LATER"]
+    if hyperparams and "NICE_TO_HAVE" in hyperparams:
+        later_section = hyperparams["NICE_TO_HAVE"]
         cleaned_later = {}
         if "hyperparameters" in later_section:
             cleaned_later["hyperparameters"] = later_section["hyperparameters"]
         if "architectures" in later_section:
             cleaned_later["architectures"] = later_section["architectures"]
-        later_only["hyperparameters"] = {"LATER": cleaned_later}
+        later_only["hyperparameters"] = {"NICE_TO_HAVE": cleaned_later}
 
-    # Inference strategies - LATER has inference_strategies array
+    # Inference strategies - NICE_TO_HAVE has inference_strategies array
     inference = recommendations.get("inference_strategies", {})
-    if inference and "LATER" in inference:
-        later_section = inference["LATER"]
+    if inference and "NICE_TO_HAVE" in inference:
+        later_section = inference["NICE_TO_HAVE"]
         if "inference_strategies" in later_section:
             later_only["inference_strategies"] = {
-                "LATER": {
+                "NICE_TO_HAVE": {
                     "inference_strategies": later_section["inference_strategies"]
                 }
             }
@@ -164,7 +164,7 @@ def _extract_later_recommendations(recommendations: dict) -> dict:
 def _format_recommendations_for_developer(recommendations: dict) -> str:
     """Format model recommendations for DeveloperAgent.
 
-    Formats the NOW recommendations into a readable string that can be passed
+    Formats the MUST_HAVE recommendations into a readable string that can be passed
     to DeveloperAgent as guidance.
     """
     details = []
@@ -174,8 +174,8 @@ def _format_recommendations_for_developer(recommendations: dict) -> str:
     if preprocessing:
         details.append("## Preprocessing Strategies")
         for category, content in preprocessing.items():
-            if isinstance(content, dict) and "NOW" in content:
-                now_items = content["NOW"]
+            if isinstance(content, dict) and "MUST_HAVE" in content:
+                now_items = content["MUST_HAVE"]
                 if now_items and isinstance(now_items, list):
                     details.append(f"\n### {category.replace('_', ' ').title()}")
                     for item in now_items:
@@ -187,9 +187,9 @@ def _format_recommendations_for_developer(recommendations: dict) -> str:
 
     # Loss function
     loss_fn = recommendations.get("loss_function", {})
-    if loss_fn and "NOW" in loss_fn:
+    if loss_fn and "MUST_HAVE" in loss_fn:
         details.append("\n## Loss Function")
-        now_loss = loss_fn["NOW"]
+        now_loss = loss_fn["MUST_HAVE"]
         loss_name = now_loss.get("loss_function", "")
         loss_exp = now_loss.get("explanation", "")
         if loss_name:
@@ -197,8 +197,8 @@ def _format_recommendations_for_developer(recommendations: dict) -> str:
 
     # Hyperparameters
     hyperparams = recommendations.get("hyperparameters", {})
-    if hyperparams and "NOW" in hyperparams:
-        now_section = hyperparams["NOW"]
+    if hyperparams and "MUST_HAVE" in hyperparams:
+        now_section = hyperparams["MUST_HAVE"]
 
         details.append("\n## Hyperparameters")
         hp_list = now_section.get("hyperparameters", [])
@@ -222,8 +222,8 @@ def _format_recommendations_for_developer(recommendations: dict) -> str:
 
     # Inference strategies
     inference = recommendations.get("inference_strategies", {})
-    if inference and "NOW" in inference:
-        now_section = inference["NOW"]
+    if inference and "MUST_HAVE" in inference:
+        now_section = inference["MUST_HAVE"]
         details.append("\n## Inference Strategies")
         strategies = now_section.get("inference_strategies", [])
         for item in strategies:
