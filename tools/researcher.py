@@ -55,8 +55,16 @@ def _timeout_handler(signum, frame):
 
 
 @weave.op()
-def ask_eda(question: str, description: str, data_path: str, max_attempts: int | None = None) -> str:
-    """Asks a question about the data provided for exploratory data analysis (EDA)"""
+def ask_eda(question: str, description: str, data_path: str, max_attempts: int | None = None, timeout_seconds: int = 600) -> str:
+    """Asks a question about the data provided for exploratory data analysis (EDA)
+
+    Args:
+        question: The EDA question to answer
+        description: Competition description
+        data_path: Path to the data directory
+        max_attempts: Maximum number of attempts (default from config)
+        timeout_seconds: Timeout for code execution in seconds (default 600 = 10 minutes)
+    """
     # Prepare media directory for EDA charts and expose to executed code
     try:
         preset_media = os.environ.get("MEDIA_DIR", "").strip()
@@ -109,9 +117,10 @@ def ask_eda(question: str, description: str, data_path: str, max_attempts: int |
                 with open("code_abc.py", "r") as f:
                     code_text = f.read()
 
-                # Set timeout of 600 seconds (10 minutes)
+                # Set timeout
                 signal.signal(signal.SIGALRM, _timeout_handler)
-                signal.alarm(600)
+                signal.alarm(timeout_seconds)
+                logger.debug("Set execution timeout to %d seconds", timeout_seconds)
 
                 try:
                     exec(code_text, globals())
@@ -128,8 +137,12 @@ def ask_eda(question: str, description: str, data_path: str, max_attempts: int |
                 # Cancel alarm and restore stdout
                 signal.alarm(0)
                 sys.stdout = old_stdout
-                logger.error("ask_eda execution timed out after 600 seconds")
-                return "Your query cannot be executed within 10 minutes"
+                logger.error("ask_eda execution timed out after %d seconds", timeout_seconds)
+                timeout_minutes = timeout_seconds / 60
+                if timeout_minutes >= 1:
+                    return f"Your query cannot be executed within {timeout_minutes:.0f} minutes"
+                else:
+                    return f"Your query cannot be executed within {timeout_seconds} seconds"
             except Exception as e:
                 # Cancel alarm and restore stdout
                 signal.alarm(0)
