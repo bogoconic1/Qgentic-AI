@@ -85,7 +85,7 @@ def search_sota_suggestions(
     failed_to_improve_score: bool,
     failed_ideas: list[str],
     executed_code: str | None = None,
-    plans: list[str] | None = None,
+    later_recommendations: str | None = None,
 ) -> str:
     """Use web search to surface potential SOTA improvements for the competition."""
     logger.info("Dispatching SOTA web search")
@@ -94,22 +94,17 @@ def search_sota_suggestions(
     executed_code_text = executed_code or "No explicit code snippet was provided for the last attempt."
     failed_ideas_text = "\n".join(f"- {idea}" for idea in failed_ideas)
 
-    # Optional: include researcher plans as a separate section for plan-aware suggestions
-    plans_section = ""
-    if plans:
-        blocks: list[str] = []
-        for idx, p in enumerate(plans, start=1):
-            # Truncate to avoid excessive token usage
-            text = p if len(p) <= 30000 else p[-30000:]
-            blocks.append(f"<plan id=\"{idx}\">\n{text}\n</plan>")
-        plans_section = "\n<researcher_plans>\n" + "\n\n".join(blocks) + "\n</researcher_plans>\n"
+    # Include LATER recommendations as context for more advanced suggestions
+    suggestions_section = ""
+    if later_recommendations:
+        suggestions_section = f"\n<suggestions>\n{later_recommendations}\n</suggestions>\n"
 
     system_prompt = prompt_sota_system()
 
     outcome_status = "No improvement" if failed_to_improve_score else "Improved or matched"
     prompt = prompt_sota_user(
         description=description,
-        plans_section=plans_section,
+        plans_section=suggestions_section,
         failed_ideas_text=failed_ideas_text,
         executed_suggestion_text=executed_suggestion_text,
         executed_code_text=executed_code_text,

@@ -65,7 +65,7 @@ class DeveloperAgent:
       <task_root>/<slug>/<outputs_dir>/<iteration>/submission.csv
     """
 
-    def __init__(self, slug: str, iteration: int, model_name: Optional[str] = None, example_code: Optional[str] = None):
+    def __init__(self, slug: str, iteration: int, model_name: Optional[str] = None, model_recommendations: Optional[str] = None, later_recommendations: Optional[dict] = None):
         load_dotenv()
         self.slug = slug
         self.iteration = iteration
@@ -96,9 +96,11 @@ class DeveloperAgent:
         self.best_score = float("inf") if self.is_lower_better else float("-inf")
 
         # File targets
-        self.plan_path = self.outputs_dir / "plan.md"
         self.latest_submission_path: Optional[Path] = None
         self.benchmark_info: Optional[dict] = None
+
+        # LATER recommendations for progressive enhancement
+        self.later_recommendations: Optional[dict] = later_recommendations
         self.threshold_directive: str = ""
 
         os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
@@ -106,11 +108,12 @@ class DeveloperAgent:
         # Patch mode configuration
         self.patch_mode_enabled = _PATCH_MODE_ENABLED
 
-        # Optional model constraints for the developer system prompt
+        # Model-specific strategy recommendations for the developer system prompt
         self.model_name: Optional[str] = model_name
-        self.example_code: Optional[str] = example_code
+        self.model_recommendations: Optional[str] = model_recommendations
 
-        assert self.model_name is not None and self.example_code is not None, "Both model_name and example_code must be provided"
+        assert self.model_name is not None and self.model_recommendations is not None, "Both model_name and model_recommendations must be provided"
+        assert self.later_recommendations is not None, "later_recommendations must be provided"
 
         logger.info(
             "Initialized DeveloperAgent for slug=%s iteration=%s", self.slug, self.iteration
@@ -182,24 +185,111 @@ class DeveloperAgent:
             description=self.description,
             directory_listing=directory_listing,
             model_name=self.model_name,
-            example_code=self.example_code,
+            model_recommendations=self.model_recommendations,
             slug=self.slug,
         )
 
-    def _build_user_prompt(self, plan_markdown: str, version: int) -> str:
+    def _build_user_prompt(self, version: int) -> str:
         logger.debug("Building user prompt")
         base_dir_display = self.base_dir
         outputs_dir_display = self.outputs_dir
         log_path_display = self.outputs_dir / self._log_filename(version)
         submission_path_display = self.outputs_dir / self._submission_filename(version)
         return prompt_build_user(
-            plan_markdown=plan_markdown,
             base_dir=base_dir_display,
             outputs_dir=outputs_dir_display,
             log_path=log_path_display,
             submission_path=submission_path_display,
             threshold_directive=self.threshold_directive,
         )
+
+    def _format_later_recommendations(self) -> str:
+        """Format LATER recommendations as a string for SOTA search context."""
+        if not self.later_recommendations:
+            return "No LATER recommendations available."
+
+        sections = []
+
+        # Preprocessing
+        preprocessing = self.later_recommendations.get("preprocessing", {})
+        if preprocessing:
+            sections.append("## Preprocessing LATER Recommendations")
+            for category, content in preprocessing.items():
+                if isinstance(content, dict) and "LATER" in content:
+                    later_items = content["LATER"]
+                    if later_items:
+                        sections.append(f"\n### {category.replace('_', ' ').title()}")
+                        for item in later_items:
+                            if isinstance(item, dict):
+                                strategy = item.get("strategy", "")
+                                explanation = item.get("explanation", "")
+                                if strategy:
+                                    sections.append(f"- {strategy}")
+                                    if explanation:
+                                        sections.append(f"  {explanation}")
+
+        # Loss function
+        loss_fn = self.later_recommendations.get("loss_function", {})
+        if loss_fn and "LATER" in loss_fn:
+            sections.append("\n## Loss Function LATER Recommendations")
+            later_losses = loss_fn["LATER"]
+            if isinstance(later_losses, list):
+                for item in later_losses:
+                    if isinstance(item, dict):
+                        loss_name = item.get("loss_function", "")
+                        explanation = item.get("explanation", "")
+                        if loss_name:
+                            sections.append(f"- {loss_name}")
+                            if explanation:
+                                sections.append(f"  {explanation}")
+
+        # Hyperparameters
+        hyperparams = self.later_recommendations.get("hyperparameters", {})
+        if hyperparams and "LATER" in hyperparams:
+            later_section = hyperparams["LATER"]
+
+            hp_list = later_section.get("hyperparameters", [])
+            if hp_list:
+                sections.append("\n## Hyperparameters LATER Recommendations")
+                for item in hp_list:
+                    if isinstance(item, dict):
+                        hp = item.get("hyperparameter", "")
+                        explanation = item.get("explanation", "")
+                        if hp:
+                            sections.append(f"- {hp}")
+                            if explanation:
+                                sections.append(f"  {explanation}")
+
+            arch_list = later_section.get("architectures", [])
+            if arch_list:
+                sections.append("\n### Architecture LATER Recommendations")
+                for item in arch_list:
+                    if isinstance(item, dict):
+                        arch = item.get("architecture", "")
+                        explanation = item.get("explanation", "")
+                        if arch:
+                            sections.append(f"- {arch}")
+                            if explanation:
+                                sections.append(f"  {explanation}")
+
+        # Inference strategies
+        inference = self.later_recommendations.get("inference_strategies", {})
+        if inference and "LATER" in inference:
+            later_section = inference["LATER"]
+            if "inference_strategies" in later_section:
+                sections.append("\n## Inference Strategies LATER Recommendations")
+                strategies = later_section["inference_strategies"]
+                if isinstance(strategies, list):
+                    for item in strategies:
+                        if isinstance(item, dict):
+                            strategy = item.get("strategy", "")
+                            explanation = item.get("explanation", "")
+                            if strategy:
+                                sections.append(f"- {strategy}")
+                                if explanation:
+                                    sections.append(f"  {explanation}")
+
+        return "\n".join(sections) if sections else "No LATER recommendations available."
 
     def _extract_code(self, content: str) -> str:
         logger.debug("Extracting code from completion content. Content length: %s", len(content))
@@ -406,7 +496,7 @@ class DeveloperAgent:
             self.blacklisted_ideas.append(entry)
 
     @weave.op()
-    def run(self, plan_markdown: str, max_time_seconds: int = 6 * 3600) -> bool:
+    def run(self, max_time_seconds: int = 6 * 3600) -> bool:
         logger.info(
             "Starting developer run for slug=%s iteration=%s",
             self.slug,
@@ -414,20 +504,11 @@ class DeveloperAgent:
         )
         start_time = time.time()
         deadline = start_time + max_time_seconds
-        # you only keep the part within ```plan tags
-        start_index = plan_markdown.find("## External Data Recommendations")
-        if start_index != -1: plan_markdown = plan_markdown[start_index:].strip()
-        try:
-            with open(self.plan_path, "w") as f:
-                f.write(plan_markdown)
-            logger.debug("Plan markdown persisted to %s", self.plan_path)
-        except Exception:
-            logger.exception("Failed to persist plan markdown to %s", self.plan_path)
 
         run_score = 0
 
         system_prompt = self._compose_system()
-        user_prompt = self._build_user_prompt(plan_markdown, version=1)
+        user_prompt = self._build_user_prompt(version=1)
         input_list = [{"role": "user", "content": user_prompt}]
         
         attempt = 0
@@ -607,21 +688,8 @@ class DeveloperAgent:
                 self.previous_runs.append((code, run_score))
 
                 try:
-                    # Collect all researcher plans in outputs dir: plan.md, plan_*.md
-                    # not an issue: no plan is acceptable
-                    plan_texts: list[str] = []
-                    try:
-                        if self.plan_path.exists():
-                            with open(self.plan_path, "r") as f:
-                                plan_texts.append(f.read())
-                    except Exception:
-                        pass
-                    try:
-                        for extra_plan_path in sorted(self.outputs_dir.glob("plan_*.md")):
-                            with open(extra_plan_path, "r") as f:
-                                plan_texts.append(f.read())
-                    except Exception:
-                        pass
+                    # Format LATER recommendations for SOTA search context
+                    later_context = self._format_later_recommendations()
 
                     sota_suggestions = search_sota_suggestions(
                         self.description,
@@ -630,7 +698,7 @@ class DeveloperAgent:
                         failed_to_improve_score=not improvement,
                         failed_ideas=self.blacklisted_ideas,
                         executed_code=self.last_suggestion_code,
-                        plans=plan_texts,
+                        later_recommendations=later_context,
                     )
                 except Exception:
                     logger.exception("Failed to fetch SOTA suggestions for attempt %s", attempt)

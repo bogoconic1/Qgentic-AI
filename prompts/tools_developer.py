@@ -2,7 +2,7 @@ from __future__ import annotations
 
 
 def build_stack_trace_prompt() -> str:
-    return """Developer: # Role and Objective
+    return """# Role and Objective
 Guide the assistant in generating a structured and actionable debugging workflow based on a Python traceback, leveraging web search for supporting information and ensuring the resolution is validated.
 
 # Instructions

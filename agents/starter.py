@@ -11,6 +11,7 @@ from prompts.starter_agent import (
     build_system as prompt_build_system,
     build_user as prompt_build_user,
 )
+from constants import VALID_TASK_TYPES, normalize_task_type
 import weave
 
 
@@ -28,12 +29,6 @@ _OUTPUTS_DIRNAME = _PATH_CFG.get("outputs_dirname")
 
 
 class StarterAgent:
-    """Propose 5 starter model ideas with code snippets and JSON summary.
-
-    Inputs: competition description and the full 2024 report (handled in prompt).
-    Outputs: starter_suggestions.txt (raw), starter_suggestions.json (parsed JSON).
-    """
-
     def __init__(self, slug: str, iteration: int):
         load_dotenv()
         self.slug = slug
@@ -116,8 +111,34 @@ class StarterAgent:
             json_text = self._extract_json_block(content)
             if json_text:
                 suggestions = json.loads(json_text)
-        except Exception:
-            logger.debug("Failed to parse JSON from starter response")
+
+                # Validate and normalize task_type
+                if "task_type" not in suggestions:
+                    raise ValueError("StarterAgent response missing required field 'task_type'")
+
+                raw_task_type = suggestions["task_type"]
+                normalized_task_type = normalize_task_type(raw_task_type)
+
+                if raw_task_type.lower() != normalized_task_type:
+                    logger.info(f"Normalized task_type from '{raw_task_type}' to '{normalized_task_type}'")
+
+                if normalized_task_type not in VALID_TASK_TYPES:
+                    raise ValueError(
+                        f"Invalid task_type '{raw_task_type}' (normalized: '{normalized_task_type}'). "
+                        f"Must be one of {VALID_TASK_TYPES}"
+                    )
+
+                suggestions["task_type"] = normalized_task_type
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse JSON from starter response: {e}")
+            raise
+        except ValueError as e:
+            logger.error(f"Validation error in starter response: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error processing starter response: {e}")
+            raise
 
         # Persist JSON
         try:

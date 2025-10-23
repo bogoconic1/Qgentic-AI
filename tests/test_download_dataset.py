@@ -20,6 +20,5 @@ wandb.init(entity='520f8592abc', project='qgentic-ai', name=f'test_download_data
 weave.init(project_name='520f8592abc/qgentic-ai')
 
 slug = "us-patent-phrase-to-phrase-matching"
-query = f"Download CPC Scheme 2021.05 or later: machine-readable CPC code-to-title and definitions (XML/CSV/JSON). Prefer USPTO/Cooperative Patent Classification official scheme. Save under task/us-patent-phrase-to-phrase-matching/external/cpc_scheme/."
-query = "xhlulu cpc codes"
-print(researcher.download_external_datasets(query=query, slug=slug))
+query = f"Cooperative Patent Classification CPC Scheme and Definitions CSV mapping (code, title, definition) version 2021.05"
+print(researcher.download_external_datasets(dataset_name=query, slug=slug))

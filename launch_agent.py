@@ -81,6 +81,16 @@ def main():
     orchestrator = Orchestrator(args.slug, args.iteration)
     orchestrator.run(max_time_seconds=args.time_seconds)
 
+    # Gracefully close tracking backends to avoid hanging background threads
+    try:
+        weave.finish()
+    except Exception:
+        pass
+    try:
+        wandb.finish()
+    except Exception:
+        pass
+
 
 if __name__ == "__main__":
     main()

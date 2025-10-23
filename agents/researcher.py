@@ -158,19 +158,22 @@ class ResearcherAgent:
     def _compose_system(self) -> str:
         return prompt_build_system(str(self.base_dir))
 
-    def _read_models_summary(self) -> str:
+    def _read_starter_suggestions(self) -> str:
         # Prefer raw starter_suggestions.txt; fallback to JSON; else 'None'
         json_path = self.outputs_dir / "starter_suggestions.json"
         with open(json_path, "r") as f:
-            models = json.load(f)
-        return "\n".join([f"- {model['suggestion']}" for model in models.values()])
+            starter_suggestions = json.load(f)
+        res = ""
+        for key in starter_suggestions.keys():
+            res += f"<{key}>\n{starter_suggestions[key]}\n</{key}>\n"
+        return res
 
     @weave.op()
     def build_plan(self, max_steps: int | None = None) -> str:
         system_prompt = self._compose_system()
-        models_summary = self._read_models_summary()
+        starter_suggestions = self._read_starter_suggestions()
         input_list = [
-            {"role": "user", "content": prompt_initial_user(self.description, models_summary)},
+            {"role": "user", "content": prompt_initial_user(self.description, starter_suggestions)},
         ]
 
         max_steps = max_steps or _DEFAULT_MAX_STEPS

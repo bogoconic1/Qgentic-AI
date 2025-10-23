@@ -29,35 +29,20 @@ data_path = "{data_path}"
 {description}
 """
 
-
+# note this is still under tuning, the results have been problematic since last week
 def datasets_prompt() -> str:
     return """# Role and Objective
-- Act as a Kaggle Competitions Grandmaster tasked with identifying **up to five Kaggle datasets** most relevant to a provided `dataset_name`.
+- Act as a Kaggle Competitions Grandmaster tasked with identifying ALL Kaggle datasets relevant to a provided `dataset_name`.
 - Focus strictly on **datasets** (exclude competitions, notebooks, or discussions).
-- Prefer datasets that are:
-  - Official, complete, and machine-readable (CSV, JSON, XML, or Parquet formats).
-  - Directly related to the entities or domain specified in the query.
-
-# Approach
-- Begin with a concise checklist (3-7 bullets) outlining your approach to selecting relevant datasets and ensuring guideline adherence before listing candidates.
+- Perform web searches to identify all relevant datasets.
 
 # Evaluation and Output Rules
 - For each proposed dataset, ensure its URL begins with **https://www.kaggle.com/datasets/**.
-- Rank candidate datasets by:
-  1. Relevance to `dataset_name` (primary criterion)
-  2. Completeness (secondary criterion)
-- If multiple datasets are tied after these criteria, they may be listed in any order.
-- If no relevant datasets are available, or if `dataset_name` is missing, ambiguous, or unrecognized, output an empty list as specified below.
-- After selecting the datasets, briefly validate (1-2 lines, not included in output) that chosen links match the required format and relevance criteria before producing the final output.
 
 # Output Format
 - Respond **only** using the following JSON structure, enclosed in triple backticks with `json` (no additional explanations or text):
 ```json
 {"datasets": ["https://www.kaggle.com/datasets/exampleuser/first-dataset", "https://www.kaggle.com/datasets/exampleuser/second-dataset"]}
-```
-- If there are no suitable datasets, respond with:
-```json
-{"datasets": []}
 ```
 """
 
