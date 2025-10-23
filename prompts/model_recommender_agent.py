@@ -64,6 +64,7 @@ List the selected categories with **1-2 sentences** explaining *why* each is rel
 - …(add more if justified)
 
 ### Suggestions
+Provide a single JSON block within ```json backticks with **NOW** and **LATER** sections.  
 Provide **NOW** and **LATER** recommendations **per selected category**. Each item must include a crisp rationale and compute awareness.
 
 **Schema (example; adapt categories to the task):**
@@ -88,7 +89,7 @@ Provide **NOW** and **LATER** recommendations **per selected category**. Each it
   "tokenization": { "NOW": [...], "LATER": [...] },
   "data_augmentation": { "NOW": [...], "LATER": [...] }
 }
-
+```
 """
 
 def loss_function_system_prompt() -> str:
@@ -173,7 +174,7 @@ List up to 5 candidate losses briefly explaining why each was considered.
 
 ### Final Recommendation
 
-Provide a single **JSON block** structured as follows.  
+Provide a single JSON block within ```json backticks with **NOW** and **LATER** sections.  
 The **NOW** section contains exactly one loss;  
 the **LATER** section may contain multiple.
 
@@ -191,6 +192,7 @@ the **LATER** section may contain multiple.
     ...
   ]
 }
+```
 """
 
 def hyperparameter_tuning_system_prompt() -> str:
@@ -296,7 +298,7 @@ When selecting hyperparameters or architectures:
 ---
 
 ## Output Format
-Provide a single JSON object with NOW and LATER sections.  
+Provide a single JSON block within ```json backticks with **NOW** and **LATER** sections.  
 Each contains two lists: `hyperparameters` and `architectures`.
 
 ```json
@@ -312,7 +314,7 @@ Each contains two lists: `hyperparameters` and `architectures`.
   },
   "LATER": {
     "hyperparameters": [
-      { "hyperparameter": "string (e.g., 'layerwise_lr_decay: 0.9')", "explanation": "string", "est_runtime_minutes_gpu": 0 },
+      { "hyperparameter": "string (e.g., 'layerwise_lr_decay: 0.9')", "explanation": "string" },
       ...
     ],
     "architectures": [
@@ -321,6 +323,7 @@ Each contains two lists: `hyperparameters` and `architectures`.
     ]
   }
 }
+```
 """
 
 def inference_strategy_system_prompt() -> str:
@@ -430,7 +433,7 @@ When selecting inference strategies:
 ---
 
 ## Output Format
-Provide a single JSON block with **NOW** and **LATER** sections.  
+Provide a single JSON block within ```json backticks with **NOW** and **LATER** sections.  
 Each section contains a list of inference strategies with concise explanations.
 
 ```json
@@ -460,6 +463,7 @@ Each section contains a list of inference strategies with concise explanations.
     ]
   }
 }
+```
 """
 
 def build_user_prompt(

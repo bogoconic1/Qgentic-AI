@@ -15,13 +15,16 @@ You should perform web searches to determine how to set up and configure `{model
 **Model Name:**
 `{model_name}`
 
+**Model Recommendations:**
+{model_recommendations}
+
 **Hard Constraints:**
 - Use ONLY `{model_name}` (no substitutions or fallback models).
 - Deliver a fully-contained, single-file script.
 - Use CUDA whenever available.
 - Place all `logging.info` statements for validation results only (per fold and overall); only log data loading/setup if directly relevant to validation.
 - Place `logging.basicConfig()` at the start of the script.
-- Deep learning: always use `float16`, **no** gradient checkpointing. Do not code fallback methods.
+- Deep learning: always use `bfloat16`, **no** gradient checkpointing. Do not code fallback methods. You must call float() before casting to numpy() if needed.
 - LightGBM (if used): **CPU only**.
 - If you use `transformers.Trainer`, use eval_strategy instead of evaluation_strategy.
 - Do not use `try/except` to suppress errors.
