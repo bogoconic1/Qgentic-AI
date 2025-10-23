@@ -169,6 +169,8 @@ class Orchestrator:
             else:
                 raise RuntimeError("No model recommendations found")
 
+        return
+
         # Phase 4: Baseline Developer Stage - Evaluate models with recommendations
         baseline_results = {}
         tasks = []

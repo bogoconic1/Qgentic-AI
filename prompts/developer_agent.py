@@ -15,16 +15,6 @@ You should perform web searches to determine how to set up and configure `{model
 **Model Name:**
 `{model_name}`
 
-**Model-Specific Strategy Recommendations**
-{model_recommendations}
-
-**How to Use These Recommendations:**
-- These strategies are tailored specifically for `{model_name}` on this competition
-- Prioritize by: (1) impact on metric, (2) implementation feasibility, (3) time budget
-- Core strategies (preprocessing, loss function, basic hyperparameters) should be implemented first
-- Advanced techniques (multi-sample dropout, EMA, calibration) are optional enhancements
-- Not all recommendations need to be implemented - use your engineering judgment
-
 **Hard Constraints:**
 - Use ONLY `{model_name}` (no substitutions or fallback models).
 - Deliver a fully-contained, single-file script.
@@ -41,7 +31,6 @@ You should perform web searches to determine how to set up and configure `{model
 - External datasets: may be appended **only** to training set.
 - **DEBUG flag**: At the script top, define. Pipeline runs twice: once with `DEBUG=True`, then with `DEBUG=False` (full config). Log which mode is running.
 - **DL Only:** After 1st epoch on fold 0, if loss is NaN, raise Exception to halt.
-- Split: 80% train, 20% validation. **No K-Fold** methods.
 
 **DEBUG mode guidelines**
 - After splitting the data into train and valid, right before starting training, sample train to 1000 rows. For classification, ensure at least one sample per class, so if there are > 1000 classes there will be > 1000 samples. For time series tasks, take the last 1000 rows (most recent) instead of random sampling to preserve temporal order.

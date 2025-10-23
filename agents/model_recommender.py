@@ -18,7 +18,6 @@ from prompts.model_recommender_agent import (
     inference_strategy_system_prompt,
     build_user_prompt,
 )
-from constants import select_preprocessing_categories_dynamically
 
 
 logger = logging.getLogger(__name__)
@@ -244,35 +243,13 @@ class ModelRecommenderAgent:
 
     def _recommend_preprocessing(self, model_name: str) -> Dict[str, Any]:
         """Get preprocessing recommendations for a model."""
-        # Dynamically determine relevant categories based on competition characteristics
-        task_type = self.inputs.get("task_type", "tabular")
-
-        logger.info(
-            "[%s] Dynamically selecting preprocessing categories based on competition characteristics",
-            model_name,
-        )
-
-        categories = select_preprocessing_categories_dynamically(
-            task_type=task_type,
-            competition_description=self.inputs.get("description", ""),
-            research_plan=self.inputs.get("plan"),
-            model_name=model_name,
-        )
-
-        logger.info(
-            "[%s] Dynamically selected preprocessing categories: %s",
-            model_name,
-            categories,
-        )
-
         # Build user prompt with categories
         user_prompt = build_user_prompt(
             description=self.inputs["description"],
             task_type=self.inputs["task_type"],
             task_summary=self.inputs["task_summary"],
             model_name=model_name,
-            research_plan=self.inputs.get("research_plan"),
-            preprocessing_categories=categories,
+            research_plan=self.inputs.get("plan"),
         )
 
         # Call LLM
@@ -293,25 +270,20 @@ class ModelRecommenderAgent:
             json_text = self._extract_json_block(content)
             if not json_text:
                 logger.warning("[%s] No JSON block found in preprocessing response", model_name)
-                return {cat: [] for cat in categories}
+                return {"preprocessing": [], "feature_creation": [], "feature_selection": [], "feature_transformation": [], "tokenization": [], "data_augmentation": []}
 
             # Parse JSON
             result = json.loads(json_text)
             logger.info("[%s] Successfully parsed preprocessing recommendations", model_name)
 
-            # Ensure all expected categories are present
-            for cat in categories:
-                if cat not in result:
-                    result[cat] = []
-
             return result
 
         except json.JSONDecodeError as e:
             logger.warning("[%s] JSON parsing failed for preprocessing: %s", model_name, e)
-            return {cat: [] for cat in categories}
+            return {"preprocessing": [], "feature_creation": [], "feature_selection": [], "feature_transformation": [], "tokenization": [], "data_augmentation": []}
         except Exception as e:
             logger.error("[%s] Error getting preprocessing recommendations: %s", model_name, e)
-            return {cat: [] for cat in categories}
+            return {"preprocessing": [], "feature_creation": [], "feature_selection": [], "feature_transformation": [], "tokenization": [], "data_augmentation": []}
 
     def _recommend_loss_function(self, model_name: str) -> Dict[str, Any]:
         """Get loss function recommendation for a model."""
