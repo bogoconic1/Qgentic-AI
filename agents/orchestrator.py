@@ -81,6 +81,11 @@ def _extract_now_recommendations(recommendations: dict) -> dict:
                         "MUST_HAVE": now_items
                     }
 
+    # Fold split strategy (from loss_function recommendations)
+    fold_split = recommendations.get("loss_function", {}).get("fold_split_strategy")
+    if fold_split:
+        now_only["fold_split_strategy"] = fold_split
+
     # Loss function - MUST_HAVE is an object, NICE_TO_HAVE is an array
     loss_fn = recommendations.get("loss_function", {})
     if loss_fn and "MUST_HAVE" in loss_fn:
@@ -170,6 +175,17 @@ def _format_recommendations_for_developer(recommendations: dict) -> str:
     to DeveloperAgent as guidance.
     """
     details = []
+
+    # Fold split strategy
+    fold_split = recommendations.get("fold_split_strategy", {})
+    if fold_split:
+        strategy = fold_split.get("strategy", "")
+        explanation = fold_split.get("explanation", "")
+        if strategy:
+            details.append("## Cross-Validation Strategy")
+            details.append(f"- Use {strategy}")
+            if explanation:
+                details.append(f"  {explanation}")
 
     # Preprocessing
     preprocessing = recommendations.get("preprocessing", {})
@@ -288,10 +304,16 @@ class Orchestrator:
         # Extract NOW and LATER recommendations for each model
         now_recommendations_all = {}
         later_recommendations_all = {}
+        fold_split_strategies = {}
 
         for model_name, recommendations in model_recommendations.items():
             now_recommendations_all[model_name] = _extract_now_recommendations(recommendations)
             later_recommendations_all[model_name] = _extract_later_recommendations(recommendations)
+
+            # Extract fold split strategy for this model
+            fold_split = recommendations.get("loss_function", {}).get("fold_split_strategy")
+            if fold_split:
+                fold_split_strategies[model_name] = fold_split
         
         # Persist NOW recommendations for future use
         now_rec_path = self.outputs_dir / "now_recommendations.json"
@@ -303,10 +325,12 @@ class Orchestrator:
         with open(later_rec_path, "w") as f:
             json.dump(later_recommendations_all, f, indent=2)
 
-        # Phase 4: Baseline Developer Stage - Evaluate models in parallel with NOW recommendations
-        import logging
-        logger = logging.getLogger(__name__)
+        # Persist fold split strategies for future use
+        fold_split_path = self.outputs_dir / "fold_split_strategies.json"
+        with open(fold_split_path, "w") as f:
+            json.dump(fold_split_strategies, f, indent=2)
 
+        # Phase 4: Baseline Developer Stage - Evaluate models in parallel with NOW recommendations
         baseline_results = {}
 
         # Prepare tasks for parallel execution
@@ -316,8 +340,6 @@ class Orchestrator:
             dev_iter = f"{self.iteration}_{idx}"
             later_recs = later_recommendations_all.get(model_name, {})
             tasks.append((key, dev_iter, model_name, now_recommendations, later_recs))
-
-        logger.info(f"Starting parallel baseline execution for {len(tasks)} models")
 
         # Run all models in parallel using Weave's ThreadPoolExecutor
         with ThreadPoolExecutor(max_workers=5) as executor:
@@ -345,24 +367,22 @@ class Orchestrator:
                         "best_score": best_score,
                         "best_code_file": best_code_file or "",
                         "blacklisted_ideas": blacklisted_ideas,
+                        "fold_split_strategy": fold_split_strategies.get(result_key, {}),
                         "now_recommendations": now_recommendations_all.get(result_key, {}),
                         "later_recommendations": later_recommendations_all.get(result_key, {})
                     }
-                    logger.info(f"Model {result_key} completed: score={best_score}")
 
                     # Persist baseline results incrementally
                     baseline_path = self.outputs_dir / "baseline_results.json"
                     with open(baseline_path, "w") as f:
                         json.dump(baseline_results, f, indent=2)
 
-                except Exception as e:
-                    logger.error(f"Failed to run developer for model {key}: {e}", exc_info=True)
+                except Exception:
+                    # Failed to run developer for this model, continue with others
                     continue
 
         if not baseline_results:
             raise RuntimeError("All developer baseline runs failed")
-
-        logger.info(f"Baseline stage completed: {len(baseline_results)}/{len(tasks)} models succeeded")
 
         # Persist baseline results
         baseline_path = self.outputs_dir / "baseline_results.json"
