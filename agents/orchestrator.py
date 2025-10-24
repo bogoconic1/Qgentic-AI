@@ -36,7 +36,7 @@ def _run_researcher_once(slug: str, iteration: int, run_id: int) -> tuple[int, s
 
 @weave.op()
 def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, now_recommendations: dict, later_recommendations: dict, key: str):
-    """Run a single baseline DeveloperAgent and return (key, best_score, best_code).
+    """Run a single baseline DeveloperAgent and return (key, best_score, best_code_file).
 
     Args:
         slug: Competition slug
@@ -56,8 +56,8 @@ def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, n
         model_recommendations=formatted_recommendations,
         later_recommendations=later_recommendations
     )
-    best_score, best_code, blacklisted_ideas = dev.run(max_time_seconds=9000)
-    return key, best_score, best_code, blacklisted_ideas
+    best_score, best_code_file, blacklisted_ideas = dev.run(max_time_seconds=10800)  # 3 hours
+    return key, best_score, best_code_file, blacklisted_ideas
 
 def _extract_now_recommendations(recommendations: dict) -> dict:
     """Extract only MUST_HAVE recommendations from model recommendations.
@@ -311,7 +311,7 @@ class Orchestrator:
             later_recs = later_recommendations_all.get(model_name, {})
 
             try:
-                key, best_score, best_code, blacklisted_ideas = _run_developer_baseline(
+                key, best_score, best_code_file, blacklisted_ideas = _run_developer_baseline(
                     self.slug,
                     dev_iter,
                     model_name,
@@ -322,7 +322,7 @@ class Orchestrator:
                 baseline_results[key] = {
                     "model_name": key,
                     "best_score": best_score,
-                    "best_code": best_code or "",
+                    "best_code_file": best_code_file or "",
                     "blacklisted_ideas": blacklisted_ideas,
                     "now_recommendations": now_recommendations_all.get(key, {}),
                     "later_recommendations": later_recommendations_all.get(key, {})

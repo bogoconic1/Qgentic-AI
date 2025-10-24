@@ -801,4 +801,4 @@ class DeveloperAgent:
 
             artifact.save()
 
-        return self.best_score, self.best_code, self.blacklisted_ideas
+        return self.best_score, self.best_code_file, self.blacklisted_ideas
