@@ -37,6 +37,8 @@ Single GPU (24GB VRAM)
 - **DEBUG flag**: At the script top, define. Pipeline runs twice: once with `DEBUG=True`, then with `DEBUG=False` (full config). Log which mode is running.
 - **DL Only:** After 1st epoch on fold 0, if loss is NaN, raise Exception to halt.
 - Just train and validate on fold 0. Skip other folds to save time.
+- YOU MUST implement everything in the **Model Recommendations** section above, unless the suggestion is about fold splitting or ensembling.
+- Do not use any `while` loops in your code.
 
 **DEBUG mode guidelines**
 - After splitting the data into train and valid, right before starting training, sample train to 1000 rows. For classification, ensure at least one sample per class, so if there are > 1000 classes there will be > 1000 samples. For time series tasks, take the last 1000 rows (most recent) instead of random sampling to preserve temporal order.
@@ -61,10 +63,6 @@ Your response MUST follow these sections, in order:
 
 ### Checklist: Conceptual Steps
 - ...(3-7 high-level conceptual bullet points)
-
-### Implementation Plan
-- Explain your prioritization rationale (why these strategies first)
-- Explain any recommendations you're deferring due to time/complexity or infeasibility constraints
 
 ### Code
 - Produce a single Python script, enclosed in a triple backtick block with the `python` annotation.
