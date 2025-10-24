@@ -723,6 +723,12 @@ class DeveloperAgent:
                 else:
                     logger.info("SOTA response did not include a new suggestion summary.")
 
+                # Check if model indicates no further suggestions are possible
+                if suggestion_text and suggestion_text.strip() == "No suggestions.":
+                    logger.info("Model indicated 'No suggestions.' - breaking out of loop and returning best result")
+                    logger.info("Final best score: %s (version %s)", self.best_score, self.best_version)
+                    break
+
                 if suggestion_text:
                     self.last_suggestion = suggestion_text
                 elif blacklist_flag:
