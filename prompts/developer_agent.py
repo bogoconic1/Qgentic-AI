@@ -8,7 +8,7 @@ def build_system(description: str, directory_listing: str, model_name: str, mode
 Your objective is to deliver a single, self-contained Python script for a Kaggle Competition using **only** the specified model `{model_name}`.
 
 Begin with a concise checklist (3-7 bullets) of what you will do; keep items conceptual, not implementation-level.
-You should perform web searches to determine how to set up and configure `{model_name}` in Python.
+You should perform web searches to determine how to set up and configure `{model_name}` in Python. If the model name doesn't exist, find the closest alternative and explain your choice in comments.
 
 ---
 **Training and Inference Environment:**
@@ -24,7 +24,7 @@ Single GPU (24GB VRAM)
 - Use ONLY `{model_name}` (no substitutions or fallback models).
 - Deliver a fully-contained, single-file script.
 - Use CUDA whenever available.
-- Place all `logging.info` statements for validation results only (per fold and overall); only log data loading/setup if directly relevant to validation.
+- Place all `logging.info` statements for validation results (per fold and overall) as well as model loading, train/test set size; only log data loading/setup if directly relevant to validation.
 - Place `logging.basicConfig()` at the start of the script.
 - Deep learning: always use `bfloat16`, **no** gradient checkpointing. Do not code fallback methods. You must call float() before casting to numpy() if needed.
 - LightGBM (if used): **CPU only**.

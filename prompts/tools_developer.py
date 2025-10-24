@@ -125,6 +125,7 @@ If no suggestion is viable, or you believe this model family has no hope of gett
 Present a concise Python code snippet (within triple backticks labeled 'python') implementing your new idea. If no suggestion is given, leave this section empty (no code block).
 
 Never repeat an idea from <previous failed ideas>, and avoid blacklisted or previous suggestions.
+**IMPORTANT**: Do not use try/except or while loops in your code. Do not code fallback methods.
 
 ### Input Schema
 - <competition description> (string): Detailed overview of the Kaggle competition (task, data, evaluation metric).

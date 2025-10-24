@@ -13,7 +13,7 @@ import weave
 import wandb
 
 from tools.developer import (
-    execute_code,
+    execute_code_with_oom_retry,
     search_sota_suggestions,
 )
 from utils.guardrails import evaluate_guardrails, build_block_summary
@@ -599,10 +599,17 @@ class DeveloperAgent:
                 # continue to next attempt without execution
                 continue
 
-            # Execute the code
-            output = execute_code(str(code_path))
+            # Execute the code with OOM retry logic
+            output, wait_time = execute_code_with_oom_retry(str(code_path))
             logger.info("Execution output captured for version v%s", version)
             logger.debug("Execution output: %s", output)
+
+            # Extend deadline to exclude OOM waiting time from budget
+            if wait_time > 0:
+                deadline += wait_time
+                logger.info(
+                    f"Extended deadline by {wait_time/60:.1f} minutes to exclude OOM retry wait time"
+                )
 
             log_path = self.outputs_dir / self._log_filename(version)
             log_content = ""

@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import subprocess
+import time
 import traceback
 
 from dotenv import load_dotenv
@@ -16,6 +17,7 @@ from prompts.tools_developer import (
     sota_system as prompt_sota_system,
     sota_user as prompt_sota_user,
 )
+from utils.oom_detector import detect_oom, OOMError
 import weave
 
 load_dotenv()
@@ -153,6 +155,13 @@ def execute_code(filepath: str, timeout_seconds: int = 3600) -> str:
             "Execution failed for %s with return code %s", filepath, result.returncode
         )
         logger.debug("Execution stderr: %s", trace)
+
+        # Efficiency: If OOM, skip web search (retry logic will handle it)
+        if detect_oom(trace):
+            logger.info("OOM detected - skipping web search (will be handled by retry logic)")
+            return trace
+
+        # Non-OOM error: do web search for suggestions
         search_result = web_search_stack_trace(trace)
         return search_result
 
@@ -169,5 +178,77 @@ def execute_code(filepath: str, timeout_seconds: int = 3600) -> str:
     except Exception:
         trace = traceback.format_exc()
         logger.exception("Unexpected error while executing %s", filepath)
+
+        # Efficiency: If OOM in exception trace, skip web search
+        if detect_oom(trace):
+            logger.info("OOM detected in exception - skipping web search")
+            return trace
+
         search_result = web_search_stack_trace(trace)
         return search_result
+
+
+@weave.op()
+def execute_code_with_oom_retry(
+    filepath: str,
+    timeout_seconds: int = 3600,
+    max_oom_retries: int = 10,
+    oom_retry_delay: int = 300
+) -> tuple[str, float]:
+    """
+    Execute code with automatic OOM retry logic.
+
+    If OOM is detected, waits and retries the SAME script up to max_oom_retries times.
+    If OOM persists after all retries, returns the output (which includes web search
+    suggestions for fixing the OOM), allowing the agent to generate corrected code.
+
+    Args:
+        filepath: Path to the Python file to execute
+        timeout_seconds: Timeout in seconds for each execution attempt
+        max_oom_retries: Maximum number of OOM retries (default 10)
+        oom_retry_delay: Seconds to wait between OOM retries (default 300 = 5 min)
+
+    Returns:
+        Tuple of (output string, total_wait_time_seconds)
+        - output: Execution output or error message from execute_code()
+        - total_wait_time: Time spent waiting for OOM retries (to exclude from budget)
+    """
+    total_wait_time = 0.0
+
+    for attempt in range(max_oom_retries + 1):
+        # Execute using the existing execute_code function
+        output = execute_code(filepath, timeout_seconds)
+
+        # Check if output indicates OOM
+        if detect_oom(output):
+            if attempt < max_oom_retries:
+                logger.warning(
+                    f"OOM detected in {filepath} (attempt {attempt + 1}/{max_oom_retries + 1}). "
+                    f"Waiting {oom_retry_delay}s before retry..."
+                )
+
+                # Wait for GPU VRAM to free up
+                wait_start = time.time()
+                time.sleep(oom_retry_delay)
+                wait_duration = time.time() - wait_start
+                total_wait_time += wait_duration
+
+                logger.info(f"Retrying {filepath} after {wait_duration:.1f}s wait...")
+                continue  # Retry the same script
+            else:
+                # Max retries exhausted - return output with web search suggestions
+                # The agent will use these suggestions to fix the code
+                logger.warning(
+                    f"OOM persisted after {max_oom_retries} retries for {filepath}. "
+                    f"Returning output with suggestions for agent to fix."
+                )
+                return output, total_wait_time
+
+        # No OOM detected - return successfully
+        if attempt > 0:
+            logger.info(f"Execution succeeded for {filepath} after {attempt} OOM retries")
+
+        return output, total_wait_time
+
+    # Defensive return (technically unreachable)
+    return output, total_wait_time
