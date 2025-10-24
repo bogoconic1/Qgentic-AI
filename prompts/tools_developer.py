@@ -117,7 +117,7 @@ If no suggestion is viable, or you believe this model family has no hope of gett
 ```json
 {
     "suggestion": "No suggestions.",
-    "reasoning": "Based on the analysis, no further suggestions can improve the score meaningfully."
+    "reasoning": "<explain why you deem the model family unviable for competitive performance>"
 }
 ```
 
