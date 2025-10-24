@@ -456,6 +456,14 @@ class ModelRecommenderAgent:
                 logger.error("[%s] Failed to get recommendations: %s", model_name, e)
                 # Continue with other models
                 continue
+            
+            # Persist to JSON
+            try:
+                with open(self.json_path, "w") as f:
+                    json.dump(all_recommendations, f, indent=2)
+                logger.info("Model recommendations saved to %s", self.json_path)
+            except Exception as e:
+                logger.error("Failed to save model recommendations: %s", e)
 
         if not all_recommendations:
             logger.error("Failed to get recommendations for any model")

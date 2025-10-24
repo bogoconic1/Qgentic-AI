@@ -37,7 +37,6 @@ Single GPU (24GB VRAM)
 - **DEBUG flag**: At the script top, define. Pipeline runs twice: once with `DEBUG=True`, then with `DEBUG=False` (full config). Log which mode is running.
 - **DL Only:** After 1st epoch on fold 0, if loss is NaN, raise Exception to halt.
 - Just train and validate on fold 0. Skip other folds to save time.
-- YOU MUST implement everything in the **Model Recommendations** section above, unless the suggestion is about fold splitting or ensembling.
 - Do not use any `while` loops in your code.
 
 **DEBUG mode guidelines**

@@ -26,6 +26,7 @@ Begin with a **concise checklist (3-7 conceptual bullets)** describing your reas
 ## Hard Constraints
 - ❌ Do **not** search for or use actual winning solutions from this specific competition.
 - ❌ Do not rely on prior knowledge of the competition.
+- ❌ Do **not** discuss or recommend CV/fold splitting strategies - this is handled elsewhere.
 - ✅ All recommendations must fit the 3-hour training budget.
 
 ---
@@ -114,6 +115,7 @@ Begin with a concise checklist (3-7 bullets) describing your *process* (conceptu
 ## Hard Constraints
 - Do **not** search for or use actual winning solutions from this specific competition.
 - Do **not** rely on prior knowledge of those solutions.
+- Do **not** discuss or recommend CV/fold splitting strategies - this is handled elsewhere.
 - **Do not** recommend creating features merely to prune them later—propose **top candidates only**.
 - **Do not** duplicate the same strategy across multiple categories.
 - Anything under ensembling/stacking/calibration/blending MUST be in the NICE_TO_HAVE section.
@@ -189,12 +191,18 @@ Begin with a **concise checklist (3-7 bullets)** summarizing your conceptual rea
 
 ## Objective
 1. Review all inputs to understand **data characteristics, metric target, and model behavior**.
-2. Perform **targeted web searches** to identify **state-of-the-art loss functions** relevant to the task, metric, and model.
-3. Evaluate how each candidate handles **key dataset traits** (imbalance, noise, ordinal structure, outliers).
-4. Recommend:
+2. **Determine the single best fold splitting strategy** based on data characteristics:
+   - Temporal structure (use TimeSeriesSplit)
+   - Grouped/hierarchical data (use GroupKFold with specific grouping variable)
+   - Class imbalance (use StratifiedKFold)
+   - Standard tabular (use KFold)
+   Be SPECIFIC: include number of folds and grouping variable if applicable.
+3. Perform **targeted web searches** to identify **state-of-the-art loss functions** relevant to the task, metric, and model.
+4. Evaluate how each candidate handles **key dataset traits** (imbalance, noise, ordinal structure, outliers).
+5. Recommend:
    - A **MUST_HAVE** - the single best choice for this competition, data, and model.
    - One or more **NICE_TO_HAVE** loss setups — additional loss functions that could be promising but are not strictly necessary for top-notch results.
-5. Justify each recommendation using a hierarchy of importance:
+6. Justify each recommendation using a hierarchy of importance:
    1) **Metric alignment** → 2) **Data compatibility** → 3) **Numerical stability** → 4) **Compute feasibility** → 5) **Implementation simplicity**
 
 ---
@@ -202,6 +210,7 @@ Begin with a **concise checklist (3-7 bullets)** summarizing your conceptual rea
 ## Hard Constraints
 - Do **not** search for or use actual winning solutions from this specific competition.
 - Do **not** rely on prior competition knowledge.
+- **MUST recommend exactly ONE specific fold splitting strategy** - be as specific as possible (e.g., "5-fold StratifiedKFold", "10-fold GroupKFold grouped by user_id", "TimeSeriesSplit with 5 folds"). This is REQUIRED.
 - Recommend exactly **one** primary loss for MUST_HAVE.
 - NICE_TO_HAVE may contain **multiple losses** (ensembled, multi-task, or joint).
 - Do **not** specify hyperparameters, architecture, or preprocessing choices here.
@@ -219,6 +228,25 @@ Begin with a **concise checklist (3-7 bullets)** summarizing your conceptual rea
 
 ---
 
+## Fold Splitting Strategy Guidelines
+Choose the SINGLE MOST APPROPRIATE strategy based on data characteristics:
+
+| Data Characteristic | Recommended Strategy | Example |
+|---------------------|---------------------|---------|
+| **Temporal/sequential data** | TimeSeriesSplit | "TimeSeriesSplit with 5 folds" |
+| **Grouped/hierarchical** (users, shops, etc.) | GroupKFold with specific group | "5-fold GroupKFold grouped by user_id" |
+| **Classification with imbalance** | StratifiedKFold | "5-fold StratifiedKFold" |
+| **Regression or balanced classification** | KFold | "5-fold KFold" |
+| **Stratified groups** | StratifiedGroupKFold | "5-fold StratifiedGroupKFold grouped by session_id" |
+
+**CRITICAL:** Be as specific as possible. Include:
+- Exact fold count (typically 5 or 10)
+- Exact grouping variable name if using GroupKFold
+- Stratification target if using StratifiedKFold
+- Any other requirements (e.g. GroupKFold by session_id but make sure at least five samples per user exist in training data)
+
+---
+
 ## Evaluation Criteria
 When ranking or combining losses, consider:
 - **Metric alignment:** differentiable surrogates for leaderboard metric (e.g., QWK, MAP@K).
@@ -233,6 +261,9 @@ When ranking or combining losses, consider:
 ### Checklist (3-7 bullets)
 Outline conceptual reasoning steps.
 
+### Fold Split Strategy Analysis
+Briefly analyze data characteristics (temporal structure, groups, imbalance) and explain why your chosen fold split is the best fit.
+
 ### Loss Functions Considered
 List up to 5 candidate losses briefly explaining why each was considered.
 
@@ -240,12 +271,17 @@ List up to 5 candidate losses briefly explaining why each was considered.
 
 ### Final Recommendation
 
-Provide a single JSON block within ```json backticks with **MUST_HAVE** and **NICE_TO_HAVE** sections.
+Provide a single JSON block within ```json backticks with **fold_split_strategy**, **MUST_HAVE** and **NICE_TO_HAVE** sections.
+The **fold_split_strategy** must be a single, specific strategy (e.g., "5-fold StratifiedKFold", "10-fold GroupKFold grouped by user_id").
 The **MUST_HAVE** section contains exactly one loss;
 the **NICE_TO_HAVE** section may contain multiple.
 
 ```json
 {
+  "fold_split_strategy": {
+    "strategy": "the single specific CV fold splitting strategy",
+    "explanation": "2-3 sentences on why this fold split strategy is best for this competition's data characteristics and evaluation metric. Consider: temporal structure, grouped data, class imbalance, data leakage risks."
+  },
   "MUST_HAVE": {
     "loss_function": "the single best loss function choice for this competition, data, and model",
     "explanation": "3-5 sentences on why this loss aligns with the competition metric and dataset traits. Why is it better than other loss functions considered?",
@@ -334,6 +370,7 @@ Applicable to Transformers, CNNs, RNNs, and ViTs:
 
 ## Hard Constraints
 - ❌ Do **not** search for or use actual winning solutions from this specific competition.
+- ❌ Do **not** discuss or recommend CV/fold splitting strategies - this is handled elsewhere.
 - ❌ Do not redefine loss functions or preprocessing steps — they exist elsewhere.
 - ✅ All recommendations must fit the 3-hour training budget.
 - Anything under ensembling/stacking/calibration/blending MUST be in the NICE_TO_HAVE section.
@@ -467,6 +504,7 @@ All strategies must be **realistically executable** within these constraints.
 ## Hard Constraints
 - Do **not** search for or use actual winning solutions from this specific competition.
 - Do **not** rely on prior knowledge of the competition.
+- Do **not** discuss or recommend CV/fold splitting strategies - this is handled elsewhere.
 - Do **not** include training-time augmentations or losses.
 - Focus **strictly on inference-time logic** (prediction, calibration, or post-processing).
 - Anything under ensembling/stacking/calibration/blending MUST be in the NICE_TO_HAVE section.
