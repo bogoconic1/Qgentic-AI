@@ -39,8 +39,8 @@ def test_timeout_short():
 
         logger.info("Created test data at %s", csv_path)
 
-        # Ask a question that will cause a long-running operation (infinite loop)
-        question = "Load test_data.csv and then run an infinite loop: while True: pass"
+        # Ask a question that will cause a long-running operation
+        question = "Load test_data.csv and then sleep for 20 seconds using time.sleep(20)"
         description = "Test competition for timeout verification"
 
         result = ask_eda(
