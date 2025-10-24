@@ -123,15 +123,24 @@ def search_sota_suggestions(
     return response.output_text or ""
 
 @weave.op()
-def execute_code(filepath: str) -> str:
-    """Execute a generated Python file and enrich errors with search guidance."""
-    logger.info("Executing generated script: %s", filepath)
+def execute_code(filepath: str, timeout_seconds: int = 3600) -> str:
+    """Execute a generated Python file and enrich errors with search guidance.
+
+    Args:
+        filepath: Path to the Python file to execute
+        timeout_seconds: Timeout in seconds (default 3600 = 1 hour)
+
+    Returns:
+        Execution output or error message
+    """
+    logger.info("Executing generated script: %s (timeout: %d seconds)", filepath, timeout_seconds)
     try:
         logger.debug("Running subprocess command: python %s", filepath)
         result = subprocess.run(
             ["python", filepath],
             capture_output=True,
             text=True,
+            timeout=timeout_seconds,
         )
 
         if result.returncode == 0:
@@ -147,6 +156,16 @@ def execute_code(filepath: str) -> str:
         search_result = web_search_stack_trace(trace)
         return search_result
 
+    except subprocess.TimeoutExpired:
+        logger.error("Execution timed out after %d seconds for %s", timeout_seconds, filepath)
+        timeout_minutes = timeout_seconds / 60
+        if timeout_minutes >= 60:
+            timeout_hours = timeout_minutes / 60
+            return f"Code execution timed out after {timeout_hours:.1f} hour(s)"
+        elif timeout_minutes >= 1:
+            return f"Code execution timed out after {timeout_minutes:.0f} minute(s)"
+        else:
+            return f"Code execution timed out after {timeout_seconds} second(s)"
     except Exception:
         trace = traceback.format_exc()
         logger.exception("Unexpected error while executing %s", filepath)

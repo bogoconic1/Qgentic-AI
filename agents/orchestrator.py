@@ -327,6 +327,11 @@ class Orchestrator:
                     "now_recommendations": now_recommendations_all.get(key, {}),
                     "later_recommendations": later_recommendations_all.get(key, {})
                 }
+                # Persist baseline results
+                baseline_path = self.outputs_dir / "baseline_results.json"
+                with open(baseline_path, "w") as f:
+                    json.dump(baseline_results, f, indent=2)
+                    
             except Exception as e:
                 # Log error but continue with other models
                 import logging
