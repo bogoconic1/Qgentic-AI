@@ -19,14 +19,14 @@ Begin with a **concise checklist (3-7 conceptual bullets)** describing your reas
 
 ## Objective
 1. Review all inputs to understand **data characteristics, task type, and evaluation metric**.
-2. Perform **targeted web searches** to identify **state-of-the-art models** relevant to the task, data, and metric.
-3. Evaluate each candidate model under three criteria: metric impact, implementation simplicity, and compute feasibility within the 3-hour budget.
-4. Recommend up to **5 models** that balance these criteria effectively.
+2. **Determine the single best fold splitting strategy** based on data characteristics in <research_plan>. Be SPECIFIC and include as many details as possible.
+3. Perform **targeted web searches** to identify **state-of-the-art models** relevant to the task, data, and metric.
+4. Evaluate each candidate model under three criteria: metric impact, implementation simplicity, and compute feasibility within the 3-hour budget.
+5. Recommend up to **5 models** that balance these criteria effectively.
 
 ## Hard Constraints
 - ❌ Do **not** search for or use actual winning solutions from this specific competition.
 - ❌ Do not rely on prior knowledge of the competition.
-- ❌ Do **not** discuss or recommend CV/fold splitting strategies - this is handled elsewhere.
 - ✅ All recommendations must fit the 3-hour training budget.
 
 ---
@@ -34,7 +34,10 @@ Begin with a **concise checklist (3-7 conceptual bullets)** describing your reas
 ## Output Format
 
 ### Checklist (3-7 bullets)
-High-level steps you will follow (conceptual only).
+High-level steps you will follow (conceptual only). MUST include determining the fold splitting strategy as one step.
+
+### Fold Split Strategy Analysis
+Analyze data characteristics and <research_plan> and explain why your chosen fold split is the best fit.
 
 ### Considered Models
 List up to 10 candidate models briefly explaining why each was considered.
@@ -50,9 +53,14 @@ Model 2
 ...
 
 ### Final Recommendations
-Provide a single JSON block within ```json backticks with up to 5 recommended models. Just give the model name with no additional details in the "name" field.
+Provide a single JSON block within ```json backticks with **fold_split_strategy** and **recommended_models**.
+The **fold_split_strategy** must be a single, specific strategy.
+
 ```json
 {
+  "fold_split_strategy": {
+    "strategy": "the single specific CV fold splitting strategy",
+  },
   "recommended_models": [
     {
       "name": "Model 1",
@@ -76,6 +84,7 @@ Provide a single JSON block within ```json backticks with up to 5 recommended mo
     }
   ]
 }
+```
 
 """
 
@@ -191,18 +200,12 @@ Begin with a **concise checklist (3-7 bullets)** summarizing your conceptual rea
 
 ## Objective
 1. Review all inputs to understand **data characteristics, metric target, and model behavior**.
-2. **Determine the single best fold splitting strategy** based on data characteristics:
-   - Temporal structure (use TimeSeriesSplit)
-   - Grouped/hierarchical data (use GroupKFold with specific grouping variable)
-   - Class imbalance (use StratifiedKFold)
-   - Standard tabular (use KFold)
-   Be SPECIFIC: include number of folds and grouping variable if applicable.
-3. Perform **targeted web searches** to identify **state-of-the-art loss functions** relevant to the task, metric, and model.
-4. Evaluate how each candidate handles **key dataset traits** (imbalance, noise, ordinal structure, outliers).
-5. Recommend:
+2. Perform **targeted web searches** to identify **state-of-the-art loss functions** relevant to the task, metric, and model.
+3. Evaluate how each candidate handles **key dataset traits** (imbalance, noise, ordinal structure, outliers).
+4. Recommend:
    - A **MUST_HAVE** - the single best choice for this competition, data, and model.
    - One or more **NICE_TO_HAVE** loss setups — additional loss functions that could be promising but are not strictly necessary for top-notch results.
-6. Justify each recommendation using a hierarchy of importance:
+5. Justify each recommendation using a hierarchy of importance:
    1) **Metric alignment** → 2) **Data compatibility** → 3) **Numerical stability** → 4) **Compute feasibility** → 5) **Implementation simplicity**
 
 ---
@@ -210,7 +213,7 @@ Begin with a **concise checklist (3-7 bullets)** summarizing your conceptual rea
 ## Hard Constraints
 - Do **not** search for or use actual winning solutions from this specific competition.
 - Do **not** rely on prior competition knowledge.
-- **MUST recommend exactly ONE specific fold splitting strategy** - be as specific as possible (e.g., "5-fold StratifiedKFold", "10-fold GroupKFold grouped by user_id", "TimeSeriesSplit with 5 folds"). This is REQUIRED.
+- Do **not** discuss or recommend CV/fold splitting strategies - this is handled elsewhere.
 - Recommend exactly **one** primary loss for MUST_HAVE.
 - NICE_TO_HAVE may contain **multiple losses** (ensembled, multi-task, or joint).
 - Do **not** specify hyperparameters, architecture, or preprocessing choices here.
@@ -228,25 +231,6 @@ Begin with a **concise checklist (3-7 bullets)** summarizing your conceptual rea
 
 ---
 
-## Fold Splitting Strategy Guidelines
-Choose the SINGLE MOST APPROPRIATE strategy based on data characteristics:
-
-| Data Characteristic | Recommended Strategy | Example |
-|---------------------|---------------------|---------|
-| **Temporal/sequential data** | TimeSeriesSplit | "TimeSeriesSplit with 5 folds" |
-| **Grouped/hierarchical** (users, shops, etc.) | GroupKFold with specific group | "5-fold GroupKFold grouped by user_id" |
-| **Classification with imbalance** | StratifiedKFold | "5-fold StratifiedKFold" |
-| **Regression or balanced classification** | KFold | "5-fold KFold" |
-| **Stratified groups** | StratifiedGroupKFold | "5-fold StratifiedGroupKFold grouped by session_id" |
-
-**CRITICAL:** Be as specific as possible. Include:
-- Exact fold count (typically 5 or 10)
-- Exact grouping variable name if using GroupKFold
-- Stratification target if using StratifiedKFold
-- Any other requirements (e.g. GroupKFold by session_id but make sure at least five samples per user exist in training data)
-
----
-
 ## Evaluation Criteria
 When ranking or combining losses, consider:
 - **Metric alignment:** differentiable surrogates for leaderboard metric (e.g., QWK, MAP@K).
@@ -261,9 +245,6 @@ When ranking or combining losses, consider:
 ### Checklist (3-7 bullets)
 Outline conceptual reasoning steps.
 
-### Fold Split Strategy Analysis
-Briefly analyze data characteristics (temporal structure, groups, imbalance) and explain why your chosen fold split is the best fit.
-
 ### Loss Functions Considered
 List up to 5 candidate losses briefly explaining why each was considered.
 
@@ -271,17 +252,12 @@ List up to 5 candidate losses briefly explaining why each was considered.
 
 ### Final Recommendation
 
-Provide a single JSON block within ```json backticks with **fold_split_strategy**, **MUST_HAVE** and **NICE_TO_HAVE** sections.
-The **fold_split_strategy** must be a single, specific strategy (e.g., "5-fold StratifiedKFold", "10-fold GroupKFold grouped by user_id").
+Provide a single JSON block within ```json backticks with **MUST_HAVE** and **NICE_TO_HAVE** sections.
 The **MUST_HAVE** section contains exactly one loss;
 the **NICE_TO_HAVE** section may contain multiple.
 
 ```json
 {
-  "fold_split_strategy": {
-    "strategy": "the single specific CV fold splitting strategy",
-    "explanation": "2-3 sentences on why this fold split strategy is best for this competition's data characteristics and evaluation metric. Consider: temporal structure, grouped data, class imbalance, data leakage risks."
-  },
   "MUST_HAVE": {
     "loss_function": "the single best loss function choice for this competition, data, and model",
     "explanation": "3-5 sentences on why this loss aligns with the competition metric and dataset traits. Why is it better than other loss functions considered?",

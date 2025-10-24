@@ -384,6 +384,7 @@ class ModelRecommenderAgent:
         try:
             data = json.loads(json_str)
             recommended_models = data.get("recommended_models", [])
+            fold_split_strategy = data.get("fold_split_strategy", {})
 
             if not recommended_models:
                 logger.warning("No models in recommended_models array, using default models")
@@ -402,6 +403,16 @@ class ModelRecommenderAgent:
                 return _DEFAULT_MODELS
 
             logger.info("Selected %d models: %s", len(model_names), model_names)
+
+            # Save fold split strategy to file for reference
+            if fold_split_strategy:
+                fold_split_path = self.outputs_dir / "fold_split_strategy.json"
+                try:
+                    with open(fold_split_path, "w") as f:
+                        json.dump(fold_split_strategy, f, indent=2)
+                    logger.info("Saved fold split strategy: %s", fold_split_strategy.get("strategy", ""))
+                except Exception:
+                    logger.debug("Failed to save fold split strategy")
 
             # Save selected models to file for reference
             selected_models_path = self.outputs_dir / "selected_models.json"

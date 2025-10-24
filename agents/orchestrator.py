@@ -81,11 +81,6 @@ def _extract_now_recommendations(recommendations: dict) -> dict:
                         "MUST_HAVE": now_items
                     }
 
-    # Fold split strategy (from loss_function recommendations)
-    fold_split = recommendations.get("loss_function", {}).get("fold_split_strategy")
-    if fold_split:
-        now_only["fold_split_strategy"] = fold_split
-
     # Loss function - MUST_HAVE is an object, NICE_TO_HAVE is an array
     loss_fn = recommendations.get("loss_function", {})
     if loss_fn and "MUST_HAVE" in loss_fn:
@@ -180,12 +175,9 @@ def _format_recommendations_for_developer(recommendations: dict) -> str:
     fold_split = recommendations.get("fold_split_strategy", {})
     if fold_split:
         strategy = fold_split.get("strategy", "")
-        explanation = fold_split.get("explanation", "")
         if strategy:
             details.append("## Cross-Validation Strategy")
             details.append(f"- Use {strategy}")
-            if explanation:
-                details.append(f"  {explanation}")
 
     # Preprocessing
     preprocessing = recommendations.get("preprocessing", {})
@@ -301,19 +293,27 @@ class Orchestrator:
             else:
                 raise RuntimeError("No model recommendations found")
 
+        # Load fold split strategy (single strategy for all models)
+        fold_split_strategy_path = self.outputs_dir / "fold_split_strategy.json"
+        fold_split_strategy = {}
+        if fold_split_strategy_path.exists():
+            try:
+                with open(fold_split_strategy_path, "r") as f:
+                    fold_split_strategy = json.load(f)
+            except Exception:
+                pass
+
         # Extract NOW and LATER recommendations for each model
         now_recommendations_all = {}
         later_recommendations_all = {}
-        fold_split_strategies = {}
 
         for model_name, recommendations in model_recommendations.items():
-            now_recommendations_all[model_name] = _extract_now_recommendations(recommendations)
+            now_recs = _extract_now_recommendations(recommendations)
+            # Add the fold split strategy to each model's recommendations
+            if fold_split_strategy:
+                now_recs["fold_split_strategy"] = fold_split_strategy
+            now_recommendations_all[model_name] = now_recs
             later_recommendations_all[model_name] = _extract_later_recommendations(recommendations)
-
-            # Extract fold split strategy for this model
-            fold_split = recommendations.get("loss_function", {}).get("fold_split_strategy")
-            if fold_split:
-                fold_split_strategies[model_name] = fold_split
         
         # Persist NOW recommendations for future use
         now_rec_path = self.outputs_dir / "now_recommendations.json"
@@ -324,11 +324,6 @@ class Orchestrator:
         later_rec_path = self.outputs_dir / "later_recommendations.json"
         with open(later_rec_path, "w") as f:
             json.dump(later_recommendations_all, f, indent=2)
-
-        # Persist fold split strategies for future use
-        fold_split_path = self.outputs_dir / "fold_split_strategies.json"
-        with open(fold_split_path, "w") as f:
-            json.dump(fold_split_strategies, f, indent=2)
 
         # Phase 4: Baseline Developer Stage - Evaluate models in parallel with NOW recommendations
         baseline_results = {}
@@ -367,7 +362,7 @@ class Orchestrator:
                         "best_score": best_score,
                         "best_code_file": best_code_file or "",
                         "blacklisted_ideas": blacklisted_ideas,
-                        "fold_split_strategy": fold_split_strategies.get(result_key, {}),
+                        "fold_split_strategy": fold_split_strategy,
                         "now_recommendations": now_recommendations_all.get(result_key, {}),
                         "later_recommendations": later_recommendations_all.get(result_key, {})
                     }
