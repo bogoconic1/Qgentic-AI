@@ -89,6 +89,7 @@ class DeveloperAgent:
         self.last_suggestion: Optional[str] = None
         self.last_suggestion_code: Optional[str] = None
         self.best_code: Optional[str] = None
+        self.best_code_file: Optional[str] = None
         self.best_version: Optional[int] = None
         self.next_patch_base_version: Optional[int] = None
 
@@ -685,6 +686,7 @@ class DeveloperAgent:
                 code_with_logs += f"<analysis>\n{analysis_msg}\n</analysis>\n"
                 if improvement:
                     self.best_code = code
+                    self.best_code_file = self._code_filename(version)
                 self.previous_runs.append((code, run_score))
 
                 try:
