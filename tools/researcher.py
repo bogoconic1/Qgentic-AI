@@ -2,10 +2,7 @@ import logging
 import os
 import re
 import shlex
-import signal
 import sys
-import traceback
-from io import StringIO
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -17,7 +14,6 @@ import yaml
 import pandas as pd
 import weave
 from project_config import get_config
-from tools.developer import web_search_stack_trace
 from tools.helpers import call_llm_with_retry, _build_directory_listing
 from prompts.tools_researcher import (
     ask_eda_template as prompt_ask_eda,
@@ -42,16 +38,6 @@ _RESEARCHER_TOOL_ONLINE_MODEL = _LLM_CFG.get("researcher_tool_online_model")
 _DEFAULT_ASK_ATTEMPTS = _RUNTIME_CFG.get("ask_eda_max_attempts")
 _TASK_ROOT = Path(_PATH_CFG.get("task_root"))
 _EXTERNAL_DIRNAME = _PATH_CFG.get("external_data_dirname")
-
-
-class TimeoutException(Exception):
-    """Exception raised when code execution times out."""
-    pass
-
-
-def _timeout_handler(signum, frame):
-    """Signal handler for timeout."""
-    raise TimeoutException("Code execution timed out")
 
 
 @weave.op()
@@ -106,57 +92,32 @@ def ask_eda(question: str, description: str, data_path: str, max_attempts: int |
             logger.warning("ask_eda found no python code block in response.")
             continue
         else:
-            try:
-                # Save current stdout
-                old_stdout = sys.stdout
-                sys.stdout = captured_output = StringIO()
+            # Write code to temporary file
+            code_file = Path(data_path) / "eda_temp.py"
+            with open(code_file, "w") as f:
+                f.write(code)
 
-                with open(f"code_abc.py", "w") as f:
-                    f.write(code)
+            # Import execute_code here to avoid circular import at module level
+            from tools.developer import execute_code
 
-                with open("code_abc.py", "r") as f:
-                    code_text = f.read()
+            # Execute code using execute_code() function
+            result = execute_code(str(code_file), timeout_seconds=timeout_seconds)
 
-                # Set timeout
-                signal.signal(signal.SIGALRM, _timeout_handler)
-                signal.alarm(timeout_seconds)
-                logger.debug("Set execution timeout to %d seconds", timeout_seconds)
+            # Check if execution timed out
+            if "timed out" in result.lower():
+                logger.error("ask_eda execution timed out")
+                return result
 
-                try:
-                    exec(code_text, globals())
-                    output = captured_output.getvalue()
-                finally:
-                    # Cancel the alarm
-                    signal.alarm(0)
-                    # Restore stdout
-                    sys.stdout = old_stdout
+            # Check if execution had errors (execute_code returns error traces with guidance)
+            # If there's an error, it will contain stack trace with web search guidance
+            if "Traceback" in result or "Error" in result:
+                logger.warning("ask_eda execution failed, retrying with error feedback")
+                input_list.append({"role": "user", "content": result})
+                continue
 
-                logger.info("ask_eda succeeded on attempt %s", attempt)
-                return output
-            except TimeoutException:
-                # Cancel alarm and restore stdout
-                signal.alarm(0)
-                sys.stdout = old_stdout
-                logger.error("ask_eda execution timed out after %d seconds", timeout_seconds)
-                timeout_minutes = timeout_seconds / 60
-                if timeout_minutes >= 1:
-                    return f"Your query cannot be executed within {timeout_minutes:.0f} minutes"
-                else:
-                    return f"Your query cannot be executed within {timeout_seconds} seconds"
-            except Exception as e:
-                # Cancel alarm and restore stdout
-                signal.alarm(0)
-                sys.stdout = old_stdout
-                stack_trace = traceback.format_exc()
-                logger.exception("ask_eda execution failed: %s", e)
-
-                try:
-                    search_result = web_search_stack_trace(stack_trace)
-                    if search_result:
-                        logger.info("ask_eda web search guidance retrieved.")
-                        input_list.append({"role": "user", "content": stack_trace + "\n\n" + search_result})
-                except Exception:
-                    logger.exception("ask_eda web search for stack trace failed.")
+            # Success - return the output
+            logger.info("ask_eda succeeded on attempt %s", attempt)
+            return result
 
     logger.error("ask_eda exhausted all attempts without success")
     return "Your question cannot be answered."
