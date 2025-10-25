@@ -144,7 +144,11 @@ def search_red_flags(
             if item.type == "function_call":
                 tool_calls = True
                 if item.name == "ask_eda":
-                    question = json.loads(item.arguments)["question"]
+                    try:
+                        question = json.loads(item.arguments)["question"]
+                    except Exception as e:
+                        logger.error("Failed to parse ask_eda arguments: %s", e)
+                        question = ""
                     logger.info(f"Red flags agent calling ask_eda: {question}")
 
                     if not question:
@@ -159,13 +163,13 @@ def search_red_flags(
                             timeout_seconds=60, # Shorter timeout for red flags stage
                         )
 
-                    input_list.append({
-                        "type": "function_call_output",
-                        "call_id": item.call_id,
-                        "output": json.dumps({
-                            "insights": tool_output,
+                        input_list.append({
+                            "type": "function_call_output",
+                            "call_id": item.call_id,
+                            "output": json.dumps({
+                                "insights": tool_output,
+                            })
                         })
-                    })
 
         if tool_calls:
             continue

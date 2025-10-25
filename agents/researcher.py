@@ -201,7 +201,11 @@ class ResearcherAgent:
                 if item.type == "function_call":
                     tool_calls = True
                     if item.name == "ask_eda":
-                        question = json.loads(item.arguments)["question"]
+                        try:
+                            question = json.loads(item.arguments)["question"]
+                        except Exception as e:
+                            logger.error("Failed to parse ask_eda arguments: %s", e)
+                            question = ""
                         logger.info(f"{question}")
                         if len(question) == 0:
                             tool_output = "An error occurred. Please retry."
