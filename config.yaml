@@ -14,6 +14,9 @@ runtime:
   directory_listing_max_files: 10
   researcher_parallel_runs: 1
   patch_mode_enabled: false
+  # CPU allocation for baseline evaluation (to prevent resource contention)
+  baseline_cpu_allocation_enabled: true  # Enable CPU limits during baseline phase
+  baseline_cpu_cores_per_model: "auto"  # "auto" = divide evenly, or specify number (e.g., 25)
 paths:
   task_root: "task"
   outputs_dirname: "outputs"

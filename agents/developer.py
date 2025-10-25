@@ -67,7 +67,7 @@ class DeveloperAgent:
       <task_root>/<slug>/<outputs_dir>/<iteration>/submission.csv
     """
 
-    def __init__(self, slug: str, iteration: int, model_name: Optional[str] = None, model_recommendations: Optional[str] = None, later_recommendations: Optional[dict] = None):
+    def __init__(self, slug: str, iteration: int, model_name: Optional[str] = None, model_recommendations: Optional[str] = None, later_recommendations: Optional[dict] = None, cpu_cores_limit: Optional[int] = None):
         load_dotenv()
         self.slug = slug
         self.iteration = iteration
@@ -79,6 +79,9 @@ class DeveloperAgent:
         self.outputs_dir.mkdir(parents=True, exist_ok=True)
         self.developer_log_path = self.outputs_dir / f"developer_{iteration}.txt"
         self._configure_logger()
+
+        # CPU cores limit for parallel execution (None = no limit, use all cores)
+        self.cpu_cores_limit = cpu_cores_limit
 
         # Metric-related defaults; overwritten once benchmark info is available
         self.gold_threshold: Optional[float] = None
@@ -190,12 +193,15 @@ class DeveloperAgent:
         self.logger.debug(
             "Directory listing prepared for %s (length=%s)", self.base_dir, len(directory_listing)
         )
+        if self.cpu_cores_limit is not None:
+            self.logger.info("CPU cores limit set to %d for parallel execution", self.cpu_cores_limit)
         return prompt_build_system(
             description=self.description,
             directory_listing=directory_listing,
             model_name=self.model_name,
             model_recommendations=self.model_recommendations,
             slug=self.slug,
+            cpu_cores_limit=self.cpu_cores_limit,
         )
 
     def _build_user_prompt(self, version: int) -> str:

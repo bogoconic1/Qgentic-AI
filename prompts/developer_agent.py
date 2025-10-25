@@ -3,7 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 
 
-def build_system(description: str, directory_listing: str, model_name: str, model_recommendations: str, slug: str) -> str:
+def build_system(description: str, directory_listing: str, model_name: str, model_recommendations: str, slug: str, cpu_cores_limit: int | None = None) -> str:
+    # Build CPU cores info
+    cpu_info = ""
+    if cpu_cores_limit is not None:
+        cpu_info = f"\nNumber of CPUs: {cpu_cores_limit}"
+
     return f"""# Role: Lead Developer for Machine-Learning Competition Team
 Your objective is to deliver a single, self-contained Python script for a Kaggle Competition using **only** the specified model `{model_name}`.
 
@@ -12,7 +17,7 @@ You should perform web searches to determine how to set up and configure `{model
 
 ---
 **Training and Inference Environment:**
-Single GPU (24GB VRAM)
+Single GPU (24GB VRAM){cpu_info}
 
 **Model Name:**
 `{model_name}`
@@ -71,10 +76,17 @@ Your response MUST follow these sections, in order:
 
 Example Output Block:
 ```python
-import os
+import os{f"""
+# CPU thread limits (prevent resource contention during parallel execution)
+os.environ['OMP_NUM_THREADS'] = '{cpu_cores_limit}'
+os.environ['MKL_NUM_THREADS'] = '{cpu_cores_limit}'
+os.environ['OPENBLAS_NUM_THREADS'] = '{cpu_cores_limit}'
+os.environ['NUMEXPR_NUM_THREADS'] = '{cpu_cores_limit}'""" if cpu_cores_limit is not None else ""}
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 BASE_DIR = "task/{slug}" if not os.getenv('KAGGLE_KERNEL_RUN_TYPE') else "/kaggle/input/{slug}"
 # <YOUR CODE>
+# When using scikit-learn/LightGBM/XGBoost/CatBoost, set n_jobs={cpu_cores_limit if cpu_cores_limit is not None else "all available cores"}
+# When using PyTorch DataLoader, set num_workers=min(4, {cpu_cores_limit if cpu_cores_limit is not None else "os.cpu_count()"})
 ```
 """
 
