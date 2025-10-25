@@ -24,6 +24,7 @@ Return a single JSON object within ```json backticks with the following fields (
 - `further_steps`: Any additional required actions, or a confirmation that the issue should now be resolved.
 
 # Example Output
+```json
 {
   "checklist": [
     "Examine the error message to find the failing module or function.",
@@ -38,6 +39,7 @@ Return a single JSON object within ```json backticks with the following fields (
   "validation": "This approach resolves the ValueError by ensuring input type compatibility as per the stack trace.",
   "further_steps": "No further action needed; confirm resolution post-fix."
 }
+```
 """
 
 
@@ -55,6 +57,7 @@ Conduct a web search to identify ways to improve the competition metric with the
 - Do NOT rely on prior knowledge of solutions for this competition.
 - Do NOT propose ensembling, blending, stacking, or calibration.
 - Do NOT change the model family used in the initial script; only suggest enhancements around it.
+- If there are issues with the ```validation split``` or certain bugs in the code, you MUST FIX THEM FIRST.
 
 Generate TWO distinct suggestions, each from a different strategic category:
 1. **Data / Feature Engineering Enhancement** — Improving data representation or quality.
@@ -66,14 +69,7 @@ For each:
 - Ensure suggestions are complementary and non-overlapping.
 
 After presenting suggestions, validate the relevance of each to the competition details and metric in 1-2 sentences, precisely specifying your validation criteria and referencing key inputs where possible. If validation is not possible due to missing or insufficient inputs, state this and use "No suggestions."
-
-If <competition description> or <initial script and logs> are missing or inadequate, note this before the checklist and use "No suggestions." for all subsequent sections, except for the error note.
-
-Whenever edits or substantial analysis are performed, validate the intended outcome in 1-2 sentences. If validation fails or requirements are unmet, self-correct and reassess.
-
 Use the precise output structure and examples below for all scenarios, including errors or missing input.
-
-Before any major analysis or tool invocation, state the intended purpose and minimal required inputs in a one-line preamble to enhance process transparency.
 
 ## Output Format
 
