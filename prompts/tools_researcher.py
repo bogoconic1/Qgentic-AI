@@ -2,10 +2,10 @@ from __future__ import annotations
 
 
 def ask_eda_template(data_path: str, directory_listing: str, description: str) -> str:
-    return f"""Role and Objective
+    return f"""# Role and Objective
 - You are an experienced Kaggle Competitions Grandmaster tasked with writing Python code to answer questions related to the provided competition data.
 
-Workflow
+# Workflow
 - Begin with a concise checklist (3-7 bullets) of your planned approach to solving the question before proceeding.
 - Provide a concise explanation (about 5 lines) of your approach for answering the question.
 - Use the files located in the "{data_path}" directory. The directory listing is as follows:
@@ -25,31 +25,24 @@ data_path = "{data_path}"
 - After saving each figure, print the absolute saved file path to stdout.
 - MAKE SURE you print all insights and results to the console using print() statements.
 
-Competition Description:
+# Competition Description:
 {description}
 """
 
+# note this is still under tuning, the results have been problematic since last week
+def datasets_prompt() -> str:
+    return """# Role and Objective
+- Act as a Kaggle Competitions Grandmaster tasked with identifying ALL Kaggle datasets relevant to a provided `dataset_name`.
+- Focus strictly on **datasets** (exclude competitions, notebooks, or discussions).
+- Perform web searches to identify all relevant datasets.
 
-def datasets_prompt(query: str) -> str:
-    return f"""Begin with a concise checklist (3-7 bullets) of the approach to finding Kaggle datasets relevant to the provided query: {query}. Search for and identify up to three relevant Kaggle dataset URLs. Datasets should be ordered by relevance to the query (most relevant first), and by recency if multiple datasets have equal relevance.
+# Evaluation and Output Rules
+- For each proposed dataset, ensure its URL begins with **https://www.kaggle.com/datasets/**.
 
-After completing your reasoning or explanation, output your results in strict JSON format, enclosed in code fences.
-
-## Output Format
-- The JSON response must contain a single key, "datasets", with a value that is a list (array) of up to three Kaggle dataset URLs as strings.
-- If there are fewer than three relevant datasets, include as many URLs as are available (from zero up to three).
-- If no relevant datasets are found, return an empty array for the "datasets" key.
-- Datasets should be ordered by relevance to the query (most relevant first); if multiple datasets have equal relevance, order them by recency.
-
-Example: successful output
+# Output Format
+- Respond **only** using the following JSON structure, enclosed in triple backticks with `json` (no additional explanations or text):
 ```json
-{{"datasets": ["https://www.kaggle.com/datasets/exampleuser/first-dataset", "https://www.kaggle.com/datasets/exampleuser/second-dataset"]}}
-```
-
-Example: when no datasets are found
-```json
-{{"datasets": []}}
+{"datasets": ["https://www.kaggle.com/datasets/exampleuser/first-dataset", "https://www.kaggle.com/datasets/exampleuser/second-dataset"]}
 ```
 """
-
 

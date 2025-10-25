@@ -18,14 +18,9 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 _CONFIG = get_config()
-_LLM_CFG = _CONFIG.get("llm", {}) if isinstance(_CONFIG, dict) else {}
-_BASE_URL = _LLM_CFG.get("base_url", "https://openrouter.ai/api/v1")
-_API_KEY_ENV = _LLM_CFG.get("api_key_env", "OPENROUTER_API_KEY")
-_LEAKAGE_REVIEW_MODEL = _LLM_CFG.get("leakage_review_model", "qwen/qwen3-next-80b-a3b-thinking")
-_LEAKAGE_FOLLOWUP_MODEL = _LLM_CFG.get("leakage_followup_model", "qwen/qwen3-next-80b-a3b-instruct")
-
-client = OpenAI(api_key=os.environ.get(_API_KEY_ENV), base_url=_BASE_URL)
-
+_LLM_CFG = _CONFIG.get("llm")
+_LEAKAGE_REVIEW_MODEL = _LLM_CFG.get("leakage_review_model")
+_LEAKAGE_FOLLOWUP_MODEL = _LLM_CFG.get("leakage_followup_model")
 
 # -----------------------------
 # Guardrails: Static logging AST
@@ -33,6 +28,7 @@ client = OpenAI(api_key=os.environ.get(_API_KEY_ENV), base_url=_BASE_URL)
 LOG_LEVEL_METHODS = {"debug", "info", "warning", "error", "critical"}
 
 
+# caution: I did not check logging guardrails - I assume its correct
 def _is_logging_basicconfig_call(call: ast.Call) -> bool:
     """Return True if call node is logging.basicConfig(...)."""
     try:
@@ -79,7 +75,7 @@ def _collect_logger_aliases(nodes: List[ast.stmt]) -> List[str]:
     return aliases
 
 
-def check_logging_basicconfig_order(filepath: str) -> Dict[str, Any]:
+def check_logging_basicconfig_order(code: str) -> Dict[str, Any]:
     """
     Ensure logging.basicConfig is executed before any top-level logging statements.
 
@@ -92,24 +88,16 @@ def check_logging_basicconfig_order(filepath: str) -> Dict[str, Any]:
       statements, FAIL.
     Returns a dict report with status, basicConfig_line, and violations.
     """
-    try:
-        with open(filepath, "r") as f:
-            source = f.read()
-    except Exception as exc:
-        return {
-            "status": "error",
-            "error": f"Failed to read file: {exc}",
-        }
 
     try:
-        module = ast.parse(source)
+        module = ast.parse(code)
     except SyntaxError as exc:
         return {
             "status": "error",
             "error": f"SyntaxError while parsing: {exc}",
         }
 
-    lines = source.splitlines()
+    lines = code.splitlines()
     aliases = _collect_logger_aliases(module.body)
 
     basic_line: Optional[int] = None
@@ -155,60 +143,41 @@ def check_logging_basicconfig_order(filepath: str) -> Dict[str, Any]:
 # ----------------------------------------------
 # Guardrails: LLM-based data leakage risk review
 # ----------------------------------------------
-def llm_leakage_review(task_description: str, code: str) -> str:
+def llm_leakage_review(code: str) -> str:
     """
     Ask an LLM to review potential data leakage risks in the generated code.
     Uses the configured leakage review model via OpenRouter. Returns raw model text.
     """
-    content_payload = prompt_leakage_review(task_description, code)
+    system_prompt = prompt_leakage_review()
 
-    messages = [
-        {"role": "user", "content": content_payload}
+    input_list = [
+        {"role": "user", "content": "Python Training Script: \n\n" + code}
     ]
 
-    try:
-        content = ""
-        while content == "":
-            completion = call_llm_with_retry(
-                client,
-                model=_LEAKAGE_REVIEW_MODEL,
-                messages=messages,
-            )
-            try:
-                msg = completion.choices[0].message
-                content = msg.content or ""
-            except Exception:
-                msg = ""
-                content = ""
-        return content
-    except Exception:
-        logger.exception("Leakage LLM review failed")
-        return '{"severity": "warn", "findings": [{"rule_id": "llm_error", "snippet": "N/A", "rationale": "LLM call failed", "suggestion": "Proceed with caution; add manual review."}]}'
+    response = call_llm_with_retry(
+        model=_LEAKAGE_REVIEW_MODEL,
+        instructions=system_prompt,
+        tools=[],
+        messages=input_list,
+    )
+
+    return response.output_text or ""
+
 
 
 def llm_debug_sequence_review(code: str) -> str:
     """Ensure generated code runs DEBUG then FULL modes and guards against NaNs/zeros."""
-    content_payload = prompt_debug_sequence_review(code)
+    content_payload = prompt_debug_sequence_review()
 
-    messages = [
-        {"role": "user", "content": content_payload}
+    input_list = [
+        {"role": "user", "content": "Python Training Pipeline: \n\n" + code}
     ]
 
-    try:
-        content = ""
-        while content == "":
-            completion = call_llm_with_retry(
-                client,
-                model=_LEAKAGE_FOLLOWUP_MODEL,
-                messages=messages,
-            )
-            try:
-                msg = completion.choices[0].message
-                content = msg.content or ""
-            except Exception:
-                msg = ""
-                content = ""
-        return content
-    except Exception:
-        logger.exception("DEBUG sequence LLM review failed")
-        return '{"severity": "warn", "findings": [{"rule_id": "llm_error", "snippet": "N/A", "rationale": "LLM call failed", "suggestion": "Manually verify DEBUG sequencing and NaN/zero safeguards."}]}'
+    response = call_llm_with_retry(
+        model=_LEAKAGE_FOLLOWUP_MODEL,
+        instructions=content_payload,
+        tools=[],
+        messages=input_list,
+    )
+
+    return response.output_text or ""

@@ -2,6 +2,7 @@ import logging
 import os
 import re
 import shlex
+import signal
 import sys
 import traceback
 from io import StringIO
@@ -32,30 +33,38 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 _CONFIG = get_config()
-_LLM_CFG = _CONFIG.get("llm", {}) if isinstance(_CONFIG, dict) else {}
-_RUNTIME_CFG = _CONFIG.get("runtime", {}) if isinstance(_CONFIG, dict) else {}
-_PATH_CFG = _CONFIG.get("paths", {}) if isinstance(_CONFIG, dict) else {}
+_LLM_CFG = _CONFIG.get("llm")
+_RUNTIME_CFG = _CONFIG.get("runtime")
+_PATH_CFG = _CONFIG.get("paths")
 
-_BASE_URL = _LLM_CFG.get("base_url", "https://openrouter.ai/api/v1")
-_API_KEY_ENV = _LLM_CFG.get("api_key_env", "OPENROUTER_API_KEY")
-_RESEARCHER_MODEL = _LLM_CFG.get("researcher_model", "google/gemini-2.5-pro")
-_RESEARCHER_TOOL_OFFLINE_MODEL = _LLM_CFG.get(
-    "researcher_tool_offline_model",
-    _RESEARCHER_MODEL,
-)
-_RESEARCHER_TOOL_ONLINE_MODEL = _LLM_CFG.get(
-    "researcher_tool_online_model",
-    _RESEARCHER_MODEL,
-)
-_DEFAULT_ASK_ATTEMPTS = _RUNTIME_CFG.get("ask_eda_max_attempts", 5)
-_TASK_ROOT = Path(_PATH_CFG.get("task_root", "task"))
-_EXTERNAL_DIRNAME = _PATH_CFG.get("external_data_dirname", "external-data")
+_RESEARCHER_TOOL_OFFLINE_MODEL = _LLM_CFG.get("researcher_tool_offline_model")
+_RESEARCHER_TOOL_ONLINE_MODEL = _LLM_CFG.get("researcher_tool_online_model")
+_DEFAULT_ASK_ATTEMPTS = _RUNTIME_CFG.get("ask_eda_max_attempts")
+_TASK_ROOT = Path(_PATH_CFG.get("task_root"))
+_EXTERNAL_DIRNAME = _PATH_CFG.get("external_data_dirname")
+
+
+class TimeoutException(Exception):
+    """Exception raised when code execution times out."""
+    pass
+
+
+def _timeout_handler(signum, frame):
+    """Signal handler for timeout."""
+    raise TimeoutException("Code execution timed out")
 
 
 @weave.op()
-def ask_eda(question: str, description: str, data_path: str, max_attempts: int | None = None) -> str:
-    """Asks a question about the data provided for exploratory data analysis (EDA)"""
-    client = OpenAI(api_key=os.environ.get(_API_KEY_ENV), base_url=_BASE_URL)
+def ask_eda(question: str, description: str, data_path: str, max_attempts: int | None = None, timeout_seconds: int = 600) -> str:
+    """Asks a question about the data provided for exploratory data analysis (EDA)
+
+    Args:
+        question: The EDA question to answer
+        description: Competition description
+        data_path: Path to the data directory
+        max_attempts: Maximum number of attempts (default from config)
+        timeout_seconds: Timeout for code execution in seconds (default 600 = 10 minutes)
+    """
     # Prepare media directory for EDA charts and expose to executed code
     try:
         preset_media = os.environ.get("MEDIA_DIR", "").strip()
@@ -67,50 +76,37 @@ def ask_eda(question: str, description: str, data_path: str, max_attempts: int |
         media_dir.mkdir(parents=True, exist_ok=True)
     except Exception:
         logger.exception("Failed to ensure MEDIA_DIR under %s", data_path)
+
     directory_listing = _build_directory_listing(data_path)
-    logger.debug(
-        "Prepared directory listing for %s (length=%s)", data_path, len(directory_listing)
-    )
+    logger.debug("Prepared directory listing for %s (length=%s)", data_path, len(directory_listing))
+
     attempts = max_attempts or _DEFAULT_ASK_ATTEMPTS
     PROMPT = prompt_ask_eda(data_path, directory_listing, description)
-    all_messages = [
-        {"role": "system", "content": PROMPT},
-        {"role": "user", "content": question},
-    ]
+    input_list = [{"role": "user", "content": "Question: " + question}]
 
     pattern = r'```python\s*(.*?)\s*```'
 
-    last_error = ""
     for attempt in range(1, attempts + 1):
         logger.info("ask_eda attempt %s/%s", attempt, attempts)
-        completion = call_llm_with_retry(
-            client,
+        response = call_llm_with_retry(
             model=_RESEARCHER_TOOL_OFFLINE_MODEL,
-            messages=all_messages,
+            instructions=PROMPT,
+            tools=[],
+            messages=input_list,
         )
-        try:
-            msg = completion.choices[0].message
-            response_text = msg.content or ""
-        except Exception:
-            msg = ""
-            response_text = ""
-        assistant_message = {"role": "assistant", "content": response_text}
+        response_text = response.output_text or ""
+        input_list += response.output
 
         matches = re.findall(pattern, response_text, re.DOTALL)
         code = "\n\n".join(matches).strip()
         logger.debug("ask_eda generated code (truncated): %s", code)
 
         if not code:
-            last_error = "No python code block found in the model response."
-            logger.warning(last_error)
-            all_messages.append(assistant_message)
+            input_list.append({"role": "user", "content": "No python code block found. Please try again."})
+            logger.warning("ask_eda found no python code block in response.")
+            continue
         else:
             try:
-                # Simple policy assertion carried forward
-                assert "train_labels.csv" not in code or "!= 'Missing'" in code, (
-                    "You must remove records with type = 'Missing' before doing any analysis."
-                )
-
                 # Save current stdout
                 old_stdout = sys.stdout
                 sys.stdout = captured_output = StringIO()
@@ -118,144 +114,95 @@ def ask_eda(question: str, description: str, data_path: str, max_attempts: int |
                 with open(f"code_abc.py", "w") as f:
                     f.write(code)
 
-                exec(open(f"code_abc.py").read(), globals())
-                output = captured_output.getvalue()
+                with open("code_abc.py", "r") as f:
+                    code_text = f.read()
 
-                sys.stdout = old_stdout
+                # Set timeout
+                signal.signal(signal.SIGALRM, _timeout_handler)
+                signal.alarm(timeout_seconds)
+                logger.debug("Set execution timeout to %d seconds", timeout_seconds)
+
+                try:
+                    exec(code_text, globals())
+                    output = captured_output.getvalue()
+                finally:
+                    # Cancel the alarm
+                    signal.alarm(0)
+                    # Restore stdout
+                    sys.stdout = old_stdout
 
                 logger.info("ask_eda succeeded on attempt %s", attempt)
                 return output
-
-            except AssertionError as e:
-                try:
-                    sys.stdout = old_stdout
-                except Exception:
-                    pass
-                last_error = f"Assertion failed: {e}"
-                logger.warning(last_error)
+            except TimeoutException:
+                # Cancel alarm and restore stdout
+                signal.alarm(0)
+                sys.stdout = old_stdout
+                logger.error("ask_eda execution timed out after %d seconds", timeout_seconds)
+                timeout_minutes = timeout_seconds / 60
+                if timeout_minutes >= 1:
+                    return f"Your query cannot be executed within {timeout_minutes:.0f} minutes"
+                else:
+                    return f"Your query cannot be executed within {timeout_seconds} seconds"
             except Exception as e:
-                try:
-                    sys.stdout = old_stdout
-                except Exception:
-                    pass
-                all_messages.append(assistant_message)
+                # Cancel alarm and restore stdout
+                signal.alarm(0)
+                sys.stdout = old_stdout
                 stack_trace = traceback.format_exc()
-                last_error = f"Error executing code: {str(e)}"
                 logger.exception("ask_eda execution failed: %s", e)
 
                 try:
                     search_result = web_search_stack_trace(stack_trace)
                     if search_result:
                         logger.info("ask_eda web search guidance retrieved.")
-                        last_error = (
-                            f"{last_error}\n\nStack trace:\n{stack_trace}\n\n"
-                            f"Web search guidance:\n{search_result}"
-                        )
-                        all_messages.append(
-                            {
-                                "role": "user",
-                                "content": (
-                                    "The previous code attempt failed with this stack trace:\n"
-                                    f"{stack_trace}\n\nHere is external guidance that may help fix it:\n"
-                                    f"{search_result}\n\n"
-                                    "Please provide a corrected solution."
-                                ),
-                            }
-                        )
+                        input_list.append({"role": "user", "content": stack_trace + "\n\n" + search_result})
                 except Exception:
                     logger.exception("ask_eda web search for stack trace failed.")
 
-    logger.error(
-        "ask_eda exhausted all attempts without success. Last error: %s", last_error
-    )
+    logger.error("ask_eda exhausted all attempts without success")
     return "Your question cannot be answered."
 
 @weave.op()
-def download_external_datasets(query: str, slug: str) -> str:
+def download_external_datasets(dataset_name: str, slug: str, max_attempts: int | None = None) -> str:
     """Downloads external datasets"""
-    client = OpenAI(api_key=os.environ.get(_API_KEY_ENV), base_url=_BASE_URL)
-    logger.debug("Dataset query: %s", query)
+    logger.debug("Dataset name: %s", dataset_name)
+    attempts = max_attempts or _DEFAULT_ASK_ATTEMPTS
+    
 
     comp_dir = _TASK_ROOT / slug
     with open(comp_dir / "comp_metadata.yaml", "r") as f:
         COMP_METADATA = yaml.safe_load(f)
 
-    messages = [
-        {
-            "role": "user",
-            "content": prompt_datasets(query),
-        }
-    ]
-    logger.debug("Web search messages: %s", messages)
+    PROMPT = prompt_datasets()
+    input_list = [{"role": "user", "content": "Dataset Name: " + dataset_name}]
+    logger.debug("Web search messages: %s", input_list)
+    pattern = r'```json\s*(\{.*?\})\s*```' 
 
-    try:
-        content = ""
-        while content == "":
-            completion = call_llm_with_retry(
-                client,
-                model=_RESEARCHER_TOOL_ONLINE_MODEL,
-                messages=messages,
-            )
-            try:
-                msg = completion.choices[0].message
-                content = msg.content or ""
-            except Exception:
-                msg = ""
-                content = ""
+    relevant_datasets = []
+    for attempt in range(1, attempts + 1):
+        logger.info("Dataset discovery attempt %s/%s", attempt, attempts)
+        response = call_llm_with_retry(
+            model=_RESEARCHER_TOOL_ONLINE_MODEL,
+            instructions=PROMPT,
+            tools=[],
+            messages=input_list,
+            web_search_enabled=True,
+        )
+        completion = response.output_text or ""
 
-        logger.info("Received web search response for dataset query.")
-        logger.debug("Web search raw response: %s", content)
-    except Exception:
-        logger.exception("Web search request for dataset failed.")
-        return "No relevant datasets found."
-
-    completion = content
-    relevant_datasets = None
-    max_dataset_attempts = 3
-    for dataset_attempt in range(1, max_dataset_attempts + 1):
-        logger.debug("Web search completion text: %s", completion)
-        pattern = r'```json\s*(\{.*?\})\s*```'
         matches = re.findall(pattern, completion, re.DOTALL)
-
         if not matches:
             logger.warning("No JSON block found in web search response.")
-            relevant_datasets = None
+            continue
         else:
             data = json.loads(matches[0])
-            relevant_datasets = data.get("datasets", None)
+            new_datasets = data.get("datasets", [])
+            logger.info("Relevant datasets found: %s", new_datasets)
+            relevant_datasets.extend(new_datasets)
 
-        if relevant_datasets is None and dataset_attempt < max_dataset_attempts:
-            logger.info(
-                "Datasets key is None; retrying dataset discovery (%s/%s)",
-                dataset_attempt,
-                max_dataset_attempts,
-            )
-            # Re-query for datasets and try parsing again
-            content = ""
-            while content == "":
-                completion_obj = call_llm_with_retry(
-                    client,
-                    model=_RESEARCHER_TOOL_ONLINE_MODEL,
-                    messages=messages,
-                )
-                try:
-                    msg = completion_obj.choices[0].message
-                    content = msg.content or ""
-                except Exception:
-                    msg = ""
-                    content = ""
-            completion = content
-            continue
-        break
-
-    if relevant_datasets is None:
-        logger.info("Datasets still None after %s attempts.", max_dataset_attempts)
-        return "No relevant datasets found."
-    if not relevant_datasets:
-        logger.info("No datasets found in web search JSON response.")
-        return "No relevant datasets found."
     logger.info("Found %s relevant datasets from web search.", len(relevant_datasets))
-    external_root_env = os.environ.get("EXTERNAL_DATA_DIR", "").strip()
+
+    # this should fallback - because we will still read the directory
+    external_root_env = os.environ.get("EXTERNAL_DATA_DIR").strip()
     if external_root_env:
         external_root = Path(external_root_env)
         dest_path = external_root
@@ -263,6 +210,7 @@ def download_external_datasets(query: str, slug: str) -> str:
         dest_path = comp_dir
         external_root = dest_path / _EXTERNAL_DIRNAME
     external_root.mkdir(parents=True, exist_ok=True)
+
     for dataset in relevant_datasets:
         try:
             kaggle_url = "/".join(dataset.split("/")[-2:])
@@ -287,6 +235,7 @@ def download_external_datasets(query: str, slug: str) -> str:
         except:
             logger.exception("Failed to download dataset: %s", dataset)
             continue
+
     dest_files = _build_directory_listing(str(dest_path))
     logger.info(f"Current files in {dest_path}:\n{dest_files}")
     return f'Relevant Datasets are downloaded: now {dest_path} contains: \n{dest_files}'
@@ -297,30 +246,28 @@ def get_tools():
     return [
         {
             "type": "function",
-            "function": {
-                "name": "ask_eda",
-                "description": "Ask a question to the EDA expert",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "question": {"type": "string", "description": "The question to ask the EDA expert"}
-                    },
-                    "required": ["question"],
+            "name": "ask_eda",
+            "description": "Ask a question to the EDA expert",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "question": {"type": "string", "description": "The question to ask the EDA expert"}
                 },
             },
+            "additionalProperties": False,
+            "required": ['question']
         },
         {
             "type": "function",
-            "function": {
-                "name": "download_external_datasets",
-                "description": "Download external data to working directory",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "query": {"type": "string", "description": "Short description of the external data need"}
-                    },
-                    "required": ["query"],
+            "name": "download_external_datasets",
+            "description": "Download external data to working directory",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "dataset_name": {"type": "string", "description": "The dataset name to download - write an English phrase describing the dataset you want to download"}
                 },
             },
+            "additionalProperties": False,
+            "required": ["dataset_name"],
         },
     ]

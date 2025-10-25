@@ -4,10 +4,8 @@ import os
 import base64
 import mimetypes
 from pathlib import Path
-from typing import List
 
 from dotenv import load_dotenv
-from openai import OpenAI
 from project_config import get_config
 
 from tools.researcher import ask_eda, download_external_datasets, get_tools
@@ -17,31 +15,19 @@ from prompts.researcher_agent import (
 )
 from tools.helpers import call_llm_with_retry
 import weave
-import wandb
-
-
-def _safe_read(path: str) -> str:
-    try:
-        with open(path, "r") as f:
-            return f.read()
-    except Exception:
-        return ""
 
 logger = logging.getLogger(__name__)
 
 _CONFIG = get_config()
-_LLM_CFG = _CONFIG.get("llm", {}) if isinstance(_CONFIG, dict) else {}
-_PATH_CFG = _CONFIG.get("paths", {}) if isinstance(_CONFIG, dict) else {}
-_RUNTIME_CFG = _CONFIG.get("runtime", {}) if isinstance(_CONFIG, dict) else {}
+_LLM_CFG = _CONFIG.get("llm")
+_PATH_CFG = _CONFIG.get("paths")
+_RUNTIME_CFG = _CONFIG.get("runtime")
+_RESEARCHER_AGENT_MODEL = _LLM_CFG.get("researcher_model")
 
-_BASE_URL = _LLM_CFG.get("base_url", "https://openrouter.ai/api/v1")
-_API_KEY_ENV = _LLM_CFG.get("api_key_env", "OPENROUTER_API_KEY")
-_RESEARCHER_AGENT_MODEL = _LLM_CFG.get("researcher_model", "google/gemini-2.5-pro")
+_TASK_ROOT = Path(_PATH_CFG.get("task_root"))
+_OUTPUTS_DIRNAME = _PATH_CFG.get("outputs_dirname")
 
-_TASK_ROOT = Path(_PATH_CFG.get("task_root", "task"))
-_OUTPUTS_DIRNAME = _PATH_CFG.get("outputs_dirname", "outputs")
-
-_DEFAULT_MAX_STEPS = _RUNTIME_CFG.get("researcher_max_steps", 512)
+_DEFAULT_MAX_STEPS = _RUNTIME_CFG.get("researcher_max_steps")
 
 # Media ingestion limits/types
 SUPPORTED_IMAGE_TYPES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
@@ -57,41 +43,32 @@ class ResearcherAgent:
     (no further tool calls), or the tool-call budget is exhausted.
     """
 
-    def __init__(self, slug: str, iteration: int, run_id: int | None = None):
+    def __init__(self, slug: str, iteration: int, run_id: int = 1):
         load_dotenv()
         self.slug = slug
         self.iteration = iteration
         self.run_id = run_id
-        os.environ["TASK_SLUG"] = slug
-        self.client = OpenAI(api_key=os.environ.get(_API_KEY_ENV), base_url=_BASE_URL)
-        self.messages: List[dict] = []
+
         self.base_dir = _TASK_ROOT / self.slug
         self.outputs_dir = self.base_dir / _OUTPUTS_DIRNAME / str(self.iteration)
         self.outputs_dir.mkdir(parents=True, exist_ok=True)
+        with open(self.base_dir / "description.md", "r") as f:
+            self.description = f.read()
         # Configure per-run output dirs for media/external data under outputs/<iter>
-        if self.run_id is not None:
-            self.media_dir = self.outputs_dir / f"media_{self.run_id}"
-            self.external_dir = self.outputs_dir / f"external_data_{self.run_id}"
-            try:
-                self.media_dir.mkdir(parents=True, exist_ok=True)
-                self.external_dir.mkdir(parents=True, exist_ok=True)
-                os.environ["MEDIA_DIR"] = str(self.media_dir)
-                os.environ["EXTERNAL_DATA_DIR"] = str(self.external_dir)
-            except Exception:
-                pass
-            per_run_log_dir = self.outputs_dir / "researcher" / f"run_{self.run_id}"
-            per_run_log_dir.mkdir(parents=True, exist_ok=True)
-            self.researcher_log_path = per_run_log_dir / f"researcher_{self.run_id}.txt"
-        else:
-            # Single-run defaults (backward compatible)
-            self.media_dir = self.base_dir / "media"
-            self.external_dir = self.base_dir / _PATH_CFG.get("external_data_dirname", "external-data")
-            try:
-                self.media_dir.mkdir(parents=True, exist_ok=True)
-                self.external_dir.mkdir(parents=True, exist_ok=True)
-            except Exception:
-                pass
-            self.researcher_log_path = self.outputs_dir / "researcher.txt"
+        assert self.run_id is not None, "run_id is required"
+
+        self.media_dir = self.outputs_dir / f"media_{self.run_id}"
+        self.external_dir = self.outputs_dir / f"external_data_{self.run_id}"
+        self.media_dir.mkdir(parents=True, exist_ok=True)
+        self.external_dir.mkdir(parents=True, exist_ok=True)
+
+        os.environ["TASK_SLUG"] = slug
+        os.environ["MEDIA_DIR"] = str(self.media_dir)
+        os.environ["EXTERNAL_DATA_DIR"] = str(self.external_dir)
+
+        per_run_log_dir = self.outputs_dir / "researcher" / f"run_{self.run_id}"
+        per_run_log_dir.mkdir(parents=True, exist_ok=True)
+        self.researcher_log_path = per_run_log_dir / f"researcher_{self.run_id}.txt"
         self._configure_logger()
 
     def _configure_logger(self) -> None:
@@ -107,6 +84,9 @@ class ResearcherAgent:
         }
         if str(self.researcher_log_path) not in existing_paths:
             file_handler = logging.FileHandler(self.researcher_log_path)
+            file_handler.setFormatter(
+                logging.Formatter("%(asctime)s %(levelname)s [%(name)s] %(message)s")
+            )
             logger.addHandler(file_handler)
         logger.setLevel(logging.DEBUG)
         logger.info(
@@ -166,27 +146,34 @@ class ResearcherAgent:
             total += size
         if not selected:
             return
-        content: list[dict] = [{"type": "text", "text": f"Attaching {len(selected)} new EDA chart(s) from media/."}]
+        content: list[dict] = []
         for p in selected:
             data_url = self._encode_image_to_data_url(p)
             if not data_url:
                 continue
-            content.append({"type": "image_url", "image_url": {"url": data_url}})
-        if len(content) > 1:
-            self.messages.append({"role": "user", "content": content})
+            content.append({"type": "input_image", "image_url": {"url": data_url}})
+
+        return [{"role": "user", "content": content}]
 
     def _compose_system(self) -> str:
-        base_dir = self.base_dir
-        self.description = _safe_read(str(base_dir / "description_obfuscated.md"))
-        public_insights = _safe_read(str(base_dir / "public_insights.md"))
-        return prompt_build_system(str(base_dir), self.description, public_insights)
+        return prompt_build_system(str(self.base_dir))
+
+    def _read_starter_suggestions(self) -> str:
+        # Prefer raw starter_suggestions.txt; fallback to JSON; else 'None'
+        json_path = self.outputs_dir / "starter_suggestions.json"
+        with open(json_path, "r") as f:
+            starter_suggestions = json.load(f)
+        res = ""
+        for key in starter_suggestions.keys():
+            res += f"<{key}>\n{starter_suggestions[key]}\n</{key}>\n"
+        return res
 
     @weave.op()
     def build_plan(self, max_steps: int | None = None) -> str:
         system_prompt = self._compose_system()
-        self.messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": prompt_initial_user()},
+        starter_suggestions = self._read_starter_suggestions()
+        input_list = [
+            {"role": "user", "content": prompt_initial_user(self.description, starter_suggestions)},
         ]
 
         max_steps = max_steps or _DEFAULT_MAX_STEPS
@@ -197,83 +184,68 @@ class ResearcherAgent:
             # logger.debug("Current conversation tail: %s", self.messages[-2:])
             logger.info("[Researcher] Step %s/%s", step + 1, max_steps)
             if step == max_steps - 1:
-                self.messages.append({"role": "user", "content": "This is your FINAL step. Output the final plan now!"})
+                input_list.append({"role": "user", "content": "This is your FINAL step. Output the final plan now!"})
                 logger.info("Reached final step; forcing plan output prompt")
 
-            llm_params = {
-                "model": _RESEARCHER_AGENT_MODEL,
-                "messages": self.messages,
-                "tools": tools,
-                "tool_choice": "auto",
-            }
+            response = call_llm_with_retry(
+                model=_RESEARCHER_AGENT_MODEL,
+                instructions=system_prompt,
+                tools=tools,
+                messages=input_list
+            )
 
-            msg_content = "<tool_call>"
+            input_list += response.output
+            tool_calls = False
 
-            while "<tool_call>" in msg_content or msg_content == "" or """{"name":""" in msg_content:
-                completion = call_llm_with_retry(self.client, **llm_params)
-                try:
-                    msg = completion.choices[0].message
-                    msg_content = msg.content
-                except Exception:
-                    msg = ""
-                    msg_content = ""
-                logger.debug("Model response content length: %s", len(msg_content or ""))
-                if msg.tool_calls:
-                    break
-                
-            self.messages.append(msg.model_dump())
-
-            if msg.tool_calls:
-                for tool_call in msg.tool_calls:
-                    function_name = tool_call.function.name
-                    arguments = json.loads(tool_call.function.arguments)
-                    logger.info(
-                        "Tool call issued: %s with arguments=%s", function_name, arguments
-                    )
-                    if function_name == "ask_eda":
-                        question = arguments.get("question", "")
+            for item in response.output:
+                if item.type == "function_call":
+                    tool_calls = True
+                    if item.name == "ask_eda":
+                        try:
+                            question = json.loads(item.arguments)["question"]
+                        except Exception as e:
+                            logger.error("Failed to parse ask_eda arguments: %s", e)
+                            question = ""
                         logger.info(f"{question}")
                         if len(question) == 0:
-                            tool_output = "Your question cannot be answered based on the competition discussion threads."
+                            tool_output = "An error occurred. Please retry."
                         else:
                             before_media = self._list_media_files()
                             tool_output = ask_eda(question, self.description, data_path=str(self.base_dir))
-
-                        logger.info("```tool")
-                        logger.info(f"{tool_output}")
-                        logger.info("```")
-
-                        self.messages.append(
-                            {
-                                "role": "tool",
-                                "tool_call_id": tool_call.id,
-                                "content": tool_output or "Your question cannot be answered based on the competition discussion threads.",
-                            }
-                        )
-                        try:
-                            self._ingest_new_media(before_media)
-                        except Exception:
-                            logger.debug("No media ingested for this step.")
-                    elif function_name == "download_external_datasets":
-                        query = arguments.get("query", "")
-                        if not query:
-                            tool_output = "Search query missing; please provide a specific data need."
+                            input_list.append({
+                                "type": "function_call_output",
+                                "call_id": item.call_id,
+                                "output": json.dumps({
+                                    "insights": tool_output,
+                                })
+                            })
+                            try:
+                                # I don't care if this silently fails - its not that critical
+                                self._ingest_new_media(before_media)
+                            except Exception:
+                                logger.debug("No media ingested for this step.")
+                            
+                    elif item.name == "download_external_datasets":
+                        dataset_name = json.loads(item.arguments)["dataset_name"]
+                        if not dataset_name:
+                            tool_output = "Dataset name missing; please provide a specific dataset name."
                         else:
-                            tool_output = download_external_datasets(query, self.slug)
+                            tool_output = download_external_datasets(dataset_name, self.slug)
 
                         logger.info("External search response length=%s", len(tool_output or ""))
 
-                        self.messages.append(
-                            {
-                                "role": "tool",
-                                "tool_call_id": tool_call.id,
-                                "content": tool_output or "No relevant datasets found.",
-                            }
-                        )
-                continue
+                        input_list.append({
+                            "type": "function_call_output",
+                            "call_id": item.call_id,
+                            "output": json.dumps({
+                                "results": tool_output,
+                            })
+                        })
+
+            if tool_calls: continue
 
             # No tool calls -> final plan
-            final_content = msg.content or ""
+            final_content = response.output_text or ""
             logger.info("Final plan received at step %s with length=%s", step + 1, len(final_content))
             if len(final_content) == 0:
                 logger.error("LLM returned empty final plan at step %s", step + 1)

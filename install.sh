@@ -3,7 +3,7 @@ set -euo pipefail
 
 # === CONFIG ===
 KAGGLE_JSON_PATH="${KAGGLE_JSON_PATH:-kaggle.json}"
-TASK_NAME="playground-series-s5e10"
+TASK_NAME="learning-agency-lab-automated-essay-scoring-2"
 WORKDIR="${WORKDIR:-$(pwd)}"
 CACHE_DIR="/root/.cache/mle-bench/data/${TASK_NAME}/prepared"
 
@@ -20,11 +20,12 @@ clone_repos() {
     echo "[*] Cloning repositories..."
     mkdir -p "$WORKDIR"
     cd "$WORKDIR"
+    uv pip install -r requirements.txt
 
     if [[ ! -d mle-bench ]]; then
         git clone https://github.com/bogoconic1/mle-bench.git
         sudo apt update && sudo apt install -y git-lfs
-        (cd mle-bench && git lfs fetch --all && git lfs pull && pip install -e .)
+        (cd mle-bench && git lfs fetch --all && git lfs pull && uv pip install -e .)
     fi
 }
 

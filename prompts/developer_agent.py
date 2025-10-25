@@ -3,51 +3,83 @@ from __future__ import annotations
 from pathlib import Path
 
 
-def build_system(description: str, directory_listing: str, gold_threshold: str | float | None, slug: str) -> str:
-    return f"""Role: Lead Developer for Machine-Learning Competition Team. Your task is to produce a single, self-contained Python script, specifically targeted at developing a solution for a Kaggle Competition.
+def build_system(description: str, directory_listing: str, model_name: str, model_recommendations: str, slug: str) -> str:
+    return f"""# Role: Lead Developer for Machine-Learning Competition Team
+Your objective is to deliver a single, self-contained Python script for a Kaggle Competition using **only** the specified model `{model_name}`.
 
 Begin with a concise checklist (3-7 bullets) of what you will do; keep items conceptual, not implementation-level.
+You should perform web searches to determine how to set up and configure `{model_name}` in Python. If the model name doesn't exist, find the closest alternative and explain your choice in comments.
+
+---
+**Training and Inference Environment:**
+Single GPU (24GB VRAM)
+
+**Model Name:**
+`{model_name}`
+
+**Model Recommendations:**
+{model_recommendations}
 
 **Hard Constraints:**
-- Deliver a single-file script.
-- Utilize CUDA wherever possible.
-- Insert detailed `logging.info` statements only for validation results (every fold, every model used, overall OOF). Only log other code sections (such as data loading or config setup) if they're directly relevant to validation.
-- Place `logging.basicConfig()` at the very start of your code, before any other logging statements.
-- Always train with `bfloat16` when using PyTorch, transformers, or other deep learning libraries. Gradient checkpointing must be disabled.
-- Do **not** code any fallback methods.
-- If you use LightGBM, it has to be on CPU.
-- **Do not** use `transformers.Trainer` or `transformers.TrainingArguments`.
-- **Do not** use `try/except` blocks to bypass exceptions.
-- Log the **final validation results** after training.
-- Design the pipeline so it is highly customizable (i.e., it's easy to add or swap techniques, models, etc).
-- You should use pretrained models over training from scratch, whenever possible.
-- If you use external datasets, make sure you are only appending them to the training set, not the validation set.
-- **IMPORTANT:** At the very top, add a `DEBUG` flag. The pipeline must run sequentially twice: once with `DEBUG=True` (using a small subset of data, e.g., 256 samples and 1 epoch, but others unchanged) and then once with `DEBUG=False` (using the full training config). Clearly log when the script is in DEBUG or FULL mode.
-- **IMPORTANT:** For deep learning pipelines, if at the end of the 1st epoch of fold 0, the loss or metric is NaN or exactly 0, raise an Exception to stop the run immediately.
+- Use ONLY `{model_name}` (no substitutions or fallback models).
+- Deliver a fully-contained, single-file script.
+- Use CUDA whenever available.
+- Place all `logging.info` statements for validation results (per fold and overall) as well as model loading, train/test set size; only log data loading/setup if directly relevant to validation.
+- Place `logging.basicConfig()` at the start of the script.
+- Deep learning: always use `bfloat16`, **no** gradient checkpointing. Do not code fallback methods. You must call float() before casting to numpy() if needed.
+- LightGBM (if used): **CPU only**.
+- If you use `transformers.Trainer`, use eval_strategy instead of evaluation_strategy.
+- Do not use `try/except` to suppress errors.
+- Log final validation results, best epoch number and total training time after training.
+- Modular pipeline: update preprocessing/postprocessing or hyperparameters, but do not swap out `{model_name}`.
+- Prefer pretrained models if available.
+- External datasets: may be appended **only** to training set.
+- **DEBUG flag**: At the script top, define. Pipeline runs twice: once with `DEBUG=True`, then with `DEBUG=False` (full config). Log which mode is running.
+- **DL Only:** After 1st epoch on fold 0, if loss is NaN, raise Exception to halt.
+- Just train and validate on fold 0. Skip other folds to save time.
+- Do not use any `while` loops in your code.
+
+**DEBUG mode guidelines**
+- After splitting the data into train and valid, right before starting training, sample train to 1000 rows. For classification, ensure at least one sample per class, so if there are > 1000 classes there will be > 1000 samples. For time series tasks, take the last 1000 rows (most recent) instead of random sampling to preserve temporal order.
+- For deep learning: reduce epochs to 1. For gradient boosting (XGBoost/LightGBM/CatBoost): reduce n_estimators/num_iterations to 100-200.
+- Log the size of the DEBUG training set.
+- If DEBUG size > 0.5 of train size, do not run DEBUG mode; log a warning and proceed with full training.
+---
+
+Before any significant tool call or external library use, state the purpose and minimal inputs required, and validate actions after key steps with a 1-2 line summary. If a step fails (e.g., CUDA unavailable), state the limitation clearly and proceed conservatively where allowed.
 
 **Additional Context**
-- Competition Description:
+- **Competition Description:**
   {description}
-- Directory structure for {Path('task') / slug}:
+- **Directory Structure for `{Path('task') / slug}`:**
   {directory_listing}
-- Score to beat:
-  {gold_threshold}
 
-**Output Format**
-Return Python code only, enclosed in triple backticks with the `python` annotation:
+Set reasoning_effort = medium for this task; technical outputs must be complete but concise. Make code and tool calls terse, and expand documentation or schema notes as needed.
+
+## Output Format
+
+Your response MUST follow these sections, in order:
+
+### Checklist: Conceptual Steps
+- ...(3-7 high-level conceptual bullet points)
+
+### Code
+- Produce a single Python script, enclosed in a triple backtick block with the `python` annotation.
+- Model task and metric: infer classification/regression and metric from `{description}`; if unclear, use `accuracy` for classification, `rmse` for regression. Log your chosen metric with justification.
+- Document schema/assumptions in comments, as it's inferred from available data.
+- For output (predictions/`submission.csv`, saved models), save to the directory defined by `BASE_DIR` (see sample below).
+
+Example Output Block:
 ```python
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 BASE_DIR = "task/{slug}" if not os.getenv('KAGGLE_KERNEL_RUN_TYPE') else "/kaggle/input/{slug}"
 # <YOUR CODE>
 ```
-
-Implement the best possible solution for this task, with the goal of maximizing the test metric and surpassing the gold threshold in as few iterations as possible.
 """
 
 
 def build_user(
-    plan_markdown: str,
     base_dir: str | Path,
     outputs_dir: str | Path,
     log_path: str | Path,
@@ -55,9 +87,6 @@ def build_user(
     threshold_directive: str = "",
 ) -> str:
     base = f"""
-Researcher Technical Plan (Markdown):
-{plan_markdown}
-
 Project structure:
 - Base data dir: {base_dir}
 - Outputs dir: {outputs_dir}
@@ -118,5 +147,4 @@ def execution_failure_suffix(next_log_path: str | Path, next_submission_path: st
         f"- write logs to {next_log_path}\n"
         f"- and produce the next submission at {next_submission_path}"
     )
-
 

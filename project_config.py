@@ -12,31 +12,27 @@ import yaml
 
 _DEFAULT_CONFIG: dict[str, Any] = {
     "llm": {
-        "base_url": "https://openrouter.ai/api/v1",
-        "api_key_env": "OPENROUTER_API_KEY",
-        "developer_model": "openai/gpt-5",
-        "developer_tool_model": "openai/gpt-5:online",
-        "researcher_model": "openai/gpt-5",
-        "researcher_tool_offline_model": "openai/gpt-5",
-        "researcher_tool_online_model": "openai/gpt-5:online",
-        "leakage_review_model": "qwen/qwen3-next-80b-a3b-instruct",
-        "leakage_followup_model": "qwen/qwen3-next-80b-a3b-instruct",
+        "developer_model": "gpt-5",
+        "developer_tool_model": "gpt-5",
+        "researcher_model": "gpt-5",
+        "researcher_tool_offline_model": "gpt-5",
+        "researcher_tool_online_model": "gpt-5",
+        "leakage_review_model": "gpt-4o",
+        "leakage_followup_model": "gpt-4o",
+        "model_recommender_model": "gpt-5",
     },
     "runtime": {
         "ask_eda_max_attempts": 5,
         "researcher_max_steps": 512,
         "llm_max_retries": 3,
         "directory_listing_max_files": 10,
-        "researcher_parallel_runs": 3,
+        "researcher_parallel_runs": 1,
         "patch_mode_enabled": False,
     },
     "paths": {
         "task_root": "task",
         "outputs_dirname": "outputs",
         "external_data_dirname": "external-data",
-    },
-    "hardware": {
-        "description": "A single A100 80GB GPU",
     },
     "guardrails": {
         "logging_basicconfig_order": True,
@@ -48,6 +44,10 @@ _DEFAULT_CONFIG: dict[str, Any] = {
             "entity": None,
             "project": None,
         }
+    },
+    "model_recommender": {
+        "default_models": ["deberta-v3-large"],
+        "enable_web_search": True,
     },
 }
 

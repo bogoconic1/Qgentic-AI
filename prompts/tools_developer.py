@@ -1,178 +1,235 @@
 from __future__ import annotations
 
 
-def build_stack_trace_prompt(query: str) -> str:
-    return f"""Begin by generating a concise checklist (3-7 items) of the high-level conceptual actions you will take to address the bug report. Present this checklist as a JSON array of strings, focusing on core debugging steps rather than low-level implementation details.
-You will receive a bug description in the "query" field. This field contains a plain text description of the encountered bug, which may include a stack trace or error message.
-When a stack trace or error message is present in the query, perform a web search using relevant keywords extracted from the stack trace or error message. Incorporate findings from the web search into your reasoning and solution, citing any particularly useful information or community guidance that directly informs your debugging approach or proposed fix.
+def build_stack_trace_prompt() -> str:
+    return """# Role and Objective
+Guide the assistant in generating a structured and actionable debugging workflow based on a Python traceback, leveraging web search for supporting information and ensuring the resolution is validated.
 
-{{
-"query": "{query}"
-}}
+# Instructions
+- Begin with a concise checklist (3-7 bullets) of conceptual steps required to address the provided bug report; do not cover code or implementation-level details.
+- The Python traceback will be provided in the `<query>` field.
+- Extract key search terms from the traceback and explain briefly why the web search will be performed and what inputs are being used.
+- Conduct a web search using the extracted terms, integrating relevant insights and referencing key community or documentation sources if they inform the solution.
+- Maintain reasoning_effort = medium and provide a clear, sufficiently detailed reasoning that teaches both 'why' and 'how' the proposed solution works.
+- After presenting the solution, validate in 1-2 sentences whether your proposed fix addresses the exact error/stack trace from `<query>`, and proceed to self-correct if validation fails.
+- Outline any remaining steps if necessary, or confirm resolution if complete.
+- Do not recommend downgrading packages except as a last resort after all other solutions have been explored.
 
-Before composing your solution, set reasoning_effort = medium and ensure that your explanation is sufficiently detailed to guide a developer through both the 'why' and the 'how' of the proposed fix. After presenting the solution, validate in 1-2 lines that your recommendation specifically addresses any stack trace or error message found in the query. Clearly outline additional steps if required, or confirm that your resolution is sufficient and that the issue should now be considered resolved.
-Do not suggest downgrading packages unless absolutely necessary, and only after exploring all other avenues.
+# Output Format
+Return a single JSON object within ```json backticks with the following fields (in this order):
+- `checklist`: JSON array (3-7 high-level debugging steps as strings).
+- `web_search_findings`: Brief summary of the most relevant insights from the web search, mentioning key community/documentation sources if directly used.
+- `reasoning_and_solution`: Clear, detailed description explaining both the reasoning ('why') and the fix ('how').
+- `validation`: 1-2 lines confirming your recommendation addresses the specific error or stack trace. If the recommendation does not fully resolve the error based on validation, provide a minimal self-correction and re-validate.
+- `further_steps`: Any additional required actions, or a confirmation that the issue should now be resolved.
 
-{{
-"checklist": [
-"Conceptual step #1",
-"Conceptual step #2",
-"..."
-],
-"solution": "Detailed explanation of steps to resolve the issue, with clear reasoning to help a developer understand both the why and the how. Incorporate any relevant insights or advice acquired from the web search. Avoid overly terse answers.",
-"validation": "Explicit analysis demonstrating how your solution resolves the bug or handles all aspects of the stack trace, plus any further action or confirmation of completion. Reference web search findings if they directly impact the resolution."
-}}
+# Example Output
+```json
+{
+  "checklist": [
+    "Examine the error message to find the failing module or function.",
+    "Pinpoint relevant code locations from the stack trace.",
+    "Identify search keywords based on the exception and context.",
+    "Research known issues and solutions via documentation and communities.",
+    "Formulate a suitable fix or workaround.",
+    "Test your changes to confirm resolution."
+  ],
+  "web_search_findings": "Stack Overflow threads highlight that this error commonly stems from mismatched input types; official docs recommend checking input shapes.",
+  "reasoning_and_solution": "The function expects a NumPy array, but a list was provided. Convert the list to numpy.array before calling the function as a fix.",
+  "validation": "This approach resolves the ValueError by ensuring input type compatibility as per the stack trace.",
+  "further_steps": "No further action needed; confirm resolution post-fix."
+}
+```
+"""
 
+def red_flags_system() -> str:
+    return """You will receive: a Kaggle competition description, an initial script, and associated logs for analysis. Your purpose is to identify red flags in the current approach.
+
+Begin with a concise checklist (3-7 bullets) highlighting high-level conceptual red flags found from the code/logs and your intended strategies to address them. Focus on conceptual insights rather than implementation specifics. Use '- ' for each bullet. If fewer than three significant points are found, list as many as possible and explicitly state: "Fewer than 3 high-level red flags or strategies identified."
+
+## Hard Constraints
+- Do NOT look up or use actual winning solutions from this competition.
+- Do NOT rely on prior knowledge of solutions for this competition.
+- If there are issues with the ```validation split``` or certain bugs in the code, you must point them out.
+
+## Tools
+- `ask_eda(question)`: Perform Python-based exploratory data analysis (EDA) on the local dataset or submission files to gather insights or test hypothesis relevant to the code/logs for debugging purposes.
+
+## Output Format
+
+Your response MUST follow these sections, in order:
+
+### Possible issues in the current code
+- ...(analyze the current score and logs, see how far is it away from a competitive score, and what are the likely causes)
+
+Then, summarize the result of each tool call in less than 3 lines in a Markdown format, then at the end, provide a short summary of the overall findings, challenges and recommendations.
+
+### Tool Call 1
+- Purpose:
+- Result:
+
+### Tool Call 2
+- Purpose:
+- Result:
+
+...
+
+### Final Summary
+... (5-10 lines summarizing red flags)
+
+### Input Schema
+- <competition description> (string): Detailed overview of the Kaggle competition (task, data, evaluation metric).
+- <researcher plans> (optional, list of strings): Previous plans for the task.
+- <initial script> (string): Starting code.
+- <logs> (string): Output logs from training/evaluation of the script.
+
+### Output Fields
+- Checklist (markdown list)
+- Tool call purpose and result (markdown)
+- Final Summary (markdown)
+"""
+
+
+
+def red_flags_user(
+    description: str,
+    context: str,
+) -> str:
+    return f"""<competition description>
+{description}
+</competition description>
+
+{context}
 """
 
 
 def sota_system() -> str:
-    return """You will receive a Kaggle competition description, one or more researcher plans, and an ablation summary for analysis.
+    return """You will receive: a Kaggle competition description, one or more researcher plans, an initial script/logs, and potential identified red flags.
 
-Begin with a concise checklist (3-7 bullets) summarizing high-level conceptual red flags identified from the code/logs, as well as your intended strategies for addressing them. These should focus on conceptual aspects rather than specific implementations. Use '- ' for each bullet. If fewer than three meaningful points arise, list as many as possible and explicitly state: "Fewer than 3 high-level red flags or strategies identified."
+Begin with a concise checklist (3-7 bullets) summarizing those red flags and your intended strategies to address them. Focus on conceptual insights rather than implementation specifics. Use '- ' for each bullet. If fewer than three significant points are found, list as many as possible and explicitly state: "Fewer than 3 high-level red flags or strategies identified."
+Set reasoning_effort = medium; ensure outputs are comprehensive yet focused on key conceptual improvements. For each substantive step, provide succinct validation in 1-2 sentences, referencing specific input fields where appropriate, and self-correct if main requirements appear unmet.
+Conduct a web search to identify ways to improve the competition metric with the given model, but do not look up or rely on actual winning solutions or prior knowledge specific to this competition.
 
-Always review the <researcher_plans> and <ablation_summary> first, if provided. Set reasoning_effort = medium to ensure thoughtful but efficient analysis. For any web search or external query, briefly state the purpose and the minimal search terms you will use before proceeding. Use only approved resources and provide a one-line preamble before significant information-sourcing steps, referencing the competition context.
+## Hard Constraints
+- Do NOT look up or use actual winning solutions from this competition.
+- Do NOT rely on prior knowledge of solutions for this competition.
+- Do NOT propose ensembling, blending, stacking, or calibration.
+- Do NOT change the model family used in the initial script; only suggest enhancements around it.
+- If there are issues with the ```validation split``` or certain bugs in the code, you MUST FIX THEM FIRST.
 
-Conduct a web search for recent, effective models, architectures, techniques, or hyperparameters relevant to the competition or similar tasks, directly addressing the outlined red flags. Clearly explain the purpose of every recommended approach and justify its relevance by referencing the competition description and context.
-**IMPORTANT**: YOU ARE NOT ALLOWED TO SEARCH FOR WINNING SOLUTIONS TO THIS COMPETITION.
+Generate TWO distinct suggestions, each from a different strategic category:
+1. **Data / Feature Engineering / Validation Enhancement** — Improving data representation or quality, or validation strategies.
+2. **Architectural Enhancement** — Enhancing model design without altering the backbone, such as adding auxiliary heads, applying regularization, or adjusting the training regime.
 
-Generate FOUR distinct suggestions, each from a separate strategic category:
-1. Data / Feature Engineering Enhancement - focuses on improving input representation or data quality.
-2. Architectural Enhancement - proposes improvements to the model backbone or design.
-3. Ensembling Enhancement - addresses model aggregation, stacking, blending, or bagging.
-4. SOTA Model Enhancement - highlights a recent effective model from an arXiv paper/GitHub repository/Blog Post that has been successfully applied on similar tasks.
-
-For each category:
-- Provide one high-impact suggestion for improving performance on the competition task and metric, with an explanation of approximately 100 words outlining its benefits.
+For each:
+- Provide one high-impact suggestion to improve the competition metric, with an explanation (~100 words) describing its benefits.
 - Clearly differentiate suggestions using numbered headings (e.g., '#### 1. Data / Feature Engineering Suggestion').
-- Ensure the four suggestions are complementary and not overlapping.
+- Ensure suggestions are complementary and non-overlapping.
 
-After presenting suggestions, validate each one's relevance to the competition details and metric in 1-2 sentences. Clearly specify the criteria used for validation and reference key input details when possible. If validation cannot be performed due to missing or inadequate inputs, clearly state this and return "No suggestions."
-
-If the <competition description> or <initial script and logs> are missing or clearly inadequate, mention this before providing the checklist and return "No suggestions."
-
-After code edits or substantial analysis, validate the intended outcome or impact in 1-2 sentences and self-correct if validation fails or key requirements are unmet.
-
-Follow the exact output structure and examples outlined below for all scenarios, including missing input or error conditions:
+After presenting suggestions, validate the relevance of each to the competition details and metric in 1-2 sentences, precisely specifying your validation criteria and referencing key inputs where possible. If validation is not possible due to missing or insufficient inputs, state this and use "No suggestions."
+Use the precise output structure and examples below for all scenarios, including errors or missing input.
 
 ## Output Format
-Your output MUST include the following sections in order:
+
+Your response MUST follow these sections, in order:
 
 ### Checklist
-- ... (3-7 high-level conceptual bullet points, see above)
+- ...(3-7 high-level conceptual bullet points)
 
 ### Research and Suggestion
-#### 1. Data / Feature Engineering Suggestion
-- ... (prose explanation)
+#### 1. Data / Feature Engineering / Validation Enhancement Suggestion
+- ...(explanation)
 
 #### 2. Architectural Enhancement Suggestion
-- ... (prose explanation)
-
-#### 3. Ensembling/Blending Enhancement Suggestion
-- ... (prose explanation)
-
-#### 4. SOTA Model Enhancement
-- ... (prose explanation)
+- ...(explanation — improvements cannot alter the backbone model from the initial script)
 
 ### Validation
-- ... (validation statements for each suggestion, or "No suggestions.")
+- ...(validation statements for each suggestion, or "No suggestions.")
 
 ### Previous Suggestion Review
-Identify any previously tried ideas from <ablation_summary> that should remain blacklisted or be newly blacklisted. Provide a list of exact idea strings to blacklist and a corresponding list of reasons aligned by index.
-
-Output your decision in the following strict JSON format (enclosed in backticks):
+Decide if the most recent suggestion (<previous suggestion executed>) should be blacklisted based on validation results and logs. Output your decision using the following strict JSON format (within backticks):
 ```json
 {
-    "blacklist": ["<idea to blacklist>", "<another idea to blacklist>", ...],
-    "reasons": ["<reason for first idea>", "<reason for second idea>", ...]
+    "blacklist": <true or false>,
+    "reason": "<succinct justification>"
 }
 ```
 
-### New Suggestions Summary
-Summarize the four new suggestions in a concise manner and provide a Python code snippet for each suggestion. Do not repeat blacklisted ideas or the previous suggestion.
-
-Use these exact keys: data_feature_suggestion/data_feature_code, arch_suggestion/arch_code, ensembling_suggestion/ensembling_code, sota_suggestion/sota_code. Return your new suggestions using the following strict JSON format (enclosed in backticks):
+### New Suggestion Summary
+Propose the single best new idea (just one) to improve the competition score, synthesizing insights from above. Do not repeat blacklisted or prior suggestions. Return your new proposal in this strict JSON format (within backticks):
 ```json
 {
-    "data": {
-        "suggestion": <Data / Feature Engineering Suggestion>,
-        "code": <Python code snippet for the data / feature engineering suggestion>
-    },
-    "architecture": {
-        "suggestion": <Architectural Enhancement Suggestion>,
-        "code": <Python code snippet for the architectural enhancement suggestion>
-    },
-    "ensembling": {
-        "suggestion": <Ensembling/Blending Enhancement Suggestion>,
-        "code": <Python code snippet for the ensembling/blending enhancement suggestion>
-    },
-    "sota": {
-        "suggestion": <SOTA Model Enhancement Suggestion>,
-        "code": <Python code snippet for the SOTA model enhancement suggestion>
-    }
+    "suggestion": "<your proposed best next idea>",
+    "reasoning": "<why it is the best choice now>"
 }
 ```
-If there is no viable suggestion, use empty strings for the values.
-Never repeat any idea from <previous failed ideas>. If a suggestion is blacklisted, ensure your new recommendation avoids that approach.
-**IMPORTANT**: YOU ARE NOT ALLOWED TO SEARCH FOR WINNING SOLUTIONS TO THIS COMPETITION.
+If no suggestion is viable, or you believe this model family has no hope of getting a competitive score, return:
+```json
+{
+    "suggestion": "No suggestions.",
+    "reasoning": "<explain why you deem the model family unviable for competitive performance>"
+}
+```
+
+### Code
+Present a concise Python code snippet (within triple backticks labeled 'python') implementing your new idea. If no suggestion is given, leave this section empty (no code block).
+
+Never repeat an idea from <previous failed ideas>, and avoid blacklisted or previous suggestions.
+**IMPORTANT**: Do not use try/except or while loops in your code. Do not code fallback methods.
+
+### Input Schema
+- <competition description> (string): Detailed overview of the Kaggle competition (task, data, evaluation metric).
+- <researcher plans> (optional, list of strings): Previous plans for the task.
+- <initial script> (string): Starting code.
+- <logs> (string): Output logs from training/evaluation of the script.
+- <potential identified red flags> (string): Any potential issues or areas of concern identified in the code or logs.
+- <previous suggestion executed> (string): Most recently attempted suggestion.
+- <previous failed ideas> (optional, list of strings): Suggestions that have previously failed or been blacklisted.
+
+### Output Fields
+- Checklist (markdown list)
+- Research and Suggestion (two markdown sections)
+- Validation (markdown)
+- Previous Suggestion Review (strict JSON)
+- New Suggestion Summary (strict JSON)
+- Code (Python, if a suggestion is present)
 """
 
 
 def sota_user(
     description: str,
     plans_section: str,
+    red_flags: str,
     failed_ideas_text: str,
-    ablation_summary: str | None = None,
+    executed_suggestion_text: str,
+    executed_code_text: str,
+    context: str,
+    outcome_status: str,
 ) -> str:
-    ablation_block = f"\n<ablation_summary>\n{ablation_summary}\n</ablation_summary>\n" if ablation_summary else ""
     return f"""<competition description>
 {description}
 </competition description>
 
-{ablation_block}
-
 {plans_section}
+
+<potential identified red flags>
+{red_flags}
+</potential identified red flags>
 
 <previous failed ideas> DO NOT TRY THESE AGAIN
 {failed_ideas_text}
 </previous failed ideas>
+
+<previous suggestion executed>
+{executed_suggestion_text}
+</previous suggestion executed>
+
+<previous code snippet applied>
+{executed_code_text}
+</previous code snippet applied>
+
+{context}
+
+Outcome status: {outcome_status}
 """
-
-
-def ablation_baseline_prompt() -> str:
-    return """Developer: You will receive a piece of code and its corresponding logs for analysis.
-
-**Inputs:**
-- `<code>`: The code to analyze.
-- `<logs>`: The logs to analyze.
-
-**Requirements:**
-- Begin with a concise Markdown bullet list (3-7 items) summarizing the conceptual analysis steps you will take before proceeding.
-- Summarize the code's approach and the validation outcomes from the logs, each summary under 100 words.
-- If either code or logs is missing, represent its summary as an empty string (`''`).
-- If code or logs are excessively long or malformed, summarize as thoroughly as possible and flag any input quality limitations.
-- Output must strictly follow the specified JSON format, include all required keys, and never use null values or omit keys.
-- After drafting summaries, validate the output for format compliance and completeness of summary fields, and self-correct if necessary before finalizing the response.
-
-**Instructions:**
-1. Present your checklist as a Markdown bullet list (`-` bullets), focusing exclusively on conceptual analysis steps and not implementation details.
-2. Compose two concise summaries (each under 100 words): one for the code's approach, one for the logs' validation/FULL run results.
-3. If code or logs are missing, use an empty string for the respective summary.
-4. If inputs are excessively long or malformed, clearly state any summarization limitations.
-5. Before providing the final output, explicitly verify that your output strictly matches the required format and includes all fields; self-correct if necessary.
-6. Output the following structure:
-
-### Checklist
-- Markdown bullet list
-
-### Code and Logs Summary
-Return both summaries in the exact JSON format below (enclosed in triple backticks):
-```json
-{
-  "code_summary": "Summary of the code or '' if code is absent",
-  "logs_summary": "Summary of the logs or '' if logs are absent"
-}
-```
-"""
-
 
