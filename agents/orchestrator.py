@@ -1,7 +1,6 @@
 from typing import Tuple
 from pathlib import Path
 import json
-from concurrent.futures import as_completed
 
 from agents.researcher import ResearcherAgent
 from agents.developer import DeveloperAgent
@@ -9,7 +8,6 @@ from agents.starter import StarterAgent
 from agents.model_recommender import ModelRecommenderAgent
 from project_config import get_config
 import weave
-from weave.trace.util import ThreadPoolExecutor
 
 
 _CONFIG = get_config()
@@ -58,7 +56,7 @@ def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, n
         model_recommendations=formatted_recommendations,
         later_recommendations=later_recommendations
     )
-    best_score, best_code_file, blacklisted_ideas = dev.run(max_time_seconds=10800)  # 3 hours
+    best_score, best_code_file, blacklisted_ideas = dev.run(max_time_seconds=7200)  # 3 hours
     return key, best_score, best_code_file, blacklisted_ideas
 
 def _extract_now_recommendations(recommendations: dict) -> dict:
@@ -325,56 +323,42 @@ class Orchestrator:
         with open(later_rec_path, "w") as f:
             json.dump(later_recommendations_all, f, indent=2)
 
-        # Phase 4: Baseline Developer Stage - Evaluate models in parallel with NOW recommendations
+        # Phase 4: Baseline Developer Stage - Evaluate models sequentially with NOW recommendations
         baseline_results = {}
 
-        # Prepare tasks for parallel execution
-        tasks = []
+        # Run developer agents sequentially
         for idx, (model_name, now_recommendations) in enumerate(now_recommendations_all.items(), start=1):
             key = model_name
             dev_iter = f"{self.iteration}_{idx}"
             later_recs = later_recommendations_all.get(model_name, {})
-            tasks.append((key, dev_iter, model_name, now_recommendations, later_recs))
 
-        # Run all models in parallel using Weave's ThreadPoolExecutor
-        with ThreadPoolExecutor(max_workers=5) as executor:
-            # Submit all tasks
-            future_to_key = {
-                executor.submit(
-                    _run_developer_baseline,
+            try:
+                result_key, best_score, best_code_file, blacklisted_ideas = _run_developer_baseline(
                     self.slug,
                     dev_iter,
                     model_name,
                     now_recommendations,
                     later_recs,
                     key
-                ): key
-                for key, dev_iter, model_name, now_recommendations, later_recs in tasks
-            }
+                )
+                baseline_results[result_key] = {
+                    "model_name": result_key,
+                    "best_score": best_score,
+                    "best_code_file": best_code_file or "",
+                    "blacklisted_ideas": blacklisted_ideas,
+                    "fold_split_strategy": fold_split_strategy,
+                    "now_recommendations": now_recommendations_all.get(result_key, {}),
+                    "later_recommendations": later_recommendations_all.get(result_key, {})
+                }
 
-            # Collect results as they complete
-            for future in as_completed(future_to_key):
-                key = future_to_key[future]
-                try:
-                    result_key, best_score, best_code_file, blacklisted_ideas = future.result()
-                    baseline_results[result_key] = {
-                        "model_name": result_key,
-                        "best_score": best_score,
-                        "best_code_file": best_code_file or "",
-                        "blacklisted_ideas": blacklisted_ideas,
-                        "fold_split_strategy": fold_split_strategy,
-                        "now_recommendations": now_recommendations_all.get(result_key, {}),
-                        "later_recommendations": later_recommendations_all.get(result_key, {})
-                    }
+                # Persist baseline results incrementally
+                baseline_path = self.outputs_dir / "baseline_results.json"
+                with open(baseline_path, "w") as f:
+                    json.dump(baseline_results, f, indent=2)
 
-                    # Persist baseline results incrementally
-                    baseline_path = self.outputs_dir / "baseline_results.json"
-                    with open(baseline_path, "w") as f:
-                        json.dump(baseline_results, f, indent=2)
-
-                except Exception:
-                    # Failed to run developer for this model, continue with others
-                    continue
+            except Exception:
+                # Failed to run developer for this model, continue with others
+                continue
 
         if not baseline_results:
             raise RuntimeError("All developer baseline runs failed")
