@@ -8,8 +8,6 @@ def build_system(description: str, directory_listing: str, model_name: str, mode
     resource_info = ""
     if cpu_core_range is not None:
         resource_info = f"\nNumber of CPUs: {len(cpu_core_range)} cores"
-    if mig_instance is not None:
-        resource_info += f"\nGPU: {mig_instance} MIG instance (isolated partition)"
 
     return f"""# Role: Lead Developer for Machine-Learning Competition Team
 Your objective is to deliver a single, self-contained Python script for a Kaggle Competition using **only** the specified model `{model_name}`.
@@ -19,7 +17,7 @@ You should perform web searches to determine how to set up and configure `{model
 
 ---
 **Training and Inference Environment:**
-Single GPU (24GB VRAM) {resource_info}
+Single GPU (20GB VRAM) {resource_info}
 
 **Model Name:**
 `{model_name}`
