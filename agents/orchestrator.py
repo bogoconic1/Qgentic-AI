@@ -2,6 +2,8 @@ from typing import Tuple
 from pathlib import Path
 import json
 import os
+import subprocess
+import re
 
 from agents.researcher import ResearcherAgent
 from agents.developer import DeveloperAgent
@@ -18,6 +20,49 @@ _PATH_CFG = _CONFIG.get("paths")
 _TASK_ROOT = Path(_PATH_CFG.get("task_root"))
 _OUTPUTS_DIRNAME = _PATH_CFG.get("outputs_dirname")
 _DEFAULT_PARALLEL = int(_RUNTIME_CFG.get("researcher_parallel_runs"))
+
+def _get_mig_uuids(gpu_id: int = 0) -> list[str]:
+    """Parse MIG device UUIDs from nvidia-smi -L output.
+
+    Returns:
+        List of MIG UUIDs (e.g., ["MIG-17331e1a-f2f0-500d-86f0-acf8289655ad", ...])
+    """
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "-L"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        if result.returncode != 0:
+            return []
+
+        # Parse output for MIG UUIDs
+        # Example line: "  MIG 2g.20gb     Device  0: (UUID: MIG-17331e1a-f2f0-500d-86f0-acf8289655ad)"
+        mig_uuids = []
+        lines = result.stdout.strip().split("\n")
+        in_target_gpu = False
+
+        for line in lines:
+            # Check if this is the target GPU line
+            if line.startswith(f"GPU {gpu_id}:"):
+                in_target_gpu = True
+                continue
+
+            # Check if we've moved to next GPU
+            if line.startswith("GPU ") and not line.startswith(f"GPU {gpu_id}:"):
+                in_target_gpu = False
+                continue
+
+            # Parse MIG UUID if we're in the target GPU section
+            if in_target_gpu and "MIG" in line and "UUID:" in line:
+                match = re.search(r'UUID:\s+(MIG-[a-f0-9\-]+)', line)
+                if match:
+                    mig_uuids.append(match.group(1))
+
+        return mig_uuids
+    except Exception:
+        return []
 
 @weave.op()
 def _run_researcher_once(slug: str, iteration: int, run_id: int) -> tuple[int, str, int]:
@@ -355,8 +400,16 @@ class Orchestrator:
             cpu_core_ranges = [None] * max_parallel_workers
 
         if enable_mig and num_models > 1:
-            # Assign MIG instances (MIG-0, MIG-1, MIG-2, ...)
-            mig_instances = [f"MIG-{i}" for i in range(max_parallel_workers)]
+            # Get real MIG UUIDs from nvidia-smi
+            detected_mig_uuids = _get_mig_uuids(gpu_id=0)
+            if len(detected_mig_uuids) >= max_parallel_workers:
+                # Use the first N MIG instances
+                mig_instances = detected_mig_uuids[:max_parallel_workers]
+            else:
+                # Not enough MIG instances detected, disable MIG
+                print(f"WARNING: enable_mig=true but only {len(detected_mig_uuids)} MIG instances detected (need {max_parallel_workers})")
+                print("Falling back to no MIG isolation. Please configure MIG instances first.")
+                mig_instances = [None] * max_parallel_workers
         else:
             mig_instances = [None] * max_parallel_workers
 

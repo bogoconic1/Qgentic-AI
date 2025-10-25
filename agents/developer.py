@@ -611,6 +611,8 @@ class DeveloperAgent:
             self.iteration,
         )
         self.logger.info("cpu core range: %s", self.cpu_core_range)
+        self.logger.info("mig instance: %s", self.mig_instance)
+        
         start_time = time.time()
         deadline = start_time + max_time_seconds
 
