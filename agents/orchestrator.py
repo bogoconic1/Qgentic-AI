@@ -36,7 +36,7 @@ def _run_researcher_once(slug: str, iteration: int, run_id: int) -> tuple[int, s
 
 @weave.op()
 def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, now_recommendations: dict, later_recommendations: dict, key: str):
-    """Run a single baseline DeveloperAgent and return (key, best_score, best_code).
+    """Run a single baseline DeveloperAgent and return (key, best_score, best_code_file).
 
     Args:
         slug: Competition slug
@@ -56,8 +56,8 @@ def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, n
         model_recommendations=formatted_recommendations,
         later_recommendations=later_recommendations
     )
-    best_score, best_code, blacklisted_ideas = dev.run(max_time_seconds=9000)
-    return key, best_score, best_code, blacklisted_ideas
+    best_score, best_code_file, blacklisted_ideas = dev.run(max_time_seconds=7200)  # 3 hours
+    return key, best_score, best_code_file, blacklisted_ideas
 
 def _extract_now_recommendations(recommendations: dict) -> dict:
     """Extract only MUST_HAVE recommendations from model recommendations.
@@ -168,6 +168,14 @@ def _format_recommendations_for_developer(recommendations: dict) -> str:
     to DeveloperAgent as guidance.
     """
     details = []
+
+    # Fold split strategy
+    fold_split = recommendations.get("fold_split_strategy", {})
+    if fold_split:
+        strategy = fold_split.get("strategy", "")
+        if strategy:
+            details.append("## Cross-Validation Strategy")
+            details.append(f"- Use {strategy}")
 
     # Preprocessing
     preprocessing = recommendations.get("preprocessing", {})
@@ -283,12 +291,26 @@ class Orchestrator:
             else:
                 raise RuntimeError("No model recommendations found")
 
+        # Load fold split strategy (single strategy for all models)
+        fold_split_strategy_path = self.outputs_dir / "fold_split_strategy.json"
+        fold_split_strategy = {}
+        if fold_split_strategy_path.exists():
+            try:
+                with open(fold_split_strategy_path, "r") as f:
+                    fold_split_strategy = json.load(f)
+            except Exception:
+                pass
+
         # Extract NOW and LATER recommendations for each model
         now_recommendations_all = {}
         later_recommendations_all = {}
 
         for model_name, recommendations in model_recommendations.items():
-            now_recommendations_all[model_name] = _extract_now_recommendations(recommendations)
+            now_recs = _extract_now_recommendations(recommendations)
+            # Add the fold split strategy to each model's recommendations
+            if fold_split_strategy:
+                now_recs["fold_split_strategy"] = fold_split_strategy
+            now_recommendations_all[model_name] = now_recs
             later_recommendations_all[model_name] = _extract_later_recommendations(recommendations)
         
         # Persist NOW recommendations for future use
@@ -301,17 +323,17 @@ class Orchestrator:
         with open(later_rec_path, "w") as f:
             json.dump(later_recommendations_all, f, indent=2)
 
-        # Phase 4: Baseline Developer Stage - Evaluate models with NOW recommendations
+        # Phase 4: Baseline Developer Stage - Evaluate models sequentially with NOW recommendations
         baseline_results = {}
 
         # Run developer agents sequentially
         for idx, (model_name, now_recommendations) in enumerate(now_recommendations_all.items(), start=1):
-            key = model_name  # Use model name as key
+            key = model_name
             dev_iter = f"{self.iteration}_{idx}"
             later_recs = later_recommendations_all.get(model_name, {})
 
             try:
-                key, best_score, best_code, blacklisted_ideas = _run_developer_baseline(
+                result_key, best_score, best_code_file, blacklisted_ideas = _run_developer_baseline(
                     self.slug,
                     dev_iter,
                     model_name,
@@ -319,23 +341,23 @@ class Orchestrator:
                     later_recs,
                     key
                 )
-                baseline_results[key] = {
-                    "model_name": key,
+                baseline_results[result_key] = {
+                    "model_name": result_key,
                     "best_score": best_score,
-                    "best_code": best_code or "",
+                    "best_code_file": best_code_file or "",
                     "blacklisted_ideas": blacklisted_ideas,
-                    "now_recommendations": now_recommendations_all.get(key, {}),
-                    "later_recommendations": later_recommendations_all.get(key, {})
+                    "fold_split_strategy": fold_split_strategy,
+                    "now_recommendations": now_recommendations_all.get(result_key, {}),
+                    "later_recommendations": later_recommendations_all.get(result_key, {})
                 }
-                # Persist baseline results
+
+                # Persist baseline results incrementally
                 baseline_path = self.outputs_dir / "baseline_results.json"
                 with open(baseline_path, "w") as f:
                     json.dump(baseline_results, f, indent=2)
-                    
-            except Exception as e:
-                # Log error but continue with other models
-                import logging
-                logging.error(f"Failed to run developer for model {key}: {e}")
+
+            except Exception:
+                # Failed to run developer for this model, continue with others
                 continue
 
         if not baseline_results:

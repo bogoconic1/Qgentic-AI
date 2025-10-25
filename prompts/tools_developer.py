@@ -89,6 +89,10 @@ Your response MUST follow these sections, in order:
 #### 2. Architectural Enhancement Suggestion
 - ...(explanation — improvements cannot alter the backbone model from the initial script)
 
+#### 3. Possible issues in the current code
+- ...(analyze the current score and logs, see how far is it away from a competitive score, and what are the likely causes)
+
+
 ### Validation
 - ...(validation statements for each suggestion, or "No suggestions.")
 
@@ -97,7 +101,7 @@ Decide if the most recent suggestion (<previous suggestion executed>) should be 
 ```json
 {
     "blacklist": <true or false>,
-    "reason": "<succinct justification; if blacklist is false, use empty string>"
+    "reason": "<succinct justification>"
 }
 ```
 
@@ -109,12 +113,19 @@ Propose the single best new idea (just one) to improve the competition score, sy
     "reasoning": "<why it is the best choice now>"
 }
 ```
-If no suggestion is viable, use empty strings for the values.
+If no suggestion is viable, or you believe this model family has no hope of getting a competitive score, return:
+```json
+{
+    "suggestion": "No suggestions.",
+    "reasoning": "<explain why you deem the model family unviable for competitive performance>"
+}
+```
 
 ### Code
 Present a concise Python code snippet (within triple backticks labeled 'python') implementing your new idea. If no suggestion is given, leave this section empty (no code block).
 
 Never repeat an idea from <previous failed ideas>, and avoid blacklisted or previous suggestions.
+**IMPORTANT**: Do not use try/except or while loops in your code. Do not code fallback methods.
 
 ### Input Schema
 - <competition description> (string): Detailed overview of the Kaggle competition (task, data, evaluation metric).

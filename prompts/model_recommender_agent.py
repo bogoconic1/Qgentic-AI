@@ -19,9 +19,10 @@ Begin with a **concise checklist (3-7 conceptual bullets)** describing your reas
 
 ## Objective
 1. Review all inputs to understand **data characteristics, task type, and evaluation metric**.
-2. Perform **targeted web searches** to identify **state-of-the-art models** relevant to the task, data, and metric.
-3. Evaluate each candidate model under three criteria: metric impact, implementation simplicity, and compute feasibility within the 3-hour budget.
-4. Recommend up to **5 models** that balance these criteria effectively.
+2. **Determine the single best fold splitting strategy** based on data characteristics in <research_plan>. Be SPECIFIC and include as many details as possible.
+3. Perform **targeted web searches** to identify **state-of-the-art models** relevant to the task, data, and metric.
+4. Evaluate each candidate model under three criteria: metric impact, implementation simplicity, and compute feasibility within the 3-hour budget.
+5. Recommend up to **5 models** that balance these criteria effectively.
 
 ## Hard Constraints
 - ❌ Do **not** search for or use actual winning solutions from this specific competition.
@@ -33,7 +34,10 @@ Begin with a **concise checklist (3-7 conceptual bullets)** describing your reas
 ## Output Format
 
 ### Checklist (3-7 bullets)
-High-level steps you will follow (conceptual only).
+High-level steps you will follow (conceptual only). MUST include determining the fold splitting strategy as one step.
+
+### Fold Split Strategy Analysis
+Analyze data characteristics and <research_plan> and explain why your chosen fold split is the best fit.
 
 ### Considered Models
 List up to 10 candidate models briefly explaining why each was considered.
@@ -49,9 +53,14 @@ Model 2
 ...
 
 ### Final Recommendations
-Provide a single JSON block within ```json backticks with up to 5 recommended models. Just give the model name with no additional details in the "name" field.
+Provide a single JSON block within ```json backticks with **fold_split_strategy** and **recommended_models**.
+The **fold_split_strategy** must be a single, specific strategy.
+
 ```json
 {
+  "fold_split_strategy": {
+    "strategy": "the single specific CV fold splitting strategy",
+  },
   "recommended_models": [
     {
       "name": "Model 1",
@@ -75,6 +84,7 @@ Provide a single JSON block within ```json backticks with up to 5 recommended mo
     }
   ]
 }
+```
 
 """
 
@@ -114,6 +124,7 @@ Begin with a concise checklist (3-7 bullets) describing your *process* (conceptu
 ## Hard Constraints
 - Do **not** search for or use actual winning solutions from this specific competition.
 - Do **not** rely on prior knowledge of those solutions.
+- Do **not** discuss or recommend CV/fold splitting strategies - this is handled elsewhere.
 - **Do not** recommend creating features merely to prune them later—propose **top candidates only**.
 - **Do not** duplicate the same strategy across multiple categories.
 - Anything under ensembling/stacking/calibration/blending MUST be in the NICE_TO_HAVE section.
@@ -202,6 +213,7 @@ Begin with a **concise checklist (3-7 bullets)** summarizing your conceptual rea
 ## Hard Constraints
 - Do **not** search for or use actual winning solutions from this specific competition.
 - Do **not** rely on prior competition knowledge.
+- Do **not** discuss or recommend CV/fold splitting strategies - this is handled elsewhere.
 - Recommend exactly **one** primary loss for MUST_HAVE.
 - NICE_TO_HAVE may contain **multiple losses** (ensembled, multi-task, or joint).
 - Do **not** specify hyperparameters, architecture, or preprocessing choices here.
@@ -334,6 +346,7 @@ Applicable to Transformers, CNNs, RNNs, and ViTs:
 
 ## Hard Constraints
 - ❌ Do **not** search for or use actual winning solutions from this specific competition.
+- ❌ Do **not** discuss or recommend CV/fold splitting strategies - this is handled elsewhere.
 - ❌ Do not redefine loss functions or preprocessing steps — they exist elsewhere.
 - ✅ All recommendations must fit the 3-hour training budget.
 - Anything under ensembling/stacking/calibration/blending MUST be in the NICE_TO_HAVE section.
@@ -467,6 +480,7 @@ All strategies must be **realistically executable** within these constraints.
 ## Hard Constraints
 - Do **not** search for or use actual winning solutions from this specific competition.
 - Do **not** rely on prior knowledge of the competition.
+- Do **not** discuss or recommend CV/fold splitting strategies - this is handled elsewhere.
 - Do **not** include training-time augmentations or losses.
 - Focus **strictly on inference-time logic** (prediction, calibration, or post-processing).
 - Anything under ensembling/stacking/calibration/blending MUST be in the NICE_TO_HAVE section.
