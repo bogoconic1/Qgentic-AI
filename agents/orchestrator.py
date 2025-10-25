@@ -1,12 +1,16 @@
 from typing import Tuple
 from pathlib import Path
 import json
+import os
+import subprocess
+import re
 
 from agents.researcher import ResearcherAgent
 from agents.developer import DeveloperAgent
 from agents.starter import StarterAgent
 from agents.model_recommender import ModelRecommenderAgent
 from project_config import get_config
+from weave.trace.util import ThreadPoolExecutor
 import weave
 
 
@@ -16,6 +20,49 @@ _PATH_CFG = _CONFIG.get("paths")
 _TASK_ROOT = Path(_PATH_CFG.get("task_root"))
 _OUTPUTS_DIRNAME = _PATH_CFG.get("outputs_dirname")
 _DEFAULT_PARALLEL = int(_RUNTIME_CFG.get("researcher_parallel_runs"))
+
+def _get_mig_uuids(gpu_id: int = 0) -> list[str]:
+    """Parse MIG device UUIDs from nvidia-smi -L output.
+
+    Returns:
+        List of MIG UUIDs (e.g., ["MIG-17331e1a-f2f0-500d-86f0-acf8289655ad", ...])
+    """
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "-L"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        if result.returncode != 0:
+            return []
+
+        # Parse output for MIG UUIDs
+        # Example line: "  MIG 2g.20gb     Device  0: (UUID: MIG-17331e1a-f2f0-500d-86f0-acf8289655ad)"
+        mig_uuids = []
+        lines = result.stdout.strip().split("\n")
+        in_target_gpu = False
+
+        for line in lines:
+            # Check if this is the target GPU line
+            if line.startswith(f"GPU {gpu_id}:"):
+                in_target_gpu = True
+                continue
+
+            # Check if we've moved to next GPU
+            if line.startswith("GPU ") and not line.startswith(f"GPU {gpu_id}:"):
+                in_target_gpu = False
+                continue
+
+            # Parse MIG UUID if we're in the target GPU section
+            if in_target_gpu and "MIG" in line and "UUID:" in line:
+                match = re.search(r'UUID:\s+(MIG-[a-f0-9\-]+)', line)
+                if match:
+                    mig_uuids.append(match.group(1))
+
+        return mig_uuids
+    except Exception:
+        return []
 
 @weave.op()
 def _run_researcher_once(slug: str, iteration: int, run_id: int) -> tuple[int, str, int]:
@@ -35,7 +82,7 @@ def _run_researcher_once(slug: str, iteration: int, run_id: int) -> tuple[int, s
     return run_id, str(plan_path), len(plan or "")
 
 @weave.op()
-def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, now_recommendations: dict, later_recommendations: dict, key: str):
+def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, now_recommendations: dict, later_recommendations: dict, key: str, cpu_core_range: list[int] | None = None, mig_instance: str | None = None):
     """Run a single baseline DeveloperAgent and return (key, best_score, best_code_file).
 
     Args:
@@ -45,6 +92,8 @@ def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, n
         now_recommendations: NOW-only recommendations dict for this model
         later_recommendations: LATER-only recommendations dict for this model
         key: Key for tracking results
+        cpu_core_range: List of CPU cores to pin this process to (None = no affinity)
+        mig_instance: MIG instance ID like "MIG-0" (None = use GPU 0)
     """
     # Format NOW recommendations for developer
     formatted_recommendations = _format_recommendations_for_developer(now_recommendations)
@@ -54,9 +103,11 @@ def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, n
         iteration_suffix,
         model_name=model_name,
         model_recommendations=formatted_recommendations,
-        later_recommendations=later_recommendations
+        later_recommendations=later_recommendations,
+        cpu_core_range=cpu_core_range,
+        mig_instance=mig_instance
     )
-    best_score, best_code_file, blacklisted_ideas = dev.run(max_time_seconds=7200)  # 3 hours
+    best_score, best_code_file, blacklisted_ideas = dev.run(max_time_seconds=10800)  # 3 hours
     return key, best_score, best_code_file, blacklisted_ideas
 
 def _extract_now_recommendations(recommendations: dict) -> dict:
@@ -323,50 +374,100 @@ class Orchestrator:
         with open(later_rec_path, "w") as f:
             json.dump(later_recommendations_all, f, indent=2)
 
-        # Phase 4: Baseline Developer Stage - Evaluate models sequentially with NOW recommendations
+        # Phase 4: Baseline Developer Stage - Evaluate models in parallel with NOW recommendations
         baseline_results = {}
 
-        # Run developer agents sequentially
+        # Get parallel execution configuration
+        max_parallel_workers = int(_RUNTIME_CFG.get("baseline_max_parallel_workers", 1))
+        enable_cpu_affinity = _RUNTIME_CFG.get("enable_cpu_affinity", False)
+        enable_mig = _RUNTIME_CFG.get("enable_mig", False)
+
+        # Calculate CPU core ranges for parallel execution
+        total_cores = os.cpu_count() or 1
+        num_models = len(now_recommendations_all)
+        cpu_core_ranges = []
+        mig_instances = []
+
+        if enable_cpu_affinity and num_models > 1:
+            # Divide CPU cores evenly across workers
+            cores_per_worker = total_cores // max_parallel_workers
+            for i in range(max_parallel_workers):
+                start_core = i * cores_per_worker
+                # Last worker gets remaining cores
+                end_core = total_cores if i == max_parallel_workers - 1 else (i + 1) * cores_per_worker
+                cpu_core_ranges.append(list(range(start_core, end_core)))
+        else:
+            cpu_core_ranges = [None] * max_parallel_workers
+
+        if enable_mig and num_models > 1:
+            # Get real MIG UUIDs from nvidia-smi
+            detected_mig_uuids = _get_mig_uuids(gpu_id=0)
+            if len(detected_mig_uuids) >= max_parallel_workers:
+                # Use the first N MIG instances
+                mig_instances = detected_mig_uuids[:max_parallel_workers]
+            else:
+                # Not enough MIG instances detected, disable MIG
+                print(f"WARNING: enable_mig=true but only {len(detected_mig_uuids)} MIG instances detected (need {max_parallel_workers})")
+                print("Falling back to no MIG isolation. Please configure MIG instances first.")
+                mig_instances = [None] * max_parallel_workers
+        else:
+            mig_instances = [None] * max_parallel_workers
+
+        # Prepare tasks for parallel execution
+        tasks = []
         for idx, (model_name, now_recommendations) in enumerate(now_recommendations_all.items(), start=1):
             key = model_name
             dev_iter = f"{self.iteration}_{idx}"
             later_recs = later_recommendations_all.get(model_name, {})
 
-            try:
-                result_key, best_score, best_code_file, blacklisted_ideas = _run_developer_baseline(
-                    self.slug,
-                    dev_iter,
-                    model_name,
-                    now_recommendations,
-                    later_recs,
-                    key
-                )
-                baseline_results[result_key] = {
-                    "model_name": result_key,
-                    "best_score": best_score,
-                    "best_code_file": best_code_file or "",
-                    "blacklisted_ideas": blacklisted_ideas,
-                    "fold_split_strategy": fold_split_strategy,
-                    "now_recommendations": now_recommendations_all.get(result_key, {}),
-                    "later_recommendations": later_recommendations_all.get(result_key, {})
-                }
+            # Assign resources (cyclic if more models than workers)
+            worker_idx = (idx - 1) % max_parallel_workers
+            cpu_core_range = cpu_core_ranges[worker_idx]
+            mig_instance = mig_instances[worker_idx]
 
-                # Persist baseline results incrementally
-                baseline_path = self.outputs_dir / "baseline_results.json"
-                with open(baseline_path, "w") as f:
-                    json.dump(baseline_results, f, indent=2)
+            tasks.append((
+                self.slug,
+                dev_iter,
+                model_name,
+                now_recommendations,
+                later_recs,
+                key,
+                cpu_core_range,
+                mig_instance
+            ))
 
-            except Exception:
-                # Failed to run developer for this model, continue with others
-                continue
+        # Run developer agents in parallel using ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=max_parallel_workers) as executor:
+            futures = [
+                executor.submit(_run_developer_baseline, *task_args)
+                for task_args in tasks
+            ]
 
-        if not baseline_results:
-            raise RuntimeError("All developer baseline runs failed")
+            for future in futures:
+                try:
+                    result_key, best_score, best_code_file, blacklisted_ideas = future.result()
+                    baseline_results[result_key] = {
+                        "model_name": result_key,
+                        "best_score": best_score,
+                        "best_code_file": best_code_file or "",
+                        "blacklisted_ideas": blacklisted_ideas,
+                        "fold_split_strategy": fold_split_strategy,
+                        "now_recommendations": now_recommendations_all.get(result_key, {}),
+                        "later_recommendations": later_recommendations_all.get(result_key, {})
+                    }
+                    baseline_path = self.outputs_dir / "baseline_results.json"
+                    with open(baseline_path, "w") as f:
+                        json.dump(baseline_results, f, indent=2)
+                except Exception:
+                    continue
 
         # Persist baseline results
-        baseline_path = self.outputs_dir / "baseline_results.json"
-        with open(baseline_path, "w") as f:
-            json.dump(baseline_results, f, indent=2)
+        if baseline_results:
+            baseline_path = self.outputs_dir / "baseline_results.json"
+            with open(baseline_path, "w") as f:
+                json.dump(baseline_results, f, indent=2)
+        else:
+            raise RuntimeError("All developer baseline runs failed")
 
         return True, str(baseline_path)
     

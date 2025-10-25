@@ -3,7 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 
 
-def build_system(description: str, directory_listing: str, model_name: str, model_recommendations: str, slug: str) -> str:
+def build_system(description: str, directory_listing: str, model_name: str, model_recommendations: str, slug: str, cpu_core_range: list[int] | None = None, mig_instance: str | None = None) -> str:
+    # Build resource allocation info
+    resource_info = ""
+    if cpu_core_range is not None:
+        resource_info = f"\nNumber of CPUs: {len(cpu_core_range)} cores"
+
     return f"""# Role: Lead Developer for Machine-Learning Competition Team
 Your objective is to deliver a single, self-contained Python script for a Kaggle Competition using **only** the specified model `{model_name}`.
 
@@ -12,7 +17,7 @@ You should perform web searches to determine how to set up and configure `{model
 
 ---
 **Training and Inference Environment:**
-Single GPU (24GB VRAM)
+Single GPU (20GB VRAM) {resource_info}
 
 **Model Name:**
 `{model_name}`
@@ -38,6 +43,7 @@ Single GPU (24GB VRAM)
 - **DL Only:** After 1st epoch on fold 0, if loss is NaN, raise Exception to halt.
 - Just train and validate on fold 0. Skip other folds to save time.
 - Do not use any `while` loops in your code.
+- YOU SHOULD NOT CREATE A SUBMISSION FILE DURING DEBUG MODE.
 
 **DEBUG mode guidelines**
 - After splitting the data into train and valid, right before starting training, sample train to 1000 rows. For classification, ensure at least one sample per class, so if there are > 1000 classes there will be > 1000 samples. For time series tasks, take the last 1000 rows (most recent) instead of random sampling to preserve temporal order.
@@ -71,9 +77,6 @@ Your response MUST follow these sections, in order:
 
 Example Output Block:
 ```python
-import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-BASE_DIR = "task/{slug}" if not os.getenv('KAGGLE_KERNEL_RUN_TYPE') else "/kaggle/input/{slug}"
 # <YOUR CODE>
 ```
 """

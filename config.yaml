@@ -14,6 +14,10 @@ runtime:
   directory_listing_max_files: 10
   researcher_parallel_runs: 1
   patch_mode_enabled: false
+  # Parallel baseline execution
+  baseline_max_parallel_workers: 3  # Max baselines running in parallel (1=sequential, 3=balanced)
+  enable_mig: true  # Use NVIDIA MIG for GPU isolation (requires root setup)
+  enable_cpu_affinity: true  # Pin processes to specific CPU cores
 paths:
   task_root: "task"
   outputs_dirname: "outputs"
