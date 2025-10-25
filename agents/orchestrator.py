@@ -37,7 +37,7 @@ def _run_researcher_once(slug: str, iteration: int, run_id: int) -> tuple[int, s
     return run_id, str(plan_path), len(plan or "")
 
 @weave.op()
-def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, now_recommendations: dict, later_recommendations: dict, key: str, cpu_cores_limit: int | None = None):
+def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, now_recommendations: dict, later_recommendations: dict, key: str, cpu_core_range: list[int] | None = None, mig_instance: str | None = None):
     """Run a single baseline DeveloperAgent and return (key, best_score, best_code_file).
 
     Args:
@@ -47,7 +47,8 @@ def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, n
         now_recommendations: NOW-only recommendations dict for this model
         later_recommendations: LATER-only recommendations dict for this model
         key: Key for tracking results
-        cpu_cores_limit: CPU cores limit for parallel execution (None = no limit)
+        cpu_core_range: List of CPU cores to pin this process to (None = no affinity)
+        mig_instance: MIG instance ID like "MIG-0" (None = use GPU 0)
     """
     # Format NOW recommendations for developer
     formatted_recommendations = _format_recommendations_for_developer(now_recommendations)
@@ -58,9 +59,10 @@ def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, n
         model_name=model_name,
         model_recommendations=formatted_recommendations,
         later_recommendations=later_recommendations,
-        cpu_cores_limit=cpu_cores_limit
+        cpu_core_range=cpu_core_range,
+        mig_instance=mig_instance
     )
-    best_score, best_code_file, blacklisted_ideas = dev.run(max_time_seconds=7200)  # 3 hours
+    best_score, best_code_file, blacklisted_ideas = dev.run(max_time_seconds=10800)  # 3 hours
     return key, best_score, best_code_file, blacklisted_ideas
 
 def _extract_now_recommendations(recommendations: dict) -> dict:
@@ -330,14 +332,33 @@ class Orchestrator:
         # Phase 4: Baseline Developer Stage - Evaluate models in parallel with NOW recommendations
         baseline_results = {}
 
-        # Calculate CPU cores limit for parallel execution
-        total_cores = os.cpu_count()
-        num_models = len(now_recommendations_all)
-        cpu_cores_limit = None
+        # Get parallel execution configuration
+        max_parallel_workers = int(_RUNTIME_CFG.get("baseline_max_parallel_workers", 1))
+        enable_cpu_affinity = _RUNTIME_CFG.get("enable_cpu_affinity", False)
+        enable_mig = _RUNTIME_CFG.get("enable_mig", False)
 
-        if total_cores and num_models > 1:
-            cores_per_model = max(1, total_cores // num_models)
-            cpu_cores_limit = cores_per_model
+        # Calculate CPU core ranges for parallel execution
+        total_cores = os.cpu_count() or 1
+        num_models = len(now_recommendations_all)
+        cpu_core_ranges = []
+        mig_instances = []
+
+        if enable_cpu_affinity and num_models > 1:
+            # Divide CPU cores evenly across workers
+            cores_per_worker = total_cores // max_parallel_workers
+            for i in range(max_parallel_workers):
+                start_core = i * cores_per_worker
+                # Last worker gets remaining cores
+                end_core = total_cores if i == max_parallel_workers - 1 else (i + 1) * cores_per_worker
+                cpu_core_ranges.append(list(range(start_core, end_core)))
+        else:
+            cpu_core_ranges = [None] * max_parallel_workers
+
+        if enable_mig and num_models > 1:
+            # Assign MIG instances (MIG-0, MIG-1, MIG-2, ...)
+            mig_instances = [f"MIG-{i}" for i in range(max_parallel_workers)]
+        else:
+            mig_instances = [None] * max_parallel_workers
 
         # Prepare tasks for parallel execution
         tasks = []
@@ -346,6 +367,11 @@ class Orchestrator:
             dev_iter = f"{self.iteration}_{idx}"
             later_recs = later_recommendations_all.get(model_name, {})
 
+            # Assign resources (cyclic if more models than workers)
+            worker_idx = (idx - 1) % max_parallel_workers
+            cpu_core_range = cpu_core_ranges[worker_idx]
+            mig_instance = mig_instances[worker_idx]
+
             tasks.append((
                 self.slug,
                 dev_iter,
@@ -353,11 +379,12 @@ class Orchestrator:
                 now_recommendations,
                 later_recs,
                 key,
-                cpu_cores_limit
+                cpu_core_range,
+                mig_instance
             ))
 
         # Run developer agents in parallel using ThreadPoolExecutor
-        with ThreadPoolExecutor(max_workers=num_models) as executor:
+        with ThreadPoolExecutor(max_workers=max_parallel_workers) as executor:
             futures = [
                 executor.submit(_run_developer_baseline, *task_args)
                 for task_args in tasks
@@ -375,6 +402,9 @@ class Orchestrator:
                         "now_recommendations": now_recommendations_all.get(result_key, {}),
                         "later_recommendations": later_recommendations_all.get(result_key, {})
                     }
+                    baseline_path = self.outputs_dir / "baseline_results.json"
+                    with open(baseline_path, "w") as f:
+                        json.dump(baseline_results, f, indent=2)
                 except Exception:
                     continue
 

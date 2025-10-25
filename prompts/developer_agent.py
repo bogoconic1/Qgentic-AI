@@ -3,11 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 
 
-def build_system(description: str, directory_listing: str, model_name: str, model_recommendations: str, slug: str, cpu_cores_limit: int | None = None) -> str:
-    # Build CPU cores info
-    cpu_info = ""
-    if cpu_cores_limit is not None:
-        cpu_info = f"\nNumber of CPUs: {cpu_cores_limit}"
+def build_system(description: str, directory_listing: str, model_name: str, model_recommendations: str, slug: str, cpu_core_range: list[int] | None = None, mig_instance: str | None = None) -> str:
+    # Build resource allocation info
+    resource_info = ""
+    if cpu_core_range is not None:
+        resource_info = f"\nNumber of CPUs: {len(cpu_core_range)} cores"
+    if mig_instance is not None:
+        resource_info += f"\nGPU: {mig_instance} MIG instance (isolated partition)"
 
     return f"""# Role: Lead Developer for Machine-Learning Competition Team
 Your objective is to deliver a single, self-contained Python script for a Kaggle Competition using **only** the specified model `{model_name}`.
@@ -17,7 +19,7 @@ You should perform web searches to determine how to set up and configure `{model
 
 ---
 **Training and Inference Environment:**
-Single GPU (24GB VRAM){cpu_info}
+Single GPU (H100 80GB){resource_info}
 
 **Model Name:**
 `{model_name}`
@@ -43,6 +45,7 @@ Single GPU (24GB VRAM){cpu_info}
 - **DL Only:** After 1st epoch on fold 0, if loss is NaN, raise Exception to halt.
 - Just train and validate on fold 0. Skip other folds to save time.
 - Do not use any `while` loops in your code.
+- YOU SHOULD NOT CREATE A SUBMISSION FILE DURING DEBUG MODE.
 
 **DEBUG mode guidelines**
 - After splitting the data into train and valid, right before starting training, sample train to 1000 rows. For classification, ensure at least one sample per class, so if there are > 1000 classes there will be > 1000 samples. For time series tasks, take the last 1000 rows (most recent) instead of random sampling to preserve temporal order.
@@ -77,16 +80,13 @@ Your response MUST follow these sections, in order:
 Example Output Block:
 ```python
 import os{f"""
-# CPU thread limits (prevent resource contention during parallel execution)
-os.environ['OMP_NUM_THREADS'] = '{cpu_cores_limit}'
-os.environ['MKL_NUM_THREADS'] = '{cpu_cores_limit}'
-os.environ['OPENBLAS_NUM_THREADS'] = '{cpu_cores_limit}'
-os.environ['NUMEXPR_NUM_THREADS'] = '{cpu_cores_limit}'""" if cpu_cores_limit is not None else ""}
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+import psutil  # For CPU affinity
+
+# CPU affinity (pin to specific cores to prevent resource overlap)
+psutil.Process(os.getpid()).cpu_affinity({cpu_core_range})""" if cpu_core_range is not None else ""}
+os.environ["CUDA_VISIBLE_DEVICES"] = "{mig_instance if mig_instance is not None else '0'}"
 BASE_DIR = "task/{slug}" if not os.getenv('KAGGLE_KERNEL_RUN_TYPE') else "/kaggle/input/{slug}"
 # <YOUR CODE>
-# When using scikit-learn/LightGBM/XGBoost/CatBoost, set n_jobs={cpu_cores_limit if cpu_cores_limit is not None else "all available cores"}
-# When using PyTorch DataLoader, set num_workers=min(4, {cpu_cores_limit if cpu_cores_limit is not None else "os.cpu_count()"})
 ```
 """
 
