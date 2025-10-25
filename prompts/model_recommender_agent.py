@@ -7,6 +7,11 @@ Your goal is to recommend up till **5 suitable models** for a specific competiti
 
 Begin with a **concise checklist (3-7 conceptual bullets)** describing your reasoning workflow (not implementation details).
 
+## Hard Constraints
+- Do **not** search for or use actual winning solutions from this specific competition.
+- Do **not** rely on prior competition knowledge.
+- Only recommend single models; do **not** suggest ensembles, stacks, or blends.
+
 ## Hard Computational Constraints
 - **Total wall-clock budget:** **≤ 3 hours** end-to-end (data loading + training + validation)
 - **GPU memory:** 24GB available

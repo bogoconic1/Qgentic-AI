@@ -14,6 +14,7 @@ import wandb
 
 from tools.developer import (
     execute_code_with_oom_retry,
+    search_red_flags,
     search_sota_suggestions,
 )
 from utils.guardrails import evaluate_guardrails, build_block_summary
@@ -87,6 +88,8 @@ class DeveloperAgent:
         # Iteration state
         self.previous_runs: list[tuple[str, float]] = []
         self.blacklisted_ideas: list[str] = []
+        self.successful_versions: set[int] = set()  # Versions that executed successfully (generated submission)
+        self.blacklisted_versions: set[int] = set()  # Versions that were explicitly blacklisted by SOTA
         self.last_suggestion: Optional[str] = None
         self.last_suggestion_code: Optional[str] = None
         self.best_code: Optional[str] = None
@@ -501,6 +504,64 @@ class DeveloperAgent:
         if entry not in self.blacklisted_ideas:
             self.blacklisted_ideas.append(entry)
 
+    def _find_most_recent_valid_version(self, current_version: int) -> tuple[int, Optional[str]]:
+        """Find the most recent version that is valid for rollback.
+
+        A version is valid if:
+        1. It executed successfully (generated a submission file)
+        2. It was NOT blacklisted by SOTA suggestions
+
+        Args:
+            current_version: The current version number
+
+        Returns:
+            Tuple of (version_number, code_content)
+            Returns (1, None) if no valid version found
+        """
+        # Iterate backwards from current_version-1 to find most recent valid version
+        for v in range(current_version - 1, 0, -1):
+            is_successful = v in self.successful_versions
+            is_blacklisted = v in self.blacklisted_versions
+
+            if is_successful and not is_blacklisted:
+                self.logger.info(f"Found most recent valid version for rollback: v{v}")
+                code_path = self.outputs_dir / self._code_filename(v)
+                if code_path.exists():
+                    try:
+                        code = code_path.read_text()
+                        return v, code
+                    except Exception as e:
+                        self.logger.error(f"Failed to read code from v{v}: {e}")
+                        continue
+                else:
+                    self.logger.warning(f"Code file for v{v} not found at {code_path}")
+                    continue
+
+        # No valid version found
+        self.logger.warning("No valid rollback version found; falling back to v1 (initial version)")
+        return 1, None
+
+    def _extract_final_summary(self, red_flags_response: str) -> str:
+        """Extract just the Final Summary section from red flags response.
+
+        Args:
+            red_flags_response: Full markdown response from search_red_flags()
+
+        Returns:
+            The Final Summary text, or full response if section not found
+        """
+        # Find "### Final Summary" section
+        match = re.search(r'### Final Summary\s*\n(.+)', red_flags_response, re.DOTALL)
+
+        if match:
+            summary = match.group(1).strip()
+            self.logger.info("Extracted Final Summary (%d chars)", len(summary))
+            return summary
+        else:
+            # Fallback: return entire response if section not found
+            self.logger.warning("Could not extract Final Summary section, using full response")
+            return red_flags_response
+
     @weave.op()
     def run(self, max_time_seconds: int = 6 * 3600) -> bool:
         self.logger.info(
@@ -638,8 +699,11 @@ class DeveloperAgent:
 
             if submission_path.exists():
                 self.latest_submission_path = submission_path
+                # Mark this version as successful (generated submission)
+                self.successful_versions.add(version)
                 self.logger.info(
-                    "Submission detected at %s after attempt %s", submission_path, attempt
+                    "Submission detected at %s after attempt %s (marking v%s as successful)",
+                    submission_path, attempt, version
                 )
                 grade_feedback = ""
                 try:
@@ -702,12 +766,28 @@ class DeveloperAgent:
                 self.previous_runs.append((code, run_score))
 
                 try:
-                    # Format LATER recommendations for SOTA search context
+                    # Format LATER recommendations for context
                     later_context = self._format_later_recommendations()
 
+                    # STAGE 1: Identify red flags using EDA tool-calling
+                    self.logger.info("Stage 1: Identifying red flags with EDA...")
+                    red_flags_response = search_red_flags(
+                        description=self.description,
+                        context=code_with_logs,
+                        data_path=str(self.base_dir),
+                        submission_path=str(submission_path) if submission_path else None,
+                    )
+                    self.logger.info("Red flags response length: %d chars", len(red_flags_response))
+
+                    # Extract Final Summary from red flags response
+                    final_summary = self._extract_final_summary(red_flags_response)
+
+                    # STAGE 2: Generate SOTA suggestions based on red flags
+                    self.logger.info("Stage 2: Generating SOTA suggestions based on red flags...")
                     sota_suggestions = search_sota_suggestions(
-                        self.description,
-                        code_with_logs,
+                        description=self.description,
+                        context=code_with_logs,
+                        red_flags=final_summary,
                         executed_suggestion=self.last_suggestion,
                         failed_to_improve_score=not improvement,
                         failed_ideas=self.blacklisted_ideas,
@@ -715,7 +795,7 @@ class DeveloperAgent:
                         later_recommendations=later_context,
                     )
                 except Exception:
-                    self.logger.exception("Failed to fetch SOTA suggestions for attempt %s", attempt)
+                    self.logger.exception("Failed to fetch red flags or SOTA suggestions for attempt %s", attempt)
                     sota_suggestions = ""
 
                 self.logger.info("SOTA suggestion: %s", sota_suggestions)
@@ -724,10 +804,13 @@ class DeveloperAgent:
 
                 if blacklist_flag and self.last_suggestion:
                     self._register_blacklist(self.last_suggestion, blacklist_reason)
+                    # Mark current version as blacklisted
+                    self.blacklisted_versions.add(version)
                     self.logger.info(
-                        "Previous suggestion marked as blacklisted: %s (reason: %s)",
+                        "Previous suggestion marked as blacklisted: %s (reason: %s) - marking v%s as blacklisted",
                         self.last_suggestion,
                         blacklist_reason or "N/A",
+                        version
                     )
 
                 if suggestion_text:
@@ -779,15 +862,19 @@ class DeveloperAgent:
                     f"Remember:\n- write logs to {next_log_path}\n- and produce the next submission at {next_submission_path}"
                 )
 
-                # Choose consistent base for the next patch: use best when blacklisted, else current version.
-                if blacklist_flag and self.best_code:
-                    base_version_for_next_patch = self.best_version if self.best_version is not None else version
+                # Choose consistent base for the next patch: use most recent valid when blacklisted, else current version.
+                rollback_code = None
+                if blacklist_flag:
+                    rollback_version, rollback_code = self._find_most_recent_valid_version(version)
+                    base_version_for_next_patch = rollback_version
                 else:
                     base_version_for_next_patch = version
                 next_instr = self._append_patch_directive(next_instr, base_version_for_next_patch)
 
-                if blacklist_flag and self.best_code:
-                    input_list.append({'role': 'user', 'content': 'The previous code has been blacklisted. Here is the best known working version for your reference (please start work from this version): \n' + self.best_code})
+                if blacklist_flag and rollback_code:
+                    input_list.append({'role': 'user', 'content': 'The previous code has been blacklisted. Here is the most recent valid (successful and non-blacklisted) version for your reference (please start work from this version): \n' + rollback_code})
+                elif blacklist_flag:
+                    self.logger.warning("Blacklist triggered but no valid rollback version available")
 
                 input_list.append({'role': 'user', 'content': next_instr})
                 self.next_patch_base_version = base_version_for_next_patch
