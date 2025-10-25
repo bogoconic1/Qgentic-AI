@@ -19,7 +19,7 @@ You should perform web searches to determine how to set up and configure `{model
 
 ---
 **Training and Inference Environment:**
-Single GPU (H100 80GB){resource_info}
+Single GPU (24GB VRAM) {resource_info}
 
 **Model Name:**
 `{model_name}`
@@ -79,13 +79,6 @@ Your response MUST follow these sections, in order:
 
 Example Output Block:
 ```python
-import os{f"""
-import psutil  # For CPU affinity
-
-# CPU affinity (pin to specific cores to prevent resource overlap)
-psutil.Process(os.getpid()).cpu_affinity({cpu_core_range})""" if cpu_core_range is not None else ""}
-os.environ["CUDA_VISIBLE_DEVICES"] = "{mig_instance if mig_instance is not None else '0'}"
-BASE_DIR = "task/{slug}" if not os.getenv('KAGGLE_KERNEL_RUN_TYPE') else "/kaggle/input/{slug}"
 # <YOUR CODE>
 ```
 """

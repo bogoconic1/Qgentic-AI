@@ -415,12 +415,43 @@ class DeveloperAgent:
         directive = prompt_patch_mode_directive(base_filename)
         return f"{instruction}\n\n{directive}"
 
+    def _postprocess_code(self, code: str) -> str:
+        """Insert resource allocation and BASE_DIR setup at the top of generated code."""
+        # Check if the code already has the resource allocation header (e.g., from patch mode)
+        if 'BASE_DIR = "task/' in code and 'CUDA_VISIBLE_DEVICES' in code:
+            self.logger.debug("Code already contains resource allocation header, skipping postprocessing")
+            return code
+
+        # Build the resource allocation header
+        lines = []
+        lines.append("import os")
+
+        if self.cpu_core_range is not None:
+            lines.append("import psutil  # For CPU affinity")
+            lines.append("")
+            lines.append("# CPU affinity (pin to specific cores to prevent resource overlap)")
+            lines.append(f"psutil.Process(os.getpid()).cpu_affinity({self.cpu_core_range})")
+
+        mig_device = self.mig_instance if self.mig_instance is not None else '0'
+        lines.append(f'os.environ["CUDA_VISIBLE_DEVICES"] = "{mig_device}"')
+        lines.append(f'BASE_DIR = "task/{self.slug}" if not os.getenv(\'KAGGLE_KERNEL_RUN_TYPE\') else "/kaggle/input/{self.slug}"')
+        lines.append("")
+
+        header = "\n".join(lines)
+
+        # Insert header at the top of the code
+        return header + "\n" + code
+
     def _write_code(self, code: str, version: int) -> Path:
         code_path = self.outputs_dir / self._code_filename(version)
         self.logger.info("Writing generated code to %s", code_path)
+
+        # Postprocess code to insert resource allocation
+        postprocessed_code = self._postprocess_code(code)
+
         with open(code_path, "w") as f:
-            f.write(code)
-        self.logger.debug("Written code size: %s characters", len(code))
+            f.write(postprocessed_code)
+        self.logger.debug("Written code size: %s characters", len(postprocessed_code))
         return code_path
 
     def _log_attempt_score(self, attempt: int, score: Optional[float]) -> None:
@@ -579,6 +610,7 @@ class DeveloperAgent:
             self.slug,
             self.iteration,
         )
+        self.logger.info("cpu core range: %s", self.cpu_core_range)
         start_time = time.time()
         deadline = start_time + max_time_seconds
 
