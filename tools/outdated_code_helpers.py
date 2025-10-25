@@ -1,4 +1,6 @@
 import ast
+import json
+import os
 from pathlib import Path
 from typing import List, Tuple, Dict, Optional
 
@@ -7,6 +9,67 @@ from typing import List, Tuple, Dict, Optional
 BANNED_SUBSCRIPT_METHODS = {"astype"}
 BANNED_IDENTIFIERS = {"Panel", "ix", "rolling_apply", "cross_validation", "GridSearchCV_old"}
 SUSPICIOUS_TO_CSV_VAR_NAMES = {"submission", "sub", "submission_df"}
+
+# XGBoost deprecated APIs - loaded from dataset
+XGBOOST_DEPRECATED_PARAMS = set()
+XGBOOST_DEPRECATED_METHODS = set()
+XGBOOST_DEPRECATED_CLASSES = set()
+XGBOOST_DEPRECATION_INFO = {}  # Map of API name -> full deprecation info
+
+
+def load_xgboost_deprecations():
+    """
+    Load XGBoost deprecation dataset and populate the banned sets.
+    This is called automatically when the module is imported.
+    """
+    global XGBOOST_DEPRECATED_PARAMS, XGBOOST_DEPRECATED_METHODS, XGBOOST_DEPRECATED_CLASSES, XGBOOST_DEPRECATION_INFO
+    
+    # Try to find the dataset file
+    current_dir = Path(__file__).parent
+    dataset_path = current_dir / "data" / "xgboost_deprecations" / "xgboost_deprecations_dataset.json"
+    
+    if not dataset_path.exists():
+        # Try relative to project root
+        dataset_path = current_dir.parent / "tools" / "data" / "xgboost_deprecations" / "xgboost_deprecations_dataset.json"
+    
+    if not dataset_path.exists():
+        # Dataset not found, silently continue without XGBoost deprecations
+        return
+    
+    try:
+        with open(dataset_path, 'r', encoding='utf-8') as f:
+            deprecations = json.load(f)
+        
+        for dep in deprecations:
+            api = dep.get('deprecated_api', '').strip()
+            category = dep.get('category', '')
+            
+            if not api:
+                continue
+            
+            # Store full info for detailed messages
+            key = f"{api}|{category}"
+            XGBOOST_DEPRECATION_INFO[key] = dep
+            
+            # Add to appropriate set based on category
+            if category == 'parameter':
+                XGBOOST_DEPRECATED_PARAMS.add(api)
+            elif category == 'method':
+                XGBOOST_DEPRECATED_METHODS.add(api)
+            elif category == 'class':
+                XGBOOST_DEPRECATED_CLASSES.add(api)
+        
+        # Add to main banned identifiers
+        BANNED_IDENTIFIERS.update(XGBOOST_DEPRECATED_METHODS)
+        BANNED_IDENTIFIERS.update(XGBOOST_DEPRECATED_CLASSES)
+        
+    except Exception as e:
+        # Silently fail if dataset can't be loaded
+        pass
+
+
+# Load XGBoost deprecations when module is imported
+load_xgboost_deprecations()
 
 
 class Issue:
@@ -29,6 +92,39 @@ def _file_snippet_from_source(source: str, lineno: int, context: int = 2) -> str
     start = max(0, lineno - 1 - context)
     end = min(len(lines), lineno - 1 + context + 1)
     return "\n".join(f"{i+1:4}: {lines[i]}" for i in range(start, end))
+
+
+def _get_xgboost_deprecation_message(api: str, category: str, context: str = "") -> str:
+    """
+    Get a detailed deprecation message for an XGBoost API.
+    
+    :param api: The deprecated API name
+    :param category: The category (parameter, method, class)
+    :param context: Optional context about where it was found
+    :return: Formatted deprecation message
+    """
+    key = f"{api}|{category}"
+    info = XGBOOST_DEPRECATION_INFO.get(key)
+    
+    if info:
+        version = info.get('version', 'unknown')
+        replacement = info.get('replacement', 'See XGBoost documentation')
+        reason = info.get('reason', '')
+        dep_context = info.get('context', '')
+        
+        msg = f"XGBoost deprecated {category} '{api}' detected (deprecated in v{version}"
+        if dep_context:
+            msg += f", {dep_context}"
+        msg += ")."
+        
+        if reason:
+            msg += f" Reason: {reason}."
+        
+        msg += f" Replacement: {replacement}"
+        
+        return msg
+    else:
+        return f"XGBoost deprecated {category} '{api}' detected. Update to current XGBoost API."
 
 
 class _Checker(ast.NodeVisitor):
@@ -66,12 +162,30 @@ class _Checker(ast.NodeVisitor):
 
     def visit_Call(self, node: ast.Call):
         try:
+            # Check for deprecated XGBoost parameters in fit() method
             if isinstance(node.func, ast.Attribute) and getattr(node.func, "attr", None) == "fit":
                 for kw in node.keywords:
-                    if kw.arg == "early_stopping_rounds":
-                        msg = ("Call to .fit(...) with keyword 'early_stopping_rounds' detected. "
-                               "Many xgboost/sklearn versions require callback-based early stopping or different APIs.")
-                        self.issues.append(Issue(self.filename, node.lineno, getattr(node, "col_offset", 0), "XGB001", msg))
+                    if kw.arg in XGBOOST_DEPRECATED_PARAMS:
+                        msg = _get_xgboost_deprecation_message(kw.arg, "parameter", "in fit() method")
+                        self.issues.append(Issue(self.filename, node.lineno, getattr(node, "col_offset", 0), "XGB002", msg))
+                    
+            
+            # Check for deprecated parameters in any XGBoost constructor
+            if isinstance(node.func, ast.Name):
+                # Check if it's an XGBoost class (simple heuristic: starts with XGB)
+                if node.func.id.startswith('XGB') or node.func.id in XGBOOST_DEPRECATED_CLASSES:
+                    for kw in node.keywords:
+                        if kw.arg in XGBOOST_DEPRECATED_PARAMS:
+                            msg = _get_xgboost_deprecation_message(kw.arg, "parameter", f"in {node.func.id}() constructor")
+                            self.issues.append(Issue(self.filename, node.lineno, getattr(node, "col_offset", 0), "XGB003", msg))
+            
+            # Check for deprecated XGBoost methods
+            if isinstance(node.func, ast.Attribute):
+                if node.func.attr in XGBOOST_DEPRECATED_METHODS:
+                    msg = _get_xgboost_deprecation_message(node.func.attr, "method")
+                    self.issues.append(Issue(self.filename, node.lineno, getattr(node, "col_offset", 0), "XGB004", msg))
+            
+            # Existing checks
             if isinstance(node.func, ast.Attribute) and getattr(node.func, "attr", None) == "to_csv":
                 val = node.func.value
                 if isinstance(val, ast.Name) and val.id in SUSPICIOUS_TO_CSV_VAR_NAMES:
@@ -86,6 +200,14 @@ class _Checker(ast.NodeVisitor):
 
     def visit_ImportFrom(self, node: ast.ImportFrom):
         try:
+            # Check for deprecated XGBoost imports
+            if node.module == "xgboost":
+                for alias in node.names:
+                    if alias.name == "dask":
+                        msg = _get_xgboost_deprecation_message("dask", "import", "from default xgboost import")
+                        self.issues.append(Issue(self.filename, node.lineno, getattr(node, "col_offset", 0), "XGB005", msg))
+            
+            # Existing checks
             if node.module == "transformers":
                 for alias in node.names:
                     if alias.name == "AdamW":
@@ -98,6 +220,12 @@ class _Checker(ast.NodeVisitor):
 
     def visit_Name(self, node: ast.Name):
         try:
+            # Check for deprecated XGBoost classes
+            if node.id in XGBOOST_DEPRECATED_CLASSES:
+                msg = _get_xgboost_deprecation_message(node.id, "class")
+                self.issues.append(Issue(self.filename, node.lineno, getattr(node, "col_offset", 0), "XGB006", msg))
+            
+            # Existing checks
             if node.id in BANNED_IDENTIFIERS:
                 msg = f"Use of deprecated identifier/name '{node.id}' detected. Update to current APIs."
                 self.issues.append(Issue(self.filename, node.lineno, getattr(node, "col_offset", 0), "DEP001", msg))
@@ -111,6 +239,12 @@ class _Checker(ast.NodeVisitor):
 
     def visit_Attribute(self, node: ast.Attribute):
         try:
+            # Check for deprecated XGBoost methods/attributes
+            if node.attr in XGBOOST_DEPRECATED_METHODS:
+                msg = _get_xgboost_deprecation_message(node.attr, "method")
+                self.issues.append(Issue(self.filename, node.lineno, getattr(node, "col_offset", 0), "XGB007", msg))
+            
+            # Existing checks
             if node.attr in BANNED_IDENTIFIERS:
                 msg = f"Use of deprecated attribute '{node.attr}' detected. Update to current APIs."
                 self.issues.append(Issue(self.filename, node.lineno, getattr(node, "col_offset", 0), "DEP002", msg))
@@ -121,6 +255,7 @@ class _Checker(ast.NodeVisitor):
         except Exception:
             pass
         self.generic_visit(node)
+
 
 # @weave.op()
 def analyze_code_string(source: str, filename: str = "<string>") -> str:

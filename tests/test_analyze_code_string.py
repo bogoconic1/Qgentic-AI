@@ -43,7 +43,7 @@ clf = XGBClassifier()
 clf.fit(X_train, y_train, early_stopping_rounds=10, eval_set=[(X_val, y_val)])
 """
     report = analyze_code_string(src, filename="fit_example.py")
-    assert_has_code(report, "XGB001")
+    assert_has_code(report, "XGB002")
     assert "early_stopping_rounds" in report
 
 
