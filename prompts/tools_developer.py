@@ -42,14 +42,72 @@ Return a single JSON object within ```json backticks with the following fields (
 ```
 """
 
-
-def sota_system() -> str:
-    return """You will receive: a Kaggle competition description, one or more researcher plans, an initial script, and associated logs for analysis.
+def red_flags_system() -> str:
+    return """You will receive: a Kaggle competition description, an initial script, and associated logs for analysis. Your purpose is to identify red flags in the current approach.
 
 Begin with a concise checklist (3-7 bullets) highlighting high-level conceptual red flags found from the code/logs and your intended strategies to address them. Focus on conceptual insights rather than implementation specifics. Use '- ' for each bullet. If fewer than three significant points are found, list as many as possible and explicitly state: "Fewer than 3 high-level red flags or strategies identified."
 
-Set reasoning_effort = medium; ensure outputs are comprehensive yet focused on key conceptual improvements. For each substantive step, provide succinct validation in 1-2 sentences, referencing specific input fields where appropriate, and self-correct if main requirements appear unmet.
+## Hard Constraints
+- Do NOT look up or use actual winning solutions from this competition.
+- Do NOT rely on prior knowledge of solutions for this competition.
+- If there are issues with the ```validation split``` or certain bugs in the code, you must point them out.
 
+## Tools
+- `ask_eda(question)`: Perform Python-based exploratory data analysis (EDA) on the local dataset or submission files to gather insights or test hypothesis relevant to the code/logs for debugging purposes.
+
+## Output Format
+
+Your response MUST follow these sections, in order:
+
+### Possible issues in the current code
+- ...(analyze the current score and logs, see how far is it away from a competitive score, and what are the likely causes)
+
+Then, summarize the result of each tool call in less than 3 lines in a Markdown format, then at the end, provide a short summary of the overall findings, challenges and recommendations.
+
+### Tool Call 1
+- Purpose:
+- Result:
+
+### Tool Call 2
+- Purpose:
+- Result:
+
+...
+
+### Final Summary
+... (5-10 lines summarizing red flags)
+
+### Input Schema
+- <competition description> (string): Detailed overview of the Kaggle competition (task, data, evaluation metric).
+- <researcher plans> (optional, list of strings): Previous plans for the task.
+- <initial script> (string): Starting code.
+- <logs> (string): Output logs from training/evaluation of the script.
+
+### Output Fields
+- Checklist (markdown list)
+- Tool call purpose and result (markdown)
+- Final Summary (markdown)
+"""
+
+
+
+def red_flags_user(
+    description: str,
+    context: str,
+) -> str:
+    return f"""<competition description>
+{description}
+</competition description>
+
+{context}
+"""
+
+
+def sota_system() -> str:
+    return """You will receive: a Kaggle competition description, one or more researcher plans, an initial script/logs, and potential identified red flags.
+
+Begin with a concise checklist (3-7 bullets) summarizing those red flags and your intended strategies to address them. Focus on conceptual insights rather than implementation specifics. Use '- ' for each bullet. If fewer than three significant points are found, list as many as possible and explicitly state: "Fewer than 3 high-level red flags or strategies identified."
+Set reasoning_effort = medium; ensure outputs are comprehensive yet focused on key conceptual improvements. For each substantive step, provide succinct validation in 1-2 sentences, referencing specific input fields where appropriate, and self-correct if main requirements appear unmet.
 Conduct a web search to identify ways to improve the competition metric with the given model, but do not look up or rely on actual winning solutions or prior knowledge specific to this competition.
 
 ## Hard Constraints
@@ -60,7 +118,7 @@ Conduct a web search to identify ways to improve the competition metric with the
 - If there are issues with the ```validation split``` or certain bugs in the code, you MUST FIX THEM FIRST.
 
 Generate TWO distinct suggestions, each from a different strategic category:
-1. **Data / Feature Engineering Enhancement** — Improving data representation or quality.
+1. **Data / Feature Engineering / Validation Enhancement** — Improving data representation or quality, or validation strategies.
 2. **Architectural Enhancement** — Enhancing model design without altering the backbone, such as adding auxiliary heads, applying regularization, or adjusting the training regime.
 
 For each:
@@ -79,15 +137,11 @@ Your response MUST follow these sections, in order:
 - ...(3-7 high-level conceptual bullet points)
 
 ### Research and Suggestion
-#### 1. Data / Feature Engineering Suggestion
+#### 1. Data / Feature Engineering / Validation Enhancement Suggestion
 - ...(explanation)
 
 #### 2. Architectural Enhancement Suggestion
 - ...(explanation — improvements cannot alter the backbone model from the initial script)
-
-#### 3. Possible issues in the current code
-- ...(analyze the current score and logs, see how far is it away from a competitive score, and what are the likely causes)
-
 
 ### Validation
 - ...(validation statements for each suggestion, or "No suggestions.")
@@ -128,6 +182,7 @@ Never repeat an idea from <previous failed ideas>, and avoid blacklisted or prev
 - <researcher plans> (optional, list of strings): Previous plans for the task.
 - <initial script> (string): Starting code.
 - <logs> (string): Output logs from training/evaluation of the script.
+- <potential identified red flags> (string): Any potential issues or areas of concern identified in the code or logs.
 - <previous suggestion executed> (string): Most recently attempted suggestion.
 - <previous failed ideas> (optional, list of strings): Suggestions that have previously failed or been blacklisted.
 
@@ -138,17 +193,13 @@ Never repeat an idea from <previous failed ideas>, and avoid blacklisted or prev
 - Previous Suggestion Review (strict JSON)
 - New Suggestion Summary (strict JSON)
 - Code (Python, if a suggestion is present)
-
-Error handling:
-- If <competition description> or <initial script and logs> are missing or inadequate, note this before the checklist and use "No suggestions." everywhere else.
-- When validating, explicitly reference relevant input fields (e.g., competition metric or logs).
-- If unable to validate due to lack of input, state this and use 'No suggestions.'
 """
 
 
 def sota_user(
     description: str,
     plans_section: str,
+    red_flags: str,
     failed_ideas_text: str,
     executed_suggestion_text: str,
     executed_code_text: str,
@@ -160,6 +211,10 @@ def sota_user(
 </competition description>
 
 {plans_section}
+
+<potential identified red flags>
+{red_flags}
+</potential identified red flags>
 
 <previous failed ideas> DO NOT TRY THESE AGAIN
 {failed_ideas_text}

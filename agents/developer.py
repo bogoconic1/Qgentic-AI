@@ -14,6 +14,7 @@ import wandb
 
 from tools.developer import (
     execute_code_with_oom_retry,
+    search_red_flags,
     search_sota_suggestions,
 )
 from utils.guardrails import evaluate_guardrails, build_block_summary
@@ -540,6 +541,27 @@ class DeveloperAgent:
         self.logger.warning("No valid rollback version found; falling back to v1 (initial version)")
         return 1, None
 
+    def _extract_final_summary(self, red_flags_response: str) -> str:
+        """Extract just the Final Summary section from red flags response.
+
+        Args:
+            red_flags_response: Full markdown response from search_red_flags()
+
+        Returns:
+            The Final Summary text, or full response if section not found
+        """
+        # Find "### Final Summary" section
+        match = re.search(r'### Final Summary\s*\n(.+)', red_flags_response, re.DOTALL)
+
+        if match:
+            summary = match.group(1).strip()
+            self.logger.info("Extracted Final Summary (%d chars)", len(summary))
+            return summary
+        else:
+            # Fallback: return entire response if section not found
+            self.logger.warning("Could not extract Final Summary section, using full response")
+            return red_flags_response
+
     @weave.op()
     def run(self, max_time_seconds: int = 6 * 3600) -> bool:
         self.logger.info(
@@ -744,12 +766,28 @@ class DeveloperAgent:
                 self.previous_runs.append((code, run_score))
 
                 try:
-                    # Format LATER recommendations for SOTA search context
+                    # Format LATER recommendations for context
                     later_context = self._format_later_recommendations()
 
+                    # STAGE 1: Identify red flags using EDA tool-calling
+                    self.logger.info("Stage 1: Identifying red flags with EDA...")
+                    red_flags_response = search_red_flags(
+                        description=self.description,
+                        context=code_with_logs,
+                        data_path=str(self.base_dir),
+                        submission_path=str(submission_path) if submission_path else None,
+                    )
+                    self.logger.info("Red flags response length: %d chars", len(red_flags_response))
+
+                    # Extract Final Summary from red flags response
+                    final_summary = self._extract_final_summary(red_flags_response)
+
+                    # STAGE 2: Generate SOTA suggestions based on red flags
+                    self.logger.info("Stage 2: Generating SOTA suggestions based on red flags...")
                     sota_suggestions = search_sota_suggestions(
-                        self.description,
-                        code_with_logs,
+                        description=self.description,
+                        context=code_with_logs,
+                        red_flags=final_summary,
                         executed_suggestion=self.last_suggestion,
                         failed_to_improve_score=not improvement,
                         failed_ideas=self.blacklisted_ideas,
@@ -757,7 +795,7 @@ class DeveloperAgent:
                         later_recommendations=later_context,
                     )
                 except Exception:
-                    self.logger.exception("Failed to fetch SOTA suggestions for attempt %s", attempt)
+                    self.logger.exception("Failed to fetch red flags or SOTA suggestions for attempt %s", attempt)
                     sota_suggestions = ""
 
                 self.logger.info("SOTA suggestion: %s", sota_suggestions)
