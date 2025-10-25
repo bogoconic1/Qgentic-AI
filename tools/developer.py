@@ -313,7 +313,8 @@ def execute_code_with_oom_retry(
     filepath: str,
     timeout_seconds: int = 3600,
     max_oom_retries: int = 10,
-    oom_retry_delay: int = 300
+    oom_retry_delay: int = 300,
+    skip_oom_polling: bool = False
 ) -> tuple[str, float]:
     """
     Execute code with automatic OOM retry logic.
@@ -327,6 +328,7 @@ def execute_code_with_oom_retry(
         timeout_seconds: Timeout in seconds for each execution attempt
         max_oom_retries: Maximum number of OOM retries (default 10)
         oom_retry_delay: Seconds to wait between OOM retries (default 300 = 5 min)
+        skip_oom_polling: If True (e.g., when MIG is enabled), skip polling and treat OOM as a real bug
 
     Returns:
         Tuple of (output string, total_wait_time_seconds)
@@ -335,42 +337,50 @@ def execute_code_with_oom_retry(
     """
     total_wait_time = 0.0
 
-    for attempt in range(max_oom_retries + 1):
-        # Execute using the existing execute_code function
-        output = execute_code(filepath, timeout_seconds)
+    # Execute using the existing execute_code function
+    output = execute_code(filepath, timeout_seconds)
 
-        # Check if output indicates OOM
-        if detect_oom(output):
-            if attempt < max_oom_retries:
-                logger.warning(
-                    f"OOM detected in {filepath} (attempt {attempt + 1}/{max_oom_retries + 1}). "
-                    f"Waiting {oom_retry_delay}s before retry..."
-                )
+    # Check if output indicates OOM
+    if detect_oom(output):
+        # If MIG is enabled (skip_oom_polling=True), treat OOM as a code bug, not resource contention
+        if skip_oom_polling:
+            logger.info(
+                f"OOM detected in {filepath} with MIG enabled. "
+                f"Treating as code issue (not polling for VRAM availability)."
+            )
+            return output, total_wait_time
 
-                # Wait for GPU VRAM to free up
-                wait_start = time.time()
-                time.sleep(oom_retry_delay)
-                wait_duration = time.time() - wait_start
-                total_wait_time += wait_duration
+        # Otherwise, use traditional OOM retry logic with polling
+        for attempt in range(max_oom_retries):
+            logger.warning(
+                f"OOM detected in {filepath} (attempt {attempt + 1}/{max_oom_retries + 1}). "
+                f"Waiting {oom_retry_delay}s before retry..."
+            )
 
-                logger.info(f"Retrying {filepath} after {wait_duration:.1f}s wait...")
-                continue  # Retry the same script
-            else:
-                # Max retries exhausted - return output with web search suggestions
-                # The agent will use these suggestions to fix the code
-                logger.warning(
-                    f"OOM persisted after {max_oom_retries} retries for {filepath}. "
-                    f"Returning output with suggestions for agent to fix."
-                )
+            # Wait for GPU VRAM to free up
+            wait_start = time.time()
+            time.sleep(oom_retry_delay)
+            wait_duration = time.time() - wait_start
+            total_wait_time += wait_duration
+
+            logger.info(f"Retrying {filepath} after {wait_duration:.1f}s wait...")
+
+            # Retry execution
+            output = execute_code(filepath, timeout_seconds)
+
+            # Check if OOM is resolved
+            if not detect_oom(output):
+                logger.info(f"Execution succeeded for {filepath} after {attempt + 1} OOM retries")
                 return output, total_wait_time
 
-        # No OOM detected - return successfully
-        if attempt > 0:
-            logger.info(f"Execution succeeded for {filepath} after {attempt} OOM retries")
-
+        # Max retries exhausted - return output with web search suggestions
+        logger.warning(
+            f"OOM persisted after {max_oom_retries} retries for {filepath}. "
+            f"Returning output with suggestions for agent to fix."
+        )
         return output, total_wait_time
 
-    # Defensive return (technically unreachable)
+    # No OOM detected - return successfully
     return output, total_wait_time
 
 def get_tools():

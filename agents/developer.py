@@ -710,7 +710,12 @@ class DeveloperAgent:
                 continue
 
             # Execute the code with OOM retry logic
-            output, wait_time = execute_code_with_oom_retry(str(code_path))
+            # If MIG is enabled, skip OOM polling (treat OOM as a code bug, not resource contention)
+            skip_oom_polling = self.mig_instance is not None
+            output, wait_time = execute_code_with_oom_retry(
+                str(code_path),
+                skip_oom_polling=skip_oom_polling
+            )
             self.logger.info("Execution output captured for version v%s", version)
             self.logger.debug("Execution output: %s", output)
 
