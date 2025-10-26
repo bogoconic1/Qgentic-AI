@@ -949,10 +949,14 @@ class DeveloperAgent:
                 if is_timeout:
                     # For timeout errors, run red flags analysis to diagnose performance issues
                     self.logger.info("Timeout detected - running red flags analysis on logs and code")
+
+                    # Add timeout context to code_with_logs for red flags analysis
+                    code_with_logs_timeout = code_with_logs + "\n<timeout_error>\nThe script was not able to execute within 1 hour. Please investigate.\n</timeout_error>\n"
+
                     try:
                         red_flags_response = search_red_flags(
                             description=self.description,
-                            context=code_with_logs,
+                            context=code_with_logs_timeout,
                             data_path=str(self.base_dir),
                             submission_path=None,  # No submission on timeout
                         )
