@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import re
+from queue import Queue
 
 from agents.researcher import ResearcherAgent
 from agents.developer import DeveloperAgent
@@ -82,7 +83,7 @@ def _run_researcher_once(slug: str, iteration: int, run_id: int) -> tuple[int, s
     return run_id, str(plan_path), len(plan or "")
 
 @weave.op()
-def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, now_recommendations: dict, later_recommendations: dict, key: str, cpu_core_range: list[int] | None = None, mig_instance: str | None = None):
+def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, now_recommendations: dict, later_recommendations: dict, key: str, cpu_core_pool: Queue | None = None, mig_pool: Queue | None = None):
     """Run a single baseline DeveloperAgent and return (key, best_score, best_code_file).
 
     Args:
@@ -92,23 +93,34 @@ def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, n
         now_recommendations: NOW-only recommendations dict for this model
         later_recommendations: LATER-only recommendations dict for this model
         key: Key for tracking results
-        cpu_core_range: List of CPU cores to pin this process to (None = no affinity)
-        mig_instance: MIG instance ID like "MIG-0" (None = use GPU 0)
+        cpu_core_pool: Queue of CPU core ranges to grab from (None = no affinity)
+        mig_pool: Queue of MIG UUIDs to grab from (None = use GPU 0)
     """
-    # Format NOW recommendations for developer
-    formatted_recommendations = _format_recommendations_for_developer(now_recommendations)
+    # Acquire resources from pools (blocks until available)
+    cpu_core_range = cpu_core_pool.get() if cpu_core_pool else None
+    mig_instance = mig_pool.get() if mig_pool else None
 
-    dev = DeveloperAgent(
-        slug,
-        iteration_suffix,
-        model_name=model_name,
-        model_recommendations=formatted_recommendations,
-        later_recommendations=later_recommendations,
-        cpu_core_range=cpu_core_range,
-        mig_instance=mig_instance
-    )
-    best_score, best_code_file, blacklisted_ideas = dev.run(max_time_seconds=10800)  # 3 hours
-    return key, best_score, best_code_file, blacklisted_ideas
+    try:
+        # Format NOW recommendations for developer
+        formatted_recommendations = _format_recommendations_for_developer(now_recommendations)
+
+        dev = DeveloperAgent(
+            slug,
+            iteration_suffix,
+            model_name=model_name,
+            model_recommendations=formatted_recommendations,
+            later_recommendations=later_recommendations,
+            cpu_core_range=cpu_core_range,
+            mig_instance=mig_instance
+        )
+        best_score, best_code_file, blacklisted_ideas = dev.run(max_time_seconds=10800)  # 3 hours
+        return key, best_score, best_code_file, blacklisted_ideas
+    finally:
+        # Return resources to pools for next task
+        if cpu_core_pool and cpu_core_range is not None:
+            cpu_core_pool.put(cpu_core_range)
+        if mig_pool and mig_instance is not None:
+            mig_pool.put(mig_instance)
 
 def _extract_now_recommendations(recommendations: dict) -> dict:
     """Extract only MUST_HAVE recommendations from model recommendations.
@@ -397,43 +409,37 @@ class Orchestrator:
             max_parallel_workers = int(_RUNTIME_CFG.get("baseline_max_parallel_workers", 1))
             print(f"MIG disabled: Using baseline_max_parallel_workers={max_parallel_workers}")
 
-        # Calculate CPU core ranges for parallel execution
+        # Create resource pools for dynamic allocation
         total_cores = os.cpu_count() or 1
         num_models = len(now_recommendations_all)
-        cpu_core_ranges = []
-        mig_instances = []
 
+        # CPU core pool
+        cpu_core_pool = None
         if enable_cpu_affinity and num_models > 1:
-            # Divide CPU cores evenly across workers
+            cpu_core_pool = Queue()
             cores_per_worker = total_cores // max_parallel_workers
             for i in range(max_parallel_workers):
                 start_core = i * cores_per_worker
                 # Last worker gets remaining cores
                 end_core = total_cores if i == max_parallel_workers - 1 else (i + 1) * cores_per_worker
-                cpu_core_ranges.append(list(range(start_core, end_core)))
-        else:
-            cpu_core_ranges = [None] * max_parallel_workers
+                cpu_core_pool.put(list(range(start_core, end_core)))
+            print(f"CPU core pool created with {max_parallel_workers} core ranges")
 
+        # MIG pool
+        mig_pool = None
         if enable_mig and num_models > 1:
-            # Use the detected MIG UUIDs
             if len(detected_mig_uuids) > 0:
-                mig_instances = detected_mig_uuids
-            else:
-                mig_instances = [None] * max_parallel_workers
-        else:
-            mig_instances = [None] * max_parallel_workers
+                mig_pool = Queue()
+                for mig_uuid in detected_mig_uuids:
+                    mig_pool.put(mig_uuid)
+                print(f"MIG pool created with {len(detected_mig_uuids)} instances")
 
-        # Prepare tasks for parallel execution
+        # Prepare tasks for parallel execution (no pre-assignment of resources)
         tasks = []
         for idx, (model_name, now_recommendations) in enumerate(now_recommendations_all.items(), start=1):
             key = model_name
             dev_iter = f"{self.iteration}_{idx}"
             later_recs = later_recommendations_all.get(model_name, {})
-
-            # Assign resources (cyclic if more models than workers)
-            worker_idx = (idx - 1) % max_parallel_workers
-            cpu_core_range = cpu_core_ranges[worker_idx]
-            mig_instance = mig_instances[worker_idx]
 
             tasks.append((
                 self.slug,
@@ -442,8 +448,8 @@ class Orchestrator:
                 now_recommendations,
                 later_recs,
                 key,
-                cpu_core_range,
-                mig_instance
+                cpu_core_pool,
+                mig_pool
             ))
 
         # Run developer agents in parallel using ThreadPoolExecutor
