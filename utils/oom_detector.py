@@ -31,13 +31,6 @@ def detect_oom(output: str) -> bool:
         "cuda error: out of memory",
         "torch.cuda.outofmemoryerror",
         "outofmemoryerror",
-        "allocation failed",
-        "cannot allocate memory",
-        "memoryerror",
-        "killed",  # Linux OOM killer
-        "std::bad_alloc",  # C++ memory allocation failure
-        "failed to allocate",
-        "device-side assert triggered",  # Sometimes accompanies OOM
     ]
 
     for pattern in oom_patterns:
