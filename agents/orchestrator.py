@@ -113,8 +113,8 @@ def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, n
             cpu_core_range=cpu_core_range,
             mig_instance=mig_instance
         )
-        best_score, best_code_file, blacklisted_ideas = dev.run(max_time_seconds=10800)  # 3 hours
-        return key, best_score, best_code_file, blacklisted_ideas
+        best_score, best_code_file, blacklisted_ideas, successful_ideas = dev.run(max_time_seconds=10800)  # 3 hours
+        return key, best_score, best_code_file, blacklisted_ideas, successful_ideas
     finally:
         # Return resources to pools for next task
         if cpu_core_pool and cpu_core_range is not None:
@@ -386,6 +386,7 @@ class Orchestrator:
         with open(later_rec_path, "w") as f:
             json.dump(later_recommendations_all, f, indent=2)
 
+        return
         # Phase 4: Baseline Developer Stage - Evaluate models in parallel with NOW recommendations
         baseline_results = {}
 
@@ -461,12 +462,13 @@ class Orchestrator:
 
             for future in futures:
                 try:
-                    result_key, best_score, best_code_file, blacklisted_ideas = future.result()
+                    result_key, best_score, best_code_file, blacklisted_ideas, successful_ideas = future.result()
                     baseline_results[result_key] = {
                         "model_name": result_key,
                         "best_score": best_score,
                         "best_code_file": best_code_file or "",
                         "blacklisted_ideas": blacklisted_ideas,
+                        "successful_ideas": successful_ideas,
                         "fold_split_strategy": fold_split_strategy,
                         "now_recommendations": now_recommendations_all.get(result_key, {}),
                         "later_recommendations": later_recommendations_all.get(result_key, {})
