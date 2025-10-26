@@ -17,7 +17,7 @@ runtime:
   patch_mode_enabled: false
   # Parallel baseline execution
   baseline_max_parallel_workers: 3  # Max baselines running in parallel when MIG is disabled (ignored if enable_mig=true)
-  enable_mig: true  # Use NVIDIA MIG for GPU isolation (auto-detects number of workers from MIG instances)
+  enable_mig: false  # Use NVIDIA MIG for GPU isolation (auto-detects number of workers from MIG instances)
   enable_cpu_affinity: true  # Pin processes to specific CPU cores
 paths:
   task_root: "task"
