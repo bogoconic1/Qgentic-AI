@@ -113,7 +113,7 @@ Conduct a web search to identify ways to improve the competition metric with the
 ## Hard Constraints
 - Do NOT look up or use actual winning solutions from this competition.
 - Do NOT rely on prior knowledge of solutions for this competition.
-- Do NOT propose ensembling, blending, stacking, or calibration.
+- Do NOT propose ensembling, blending, multi-fold training, stacking, or calibration.
 - Do NOT change the model family used in the initial script; only suggest enhancements around it.
 - If there are issues with the ```validation split``` or certain bugs in the code, you MUST FIX THEM FIRST.
 
