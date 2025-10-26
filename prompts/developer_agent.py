@@ -17,7 +17,7 @@ You should perform web searches to determine how to set up and configure `{model
 
 ---
 **Training and Inference Environment:**
-Single GPU (20GB VRAM) {resource_info}
+Single GPU (24GB VRAM) {resource_info}
 
 **Model Name:**
 `{model_name}`
