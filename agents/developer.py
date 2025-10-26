@@ -92,6 +92,7 @@ class DeveloperAgent:
         # Iteration state
         self.previous_runs: list[tuple[str, float]] = []
         self.blacklisted_ideas: list[str] = []
+        self.successful_ideas: list[str] = []  # Suggestions that led to successful, non-blacklisted executions
         self.successful_versions: set[int] = set()  # Versions that executed successfully (generated submission)
         self.blacklisted_versions: set[int] = set()  # Versions that were explicitly blacklisted by SOTA
         self.last_suggestion: Optional[str] = None
@@ -861,6 +862,15 @@ class DeveloperAgent:
                         blacklist_reason or "N/A",
                         version
                     )
+                elif not blacklist_flag and self.last_suggestion and version in self.successful_versions:
+                    # Register as successful idea if: not blacklisted + executed successfully
+                    if self.last_suggestion not in self.successful_ideas:
+                        self.successful_ideas.append(self.last_suggestion)
+                        self.logger.info(
+                            "Previous suggestion marked as successful: %s (v%s executed successfully and not blacklisted)",
+                            self.last_suggestion,
+                            version
+                        )
 
                 if suggestion_text:
                     self.logger.info("Summary of SOTA suggestion: %s", suggestion_text)
@@ -955,4 +965,4 @@ class DeveloperAgent:
 
             artifact.save()
 
-        return self.best_score, self.best_code_file, self.blacklisted_ideas
+        return self.best_score, self.best_code_file, self.blacklisted_ideas, self.successful_ideas

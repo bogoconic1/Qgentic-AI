@@ -49,9 +49,11 @@ def move_best_code_to_ensemble_folder(slug: str, iteration: int):
         parts = code_filename.replace("code_", "").replace(".py", "").split("_v")
         iteration_suffix = parts[0]  # e.g., "2_1"
 
-        # Define source paths (code files are in subdirectories named by iteration_suffix)
-        code_file_path = base_path / iteration_suffix / best_code_file
-        log_file_path = base_path / iteration_suffix / best_code_file.replace(".py", ".txt")
+        # Define source paths (code files are in sibling directories at outputs level)
+        # Structure: outputs/2/baseline_results.json references files in outputs/2_1/, outputs/2_2/, etc.
+        code_folder = base_path.parent / iteration_suffix  # outputs/2 -> outputs/2_1
+        code_file_path = code_folder / best_code_file
+        log_file_path = code_folder / best_code_file.replace(".py", ".txt")
 
         # Check if code file exists
         if not code_file_path.exists():
@@ -78,7 +80,8 @@ def move_best_code_to_ensemble_folder(slug: str, iteration: int):
             "now_recommendations": model_data.get("now_recommendations", {}),
             "later_recommendations": model_data.get("later_recommendations", {}),
             "fold_split_strategy": model_data.get("fold_split_strategy", {}),
-            "blacklisted_ideas": model_data.get("blacklisted_ideas", [])
+            "blacklisted_ideas": model_data.get("blacklisted_ideas", []),
+            "successful_ideas": model_data.get("successful_ideas", [])
         }
 
     # Save ensemble metadata to JSON file
