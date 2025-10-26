@@ -22,7 +22,7 @@ _CONFIG = get_config()
 _LLM_CFG = _CONFIG.get("llm")
 _PATH_CFG = _CONFIG.get("paths")
 
-_STARTER_MODEL = _LLM_CFG.get("developer_tool_model")
+_STARTER_MODEL = _LLM_CFG.get("starter_model")
 
 _TASK_ROOT = Path(_PATH_CFG.get("task_root"))
 _OUTPUTS_DIRNAME = _PATH_CFG.get("outputs_dirname")

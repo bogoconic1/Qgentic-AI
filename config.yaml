@@ -6,7 +6,8 @@ llm:
   researcher_tool_online_model: "gpt-5"
   leakage_review_model: "gpt-5-mini"
   leakage_followup_model: "gpt-5-mini"
-  model_recommender_model: "gpt-5"
+  model_recommender_model: "gpt-5-mini"
+  starter_model: "gpt-5-mini"
 runtime:
   ask_eda_max_attempts: 3
   researcher_max_steps: 512

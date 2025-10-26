@@ -40,7 +40,7 @@ Single GPU (24GB VRAM) {resource_info}
 - Prefer pretrained models if available.
 - External datasets: may be appended **only** to training set.
 - **DEBUG flag**: At the script top, define. Pipeline runs twice: once with `DEBUG=True`, then with `DEBUG=False` (full config). Log which mode is running.
-- **DL Only:** After 1st epoch on fold 0, if loss is NaN, raise Exception to halt.
+- **DL Only:** After 1st epoch on fold 0 in FULL mode, if loss is NaN, STOP training and jump directly to inference to generate the submission file.
 - Just train and validate on fold 0. Skip other folds to save time.
 - Do not use any `while` loops in your code.
 - YOU SHOULD NOT CREATE A SUBMISSION FILE DURING DEBUG MODE.
