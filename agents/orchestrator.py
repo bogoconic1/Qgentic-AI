@@ -378,9 +378,24 @@ class Orchestrator:
         baseline_results = {}
 
         # Get parallel execution configuration
-        max_parallel_workers = int(_RUNTIME_CFG.get("baseline_max_parallel_workers", 1))
         enable_cpu_affinity = _RUNTIME_CFG.get("enable_cpu_affinity", False)
         enable_mig = _RUNTIME_CFG.get("enable_mig", False)
+
+        # Determine max_parallel_workers based on MIG configuration
+        if enable_mig:
+            # Auto-detect number of workers from MIG instances
+            detected_mig_uuids = _get_mig_uuids(gpu_id=0)
+            if len(detected_mig_uuids) > 0:
+                max_parallel_workers = len(detected_mig_uuids)
+                print(f"MIG enabled: Auto-detected {max_parallel_workers} MIG instances")
+            else:
+                print("WARNING: enable_mig=true but no MIG instances detected")
+                print("Falling back to baseline_max_parallel_workers from config")
+                max_parallel_workers = int(_RUNTIME_CFG.get("baseline_max_parallel_workers", 1))
+        else:
+            # Use configured value when MIG is disabled
+            max_parallel_workers = int(_RUNTIME_CFG.get("baseline_max_parallel_workers", 1))
+            print(f"MIG disabled: Using baseline_max_parallel_workers={max_parallel_workers}")
 
         # Calculate CPU core ranges for parallel execution
         total_cores = os.cpu_count() or 1
@@ -400,15 +415,10 @@ class Orchestrator:
             cpu_core_ranges = [None] * max_parallel_workers
 
         if enable_mig and num_models > 1:
-            # Get real MIG UUIDs from nvidia-smi
-            detected_mig_uuids = _get_mig_uuids(gpu_id=0)
-            if len(detected_mig_uuids) >= max_parallel_workers:
-                # Use the first N MIG instances
-                mig_instances = detected_mig_uuids[:max_parallel_workers]
+            # Use the detected MIG UUIDs
+            if len(detected_mig_uuids) > 0:
+                mig_instances = detected_mig_uuids
             else:
-                # Not enough MIG instances detected, disable MIG
-                print(f"WARNING: enable_mig=true but only {len(detected_mig_uuids)} MIG instances detected (need {max_parallel_workers})")
-                print("Falling back to no MIG isolation. Please configure MIG instances first.")
                 mig_instances = [None] * max_parallel_workers
         else:
             mig_instances = [None] * max_parallel_workers
