@@ -125,7 +125,7 @@ Conduct a web search to identify ways to improve the competition metric with the
 Generate THREE distinct suggestions, each from a different strategic category:
 1. **Data / Feature Engineering / Validation Enhancement** — Improving data representation or quality, or validation strategies.
 2. **Architectural Enhancement** — Enhancing model design without altering the backbone, such as adding auxiliary heads, applying regularization, or adjusting the training regime.
-3. **Removing Existing Components** - If you believe there are existing components that are detrimental to performance, suggest removing or replacing them with a brief justification.
+3. **Removing Existing Components** - If you believe there are existing components that are unstable or detrimental to performance, suggest removing or replacing them with a brief justification.
 
 For each:
 - Provide one high-impact suggestion to improve the competition metric, with an explanation (~100 words) describing its benefits.
