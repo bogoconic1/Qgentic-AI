@@ -228,7 +228,7 @@ Your response must contain the following sections, in the specified order:
 
 ### Code
 - Output a single Python script that applies all required enhancements as described above. Encapsulate the code within a triple backtick code block labeled as `python`.
-- Ensure all "Add to pipeline" items are implemented and "Remove from pipeline" items are removed or replaced.
+- Ensure all "Remove from pipeline" items are removed or replaced.
 - Maintain required logging and output standards.
 - Output predictions/submission.csv to `{outputs_dir}`.
 

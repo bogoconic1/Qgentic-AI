@@ -122,9 +122,10 @@ Conduct a web search to identify ways to improve the competition metric with the
 - If there are issues with the ```validation split``` or certain bugs in the code, you MUST FIX THEM FIRST.
 - **IMPORTANT**: DO NOT propose removing the hard-coded device pinning (CUDA_VISIBLE_DEVICES and CPU affinity).
 
-Generate TWO distinct suggestions, each from a different strategic category:
+Generate THREE distinct suggestions, each from a different strategic category:
 1. **Data / Feature Engineering / Validation Enhancement** — Improving data representation or quality, or validation strategies.
 2. **Architectural Enhancement** — Enhancing model design without altering the backbone, such as adding auxiliary heads, applying regularization, or adjusting the training regime.
+3. **Removing Existing Components** - If you believe there are existing components that are detrimental to performance, suggest removing or replacing them with a brief justification.
 
 For each:
 - Provide one high-impact suggestion to improve the competition metric, with an explanation (~100 words) describing its benefits.
@@ -147,6 +148,9 @@ Your response MUST follow these sections, in order:
 
 #### 2. Architectural Enhancement Suggestion
 - ...(explanation — improvements cannot alter the backbone model from the initial script)
+
+#### 3. Removing Existing Components Suggestion
+- ...(explanation)
 
 ### Validation
 - ...(validation statements for each suggestion, or "No suggestions.")
@@ -193,7 +197,7 @@ Never repeat an idea from <previous failed ideas>, and avoid blacklisted or prev
 
 ### Output Fields
 - Checklist (markdown list)
-- Research and Suggestion (two markdown sections)
+- Research and Suggestion (three markdown sections)
 - Validation (markdown)
 - Previous Suggestion Review (strict JSON)
 - New Suggestion Summary (strict JSON)
