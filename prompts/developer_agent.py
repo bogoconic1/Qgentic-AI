@@ -6,7 +6,7 @@ from pathlib import Path
 def _get_hard_constraints(model_name: str, allow_multi_fold: bool = False) -> str:
     """Get the hard constraints section for system prompts."""
     fold_constraint = (
-        "- You may train on multiple folds if it improves performance (multi-fold training IS ALLOWED)."
+        ""
         if allow_multi_fold
         else "- Just train and validate on fold 0. Skip other folds to save time."
     )

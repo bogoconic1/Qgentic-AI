@@ -193,6 +193,7 @@ def search_sota_suggestions(
     failed_ideas: list[str],
     executed_code: str | None = None,
     later_recommendations: str | None = None,
+    allow_multi_fold: bool = False,
 ) -> str:
     """Stage 2: Use web search to generate SOTA suggestions based on red flags.
 
@@ -205,6 +206,7 @@ def search_sota_suggestions(
         failed_ideas: List of blacklisted ideas
         executed_code: Code snippet from last attempt
         later_recommendations: LATER recommendations for progressive improvement
+        allow_multi_fold: If True, allows multi-fold training and ensembling suggestions
 
     Returns:
         SOTA suggestions text with blacklist decision and new suggestion
@@ -220,7 +222,7 @@ def search_sota_suggestions(
     if later_recommendations:
         suggestions_section = f"\n<suggestions>\n{later_recommendations}\n</suggestions>\n"
 
-    system_prompt = prompt_sota_system()
+    system_prompt = prompt_sota_system(allow_multi_fold=allow_multi_fold)
 
     outcome_status = "No improvement" if failed_to_improve_score else "Improved or matched"
     user_prompt = prompt_sota_user(

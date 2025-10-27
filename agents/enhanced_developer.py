@@ -119,29 +119,12 @@ class EnhancedDeveloperAgent(DeveloperAgent):
         logger.info("Detected baseline versions: %s, starting enhanced from v%d", versions, next_version)
         return next_version
 
-    def _compose_system_prompt(self) -> str:
+    def _compose_system(self) -> str:
         """
-        Override system prompt for first iteration to use enhancement-focused prompt.
-
-        For subsequent iterations, falls back to standard DeveloperAgent prompt
-        (which uses Red Flags + SOTA for refinement).
-
-        Returns:
-            System prompt string
-        """
-        # First iteration: Apply enhancements from markdown
-        if self.version == self._starting_version:
-            return self._compose_enhancement_system_prompt()
-
-        # Subsequent iterations: Use inherited prompt (Red Flags + SOTA)
-        # But we need to customize it to remove the single-fold constraint
-        return self._compose_relaxed_system_prompt()
-
-    def _compose_enhancement_system_prompt(self) -> str:
-        """
-        Generate enhancement-focused system prompt for first iteration.
+        Generate enhancement-focused system prompt.
 
         Reads base code and enhancements, instructs LLM to apply them.
+        Called once at the start - subsequent iterations use Red Flags + SOTA loop.
 
         Returns:
             System prompt with enhancements
@@ -170,47 +153,21 @@ class EnhancedDeveloperAgent(DeveloperAgent):
             cpu_core_range=self.cpu_core_range
         )
 
-    def _compose_relaxed_system_prompt(self) -> str:
+    def _call_sota_suggestions(self, **kwargs):
         """
-        Generate system prompt for subsequent iterations (v2+).
+        Override to pass allow_multi_fold=True to SOTA suggestions tool.
 
-        Similar to DeveloperAgent but with relaxed constraints
-        (allows multi-fold, ensembling, etc.)
+        This allows SOTA suggestions in subsequent iterations (v2, v3, ...)
+        to include multi-fold training, ensembling, stacking, and calibration.
+
+        Args:
+            **kwargs: Arguments to pass to search_sota_suggestions
 
         Returns:
-            System prompt for refinement iterations
+            SOTA suggestions text
         """
-        from prompts.developer_agent import build_system
-        from tools.helpers import _build_directory_listing
+        from tools.developer import search_sota_suggestions
 
-        # Get directory listing
-        directory_listing = _build_directory_listing(str(self.base_dir))
-
-        # Read description
-        description_path = self.base_dir / "description.md"
-        with open(description_path, 'r') as f:
-            description = f.read()
-
-        # Build prompt with multi-fold allowed
-        relaxed_prompt = build_system(
-            description=description,
-            directory_listing=directory_listing,
-            model_name=self.model_name,
-            model_recommendations="(Enhanced model - no specific recommendations, use Red Flags + SOTA for refinement)",
-            slug=self.slug,
-            cpu_core_range=self.cpu_core_range,
-            gpu_identifier=self.gpu_identifier,
-            gpu_isolation_mode=self.gpu_isolation_mode,
-            allow_multi_fold=True
-        )
-
-        # Add note about enhanced context
-        relaxed_prompt += """
-
-**Enhanced Model Context:**
-This is an enhanced version of a baseline model. Previous iterations have applied cross-model improvements.
-Continue refining based on Red Flags analysis and SOTA suggestions. Multi-fold training and advanced
-techniques (ensembling, stacking, calibration) are allowed if they improve the competition metric.
-"""
-
-        return relaxed_prompt
+        # Add allow_multi_fold=True to the kwargs
+        kwargs['allow_multi_fold'] = True
+        return search_sota_suggestions(**kwargs)

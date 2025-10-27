@@ -612,6 +612,20 @@ class DeveloperAgent:
             self.logger.warning("Could not extract Final Summary section, using full response")
             return red_flags_response
 
+    def _call_sota_suggestions(self, **kwargs):
+        """
+        Call SOTA suggestions tool with appropriate parameters.
+
+        Can be overridden by subclasses to modify behavior (e.g., allow_multi_fold).
+
+        Args:
+            **kwargs: Arguments to pass to search_sota_suggestions
+
+        Returns:
+            SOTA suggestions text
+        """
+        return search_sota_suggestions(**kwargs)
+
     @weave.op()
     def run(self, max_time_seconds: int = 6 * 3600) -> bool:
         self.logger.info(
@@ -842,7 +856,7 @@ class DeveloperAgent:
 
                     # STAGE 2: Generate SOTA suggestions based on red flags
                     self.logger.info("Stage 2: Generating SOTA suggestions based on red flags...")
-                    sota_suggestions = search_sota_suggestions(
+                    sota_suggestions = self._call_sota_suggestions(
                         description=self.description,
                         context=code_with_logs,
                         red_flags=final_summary,
