@@ -965,30 +965,38 @@ class DeveloperAgent:
                 next_log_path = self.outputs_dir / self._log_filename(version + 1)
                 next_submission_path = self.outputs_dir / self._submission_filename(version + 1)
 
-                # Check if this is a timeout error
+                # Check if this is a timeout or OOM error
                 is_timeout = "Code execution timed out after" in output
+                is_oom = "CUDA out of memory" in output or "OutOfMemoryError" in output
 
-                if is_timeout:
-                    # For timeout errors, run red flags analysis to diagnose performance issues
-                    self.logger.info("Timeout detected - running red flags analysis on logs and code")
+                if is_timeout or is_oom:
+                    # For timeout/OOM errors, run red flags analysis to diagnose issues
+                    error_type = "Timeout" if is_timeout else "OOM"
+                    self.logger.info(f"{error_type} detected - running red flags analysis on logs and code")
 
-                    # Add timeout context to code_with_logs for red flags analysis
-                    code_with_logs_timeout = code_with_logs + "\n<timeout_error>\nThe script was not able to execute within 1 hour. Please investigate.\n</timeout_error>\n"
+                    # Add error context to code_with_logs for red flags analysis
+                    if is_timeout:
+                        error_context = "\n<timeout_error>\nThe script was not able to execute within 1 hour. Please investigate.\n</timeout_error>\n"
+                    else:
+                        error_context = "\n<oom_error>\nCUDA out of memory error detected. The model or batch size is too large for available GPU memory. Please investigate.\n</oom_error>\n"
+
+                    code_with_logs_error = code_with_logs + error_context
 
                     try:
                         red_flags_response = search_red_flags(
                             description=self.description,
-                            context=code_with_logs_timeout,
+                            context=code_with_logs_error,
                             data_path=str(self.base_dir),
-                            submission_path=None,  # No submission on timeout
+                            submission_path=None,  # No submission on timeout/OOM
                         )
-                        self.logger.info("Red flags analysis complete for timeout (length: %d chars)", len(red_flags_response))
+                        self.logger.info(f"Red flags analysis complete for {error_type} (length: %d chars)", len(red_flags_response))
 
                         # Extract Final Summary from red flags response
                         final_summary = self._extract_final_summary(red_flags_response)
 
+                        error_message = "TIMEOUT" if is_timeout else "OUT OF MEMORY"
                         next_instr = f"""
-                        Your code FAILED during execution due to TIMEOUT!
+                        Your code FAILED during execution due to {error_message}!
                         {output}
 
                         Performance analysis:
@@ -997,10 +1005,11 @@ class DeveloperAgent:
                         {prompt_execution_failure_suffix(next_log_path, next_submission_path)}
                         """
                     except Exception:
-                        self.logger.exception("Failed to run red flags analysis for timeout")
-                        # Fallback to basic timeout message
+                        self.logger.exception(f"Failed to run red flags analysis for {error_type}")
+                        # Fallback to basic error message
+                        error_message = "TIMEOUT" if is_timeout else "OUT OF MEMORY"
                         next_instr = f"""
-                        Your code FAILED during execution!
+                        Your code FAILED during execution due to {error_message}!
                         This is the stack trace and advice on how to fix the error:
                         {output}
 
