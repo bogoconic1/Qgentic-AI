@@ -118,9 +118,12 @@ def generate_all_summaries(
         description = f.read()
 
     summaries = {}
-    ensemble_dir = outputs_dir / str(iteration) / "ensemble"
+    ensemble_dir = outputs_dir / "ensemble"
     summaries_dir = ensemble_dir / "summaries"
     summaries_dir.mkdir(parents=True, exist_ok=True)
+
+    # outputs_dir is already outputs/{iteration}/, so go up one level to get outputs/
+    outputs_root = outputs_dir.parent
 
     for idx, (model_name, baseline_info) in enumerate(baseline_results.items(), start=1):
         print(f"Generating summary for Model {idx}: {model_name}")
@@ -131,7 +134,10 @@ def generate_all_summaries(
             print(f"  WARNING: No code file for {model_name}, skipping")
             continue
 
-        code_path = outputs_dir / str(iteration) / best_code_file
+        # Baseline code is in outputs/{iteration_suffix}/ at the same level as outputs/{iteration}/
+        # e.g., outputs/2_1/code_2_1_v3.py
+        iteration_suffix = f"{iteration}_{idx}"
+        code_path = outputs_root / iteration_suffix / best_code_file
         if not code_path.exists():
             print(f"  WARNING: Code file not found: {code_path}, skipping")
             continue
@@ -141,7 +147,7 @@ def generate_all_summaries(
 
         # Read logs file
         log_file = best_code_file.replace('.py', '.txt')
-        log_path = outputs_dir / str(iteration) / log_file
+        log_path = outputs_root / iteration_suffix / log_file
         if not log_path.exists():
             print(f"  WARNING: Log file not found: {log_path}, using empty logs")
             logs = ""
@@ -187,7 +193,7 @@ def generate_all_enhancements(
         Dict mapping model_name to enhancement recommendations markdown
     """
     enhancements = {}
-    ensemble_dir = outputs_dir / str(iteration) / "ensemble"
+    ensemble_dir = outputs_dir / "ensemble"
     enhancements_dir = ensemble_dir / "enhancements"
     enhancements_dir.mkdir(parents=True, exist_ok=True)
 

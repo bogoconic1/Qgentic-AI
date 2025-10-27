@@ -644,7 +644,9 @@ class Orchestrator:
             if not best_code_file:
                 continue
 
-            base_code_path = self.outputs_dir / str(self.iteration) / best_code_file
+            # Baseline code is in outputs/{iteration_suffix}/ (e.g., outputs/2_1/)
+            dev_iter = f"{self.iteration}_{idx}"
+            base_code_path = self.outputs_dir / dev_iter / best_code_file
             enhancements_path = enhancements_dir / f"enhancements_model_{idx}.md"
 
             if not base_code_path.exists():
@@ -653,7 +655,6 @@ class Orchestrator:
                 continue
 
             key = model_name
-            dev_iter = f"{self.iteration}_{idx}"
 
             enhancement_tasks.append((
                 self.slug,
