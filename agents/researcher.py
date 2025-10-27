@@ -151,7 +151,7 @@ class ResearcherAgent:
             data_url = self._encode_image_to_data_url(p)
             if not data_url:
                 continue
-            content.append({"type": "input_image", "image_url": {"url": data_url}})
+            content.append({"type": "input_image", "image_url": data_url})
 
         return [{"role": "user", "content": content}]
 
@@ -221,9 +221,11 @@ class ResearcherAgent:
                             })
                             try:
                                 # I don't care if this silently fails - its not that critical
-                                self._ingest_new_media(before_media)
-                            except Exception:
-                                logger.debug("No media ingested for this step.")
+                                media_prompt = self._ingest_new_media(before_media)
+                                if media_prompt: input_list += media_prompt
+                            except Exception as e:
+                                logger.error("Failed to ingest new media: %s", e)
+                                logger.info("No media ingested for this step.")
                             
                     elif item.name == "download_external_datasets":
                         dataset_name = json.loads(item.arguments)["dataset_name"]
