@@ -2,7 +2,8 @@
 
 This module provides a modular, concurrency-friendly workflow that:
     1. Searches Semantic Scholar for papers related to a query.
-    2. Downloads any available open-access PDFs into ``data/``.
+    2. Downloads PDFs into ``data/`` using open-access links, detailed lookups,
+       and external identifiers when available.
     3. Extracts lightweight implementation insights (model, architecture, dataset)
        from the PDF text using PyMuPDF.
 
@@ -18,14 +19,26 @@ from __future__ import annotations
 import concurrent.futures
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+import re
 from typing import Dict, Iterable, List, Optional, Sequence
 
 import requests
 from dotenv import load_dotenv
 
-import fitz
+try:
+    import pymupdf
+    _PYMUPDF = pymupdf
+except ImportError:
+    try:
+        import fitz
+
+        _PYMUPDF = fitz
+    except ImportError as exc:
+        raise ImportError(
+            "PyMuPDF is required for PDF analysis. Install via `pip install pymupdf`."
+        ) from exc
 
 
 load_dotenv()
@@ -34,7 +47,7 @@ LOGGER = logging.getLogger(__name__)
 
 SEMANTIC_SCHOLAR_API_URL = "https://api.semanticscholar.org/graph/v1"
 DEFAULT_FIELDS = (
-    "paperId,title,url,abstract,isOpenAccess,openAccessPdf,authors"
+    "paperId,title,url,abstract,isOpenAccess,openAccessPdf,authors,externalIds"
 )
 DEFAULT_LIMIT = 5
 DEFAULT_MAX_WORKERS = 4
@@ -56,6 +69,7 @@ class PaperMetadata:
     is_open_access: bool
     open_access_pdf_url: Optional[str]
     authors: tuple[str, ...]
+    external_ids: Dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -136,11 +150,46 @@ class SemanticScholarClient:
         papers = payload.get("recommendedPapers", [])
         return [self._parse_paper(entry) for entry in papers]
 
+    def get_paper(
+        self,
+        paper_id: str,
+        fields: str = DEFAULT_FIELDS,
+    ) -> Optional[PaperMetadata]:
+        if not paper_id:
+            raise ValueError("paper_id cannot be empty.")
+        url = f"{self._base_url}/paper/{paper_id}"
+        params = {"fields": fields}
+        LOGGER.debug("Fetching paper details for %s", paper_id)
+        response = requests.get(
+            url,
+            headers=self._headers(),
+            params=params,
+            timeout=self._timeout,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if not payload:
+            return None
+        return self._parse_paper(payload)
+
     @staticmethod
     def _parse_paper(entry: Dict) -> PaperMetadata:
-        authors = tuple(author.get("name", "").strip()
-                        for author in entry.get("authors", []))
+        authors = tuple(
+            author.get("name", "").strip()
+            for author in entry.get("authors", [])
+        )
         open_access_pdf = entry.get("openAccessPdf") or {}
+        raw_external_ids = entry.get("externalIds") or {}
+        external_ids: Dict[str, str] = {}
+        for key, value in raw_external_ids.items():
+            if not value:
+                continue
+            if isinstance(value, str):
+                external_ids[key] = value
+            elif isinstance(value, (list, tuple)):
+                external_ids[key] = str(value[0])
+            else:
+                external_ids[key] = str(value)
         return PaperMetadata(
             paper_id=entry.get("paperId", ""),
             title=entry.get("title", "").strip(),
@@ -149,11 +198,12 @@ class SemanticScholarClient:
             is_open_access=bool(entry.get("isOpenAccess")),
             open_access_pdf_url=open_access_pdf.get("url"),
             authors=authors,
+            external_ids=external_ids,
         )
 
 
 class PaperDownloader:
-    """Handles concurrent download of open-access PDFs."""
+    """Handles concurrent download of PDFs with multiple fallbacks."""
 
     def __init__(
         self,
@@ -165,38 +215,140 @@ class PaperDownloader:
         self._user_agent = user_agent
 
     def download(self, paper: PaperMetadata) -> Optional[Path]:
-        if not paper.is_open_access or not paper.open_access_pdf_url:
-            LOGGER.info(
-                "Paper '%s' is not open access; skipping download.", paper.title)
-            return None
-
         dest_path = self._target_dir / f"{paper.paper_id}.pdf"
         if dest_path.exists():
-            LOGGER.debug("PDF already present for %s at %s",
-                         paper.paper_id, dest_path)
+            LOGGER.debug(
+                "PDF already present for %s at %s",
+                paper.paper_id,
+                dest_path,
+            )
             return dest_path
 
+        candidates = self._candidate_urls(paper)
+        if not candidates:
+            LOGGER.info(
+                "No PDF candidates available for '%s'; skipping download.",
+                paper.title,
+            )
+            return None
+
+        for url in candidates:
+            try:
+                LOGGER.info(
+                    "Attempting download for '%s' from %s",
+                    paper.title,
+                    url,
+                )
+                self._download_from_url(url, dest_path)
+                return dest_path
+            except PaperDownloadError as exc:
+                LOGGER.debug(
+                    "Candidate rejected for %s (%s): %s",
+                    paper.paper_id,
+                    url,
+                    exc,
+                )
+            except requests.RequestException as exc:
+                LOGGER.debug(
+                    "Request error for %s (%s): %s",
+                    paper.paper_id,
+                    url,
+                    exc,
+                )
+
+        LOGGER.info(
+            "Failed to download a PDF for '%s' after trying %s candidates.",
+            paper.title,
+            len(candidates),
+        )
+        return None
+
+    def _candidate_urls(self, paper: PaperMetadata) -> List[str]:
+        urls: List[str] = []
+
+        def add(url: Optional[str]) -> None:
+            if url and url not in urls:
+                urls.append(url)
+
+        add(paper.open_access_pdf_url)
+
+        external_ids = paper.external_ids or {}
+        arxiv_id = external_ids.get("ArXiv") or external_ids.get("ARXIV")
+        if arxiv_id:
+            arxiv_clean = arxiv_id.replace("arXiv:", "")
+            add(f"https://arxiv.org/pdf/{arxiv_clean}.pdf")
+
+        acl_id = external_ids.get("ACL")
+        if acl_id:
+            lower_acl = acl_id.lower()
+            add(f"https://aclanthology.org/{lower_acl}.pdf")
+
+        pmc_id = (
+            external_ids.get("PubMedCentral")
+            or external_ids.get("PMCID")
+            or external_ids.get("PUBMEDCENTRAL")
+        )
+        if pmc_id:
+            add(f"https://www.ncbi.nlm.nih.gov/pmc/articles/{pmc_id}/pdf")
+
+        doi = external_ids.get("DOI")
+        if doi:
+            add(f"https://doi.org/{doi}")
+
+        add(paper.url)
+        return urls
+
+    def _download_from_url(self, url: str, dest_path: Path) -> None:
         headers = {"user-agent": self._user_agent}
-        LOGGER.info("Downloading PDF for '%s' -> %s", paper.title, dest_path)
         with requests.Session() as session:
             with session.get(
-                paper.open_access_pdf_url,
+                url,
                 headers=headers,
                 stream=True,
                 timeout=120,
+                allow_redirects=True,
                 verify=False,  # noqa: S501 (semanticscholar hosts many certs)
             ) as response:
                 response.raise_for_status()
                 content_type = response.headers.get("content-type", "")
-                if "pdf" not in content_type.lower():
-                    raise PaperDownloadError(
-                        f"Expected a PDF, got '{content_type}' for {paper.paper_id}"
-                    )
-                with dest_path.open("wb") as fh:
+                first_chunk: Optional[bytes] = None
+                file_handle = None
+                try:
                     for chunk in response.iter_content(chunk_size=CHUNK_SIZE):
-                        if chunk:
-                            fh.write(chunk)
-        return dest_path
+                        if not chunk:
+                            continue
+                        if first_chunk is None:
+                            first_chunk = chunk
+                            if not self._looks_like_pdf(content_type, first_chunk):
+                                raise PaperDownloadError(
+                                    f"URL did not return PDF content (content-type='{content_type}')"
+                                )
+                            file_handle = dest_path.open("wb")
+                            file_handle.write(first_chunk)
+                        else:
+                            if file_handle is None:
+                                file_handle = dest_path.open("wb")
+                            file_handle.write(chunk)
+                    if file_handle is None:
+                        raise PaperDownloadError(
+                            "Empty response when downloading PDF."
+                        )
+                except Exception:
+                    if file_handle is not None:
+                        file_handle.close()
+                    if dest_path.exists():
+                        dest_path.unlink(missing_ok=True)
+                    raise
+                else:
+                    if file_handle is not None:
+                        file_handle.close()
+
+    @staticmethod
+    def _looks_like_pdf(content_type: str, first_chunk: bytes) -> bool:
+        if content_type and "pdf" in content_type.lower():
+            return True
+        stripped = first_chunk.lstrip()
+        return stripped.startswith(b"%PDF")
 
 
 class PaperAnalyzer:
@@ -211,7 +363,7 @@ class PaperAnalyzer:
 
     def _extract_text(self, pdf_path: Path) -> str:
         LOGGER.debug("Extracting text from %s", pdf_path)
-        with fitz.open(pdf_path) as document:
+        with _PYMUPDF.open(str(pdf_path)) as document:
             pages = [page.get_text("text") for page in document]
         return "\n".join(pages)
 
@@ -312,20 +464,36 @@ class LiteratureReviewer:
         pdf_path: Optional[Path] = None
         insights: Dict[str, List[str]] = {}
         error: Optional[str] = None
+        metadata = paper
 
         try:
-            pdf_path = self.downloader.download(paper)
+            if not metadata.open_access_pdf_url or not metadata.is_open_access:
+                try:
+                    detailed = self.client.get_paper(metadata.paper_id)
+                    if detailed:
+                        metadata = detailed
+                except Exception as enrich_exc:
+                    LOGGER.debug(
+                        "Unable to enrich metadata for %s: %s",
+                        metadata.paper_id,
+                        enrich_exc,
+                    )
+
+            pdf_path = self.downloader.download(metadata)
             if pdf_path:
                 insights = self.analyzer.analyze(pdf_path)
             else:
                 LOGGER.debug(
-                    "Skipping analysis for %s (no PDF downloaded).", paper.paper_id)
+                    "Skipping analysis for %s (no PDF downloaded).",
+                    metadata.paper_id,
+                )
+                error = error or "PDF not available via open-access or fallback sources."
         except Exception as exc:
             error = str(exc)
             LOGGER.warning("Issue while processing %s: %s",
                            paper.paper_id, exc)
 
-        return PaperReview(metadata=paper, pdf_path=pdf_path, insights=insights, error=error)
+        return PaperReview(metadata=metadata, pdf_path=pdf_path, insights=insights, error=error)
 
     def _fetch_recommendations(
         self,
