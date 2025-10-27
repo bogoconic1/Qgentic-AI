@@ -594,7 +594,7 @@ class Orchestrator:
             baseline_results = json.load(f)
 
         description_path = self.base_dir / "description.md"
-        ensemble_dir = self.outputs_dir / str(self.iteration) / "ensemble"
+        ensemble_dir = self.outputs_dir / "ensemble"
         summaries_dir = ensemble_dir / "summaries"
         enhancements_dir = ensemble_dir / "enhancements"
 
@@ -644,9 +644,10 @@ class Orchestrator:
             if not best_code_file:
                 continue
 
-            # Baseline code is in outputs/{iteration_suffix}/ (e.g., outputs/2_1/)
+            # Baseline code is in outputs/{iteration_suffix}/ at same level as outputs/{iteration}/
+            # self.outputs_dir is outputs/2/, so go up one level
             dev_iter = f"{self.iteration}_{idx}"
-            base_code_path = self.outputs_dir / dev_iter / best_code_file
+            base_code_path = self.outputs_dir.parent / dev_iter / best_code_file
             enhancements_path = enhancements_dir / f"enhancements_model_{idx}.md"
 
             if not base_code_path.exists():
@@ -691,7 +692,8 @@ class Orchestrator:
                     enhancement_path = self.outputs_dir / "enhancement_results.json"
                     with open(enhancement_path, "w") as f:
                         json.dump(enhancement_results, f, indent=2)
-                except Exception:
+                except Exception as e:
+                    print(f"Enhancement run failed: {e}")
                     continue
 
         # Persist enhancement results

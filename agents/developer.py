@@ -123,8 +123,7 @@ class DeveloperAgent:
         self.model_name: Optional[str] = model_name
         self.model_recommendations: Optional[str] = model_recommendations
 
-        assert self.model_name is not None and self.model_recommendations is not None, "Both model_name and model_recommendations must be provided"
-        assert self.later_recommendations is not None, "later_recommendations must be provided"
+        assert self.model_name is not None
 
         self.logger.info(
             "Initialized DeveloperAgent for slug=%s iteration=%s", self.slug, self.iteration

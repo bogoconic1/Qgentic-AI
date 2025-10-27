@@ -68,9 +68,11 @@ class EnhancedDeveloperAgent(DeveloperAgent):
             raise FileNotFoundError(f"Enhancements not found: {enhancements_path}")
 
         # Initialize parent WITHOUT model_recommendations (we use enhancements instead)
+        # Use iteration_enhanced for separate directory
+        iteration_enhanced = f"{iteration}_enhanced"
         super().__init__(
             slug=slug,
-            iteration=iteration,
+            iteration=iteration_enhanced,
             model_name=model_name,
             model_recommendations=None,  # Not used for enhanced agent
             later_recommendations=None,
@@ -79,45 +81,19 @@ class EnhancedDeveloperAgent(DeveloperAgent):
             gpu_isolation_mode=gpu_isolation_mode
         )
 
-        # Override starting version to continue from baseline
-        self._starting_version = self._get_starting_version()
+        # Store original iteration for reference
+        self.original_iteration = iteration
+
+        # Override starting version to start from v1 (fresh start in enhanced directory)
+        self._starting_version = 1
         self.version = self._starting_version
 
         logger.info(
-            "EnhancedDeveloperAgent initialized for %s (model=%s, starting_version=v%d)",
-            slug, model_name, self._starting_version
+            "EnhancedDeveloperAgent initialized for %s (model=%s, iteration=%s, starting_version=v%d)",
+            slug, model_name, iteration_enhanced, self._starting_version
         )
         logger.info("Base code: %s", self.base_code_path)
         logger.info("Enhancements: %s", self.enhancements_path)
-
-    def _get_starting_version(self) -> int:
-        """
-        Auto-detect the latest version in the output directory and return next version.
-
-        Example: If code_2_1_v3.py exists, return 4 (start from v4)
-
-        Returns:
-            Next version number (baseline_max + 1)
-        """
-        code_files = list(self.outputs_dir.glob("code_*_v*.py"))
-
-        if not code_files:
-            logger.warning("No existing code files found in %s, starting from v1", self.outputs_dir)
-            return 1
-
-        versions = []
-        for f in code_files:
-            match = re.search(r'_v(\d+)\.py$', f.name)
-            if match:
-                versions.append(int(match.group(1)))
-
-        if not versions:
-            logger.warning("No version numbers found in filenames, starting from v1")
-            return 1
-
-        next_version = max(versions) + 1
-        logger.info("Detected baseline versions: %s, starting enhanced from v%d", versions, next_version)
-        return next_version
 
     def _compose_system(self) -> str:
         """
