@@ -215,7 +215,7 @@ class PaperDownloader:
         self._user_agent = user_agent
 
     def download(self, paper: PaperMetadata) -> Optional[Path]:
-        dest_path = self._target_dir / f"{paper.paper_id}.pdf"
+        dest_path = self._build_dest_path(paper)
         if dest_path.exists():
             LOGGER.debug(
                 "PDF already present for %s at %s",
@@ -262,6 +262,26 @@ class PaperDownloader:
             len(candidates),
         )
         return None
+
+    def _build_dest_path(self, paper: PaperMetadata) -> Path:
+        base_name = self._sanitize_title(paper.title or "")
+        if not base_name:
+            fallback = paper.paper_id or "paper"
+            base_name = self._sanitize_title(fallback) or "paper"
+
+        candidate = self._target_dir / f"{base_name}.pdf"
+        index = 1
+        while candidate.exists():
+            candidate = self._target_dir / f"{base_name} ({index}).pdf"
+            index += 1
+        return candidate
+
+    @staticmethod
+    def _sanitize_title(value: str) -> str:
+        normalized = value.encode("ascii", "ignore").decode("ascii")
+        cleaned = re.sub(r"[\\/:*?\"<>|]", "", normalized)
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+        return cleaned[:180]
 
     def _candidate_urls(self, paper: PaperMetadata) -> List[str]:
         urls: List[str] = []
