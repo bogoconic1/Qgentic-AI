@@ -11,6 +11,9 @@ wandb/
 # C extensions
 *.so
 
+# data folder
+data/*
+
 # Distribution / packaging
 .Python
 build/
