@@ -211,12 +211,6 @@ Begin by providing a concise checklist (3-7 bullets) summarizing your enhancemen
 
 {constraints}
 
-**IMPORTANT — Enhanced Training Constraints:**
-- Multi-fold training is permitted if recommended in the enhancements.
-- Ensembling, stacking, and calibration are permitted if suggested in the enhancements.
-- Advanced techniques should be incorporated if listed as "Add to pipeline" recommendations.
-- Training with multiple folds is acceptable when recommended.
-
 ---
 **Additional Context**
 - **Competition Description:** {description}
