@@ -3,9 +3,9 @@ set -euo pipefail
 
 # === CONFIG ===
 KAGGLE_JSON_PATH="${KAGGLE_JSON_PATH:-kaggle.json}"
-TASK_NAME="learning-agency-lab-automated-essay-scoring-2"
+TASK_NAME="statoil-iceberg-classifier-challenge"
 WORKDIR="${WORKDIR:-$(pwd)}"
-CACHE_DIR="/root/.cache/mle-bench/data/${TASK_NAME}/prepared"
+CACHE_DIR="/home/geremieyeo/.cache/mle-bench/data/${TASK_NAME}/prepared"
 
 # === FUNCTIONS ===
 
