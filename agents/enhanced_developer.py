@@ -115,13 +115,13 @@ class EnhancedDeveloperAgent(DeveloperAgent):
         with open(self.enhancements_path, 'r') as f:
             enhancements = f.read()
 
-        # Read competition description
+        # Read competition description and set self.description (required by parent class)
         description_path = self.base_dir / "description.md"
         with open(description_path, 'r') as f:
-            description = f.read()
+            self.description = f.read()
 
         return build_enhancement_system(
-            description=description,
+            description=self.description,
             model_name=self.model_name,
             base_code=base_code,
             enhancements=enhancements,

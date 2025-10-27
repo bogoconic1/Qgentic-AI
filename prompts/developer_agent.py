@@ -17,7 +17,7 @@ def _get_hard_constraints(model_name: str, allow_multi_fold: bool = False) -> st
 - Use CUDA whenever available.
 - Place all `logging.info` statements for validation results (per fold and overall) as well as model loading, train/test set size; only log data loading/setup if directly relevant to validation.
 - Place `logging.basicConfig()` at the start of the script.
-- Deep learning: always use `float16`, **no** gradient checkpointing. Do not code fallback methods.
+- Deep learning: always use `bfloat16`, **no** gradient checkpointing. Do not code fallback methods. You must call float() before casting to numpy() if needed.
 - If you use `transformers.Trainer`, use eval_strategy instead of evaluation_strategy.
 - Do not use `try/except` to suppress errors.
 - Log final validation results, best epoch number and total training time after training.
@@ -205,7 +205,7 @@ Begin by providing a concise checklist (3-7 bullets) summarizing your enhancemen
 ---
 **Required Tasks:**
 1. Preserve effective strategies from the baseline code.
-2. Implement all recommendations labeled "## Add to pipeline".
+2. For all labeled "## Add to pipeline" recommendations, provide a 2-3 line explanation of whether it is likely to improve score, linking back to model compatibility. Implement if it is likely to help.
 3. Remove or replace all items marked as "## Remove from pipeline".
 4. Ensure the enhanced solution remains architecturally compatible with `{model_name}`.
 
@@ -220,6 +220,11 @@ Your response must contain the following sections, in the specified order:
 
 ### Checklist: Conceptual Steps
 - Provide 3-7 high-level, conceptual bullet points that outline your enhancement approach. Do not include implementation specifics.
+
+### Add to pipeline suggestions
+- For each recommended addition, provide:
+    - **Strategy name**: <concise description of the recommended addition>
+    - (is it likely to improve score? Brief explanation linking back to model compatibility)
 
 ### Code
 - Output a single Python script that applies all required enhancements as described above. Encapsulate the code within a triple backtick code block labeled as `python`.
