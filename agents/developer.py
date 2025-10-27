@@ -198,8 +198,8 @@ class DeveloperAgent:
         )
         if self.cpu_core_range is not None:
             self.logger.info("CPU core range set for parallel execution: %d cores", len(self.cpu_core_range))
-        if self.mig_instance is not None:
-            self.logger.info("MIG instance assigned: %s", self.mig_instance)
+        if self.gpu_identifier is not None:
+            self.logger.info("GPU identifier assigned: %s (mode: %s)", self.gpu_identifier, self.gpu_isolation_mode)
         return prompt_build_system(
             description=self.description,
             directory_listing=directory_listing,
@@ -207,7 +207,8 @@ class DeveloperAgent:
             model_recommendations=self.model_recommendations,
             slug=self.slug,
             cpu_core_range=self.cpu_core_range,
-            mig_instance=self.mig_instance,
+            gpu_identifier=self.gpu_identifier,
+            gpu_isolation_mode=self.gpu_isolation_mode,
         )
 
     def _build_user_prompt(self, version: int) -> str:
@@ -619,7 +620,7 @@ class DeveloperAgent:
             self.iteration,
         )
         self.logger.info("cpu core range: %s", self.cpu_core_range)
-        self.logger.info("mig instance: %s", self.mig_instance)
+        self.logger.info("gpu identifier: %s (mode: %s)", self.gpu_identifier, self.gpu_isolation_mode)
         
         start_time = time.time()
         deadline = start_time + max_time_seconds
