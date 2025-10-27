@@ -67,7 +67,7 @@ class DeveloperAgent:
       <task_root>/<slug>/<outputs_dir>/<iteration>/submission.csv
     """
 
-    def __init__(self, slug: str, iteration: int, model_name: Optional[str] = None, model_recommendations: Optional[str] = None, later_recommendations: Optional[dict] = None, cpu_core_range: Optional[list[int]] = None, mig_instance: Optional[str] = None):
+    def __init__(self, slug: str, iteration: int, model_name: Optional[str] = None, model_recommendations: Optional[str] = None, later_recommendations: Optional[dict] = None, cpu_core_range: Optional[list[int]] = None, gpu_identifier: Optional[str] = None, gpu_isolation_mode: str = "none"):
         load_dotenv()
         self.slug = slug
         self.iteration = iteration
@@ -82,7 +82,8 @@ class DeveloperAgent:
 
         # Resource allocation for parallel execution
         self.cpu_core_range = cpu_core_range  # List of CPU cores to use (e.g., [0,1,2,...,41])
-        self.mig_instance = mig_instance  # MIG instance ID (e.g., "MIG-0") or None
+        self.gpu_identifier = gpu_identifier  # GPU identifier: MIG UUID or GPU ID (as string)
+        self.gpu_isolation_mode = gpu_isolation_mode  # "mig", "multi-gpu", or "none"
 
         # Metric-related defaults; overwritten once benchmark info is available
         self.gold_threshold: Optional[float] = None
@@ -427,14 +428,20 @@ class DeveloperAgent:
         lines = []
         lines.append("import os")
 
+        # CPU affinity
         if self.cpu_core_range is not None:
             lines.append("import psutil  # For CPU affinity")
             lines.append("")
             lines.append("# CPU affinity (pin to specific cores to prevent resource overlap)")
             lines.append(f"psutil.Process(os.getpid()).cpu_affinity({self.cpu_core_range})")
 
-        mig_device = self.mig_instance if self.mig_instance is not None else '0'
-        lines.append(f'os.environ["CUDA_VISIBLE_DEVICES"] = "{mig_device}"')
+        # GPU assignment (works for both MIG and multi-GPU)
+        if self.gpu_identifier is not None:
+            gpu_device = self.gpu_identifier
+        else:
+            gpu_device = '0'  # Default to GPU 0
+
+        lines.append(f'os.environ["CUDA_VISIBLE_DEVICES"] = "{gpu_device}"')
         lines.append(f'BASE_DIR = "task/{self.slug}" if not os.getenv(\'KAGGLE_KERNEL_RUN_TYPE\') else "/kaggle/input/{self.slug}"')
         lines.append("")
 
@@ -711,8 +718,8 @@ class DeveloperAgent:
                 continue
 
             # Execute the code with OOM retry logic
-            # If MIG is enabled, skip OOM polling (treat OOM as a code bug, not resource contention)
-            skip_oom_polling = self.mig_instance is not None
+            # If GPU isolation is enabled (MIG or multi-GPU), skip OOM polling (treat OOM as a code bug, not resource contention)
+            skip_oom_polling = self.gpu_isolation_mode in ["mig", "multi-gpu"]
             output, wait_time = execute_code_with_oom_retry(
                 str(code_path),
                 skip_oom_polling=skip_oom_polling

@@ -65,6 +65,26 @@ def _get_mig_uuids(gpu_id: int = 0) -> list[str]:
     except Exception:
         return []
 
+def _get_available_gpus() -> list[int]:
+    """Detect available CUDA GPUs using nvidia-smi.
+
+    Returns:
+        List of GPU IDs (e.g., [0, 1, 2, 3] for 4 GPUs)
+    """
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=index", "--format=csv,noheader"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        if result.returncode == 0:
+            gpu_ids = [int(line.strip()) for line in result.stdout.strip().split("\n") if line.strip()]
+            return gpu_ids
+        return []
+    except Exception:
+        return []
+
 @weave.op()
 def _run_researcher_once(slug: str, iteration: int, run_id: int) -> tuple[int, str, int]:
     agent = ResearcherAgent(slug, iteration, run_id=run_id)
@@ -83,8 +103,8 @@ def _run_researcher_once(slug: str, iteration: int, run_id: int) -> tuple[int, s
     return run_id, str(plan_path), len(plan or "")
 
 @weave.op()
-def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, now_recommendations: dict, later_recommendations: dict, key: str, cpu_core_pool: Queue | None = None, mig_pool: Queue | None = None):
-    """Run a single baseline DeveloperAgent and return (key, best_score, best_code_file).
+def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, now_recommendations: dict, later_recommendations: dict, key: str, cpu_core_pool: Queue | None = None, gpu_pool: Queue | None = None, gpu_isolation_mode: str = "none"):
+    """Run a single baseline DeveloperAgent and return results.
 
     Args:
         slug: Competition slug
@@ -94,11 +114,12 @@ def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, n
         later_recommendations: LATER-only recommendations dict for this model
         key: Key for tracking results
         cpu_core_pool: Queue of CPU core ranges to grab from (None = no affinity)
-        mig_pool: Queue of MIG UUIDs to grab from (None = use GPU 0)
+        gpu_pool: Queue of GPU identifiers (MIG UUIDs or GPU IDs) to grab from (None = use GPU 0)
+        gpu_isolation_mode: Type of GPU isolation ("mig", "multi-gpu", or "none")
     """
     # Acquire resources from pools (blocks until available)
     cpu_core_range = cpu_core_pool.get() if cpu_core_pool else None
-    mig_instance = mig_pool.get() if mig_pool else None
+    gpu_identifier = gpu_pool.get() if gpu_pool else None
 
     try:
         # Format NOW recommendations for developer
@@ -111,7 +132,8 @@ def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, n
             model_recommendations=formatted_recommendations,
             later_recommendations=later_recommendations,
             cpu_core_range=cpu_core_range,
-            mig_instance=mig_instance
+            gpu_identifier=gpu_identifier,
+            gpu_isolation_mode=gpu_isolation_mode
         )
         best_score, best_code_file, blacklisted_ideas, successful_ideas = dev.run(max_time_seconds=10800)  # 3 hours
         return key, best_score, best_code_file, blacklisted_ideas, successful_ideas
@@ -119,8 +141,8 @@ def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, n
         # Return resources to pools for next task
         if cpu_core_pool and cpu_core_range is not None:
             cpu_core_pool.put(cpu_core_range)
-        if mig_pool and mig_instance is not None:
-            mig_pool.put(mig_instance)
+        if gpu_pool and gpu_identifier is not None:
+            gpu_pool.put(gpu_identifier)
 
 def _extract_now_recommendations(recommendations: dict) -> dict:
     """Extract only MUST_HAVE recommendations from model recommendations.
@@ -392,10 +414,24 @@ class Orchestrator:
         # Get parallel execution configuration
         enable_cpu_affinity = _RUNTIME_CFG.get("enable_cpu_affinity", False)
         enable_mig = _RUNTIME_CFG.get("enable_mig", False)
+        enable_multi_gpu = _RUNTIME_CFG.get("enable_multi_gpu", False)
 
-        # Determine max_parallel_workers based on MIG configuration
+        # Sanity check: both MIG and multi-GPU cannot be enabled simultaneously
+        if enable_mig and enable_multi_gpu:
+            raise ValueError(
+                "Conflicting GPU isolation modes: Cannot enable both MIG and multi-GPU simultaneously. "
+                "Please set only one of: enable_mig or enable_multi_gpu to true in config.yaml"
+            )
+
+        # Determine max_parallel_workers and GPU pool based on isolation mode
+        gpu_pool = None
+        gpu_isolation_mode = "none"
+        detected_mig_uuids = []
+        available_gpus = []
+
         if enable_mig:
-            # Auto-detect number of workers from MIG instances
+            # MIG mode: Auto-detect MIG instances
+            gpu_isolation_mode = "mig"
             detected_mig_uuids = _get_mig_uuids(gpu_id=0)
             if len(detected_mig_uuids) > 0:
                 max_parallel_workers = len(detected_mig_uuids)
@@ -404,10 +440,23 @@ class Orchestrator:
                 print("WARNING: enable_mig=true but no MIG instances detected")
                 print("Falling back to baseline_max_parallel_workers from config")
                 max_parallel_workers = int(_RUNTIME_CFG.get("baseline_max_parallel_workers", 1))
+
+        elif enable_multi_gpu:
+            # Multi-GPU mode: Auto-detect available GPUs
+            gpu_isolation_mode = "multi-gpu"
+            available_gpus = _get_available_gpus()
+            if len(available_gpus) > 0:
+                max_parallel_workers = len(available_gpus)
+                print(f"Multi-GPU enabled: Auto-detected {max_parallel_workers} GPUs: {available_gpus}")
+            else:
+                print("WARNING: enable_multi_gpu=true but no GPUs detected")
+                print("Falling back to baseline_max_parallel_workers from config")
+                max_parallel_workers = int(_RUNTIME_CFG.get("baseline_max_parallel_workers", 1))
+
         else:
-            # Use configured value when MIG is disabled
+            # No GPU isolation: Use configured value
             max_parallel_workers = int(_RUNTIME_CFG.get("baseline_max_parallel_workers", 1))
-            print(f"MIG disabled: Using baseline_max_parallel_workers={max_parallel_workers}")
+            print(f"GPU isolation disabled: Using baseline_max_parallel_workers={max_parallel_workers}")
 
         # Create resource pools for dynamic allocation
         total_cores = os.cpu_count() or 1
@@ -425,14 +474,18 @@ class Orchestrator:
                 cpu_core_pool.put(list(range(start_core, end_core)))
             print(f"CPU core pool created with {max_parallel_workers} core ranges")
 
-        # MIG pool
-        mig_pool = None
-        if enable_mig and num_models > 1:
-            if len(detected_mig_uuids) > 0:
-                mig_pool = Queue()
+        # GPU pool (unified for both MIG and multi-GPU)
+        if num_models > 1:
+            if enable_mig and len(detected_mig_uuids) > 0:
+                gpu_pool = Queue()
                 for mig_uuid in detected_mig_uuids:
-                    mig_pool.put(mig_uuid)
+                    gpu_pool.put(mig_uuid)
                 print(f"MIG pool created with {len(detected_mig_uuids)} instances")
+            elif enable_multi_gpu and len(available_gpus) > 0:
+                gpu_pool = Queue()
+                for gpu_id in available_gpus:
+                    gpu_pool.put(str(gpu_id))  # Store as string for consistency
+                print(f"GPU pool created with {len(available_gpus)} GPUs")
 
         # Prepare tasks for parallel execution (no pre-assignment of resources)
         tasks = []
@@ -449,7 +502,8 @@ class Orchestrator:
                 later_recs,
                 key,
                 cpu_core_pool,
-                mig_pool
+                gpu_pool,
+                gpu_isolation_mode
             ))
 
         # Run developer agents in parallel using ThreadPoolExecutor
