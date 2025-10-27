@@ -135,7 +135,7 @@ def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, n
             gpu_identifier=gpu_identifier,
             gpu_isolation_mode=gpu_isolation_mode
         )
-        best_score, best_code_file, blacklisted_ideas, successful_ideas = dev.run(max_time_seconds=10800)  # 3 hours
+        best_score, best_code_file, blacklisted_ideas, successful_ideas = dev.run(max_time_seconds=7200)  # 2 hours
         return key, best_score, best_code_file, blacklisted_ideas, successful_ideas
     finally:
         # Return resources to pools for next task
