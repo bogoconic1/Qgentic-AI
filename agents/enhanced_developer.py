@@ -19,6 +19,7 @@ from typing import Optional
 
 from agents.developer import DeveloperAgent
 from tools.helpers import call_llm_with_retry
+from utils.code_utils import strip_header_from_code
 
 logger = logging.getLogger(__name__)
 
@@ -107,9 +108,8 @@ class EnhancedDeveloperAgent(DeveloperAgent):
         """
         from prompts.developer_agent import build_enhancement_system
 
-        # Load base code
-        with open(self.base_code_path, 'r') as f:
-            base_code = f.read()
+        # Load base code and strip headers
+        base_code = strip_header_from_code(self.base_code_path)
 
         # Load enhancements
         with open(self.enhancements_path, 'r') as f:

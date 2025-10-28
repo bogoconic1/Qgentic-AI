@@ -17,6 +17,7 @@ from prompts.ensembler_agent import (
     ensembler_code_enhance_user_prompt
 )
 from tools.helpers import call_llm_with_retry
+from utils.code_utils import strip_header_from_code
 
 # Load config
 with open("config.yaml", "r") as f:
@@ -142,8 +143,8 @@ def generate_all_summaries(
             print(f"  WARNING: Code file not found: {code_path}, skipping")
             continue
 
-        with open(code_path, 'r') as f:
-            code = f.read()
+        # Read code and strip headers
+        code = strip_header_from_code(code_path)
 
         # Read logs file
         log_file = best_code_file.replace('.py', '.txt')

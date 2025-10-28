@@ -51,7 +51,6 @@ Begin with a concise checklist (3-7 bullets) highlighting high-level conceptual 
 - Do NOT look up or use actual winning solutions from this competition.
 - Do NOT rely on prior knowledge of solutions for this competition.
 - If there are issues with the ```validation split``` or certain bugs in the code, you must point them out.
-- **IMPORTANT**: DO NOT propose removing the hard-coded device pinning (CUDA_VISIBLE_DEVICES and CPU affinity).
 
 ## Tools
 - `ask_eda(question)`: Perform Python-based exploratory data analysis (EDA) on the local dataset or submission files to gather insights or test hypothesis relevant to the code/logs for debugging purposes.
@@ -120,7 +119,6 @@ Conduct a web search to identify ways to improve the competition metric with the
 {fold_constraint}
 - Do NOT change the model family used in the initial script; only suggest enhancements around it.
 - If there are issues with the ```validation split``` or certain bugs in the code, you MUST FIX THEM FIRST.
-- **IMPORTANT**: DO NOT propose removing the hard-coded device pinning (CUDA_VISIBLE_DEVICES and CPU affinity).
 
 Generate THREE distinct suggestions, each from a different strategic category:
 1. **Data / Feature Engineering / Validation Enhancement** — Improving data representation or quality, or validation strategies.

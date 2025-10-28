@@ -25,6 +25,7 @@ from utils.diffs import (
     apply_patch as util_apply_patch,
 )
 from utils.grade import run_grade
+from utils.code_utils import strip_header_from_code
 from prompts.developer_agent import (
     build_system as prompt_build_system,
     build_user as prompt_build_user,
@@ -417,12 +418,16 @@ class DeveloperAgent:
         directive = prompt_patch_mode_directive(base_filename)
         return f"{instruction}\n\n{directive}"
 
-    def _postprocess_code(self, code: str) -> str:
-        """Insert resource allocation and BASE_DIR setup at the top of generated code."""
+    def _postprocess_code(self, code: str) -> tuple[str, int]:
+        """Insert resource allocation and BASE_DIR setup at the top of generated code.
+
+        Returns:
+            Tuple of (postprocessed_code, num_header_lines_added)
+        """
         # Check if the code already has the resource allocation header (e.g., from patch mode)
         if 'BASE_DIR = "task/' in code and 'CUDA_VISIBLE_DEVICES' in code:
             self.logger.debug("Code already contains resource allocation header, skipping postprocessing")
-            return code
+            return code, 0
 
         # Build the resource allocation header
         lines = []
@@ -446,21 +451,47 @@ class DeveloperAgent:
         lines.append("")
 
         header = "\n".join(lines)
+        num_header_lines = len(lines) + 1  # +1 for the newline after header
 
         # Insert header at the top of the code
-        return header + "\n" + code
+        return header + "\n" + code, num_header_lines
 
     def _write_code(self, code: str, version: int) -> Path:
         code_path = self.outputs_dir / self._code_filename(version)
         self.logger.info("Writing generated code to %s", code_path)
 
         # Postprocess code to insert resource allocation
-        postprocessed_code = self._postprocess_code(code)
+        postprocessed_code, num_header_lines = self._postprocess_code(code)
 
         with open(code_path, "w") as f:
             f.write(postprocessed_code)
         self.logger.debug("Written code size: %s characters", len(postprocessed_code))
+
+        # Save metadata with header line count
+        metadata_path = code_path.with_suffix('.json')
+        with open(metadata_path, "w") as f:
+            json.dump({"num_header_lines": num_header_lines}, f)
+        self.logger.debug("Written metadata to %s", metadata_path)
+
         return code_path
+
+    @staticmethod
+    def _read_code_metadata(code_path: Path) -> dict:
+        """Read metadata JSON for a code file.
+
+        Args:
+            code_path: Path to the .py code file
+
+        Returns:
+            Dict with metadata (e.g., {"num_header_lines": 5})
+            Returns {"num_header_lines": 0} if metadata file doesn't exist
+        """
+        metadata_path = code_path.with_suffix('.json')
+        if not metadata_path.exists():
+            return {"num_header_lines": 0}
+
+        with open(metadata_path, 'r') as f:
+            return json.load(f)
 
     def _log_attempt_score(self, attempt: int, score: Optional[float]) -> None:
         """Send attempt/score metrics to wandb while guarding against logging errors."""
@@ -703,6 +734,10 @@ class DeveloperAgent:
             # ---------------------------
             with open(str(code_path), "r") as f:
                 code_text = f.read()
+
+            # Strip the header lines to get the clean LLM-generated code
+            code_clean = strip_header_from_code(code_path)
+
             guard_report = evaluate_guardrails(
                 code_text=code_text,
                 enable_logging_guard=_ENABLE_LOGGING_GUARD,
@@ -762,7 +797,7 @@ class DeveloperAgent:
                 self.logger.exception("Failed to read execution log at %s", log_path)
 
             submission_path = self.outputs_dir / self._submission_filename(version)
-            code_with_logs = "<code>\n" + code + "\n</code>\n"
+            code_with_logs = "<code>\n" + code_clean + "\n</code>\n"
             if log_content:
                 code_with_logs += f"<validation_log>\n{log_content[-30000:]}\n</validation_log>\n"  # to avoid token limit issues
 
@@ -832,9 +867,9 @@ class DeveloperAgent:
 
                 code_with_logs += f"<analysis>\n{analysis_msg}\n</analysis>\n"
                 if improvement:
-                    self.best_code = code
+                    self.best_code = code_clean
                     self.best_code_file = self._code_filename(version)
-                self.previous_runs.append((code, run_score))
+                self.previous_runs.append((code_clean, run_score))
 
                 try:
                     # Format LATER recommendations for context
