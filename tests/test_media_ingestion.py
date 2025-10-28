@@ -94,10 +94,9 @@ def test_ingest_new_media_appends_multimodal_message(tmp_path):
     m = agent.messages[-1]
     assert m.get("role") == "user"
     content = m.get("content")
-    assert isinstance(content, list) and len(content) >= 2
-    assert content[0].get("type") == "text"
-    # At least one image_url item present
-    assert any(item.get("type") == "image_url" for item in content[1:])
+    assert isinstance(content, list) and len(content) >= 1
+    # At least one input_image item present (Responses API format)
+    assert any(item.get("type") == "input_image" for item in content)
 
 
 def test_ingest_media_respects_max_images(tmp_path):
@@ -121,7 +120,7 @@ def test_ingest_media_respects_max_images(tmp_path):
 
     assert len(agent.messages) == prior_len + 1
     content = agent.messages[-1]["content"]
-    attached = [c for c in content if c.get("type") == "image_url"]
+    attached = [c for c in content if c.get("type") == "input_image"]
     assert len(attached) <= MAX_IMAGES_PER_STEP
 
 
