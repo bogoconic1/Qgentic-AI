@@ -3,11 +3,48 @@ from __future__ import annotations
 from pathlib import Path
 
 
-def build_system(description: str, directory_listing: str, model_name: str, model_recommendations: str, slug: str, cpu_core_range: list[int] | None = None, gpu_identifier: str | None = None, gpu_isolation_mode: str = "none") -> str:
+def _get_hard_constraints(model_name: str, allow_multi_fold: bool = False) -> str:
+    """Get the hard constraints section for system prompts."""
+    fold_constraint = (
+        ""
+        if allow_multi_fold
+        else "- Just train and validate on fold 0. Skip other folds to save time."
+    )
+
+    return f"""**Hard Constraints:**
+- Use ONLY `{model_name}` (no substitutions or fallback models).
+- Deliver a fully-contained, single-file script.
+- Use CUDA whenever available.
+- Place all `logging.info` statements for validation results (per fold and overall) as well as model loading, train/test set size; only log data loading/setup if directly relevant to validation.
+- Also emit concise `logging.info` statements for any computed quantities that can go really wrong (e.g. class weights, thresholds).
+- Place `logging.basicConfig()` at the start of the script.
+- Deep learning: always use `bfloat16`, **no** gradient checkpointing. Do not code fallback methods. You must call float() before casting to numpy() if needed.
+- If you use `transformers.Trainer`, use eval_strategy instead of evaluation_strategy.
+- Do not use `try/except` to suppress errors.
+- Log final validation results, best epoch number and total training time after training.
+- Modular pipeline: update preprocessing/postprocessing or hyperparameters, but do not swap out `{model_name}`.
+- Prefer pretrained models if available.
+- External datasets: may be appended **only** to training set.
+- **DEBUG flag**: At the script top, define. Pipeline runs twice: once with `DEBUG=True`, then with `DEBUG=False` (full config). Log which mode is running.
+- **DL Only:** After 1st epoch on fold 0 in FULL mode, if loss is NaN, STOP training and jump directly to inference to generate the submission file.
+{fold_constraint}
+- Do not use any `while` loops in your code.
+- YOU SHOULD NOT CREATE A SUBMISSION FILE DURING DEBUG MODE.
+
+**DEBUG mode guidelines**
+- After splitting the data into train and valid, right before starting training, sample train to 1000 rows. For classification, ensure at least one sample per class, so if there are > 1000 classes there will be > 1000 samples. For time series tasks, take the last 1000 rows (most recent) instead of random sampling to preserve temporal order.
+- For deep learning: reduce epochs to 1. For gradient boosting (XGBoost/LightGBM/CatBoost): reduce n_estimators/num_iterations to 100-200.
+- Log the size of the DEBUG training set.
+- If DEBUG size > 0.5 of train size, do not run DEBUG mode; log a warning and proceed with full training."""
+
+
+def build_system(description: str, directory_listing: str, model_name: str, model_recommendations: str, slug: str, cpu_core_range: list[int] | None = None, gpu_identifier: str | None = None, gpu_isolation_mode: str = "none", allow_multi_fold: bool = False) -> str:
     # Build resource allocation info
     resource_info = ""
     if cpu_core_range is not None:
         resource_info = f"\nNumber of CPUs: {len(cpu_core_range)} cores"
+
+    constraints = _get_hard_constraints(model_name, allow_multi_fold=allow_multi_fold)
 
     return f"""# Role: Lead Developer for Machine-Learning Competition Team
 Your objective is to deliver a single, self-contained Python script for a Kaggle Competition using **only** the specified model `{model_name}`.
@@ -25,31 +62,7 @@ Single GPU (24GB VRAM) {resource_info}
 **Model Recommendations:**
 {model_recommendations}
 
-**Hard Constraints:**
-- Use ONLY `{model_name}` (no substitutions or fallback models).
-- Deliver a fully-contained, single-file script.
-- Use CUDA whenever available.
-- Place all `logging.info` statements for validation results (per fold and overall) as well as model loading, train/test set size; only log data loading/setup if directly relevant to validation.
-- Place `logging.basicConfig()` at the start of the script.
-- Deep learning: always use `bfloat16`, **no** gradient checkpointing. Do not code fallback methods. You must call float() before casting to numpy() if needed.
-- LightGBM (if used): **CPU only**.
-- If you use `transformers.Trainer`, use eval_strategy instead of evaluation_strategy.
-- Do not use `try/except` to suppress errors.
-- Log final validation results, best epoch number and total training time after training.
-- Modular pipeline: update preprocessing/postprocessing or hyperparameters, but do not swap out `{model_name}`.
-- Prefer pretrained models if available.
-- External datasets: may be appended **only** to training set.
-- **DEBUG flag**: At the script top, define. Pipeline runs twice: once with `DEBUG=True`, then with `DEBUG=False` (full config). Log which mode is running.
-- **DL Only:** After 1st epoch on fold 0 in FULL mode, if loss is NaN, STOP training and jump directly to inference to generate the submission file.
-- Just train and validate on fold 0. Skip other folds to save time.
-- Do not use any `while` loops in your code.
-- YOU SHOULD NOT CREATE A SUBMISSION FILE DURING DEBUG MODE.
-
-**DEBUG mode guidelines**
-- After splitting the data into train and valid, right before starting training, sample train to 1000 rows. For classification, ensure at least one sample per class, so if there are > 1000 classes there will be > 1000 samples. For time series tasks, take the last 1000 rows (most recent) instead of random sampling to preserve temporal order.
-- For deep learning: reduce epochs to 1. For gradient boosting (XGBoost/LightGBM/CatBoost): reduce n_estimators/num_iterations to 100-200.
-- Log the size of the DEBUG training set.
-- If DEBUG size > 0.5 of train size, do not run DEBUG mode; log a warning and proceed with full training.
+{constraints}
 ---
 
 Before any significant tool call or external library use, state the purpose and minimal inputs required, and validate actions after key steps with a 1-2 line summary. If a step fails (e.g., CUDA unavailable), state the limitation clearly and proceed conservatively where allowed.
@@ -150,4 +163,89 @@ def execution_failure_suffix(next_log_path: str | Path, next_submission_path: st
         f"- write logs to {next_log_path}\n"
         f"- and produce the next submission at {next_submission_path}"
     )
+
+
+def build_enhancement_system(
+    description: str,
+    model_name: str,
+    base_code: str,
+    enhancements: str,
+    outputs_dir: str | Path,
+    cpu_core_range: list[int] | None = None,
+) -> str:
+    """Build system prompt for enhanced developer (first iteration)."""
+    # Build resource allocation info
+    resource_info = ""
+    if cpu_core_range is not None:
+        resource_info = f"\nNumber of CPUs: {len(cpu_core_range)} cores"
+
+    # Get constraints with multi-fold allowed
+    constraints = _get_hard_constraints(model_name, allow_multi_fold=True)
+
+    return f"""# Role: Senior ML Engineer — Model Enhancement Specialist
+
+Your objective is to enhance an existing baseline model by following a set of enhancement recommendations.
+
+Begin by providing a concise checklist (3-7 bullets) summarizing your enhancement plan, focusing on conceptual steps—do not include implementation details.
+
+---
+**Training and Inference Environment:**
+- Single GPU (24GB VRAM): {resource_info}
+
+**Model Name:**
+- `{model_name}`
+
+**Baseline Implementation:**
+```python
+{base_code}
+```
+
+**Enhancement Recommendations:**
+{enhancements}
+
+---
+**Required Tasks:**
+1. Preserve effective strategies from the baseline code.
+2. For all labeled "## Add to pipeline" recommendations, provide a 2-3 line explanation of whether it is likely to improve score, linking back to model compatibility. Implement if it is likely to help.
+3. Remove or replace all items marked as "## Remove from pipeline".
+4. Ensure the enhanced solution remains architecturally compatible with `{model_name}`.
+
+{constraints}
+
+---
+**Additional Context**
+- **Competition Description:** {description}
+
+## Output Format
+Your response must contain the following sections, in the specified order:
+
+### Checklist: Conceptual Steps
+- Provide 3-7 high-level, conceptual bullet points that outline your enhancement approach. Do not include implementation specifics.
+
+### Add to pipeline suggestions
+- For each recommended addition, provide:
+    - **Strategy name**: <concise description of the recommended addition>
+    - (is it likely to improve score? Brief explanation linking back to model compatibility)
+
+### Code
+- Output a single Python script that applies all required enhancements as described above. Encapsulate the code within a triple backtick code block labeled as `python`.
+- Ensure all "Remove from pipeline" items are removed or replaced.
+- Maintain required logging and output standards.
+- Output predictions/submission.csv to `{outputs_dir}`.
+
+#### Example Output Structure
+
+### Checklist: Conceptual Steps
+- Outline dataset preprocessing
+- Generate new features following "Add to pipeline" recommendations
+- Update the model architecture per recommendations
+- Revise the training routine for advanced strategies
+- Validate compatibility with the original model's evaluation
+- Save all results to the specified output directory
+
+### Code
+```python
+# <ENHANCED CODE HERE>
+```
+"""
 

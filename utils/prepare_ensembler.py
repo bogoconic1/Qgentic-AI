@@ -43,11 +43,13 @@ def move_best_code_to_ensemble_folder(slug: str, iteration: int):
             print(f"Warning: No best_code_file found for model '{model_name}', skipping.")
             continue
 
-        # Extract iteration suffix from code filename (e.g., "code_2_1_v6.py" -> "2_1")
+        # Extract iteration suffix and version from code filename
         # Format: code_{iteration}_{model_index}_v{version}.py
+        # Examples: code_2_1_v3.py, code_2_2_v10.py, code_2_3_v12.py
         code_filename = Path(best_code_file).name
         parts = code_filename.replace("code_", "").replace(".py", "").split("_v")
-        iteration_suffix = parts[0]  # e.g., "2_1"
+        iteration_suffix = parts[0]  # e.g., "2_1" from "code_2_1_v3.py"
+        version_number = parts[1] if len(parts) > 1 else "1"  # e.g., "3", "10", "12"
 
         # Define source paths (code files are in sibling directories at outputs level)
         # Structure: outputs/2/baseline_results.json references files in outputs/2_1/, outputs/2_2/, etc.
@@ -73,13 +75,31 @@ def move_best_code_to_ensemble_folder(slug: str, iteration: int):
         else:
             print(f"Warning: Log file {log_file_path} not found")
 
-        # Add metadata for this model
+        # Find corresponding submission file using the version number
+        # e.g., code_2_1_v3.py -> submission_3.csv
+        #       code_2_2_v10.py -> submission_10.csv
+        submission_file_name = f"submission_{version_number}.csv"
+        submission_file_path = code_folder / submission_file_name
+
+        # Copy submission file with renamed filename to indicate model
+        # e.g., submission_3.csv -> submission_model_1.csv (based on model index)
+        model_index = iteration_suffix.split("_")[-1]  # e.g., "2_1" -> "1"
+        dest_submission_name = f"submission_model_{model_index}.csv"
+        submission_file_copied = None
+
+        if submission_file_path.exists():
+            dest_submission_file = ensemble_folder / dest_submission_name
+            shutil.copy2(submission_file_path, dest_submission_file)
+            print(f"Copied {submission_file_name} to {dest_submission_name} in ensemble folder")
+            submission_file_copied = dest_submission_name
+        else:
+            print(f"Warning: Submission file {submission_file_path} not found")
+
+        # Add metadata for this model (only essential fields)
         ensemble_metadata[model_name] = {
             "best_code_file": best_code_file,
             "best_score": best_score,
-            "now_recommendations": model_data.get("now_recommendations", {}),
-            "later_recommendations": model_data.get("later_recommendations", {}),
-            "fold_split_strategy": model_data.get("fold_split_strategy", {}),
+            "submission_file": submission_file_copied,
             "blacklisted_ideas": model_data.get("blacklisted_ideas", []),
             "successful_ideas": model_data.get("successful_ideas", [])
         }

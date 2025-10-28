@@ -25,6 +25,7 @@ from utils.diffs import (
     apply_patch as util_apply_patch,
 )
 from utils.grade import run_grade
+from utils.code_utils import strip_header_from_code
 from prompts.developer_agent import (
     build_system as prompt_build_system,
     build_user as prompt_build_user,
@@ -123,8 +124,7 @@ class DeveloperAgent:
         self.model_name: Optional[str] = model_name
         self.model_recommendations: Optional[str] = model_recommendations
 
-        assert self.model_name is not None and self.model_recommendations is not None, "Both model_name and model_recommendations must be provided"
-        assert self.later_recommendations is not None, "later_recommendations must be provided"
+        assert self.model_name is not None
 
         self.logger.info(
             "Initialized DeveloperAgent for slug=%s iteration=%s", self.slug, self.iteration
@@ -418,12 +418,16 @@ class DeveloperAgent:
         directive = prompt_patch_mode_directive(base_filename)
         return f"{instruction}\n\n{directive}"
 
-    def _postprocess_code(self, code: str) -> str:
-        """Insert resource allocation and BASE_DIR setup at the top of generated code."""
+    def _postprocess_code(self, code: str) -> tuple[str, int]:
+        """Insert resource allocation and BASE_DIR setup at the top of generated code.
+
+        Returns:
+            Tuple of (postprocessed_code, num_header_lines_added)
+        """
         # Check if the code already has the resource allocation header (e.g., from patch mode)
         if 'BASE_DIR = "task/' in code and 'CUDA_VISIBLE_DEVICES' in code:
             self.logger.debug("Code already contains resource allocation header, skipping postprocessing")
-            return code
+            return code, 0
 
         # Build the resource allocation header
         lines = []
@@ -447,21 +451,47 @@ class DeveloperAgent:
         lines.append("")
 
         header = "\n".join(lines)
+        num_header_lines = len(lines)
 
         # Insert header at the top of the code
-        return header + "\n" + code
+        return header + "\n" + code, num_header_lines
 
     def _write_code(self, code: str, version: int) -> Path:
         code_path = self.outputs_dir / self._code_filename(version)
         self.logger.info("Writing generated code to %s", code_path)
 
         # Postprocess code to insert resource allocation
-        postprocessed_code = self._postprocess_code(code)
+        postprocessed_code, num_header_lines = self._postprocess_code(code)
 
         with open(code_path, "w") as f:
             f.write(postprocessed_code)
         self.logger.debug("Written code size: %s characters", len(postprocessed_code))
+
+        # Save metadata with header line count
+        metadata_path = code_path.with_suffix('.json')
+        with open(metadata_path, "w") as f:
+            json.dump({"num_header_lines": num_header_lines}, f)
+        self.logger.debug("Written metadata to %s", metadata_path)
+
         return code_path
+
+    @staticmethod
+    def _read_code_metadata(code_path: Path) -> dict:
+        """Read metadata JSON for a code file.
+
+        Args:
+            code_path: Path to the .py code file
+
+        Returns:
+            Dict with metadata (e.g., {"num_header_lines": 5})
+            Returns {"num_header_lines": 0} if metadata file doesn't exist
+        """
+        metadata_path = code_path.with_suffix('.json')
+        if not metadata_path.exists():
+            return {"num_header_lines": 0}
+
+        with open(metadata_path, 'r') as f:
+            return json.load(f)
 
     def _log_attempt_score(self, attempt: int, score: Optional[float]) -> None:
         """Send attempt/score metrics to wandb while guarding against logging errors."""
@@ -612,6 +642,20 @@ class DeveloperAgent:
             self.logger.warning("Could not extract Final Summary section, using full response")
             return red_flags_response
 
+    def _call_sota_suggestions(self, **kwargs):
+        """
+        Call SOTA suggestions tool with appropriate parameters.
+
+        Can be overridden by subclasses to modify behavior (e.g., allow_multi_fold).
+
+        Args:
+            **kwargs: Arguments to pass to search_sota_suggestions
+
+        Returns:
+            SOTA suggestions text
+        """
+        return search_sota_suggestions(**kwargs)
+
     @weave.op()
     def run(self, max_time_seconds: int = 6 * 3600) -> bool:
         self.logger.info(
@@ -652,6 +696,12 @@ class DeveloperAgent:
                 self.logger.info("Attempt %s", attempt)
             version = attempt
             expect_patch = self.patch_mode_enabled and attempt > 1
+
+            # Keep only the last 40 messages to prevent context overflow
+            if len(input_list) > 40:
+                input_list = input_list[-40:]
+                self.logger.info("Trimmed input_list to last 40 messages")
+
             while True:
                 response_output, generated = self._generate_code(instructions=system_prompt, messages=input_list, expect_patch=expect_patch)
                 input_list += response_output
@@ -690,6 +740,10 @@ class DeveloperAgent:
             # ---------------------------
             with open(str(code_path), "r") as f:
                 code_text = f.read()
+
+            # Strip the header lines to get the clean LLM-generated code
+            code_clean = strip_header_from_code(code_path)
+
             guard_report = evaluate_guardrails(
                 code_text=code_text,
                 enable_logging_guard=_ENABLE_LOGGING_GUARD,
@@ -749,7 +803,7 @@ class DeveloperAgent:
                 self.logger.exception("Failed to read execution log at %s", log_path)
 
             submission_path = self.outputs_dir / self._submission_filename(version)
-            code_with_logs = "<code>\n" + code + "\n</code>\n"
+            code_with_logs = "<code>\n" + code_clean + "\n</code>\n"
             if log_content:
                 code_with_logs += f"<validation_log>\n{log_content[-30000:]}\n</validation_log>\n"  # to avoid token limit issues
 
@@ -819,9 +873,9 @@ class DeveloperAgent:
 
                 code_with_logs += f"<analysis>\n{analysis_msg}\n</analysis>\n"
                 if improvement:
-                    self.best_code = code
+                    self.best_code = code_clean
                     self.best_code_file = self._code_filename(version)
-                self.previous_runs.append((code, run_score))
+                self.previous_runs.append((code_clean, run_score))
 
                 try:
                     # Format LATER recommendations for context
@@ -842,7 +896,7 @@ class DeveloperAgent:
 
                     # STAGE 2: Generate SOTA suggestions based on red flags
                     self.logger.info("Stage 2: Generating SOTA suggestions based on red flags...")
-                    sota_suggestions = search_sota_suggestions(
+                    sota_suggestions = self._call_sota_suggestions(
                         description=self.description,
                         context=code_with_logs,
                         red_flags=final_summary,
@@ -951,30 +1005,38 @@ class DeveloperAgent:
                 next_log_path = self.outputs_dir / self._log_filename(version + 1)
                 next_submission_path = self.outputs_dir / self._submission_filename(version + 1)
 
-                # Check if this is a timeout error
+                # Check if this is a timeout or OOM error
                 is_timeout = "Code execution timed out after" in output
+                is_oom = "CUDA out of memory" in output or "OutOfMemoryError" in output
 
-                if is_timeout:
-                    # For timeout errors, run red flags analysis to diagnose performance issues
-                    self.logger.info("Timeout detected - running red flags analysis on logs and code")
+                if is_timeout or is_oom:
+                    # For timeout/OOM errors, run red flags analysis to diagnose issues
+                    error_type = "Timeout" if is_timeout else "OOM"
+                    self.logger.info(f"{error_type} detected - running red flags analysis on logs and code")
 
-                    # Add timeout context to code_with_logs for red flags analysis
-                    code_with_logs_timeout = code_with_logs + "\n<timeout_error>\nThe script was not able to execute within 1 hour. Please investigate.\n</timeout_error>\n"
+                    # Add error context to code_with_logs for red flags analysis
+                    if is_timeout:
+                        error_context = "\n<timeout_error>\nThe script was not able to execute within 1 hour. Please investigate.\n</timeout_error>\n"
+                    else:
+                        error_context = "\n<oom_error>\nCUDA out of memory error detected. The model or batch size is too large for available GPU memory. Please investigate.\n</oom_error>\n"
+
+                    code_with_logs_error = code_with_logs + error_context
 
                     try:
                         red_flags_response = search_red_flags(
                             description=self.description,
-                            context=code_with_logs_timeout,
+                            context=code_with_logs_error,
                             data_path=str(self.base_dir),
-                            submission_path=None,  # No submission on timeout
+                            submission_path=None,  # No submission on timeout/OOM
                         )
-                        self.logger.info("Red flags analysis complete for timeout (length: %d chars)", len(red_flags_response))
+                        self.logger.info(f"Red flags analysis complete for {error_type} (length: %d chars)", len(red_flags_response))
 
                         # Extract Final Summary from red flags response
                         final_summary = self._extract_final_summary(red_flags_response)
 
+                        error_message = "TIMEOUT" if is_timeout else "OUT OF MEMORY"
                         next_instr = f"""
-                        Your code FAILED during execution due to TIMEOUT!
+                        Your code FAILED during execution due to {error_message}!
                         {output}
 
                         Performance analysis:
@@ -983,10 +1045,11 @@ class DeveloperAgent:
                         {prompt_execution_failure_suffix(next_log_path, next_submission_path)}
                         """
                     except Exception:
-                        self.logger.exception("Failed to run red flags analysis for timeout")
-                        # Fallback to basic timeout message
+                        self.logger.exception(f"Failed to run red flags analysis for {error_type}")
+                        # Fallback to basic error message
+                        error_message = "TIMEOUT" if is_timeout else "OUT OF MEMORY"
                         next_instr = f"""
-                        Your code FAILED during execution!
+                        Your code FAILED during execution due to {error_message}!
                         This is the stack trace and advice on how to fix the error:
                         {output}
 

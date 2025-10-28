@@ -22,11 +22,11 @@ _TASK_ROOT = Path(_PATH_CFG.get("task_root"))
 _OUTPUTS_DIRNAME = _PATH_CFG.get("outputs_dirname")
 _DEFAULT_PARALLEL = int(_RUNTIME_CFG.get("researcher_parallel_runs"))
 
-def _get_mig_uuids(gpu_id: int = 0) -> list[str]:
-    """Parse MIG device UUIDs from nvidia-smi -L output.
+def _get_mig_uuids() -> list[str]:
+    """Parse MIG device UUIDs from nvidia-smi -L output for all GPUs.
 
     Returns:
-        List of MIG UUIDs (e.g., ["MIG-17331e1a-f2f0-500d-86f0-acf8289655ad", ...])
+        List of MIG UUIDs from all GPUs (e.g., ["MIG-17331e1a-f2f0-500d-86f0-acf8289655ad", ...])
     """
     try:
         result = subprocess.run(
@@ -38,25 +38,14 @@ def _get_mig_uuids(gpu_id: int = 0) -> list[str]:
         if result.returncode != 0:
             return []
 
-        # Parse output for MIG UUIDs
+        # Parse output for MIG UUIDs from all GPUs
         # Example line: "  MIG 2g.20gb     Device  0: (UUID: MIG-17331e1a-f2f0-500d-86f0-acf8289655ad)"
         mig_uuids = []
         lines = result.stdout.strip().split("\n")
-        in_target_gpu = False
 
         for line in lines:
-            # Check if this is the target GPU line
-            if line.startswith(f"GPU {gpu_id}:"):
-                in_target_gpu = True
-                continue
-
-            # Check if we've moved to next GPU
-            if line.startswith("GPU ") and not line.startswith(f"GPU {gpu_id}:"):
-                in_target_gpu = False
-                continue
-
-            # Parse MIG UUID if we're in the target GPU section
-            if in_target_gpu and "MIG" in line and "UUID:" in line:
+            # Parse MIG UUID from any line that contains both "MIG" and "UUID:"
+            if "MIG" in line and "UUID:" in line:
                 match = re.search(r'UUID:\s+(MIG-[a-f0-9\-]+)', line)
                 if match:
                     mig_uuids.append(match.group(1))
@@ -125,6 +114,7 @@ def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, n
         # Format NOW recommendations for developer
         formatted_recommendations = _format_recommendations_for_developer(now_recommendations)
 
+        baseline_time_limit = _RUNTIME_CFG["baseline_time_limit"]
         dev = DeveloperAgent(
             slug,
             iteration_suffix,
@@ -135,7 +125,50 @@ def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, n
             gpu_identifier=gpu_identifier,
             gpu_isolation_mode=gpu_isolation_mode
         )
-        best_score, best_code_file, blacklisted_ideas, successful_ideas = dev.run(max_time_seconds=10800)  # 3 hours
+        best_score, best_code_file, blacklisted_ideas, successful_ideas = dev.run(max_time_seconds=baseline_time_limit)
+        return key, best_score, best_code_file, blacklisted_ideas, successful_ideas
+    finally:
+        # Return resources to pools for next task
+        if cpu_core_pool and cpu_core_range is not None:
+            cpu_core_pool.put(cpu_core_range)
+        if gpu_pool and gpu_identifier is not None:
+            gpu_pool.put(gpu_identifier)
+
+
+@weave.op()
+def _run_developer_enhancement(slug: str, iteration_suffix: str, model_name: str, base_code_path: str, enhancements_path: str, key: str, cpu_core_pool: Queue | None = None, gpu_pool: Queue | None = None, gpu_isolation_mode: str = "none"):
+    """Run a single EnhancedDeveloperAgent and return results.
+
+    Args:
+        slug: Competition slug
+        iteration_suffix: Iteration identifier (e.g., "1_1")
+        model_name: Model name (e.g., "deberta-v3-large")
+        base_code_path: Path to baseline code file
+        enhancements_path: Path to enhancement markdown file
+        key: Key for tracking results
+        cpu_core_pool: Queue of CPU core ranges to grab from (None = no affinity)
+        gpu_pool: Queue of GPU identifiers (MIG UUIDs or GPU IDs) to grab from (None = use GPU 0)
+        gpu_isolation_mode: Type of GPU isolation ("mig", "multi-gpu", or "none")
+    """
+    from agents.enhanced_developer import EnhancedDeveloperAgent
+
+    # Acquire resources from pools (blocks until available)
+    cpu_core_range = cpu_core_pool.get() if cpu_core_pool else None
+    gpu_identifier = gpu_pool.get() if gpu_pool else None
+
+    try:
+        enhancement_time_limit = _RUNTIME_CFG["enhancement_time_limit"]
+        dev = EnhancedDeveloperAgent(
+            slug=slug,
+            iteration=iteration_suffix,
+            model_name=model_name,
+            base_code_path=base_code_path,
+            enhancements_path=enhancements_path,
+            cpu_core_range=cpu_core_range,
+            gpu_identifier=gpu_identifier,
+            gpu_isolation_mode=gpu_isolation_mode
+        )
+        best_score, best_code_file, blacklisted_ideas, successful_ideas = dev.run(max_time_seconds=enhancement_time_limit)
         return key, best_score, best_code_file, blacklisted_ideas, successful_ideas
     finally:
         # Return resources to pools for next task
@@ -430,9 +463,9 @@ class Orchestrator:
         available_gpus = []
 
         if enable_mig:
-            # MIG mode: Auto-detect MIG instances
+            # MIG mode: Auto-detect MIG instances from all GPUs
             gpu_isolation_mode = "mig"
-            detected_mig_uuids = _get_mig_uuids(gpu_id=0)
+            detected_mig_uuids = _get_mig_uuids()
             if len(detected_mig_uuids) > 0:
                 max_parallel_workers = len(detected_mig_uuids)
                 print(f"MIG enabled: Auto-detected {max_parallel_workers} MIG instances")
@@ -488,57 +521,176 @@ class Orchestrator:
                 print(f"GPU pool created with {len(available_gpus)} GPUs")
 
         # Prepare tasks for parallel execution (no pre-assignment of resources)
-        tasks = []
-        for idx, (model_name, now_recommendations) in enumerate(now_recommendations_all.items(), start=1):
-            key = model_name
-            dev_iter = f"{self.iteration}_{idx}"
-            later_recs = later_recommendations_all.get(model_name, {})
+        if not os.path.exists(self.outputs_dir / "baseline_results.json"):
+            tasks = []
+            for idx, (model_name, now_recommendations) in enumerate(now_recommendations_all.items(), start=1):
+                key = model_name
+                dev_iter = f"{self.iteration}_{idx}"
+                later_recs = later_recommendations_all.get(model_name, {})
 
-            tasks.append((
+                tasks.append((
+                    self.slug,
+                    dev_iter,
+                    model_name,
+                    now_recommendations,
+                    later_recs,
+                    key,
+                    cpu_core_pool,
+                    gpu_pool,
+                    gpu_isolation_mode
+                ))
+
+            # Run developer agents in parallel using ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=max_parallel_workers) as executor:
+                futures = [
+                    executor.submit(_run_developer_baseline, *task_args)
+                    for task_args in tasks
+                ]
+
+                for future in futures:
+                    try:
+                        result_key, best_score, best_code_file, blacklisted_ideas, successful_ideas = future.result()
+                        baseline_results[result_key] = {
+                            "model_name": result_key,
+                            "best_score": best_score,
+                            "best_code_file": best_code_file or "",
+                            "blacklisted_ideas": blacklisted_ideas,
+                            "successful_ideas": successful_ideas,
+                            "fold_split_strategy": fold_split_strategy,
+                            "now_recommendations": now_recommendations_all.get(result_key, {}),
+                            "later_recommendations": later_recommendations_all.get(result_key, {})
+                        }
+                        baseline_path = self.outputs_dir / "baseline_results.json"
+                        with open(baseline_path, "w") as f:
+                            json.dump(baseline_results, f, indent=2)
+                    except Exception:
+                        continue
+
+            # Persist baseline results
+            if baseline_results:
+                baseline_path = self.outputs_dir / "baseline_results.json"
+                with open(baseline_path, "w") as f:
+                    json.dump(baseline_results, f, indent=2)
+            else:
+                raise RuntimeError("All developer baseline runs failed")
+
+        # Phase 4.5: Generate summaries and enhancement recommendations
+        from tools.enhanced_developer import generate_all_summaries, generate_all_enhancements
+
+        # Read baseline results from file (in case we're resuming)
+        baseline_path = self.outputs_dir / "baseline_results.json"
+        with open(baseline_path, 'r') as f:
+            baseline_results = json.load(f)
+
+        description_path = self.base_dir / "description.md"
+        ensemble_dir = self.outputs_dir / "ensemble"
+        summaries_dir = ensemble_dir / "summaries"
+        enhancements_dir = ensemble_dir / "enhancements"
+
+        # Step 1: Generate technical summaries for all baseline models
+        if not summaries_dir.exists() or not any(summaries_dir.glob("summary_model_*.md")):
+            generate_all_summaries(
+                competition_description_path=description_path,
+                baseline_results=baseline_results,
+                outputs_dir=self.outputs_dir,
+                iteration=self.iteration
+            )
+
+        # Step 2: Generate enhancement recommendations based on cross-model analysis
+        if not enhancements_dir.exists() or not any(enhancements_dir.glob("enhancements_model_*.md")):
+            # Need to load summaries from files for enhancement generation
+            summaries = {}
+            for idx in range(1, len(baseline_results) + 1):
+                summary_path = summaries_dir / f"summary_model_{idx}.md"
+                if summary_path.exists():
+                    with open(summary_path, 'r') as f:
+                        # Get model name from baseline_results by index
+                        model_name = list(baseline_results.keys())[idx - 1]
+                        summaries[model_name] = f.read()
+
+            generate_all_enhancements(
+                baseline_results=baseline_results,
+                summaries=summaries,
+                outputs_dir=self.outputs_dir,
+                iteration=self.iteration
+            )
+
+        # Phase 5: Enhancement Stage - Apply cross-model knowledge transfer
+        # Check if enhancement files exist
+        if not enhancements_dir.exists() or not any(enhancements_dir.glob("enhancements_model_*.md")):
+            return True, str(baseline_path)
+
+        # Re-read baseline results from file
+        with open(baseline_path, 'r') as f:
+            baseline_results = json.load(f)
+
+        enhancement_results = {}
+
+        # Prepare enhancement tasks (reuse same resource pools)
+        enhancement_tasks = []
+        for idx, (model_name, baseline_info) in enumerate(baseline_results.items(), start=1):
+            best_code_file = baseline_info.get("best_code_file")
+            if not best_code_file:
+                continue
+
+            # Baseline code is in outputs/{iteration_suffix}/ at same level as outputs/{iteration}/
+            # self.outputs_dir is outputs/2/, so go up one level
+            dev_iter = f"{self.iteration}_{idx}"
+            base_code_path = self.outputs_dir.parent / dev_iter / best_code_file
+            enhancements_path = enhancements_dir / f"enhancements_model_{idx}.md"
+
+            if not base_code_path.exists():
+                continue
+            if not enhancements_path.exists():
+                continue
+
+            key = model_name
+
+            enhancement_tasks.append((
                 self.slug,
                 dev_iter,
                 model_name,
-                now_recommendations,
-                later_recs,
+                str(base_code_path),
+                str(enhancements_path),
                 key,
                 cpu_core_pool,
                 gpu_pool,
                 gpu_isolation_mode
             ))
 
-        # Run developer agents in parallel using ThreadPoolExecutor
+        if not enhancement_tasks:
+            return True, str(baseline_path)
+
+        # Run enhancement agents in parallel using ThreadPoolExecutor
         with ThreadPoolExecutor(max_workers=max_parallel_workers) as executor:
             futures = [
-                executor.submit(_run_developer_baseline, *task_args)
-                for task_args in tasks
+                executor.submit(_run_developer_enhancement, *task_args)
+                for task_args in enhancement_tasks
             ]
 
             for future in futures:
                 try:
                     result_key, best_score, best_code_file, blacklisted_ideas, successful_ideas = future.result()
-                    baseline_results[result_key] = {
+                    enhancement_results[result_key] = {
                         "model_name": result_key,
                         "best_score": best_score,
                         "best_code_file": best_code_file or "",
                         "blacklisted_ideas": blacklisted_ideas,
                         "successful_ideas": successful_ideas,
-                        "fold_split_strategy": fold_split_strategy,
-                        "now_recommendations": now_recommendations_all.get(result_key, {}),
-                        "later_recommendations": later_recommendations_all.get(result_key, {})
                     }
-                    baseline_path = self.outputs_dir / "baseline_results.json"
-                    with open(baseline_path, "w") as f:
-                        json.dump(baseline_results, f, indent=2)
-                except Exception:
+                    enhancement_path = self.outputs_dir / "enhancement_results.json"
+                    with open(enhancement_path, "w") as f:
+                        json.dump(enhancement_results, f, indent=2)
+                except Exception as e:
+                    print(f"Enhancement run failed: {e}")
                     continue
 
-        # Persist baseline results
-        if baseline_results:
-            baseline_path = self.outputs_dir / "baseline_results.json"
-            with open(baseline_path, "w") as f:
-                json.dump(baseline_results, f, indent=2)
+        # Persist enhancement results
+        if enhancement_results:
+            enhancement_path = self.outputs_dir / "enhancement_results.json"
+            with open(enhancement_path, "w") as f:
+                json.dump(enhancement_results, f, indent=2)
+            return True, str(enhancement_path)
         else:
-            raise RuntimeError("All developer baseline runs failed")
-
-        return True, str(baseline_path)
+            return True, str(baseline_path)
     

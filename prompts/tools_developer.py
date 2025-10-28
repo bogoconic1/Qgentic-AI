@@ -51,7 +51,6 @@ Begin with a concise checklist (3-7 bullets) highlighting high-level conceptual 
 - Do NOT look up or use actual winning solutions from this competition.
 - Do NOT rely on prior knowledge of solutions for this competition.
 - If there are issues with the ```validation split``` or certain bugs in the code, you must point them out.
-- **IMPORTANT**: DO NOT propose removing the hard-coded device pinning (CUDA_VISIBLE_DEVICES and CPU affinity).
 
 ## Tools
 - `ask_eda(question)`: Perform Python-based exploratory data analysis (EDA) on the local dataset or submission files to gather insights or test hypothesis relevant to the code/logs for debugging purposes.
@@ -104,8 +103,11 @@ def red_flags_user(
 """
 
 
-def sota_system() -> str:
-    return """You will receive: a Kaggle competition description, one or more researcher plans, an initial script/logs, and potential identified red flags.
+def sota_system(allow_multi_fold: bool = False) -> str:
+    # Build constraints based on mode
+    fold_constraint = "" if allow_multi_fold else "- Do NOT propose ensembling, blending, multi-fold training, stacking, or calibration."
+
+    return f"""You will receive: a Kaggle competition description, one or more researcher plans, an initial script/logs, and potential identified red flags.
 
 Begin with a concise checklist (3-7 bullets) summarizing those red flags and your intended strategies to address them. Focus on conceptual insights rather than implementation specifics. Use '- ' for each bullet. If fewer than three significant points are found, list as many as possible and explicitly state: "Fewer than 3 high-level red flags or strategies identified."
 Set reasoning_effort = medium; ensure outputs are comprehensive yet focused on key conceptual improvements. For each substantive step, provide succinct validation in 1-2 sentences, referencing specific input fields where appropriate, and self-correct if main requirements appear unmet.
@@ -114,14 +116,14 @@ Conduct a web search to identify ways to improve the competition metric with the
 ## Hard Constraints
 - Do NOT look up or use actual winning solutions from this competition.
 - Do NOT rely on prior knowledge of solutions for this competition.
-- Do NOT propose ensembling, blending, multi-fold training, stacking, or calibration.
+{fold_constraint}
 - Do NOT change the model family used in the initial script; only suggest enhancements around it.
 - If there are issues with the ```validation split``` or certain bugs in the code, you MUST FIX THEM FIRST.
-- **IMPORTANT**: DO NOT propose removing the hard-coded device pinning (CUDA_VISIBLE_DEVICES and CPU affinity).
 
-Generate TWO distinct suggestions, each from a different strategic category:
+Generate THREE distinct suggestions, each from a different strategic category:
 1. **Data / Feature Engineering / Validation Enhancement** — Improving data representation or quality, or validation strategies.
 2. **Architectural Enhancement** — Enhancing model design without altering the backbone, such as adding auxiliary heads, applying regularization, or adjusting the training regime.
+3. **Removing Existing Components** - If you believe there are existing components that are unstable or detrimental to performance, suggest removing or replacing them with a brief justification.
 
 For each:
 - Provide one high-impact suggestion to improve the competition metric, with an explanation (~100 words) describing its benefits.
@@ -145,32 +147,35 @@ Your response MUST follow these sections, in order:
 #### 2. Architectural Enhancement Suggestion
 - ...(explanation — improvements cannot alter the backbone model from the initial script)
 
+#### 3. Removing Existing Components Suggestion
+- ...(explanation)
+
 ### Validation
 - ...(validation statements for each suggestion, or "No suggestions.")
 
 ### Previous Suggestion Review
 Decide if the most recent suggestion (<previous suggestion executed>) should be blacklisted based on validation results and logs. Output your decision using the following strict JSON format (within backticks):
 ```json
-{
+{{
     "blacklist": <true or false>,
     "reason": "<succinct justification>"
-}
+}}
 ```
 
 ### New Suggestion Summary
 Propose the single best new idea (just one) to improve the competition score, synthesizing insights from above. Do not repeat blacklisted or prior suggestions. Return your new proposal in this strict JSON format (within backticks):
 ```json
-{
+{{
     "suggestion": "<your proposed best next idea>",
     "reasoning": "<why it is the best choice now>"
-}
+}}
 ```
 If no suggestion is viable, or you believe this model family has no hope of getting a competitive score, return:
 ```json
-{
+{{
     "suggestion": "No suggestions.",
     "reasoning": "<explain why you deem the model family unviable for competitive performance>"
-}
+}}
 ```
 
 ### Code
@@ -190,7 +195,7 @@ Never repeat an idea from <previous failed ideas>, and avoid blacklisted or prev
 
 ### Output Fields
 - Checklist (markdown list)
-- Research and Suggestion (two markdown sections)
+- Research and Suggestion (three markdown sections)
 - Validation (markdown)
 - Previous Suggestion Review (strict JSON)
 - New Suggestion Summary (strict JSON)
