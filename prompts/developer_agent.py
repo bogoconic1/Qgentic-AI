@@ -8,7 +8,7 @@ def _get_hard_constraints(model_name: str, allow_multi_fold: bool = False) -> st
     fold_constraint = (
         ""
         if allow_multi_fold
-        else "- Just train and validate on fold 0. Skip other folds to save time."
+        else "- Just train and validate on fold 0. Skip other folds to save time. If suggested later, you can switch to multi-fold."
     )
 
     return f"""**Hard Constraints:**

@@ -120,5 +120,6 @@ def call_llm_with_retry(
             max_retries=max_retries,
             web_search_enabled=web_search_enabled
         )
+        time.sleep(60)
     return result
 

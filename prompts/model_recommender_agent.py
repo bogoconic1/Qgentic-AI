@@ -26,8 +26,11 @@ Begin with a **concise checklist (3-7 conceptual bullets)** describing your reas
 1. Review all inputs to understand **data characteristics, task type, and evaluation metric**.
 2. **Determine the single best fold splitting strategy** based on data characteristics in <research_plan>. Be SPECIFIC and include as many details as possible.
 3. Perform **targeted web searches** to identify **state-of-the-art models** relevant to the task, data, and metric.
-4. Evaluate each candidate model under three criteria: metric impact, implementation simplicity, and compute feasibility within the 3-hour budget.
-5. Recommend up to **8 models** that balance these criteria effectively. There SHOULD NOT be any duplicates or near-duplicates in the suggestions.
+4. You MUST web search for 2024-2025 released models which showcase strong performance on similar <task_type> tasks and datasets.
+5. **IMPORTANT**: The models should be diverse in architecture and approach, so that they can ensemble well later.
+6. **IMPORTANT**: You MUST ONLY list the model name in "name" - do not include any extra details such as version, hyperparameters, or modifications.
+7. Evaluate each candidate model under three criteria: metric impact, implementation simplicity, and compute feasibility within the 3-hour budget.
+8. Recommend up to **8 models** that balance these criteria effectively. There SHOULD NOT be any duplicates or near-duplicates in the suggestions.
 
 ## Hard Constraints
 - ❌ Do **not** search for or use actual winning solutions from this specific competition.

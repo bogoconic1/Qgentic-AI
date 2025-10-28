@@ -676,7 +676,7 @@ class DeveloperAgent:
         input_list = [{"role": "user", "content": user_prompt}]
         
         attempt = 0
-        while True:
+        for _ in range(16): # max 16 attempts
             now = time.time()
             if max_time_seconds is not None and now >= deadline:
                 self.logger.info("Time budget exhausted (%.2f minutes)", (deadline - start_time) / 60.0)
@@ -696,11 +696,6 @@ class DeveloperAgent:
                 self.logger.info("Attempt %s", attempt)
             version = attempt
             expect_patch = self.patch_mode_enabled and attempt > 1
-
-            # Keep only the last 40 messages to prevent context overflow
-            if len(input_list) > 40:
-                input_list = input_list[-40:]
-                self.logger.info("Trimmed input_list to last 40 messages")
 
             while True:
                 response_output, generated = self._generate_code(instructions=system_prompt, messages=input_list, expect_patch=expect_patch)
