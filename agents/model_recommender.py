@@ -8,6 +8,7 @@ from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
 import weave
+from weave.trace.util import ThreadPoolExecutor
 
 from project_config import get_config
 from tools.helpers import call_llm_with_retry
@@ -455,38 +456,50 @@ class ModelRecommenderAgent:
             logger.error("No models provided for recommendations")
             raise ValueError("model_list cannot be empty")
 
-        logger.info("Processing %d model(s): %s", len(model_list), model_list)
+        logger.info("Processing %d model(s) in parallel: %s", len(model_list), model_list)
 
         all_recommendations = {}
 
-        for model_name in model_list:
-            try:
-                recommendations = self._recommend_for_model(model_name)
-                all_recommendations[model_name] = recommendations
-            except Exception as e:
-                logger.error("[%s] Failed to get recommendations: %s", model_name, e)
-                # Continue with other models
-                continue
-            
-            # Persist to JSON
-            try:
-                with open(self.json_path, "w") as f:
-                    json.dump(all_recommendations, f, indent=2)
-                logger.info("Model recommendations saved to %s", self.json_path)
-            except Exception as e:
-                logger.error("Failed to save model recommendations: %s", e)
+        # Run model recommendations in parallel using ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=len(model_list)) as executor:
+            # Submit all tasks
+            future_to_model = {
+                executor.submit(self._recommend_for_model, model_name): model_name
+                for model_name in model_list
+            }
+
+            # Collect results as they complete
+            for future in future_to_model:
+                model_name = future_to_model[future]
+                try:
+                    recommendations = future.result()
+                    all_recommendations[model_name] = recommendations
+                    logger.info("[%s] Recommendations generated successfully", model_name)
+
+                    # Persist incrementally after each model completes
+                    try:
+                        with open(self.json_path, "w") as f:
+                            json.dump(all_recommendations, f, indent=2)
+                        logger.info("Model recommendations saved to %s", self.json_path)
+                    except Exception as e:
+                        logger.error("Failed to save model recommendations: %s", e)
+
+                except Exception as e:
+                    logger.error("[%s] Failed to get recommendations: %s", model_name, e)
+                    # Continue with other models
+                    continue
 
         if not all_recommendations:
             logger.error("Failed to get recommendations for any model")
             raise RuntimeError("No model recommendations were generated successfully")
 
-        # Persist to JSON
+        # Final persist to JSON
         try:
             with open(self.json_path, "w") as f:
                 json.dump(all_recommendations, f, indent=2)
-            logger.info("Model recommendations saved to %s", self.json_path)
+            logger.info("Final model recommendations saved to %s", self.json_path)
         except Exception as e:
-            logger.error("Failed to save model recommendations: %s", e)
+            logger.error("Failed to save final model recommendations: %s", e)
 
         logger.info(
             "ModelRecommenderAgent completed for %d model(s)", len(all_recommendations)

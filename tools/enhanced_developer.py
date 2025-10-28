@@ -9,6 +9,7 @@ This module provides functions for:
 from pathlib import Path
 from typing import Dict, List
 import yaml
+from weave.trace.util import ThreadPoolExecutor
 
 from prompts.ensembler_agent import (
     ensembler_code_summarize_system_prompt,
@@ -97,6 +98,62 @@ def generate_enhancement_recommendations(
     return response.output_text
 
 
+def _generate_summary_task(
+    idx: int,
+    model_name: str,
+    baseline_info: Dict,
+    description: str,
+    outputs_root: Path,
+    summaries_dir: Path,
+    iteration: int
+):
+    """Helper function to generate a single model summary (for parallel execution)."""
+    print(f"Generating summary for Model {idx}: {model_name}")
+
+    # Read code file
+    best_code_file = baseline_info.get("best_code_file")
+    if not best_code_file:
+        print(f"  WARNING: No code file for {model_name}, skipping")
+        return idx, model_name, None
+
+    # Baseline code is in outputs/{iteration_suffix}/ at the same level as outputs/{iteration}/
+    # e.g., outputs/2_1/code_2_1_v3.py
+    iteration_suffix = f"{iteration}_{idx}"
+    code_path = outputs_root / iteration_suffix / best_code_file
+    if not code_path.exists():
+        print(f"  WARNING: Code file not found: {code_path}, skipping")
+        return idx, model_name, None
+
+    # Read code and strip headers
+    code = strip_header_from_code(code_path)
+
+    # Read logs file
+    log_file = best_code_file.replace('.py', '.txt')
+    log_path = outputs_root / iteration_suffix / log_file
+    if not log_path.exists():
+        print(f"  WARNING: Log file not found: {log_path}, using empty logs")
+        logs = ""
+    else:
+        with open(log_path, 'r') as f:
+            logs = f.read()
+
+    # Generate summary
+    summary = generate_model_summary(
+        description=description,
+        model_name=model_name,
+        code=code,
+        logs=logs
+    )
+
+    # Save summary
+    summary_path = summaries_dir / f"summary_model_{idx}.md"
+    with open(summary_path, 'w') as f:
+        f.write(summary)
+
+    print(f"  Saved summary to {summary_path}")
+    return idx, model_name, summary
+
+
 def generate_all_summaries(
     competition_description_path: Path,
     baseline_results: Dict,
@@ -104,7 +161,7 @@ def generate_all_summaries(
     iteration: int
 ):
     """
-    Generate technical summaries for all baseline models.
+    Generate technical summaries for all baseline models in parallel.
 
     Args:
         competition_description_path: Path to description.md
@@ -126,53 +183,91 @@ def generate_all_summaries(
     # outputs_dir is already outputs/{iteration}/, so go up one level to get outputs/
     outputs_root = outputs_dir.parent
 
-    for idx, (model_name, baseline_info) in enumerate(baseline_results.items(), start=1):
-        print(f"Generating summary for Model {idx}: {model_name}")
+    print(f"Generating summaries for {len(baseline_results)} models in parallel")
 
-        # Read code file
-        best_code_file = baseline_info.get("best_code_file")
-        if not best_code_file:
-            print(f"  WARNING: No code file for {model_name}, skipping")
-            continue
+    # Run summary generation in parallel using ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=len(baseline_results)) as executor:
+        futures = []
+        for idx, (model_name, baseline_info) in enumerate(baseline_results.items(), start=1):
+            future = executor.submit(
+                _generate_summary_task,
+                idx, model_name, baseline_info, description,
+                outputs_root, summaries_dir, iteration
+            )
+            futures.append(future)
 
-        # Baseline code is in outputs/{iteration_suffix}/ at the same level as outputs/{iteration}/
-        # e.g., outputs/2_1/code_2_1_v3.py
-        iteration_suffix = f"{iteration}_{idx}"
-        code_path = outputs_root / iteration_suffix / best_code_file
-        if not code_path.exists():
-            print(f"  WARNING: Code file not found: {code_path}, skipping")
-            continue
-
-        # Read code and strip headers
-        code = strip_header_from_code(code_path)
-
-        # Read logs file
-        log_file = best_code_file.replace('.py', '.txt')
-        log_path = outputs_root / iteration_suffix / log_file
-        if not log_path.exists():
-            print(f"  WARNING: Log file not found: {log_path}, using empty logs")
-            logs = ""
-        else:
-            with open(log_path, 'r') as f:
-                logs = f.read()
-
-        # Generate summary
-        summary = generate_model_summary(
-            description=description,
-            model_name=model_name,
-            code=code,
-            logs=logs
-        )
-
-        # Save summary
-        summary_path = summaries_dir / f"summary_model_{idx}.md"
-        with open(summary_path, 'w') as f:
-            f.write(summary)
-
-        summaries[model_name] = summary
-        print(f"  Saved summary to {summary_path}")
+        # Collect results
+        for future in futures:
+            try:
+                idx, model_name, summary = future.result()
+                if summary:
+                    summaries[model_name] = summary
+            except Exception as e:
+                print(f"  ERROR: Summary generation failed: {e}")
+                continue
 
     return summaries
+
+
+def _generate_enhancement_task(
+    idx: int,
+    target_model_name: str,
+    baseline_results: Dict,
+    summaries: Dict[str, str],
+    enhancements_dir: Path
+):
+    """Helper function to generate enhancements for a single model (for parallel execution)."""
+    print(f"Generating enhancements for Model {idx}: {target_model_name}")
+
+    target_info = baseline_results[target_model_name]
+    target_summary = summaries.get(target_model_name)
+
+    if not target_summary:
+        print(f"  WARNING: No summary for {target_model_name}, skipping")
+        return idx, target_model_name, None
+
+    model_names = list(baseline_results.keys())
+
+    # Build other models list (all except target)
+    other_models = []
+    for other_model_name in model_names:
+        if other_model_name == target_model_name:
+            continue
+
+        other_info = baseline_results[other_model_name]
+        other_summary = summaries.get(other_model_name)
+
+        if not other_summary:
+            print(f"  WARNING: No summary for {other_model_name}, skipping in cross-analysis")
+            continue
+
+        other_models.append({
+            "name": other_model_name,
+            "summary": other_summary,
+            "successful_ideas": other_info.get("successful_ideas", []),
+            "blacklisted_ideas": other_info.get("blacklisted_ideas", [])
+        })
+
+    if not other_models:
+        print(f"  WARNING: No other models to analyze, skipping")
+        return idx, target_model_name, None
+
+    # Generate enhancement recommendations
+    enhancement = generate_enhancement_recommendations(
+        target_model_name=target_model_name,
+        target_summary=target_summary,
+        target_successful_ideas=target_info.get("successful_ideas", []),
+        target_blacklisted_ideas=target_info.get("blacklisted_ideas", []),
+        other_models=other_models
+    )
+
+    # Save enhancement
+    enhancement_path = enhancements_dir / f"enhancements_model_{idx}.md"
+    with open(enhancement_path, 'w') as f:
+        f.write(enhancement)
+
+    print(f"  Saved enhancements to {enhancement_path}")
+    return idx, target_model_name, enhancement
 
 
 def generate_all_enhancements(
@@ -182,7 +277,7 @@ def generate_all_enhancements(
     iteration: int
 ):
     """
-    Generate enhancement recommendations for all models based on cross-model analysis.
+    Generate enhancement recommendations for all models based on cross-model analysis in parallel.
 
     Args:
         baseline_results: Dict of baseline results (from baseline_results.json)
@@ -200,53 +295,25 @@ def generate_all_enhancements(
 
     model_names = list(baseline_results.keys())
 
-    for idx, target_model_name in enumerate(model_names, start=1):
-        print(f"Generating enhancements for Model {idx}: {target_model_name}")
+    print(f"Generating enhancements for {len(model_names)} models in parallel")
 
-        target_info = baseline_results[target_model_name]
-        target_summary = summaries.get(target_model_name)
+    # Run enhancement generation in parallel using ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=len(model_names)) as executor:
+        futures = []
+        for idx, target_model_name in enumerate(model_names, start=1):
+            future = executor.submit(
+                _generate_enhancement_task,
+                idx, target_model_name, baseline_results,
+                summaries, enhancements_dir
+            )
+            futures.append(future)
 
-        if not target_summary:
-            print(f"  WARNING: No summary for {target_model_name}, skipping")
-            continue
-
-        # Build other models list (all except target)
-        other_models = []
-        for other_idx, other_model_name in enumerate(model_names, start=1):
-            if other_model_name == target_model_name:
+        # Collect results
+        for future in futures:
+            try:
+                idx, target_model_name, enhancement = future.result()
+                if enhancement:
+                    enhancements[target_model_name] = enhancement
+            except Exception as e:
+                print(f"  ERROR: Enhancement generation failed: {e}")
                 continue
-
-            other_info = baseline_results[other_model_name]
-            other_summary = summaries.get(other_model_name)
-
-            if not other_summary:
-                print(f"  WARNING: No summary for {other_model_name}, skipping in cross-analysis")
-                continue
-
-            other_models.append({
-                "name": other_model_name,
-                "summary": other_summary,
-                "successful_ideas": other_info.get("successful_ideas", []),
-                "blacklisted_ideas": other_info.get("blacklisted_ideas", [])
-            })
-
-        if not other_models:
-            print(f"  WARNING: No other models to analyze, skipping")
-            continue
-
-        # Generate enhancement recommendations
-        enhancement = generate_enhancement_recommendations(
-            target_model_name=target_model_name,
-            target_summary=target_summary,
-            target_successful_ideas=target_info.get("successful_ideas", []),
-            target_blacklisted_ideas=target_info.get("blacklisted_ideas", []),
-            other_models=other_models
-        )
-
-        # Save enhancement
-        enhancement_path = enhancements_dir / f"enhancements_model_{idx}.md"
-        with open(enhancement_path, 'w') as f:
-            f.write(enhancement)
-
-        enhancements[target_model_name] = enhancement
-        print(f"  Saved enhancements to {enhancement_path}")
