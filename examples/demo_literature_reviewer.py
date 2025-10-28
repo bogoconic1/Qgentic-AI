@@ -1,8 +1,8 @@
 """Quick demo showing how to use the LiteratureReviewer tool.
 
 Usage:
-    export S2_API_KEY="your-semantic-scholar-api-key"
-    python example/demo_literature_reviewer.py --query "vision-language agents"
+    set S2_API_KEY="your-semantic-scholar-api-key" in .env file
+    python examples/demo_literature_reviewer.py --query "vision-language agents"
 """
 
 from __future__ import annotations
@@ -11,7 +11,15 @@ import argparse
 import json
 import logging
 import os
+import sys
 from pathlib import Path
+
+# Add project root to Python path
+project_root = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(project_root))
+
+from dotenv import load_dotenv
+load_dotenv()
 
 from tools.literature_reviewer import LiteratureReviewer
 from prompts.literature_reviewer import literature_reviewer_prompt
