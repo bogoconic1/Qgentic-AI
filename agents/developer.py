@@ -451,7 +451,7 @@ class DeveloperAgent:
         lines.append("")
 
         header = "\n".join(lines)
-        num_header_lines = len(lines) + 1  # +1 for the newline after header
+        num_header_lines = len(lines)
 
         # Insert header at the top of the code
         return header + "\n" + code, num_header_lines
