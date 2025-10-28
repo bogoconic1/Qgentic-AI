@@ -44,7 +44,10 @@ def build_system(description: str, directory_listing: str, model_name: str, mode
     if cpu_core_range is not None:
         resource_info = f"\nNumber of CPUs: {len(cpu_core_range)} cores"
 
-    constraints = _get_hard_constraints(model_name, allow_multi_fold=allow_multi_fold)
+    try:
+        constraints = _get_hard_constraints(model_name, allow_multi_fold=allow_multi_fold)
+    except Exception as e:
+        constraints = f"[Error loading constraints: {str(e)}]"
 
     return f"""# Role: Lead Developer for Machine-Learning Competition Team
 Your objective is to deliver a single, self-contained Python script for a Kaggle Competition using **only** the specified model `{model_name}`.
@@ -180,7 +183,11 @@ def build_enhancement_system(
         resource_info = f"\nNumber of CPUs: {len(cpu_core_range)} cores"
 
     # Get constraints with multi-fold allowed
-    constraints = _get_hard_constraints(model_name, allow_multi_fold=True)
+    try:
+        constraints = _get_hard_constraints(model_name, allow_multi_fold=True)
+    except Exception as e:
+        constraints = f"[Error loading constraints: {str(e)}]"
+
 
     return f"""# Role: Senior ML Engineer — Model Enhancement Specialist
 
