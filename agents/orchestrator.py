@@ -22,11 +22,11 @@ _TASK_ROOT = Path(_PATH_CFG.get("task_root"))
 _OUTPUTS_DIRNAME = _PATH_CFG.get("outputs_dirname")
 _DEFAULT_PARALLEL = int(_RUNTIME_CFG.get("researcher_parallel_runs"))
 
-def _get_mig_uuids(gpu_id: int = 0) -> list[str]:
-    """Parse MIG device UUIDs from nvidia-smi -L output.
+def _get_mig_uuids() -> list[str]:
+    """Parse MIG device UUIDs from nvidia-smi -L output for all GPUs.
 
     Returns:
-        List of MIG UUIDs (e.g., ["MIG-17331e1a-f2f0-500d-86f0-acf8289655ad", ...])
+        List of MIG UUIDs from all GPUs (e.g., ["MIG-17331e1a-f2f0-500d-86f0-acf8289655ad", ...])
     """
     try:
         result = subprocess.run(
@@ -38,25 +38,14 @@ def _get_mig_uuids(gpu_id: int = 0) -> list[str]:
         if result.returncode != 0:
             return []
 
-        # Parse output for MIG UUIDs
+        # Parse output for MIG UUIDs from all GPUs
         # Example line: "  MIG 2g.20gb     Device  0: (UUID: MIG-17331e1a-f2f0-500d-86f0-acf8289655ad)"
         mig_uuids = []
         lines = result.stdout.strip().split("\n")
-        in_target_gpu = False
 
         for line in lines:
-            # Check if this is the target GPU line
-            if line.startswith(f"GPU {gpu_id}:"):
-                in_target_gpu = True
-                continue
-
-            # Check if we've moved to next GPU
-            if line.startswith("GPU ") and not line.startswith(f"GPU {gpu_id}:"):
-                in_target_gpu = False
-                continue
-
-            # Parse MIG UUID if we're in the target GPU section
-            if in_target_gpu and "MIG" in line and "UUID:" in line:
+            # Parse MIG UUID from any line that contains both "MIG" and "UUID:"
+            if "MIG" in line and "UUID:" in line:
                 match = re.search(r'UUID:\s+(MIG-[a-f0-9\-]+)', line)
                 if match:
                     mig_uuids.append(match.group(1))
@@ -474,9 +463,9 @@ class Orchestrator:
         available_gpus = []
 
         if enable_mig:
-            # MIG mode: Auto-detect MIG instances
+            # MIG mode: Auto-detect MIG instances from all GPUs
             gpu_isolation_mode = "mig"
-            detected_mig_uuids = _get_mig_uuids(gpu_id=0)
+            detected_mig_uuids = _get_mig_uuids()
             if len(detected_mig_uuids) > 0:
                 max_parallel_workers = len(detected_mig_uuids)
                 print(f"MIG enabled: Auto-detected {max_parallel_workers} MIG instances")
