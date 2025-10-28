@@ -31,13 +31,13 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
 
 | Kaggle Competition | Difficulty | Type | Metric | Qgentic-AI (no ensembler) | FM Agent | InternAgent | Operand | R&D-Agent |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| us-patent-phrase-to-phrase-matching | Medium | Information Retrieval | PCC (higher) | [0.88072] | [0.87466, 0.84211, 0.86829] | [0.86864, 0.8647, 0.87046] | [0.45894, 0.7729, 0.84507] | [0.75307, 0.80521, 0.84449] |
-| learning-agency-lab-automated-essay-scoring-2 | Medium | Text | QWK (higher) | [0.83795, 0.84812] | [0.8384, 0.84839, 0.84733] | [0.83995, 0.82771, 0.82221] | [0.83013] | [0.83751, 0.82051, 0.81547] |
-| tabular-playground-series-dec-2021 | Easy | Tabular | Accuracy % (higher) | [0.96322] | [0.96137, 0.95822, 0.96004] | [0.96216, 0.96302, 0.96286] | [0.96194, 0.96335, 0.96269] | [0.96295, 0.96312, 0.96276] |
-| statoil-iceberg-classifier-challenge | Medium | Image Classification | Logloss (lower) | TBC | [0.71993, 0.6963, 2.35887] | [0.20956, 0.19655, 0.20297] | Failed | Failed |
-| denoising-dirty-documents | Medium | Computer Vision | RMSE (lower) | TBC | [0.02779, 0.01785, 0.01311] | [0.0116, 0.01509, 0.0418] | [0.01884, 0.01081, 0.03939] | [0.01221, 0.01135, 0.01009] |
-| whale-categorization-playground | Medium | Computer Vision | MAP@5 (higher) | [0.4583, 0.39941] | [0.46374, 0.50367, 0.43165] | [0.31698, 0.19513, 0.03771] | [0.40842, 0.24289, 0.43053] | [0.25507, 0.25628, 0.27506] |
-| google-quest-challenge | Medium | Text | Spearman Correlation (higher) | TBC | [0.3863, 0.38017, 0.41448] | [0.39183, 0.41797, 0.4164] | [0.4105, 0.39704, 0.38652] | [0.41739, 0.42004, 0.4072] |
+| us-patent-phrase-to-phrase-matching | Medium | Information Retrieval | PCC (higher) | 0.88072 | 0.86169 ± 0.01725 | 0.86793 ± 0.00294 | 0.69230 ± 0.20529 | 0.80092 ± 0.04586 |
+| learning-agency-lab-automated-essay-scoring-2 | Medium | Text | QWK (higher) | 0.84303 ± 0.00719 | 0.84471 ± 0.00549 | 0.82996 ± 0.00908 | 0.83013 | 0.82450 ± 0.01155 |
+| tabular-playground-series-dec-2021 | Easy | Tabular | Accuracy % (higher) | 0.96322 | 0.95988 ± 0.00158 | 0.96268 ± 0.00046 | 0.96266 ± 0.00071 | 0.96294 ± 0.00018 |
+| statoil-iceberg-classifier-challenge | Medium | Image Classification | Logloss (lower) | 0.19081 | 1.25837 ± 0.95314 | 0.20303 ± 0.00651 | Failed | Failed |
+| denoising-dirty-documents | Medium | Computer Vision | RMSE (lower) | TBC | 0.01958 ± 0.00749 | 0.02283 ± 0.01652 | 0.02301 ± 0.01474 | 0.01122 ± 0.00107 |
+| whale-categorization-playground | Medium | Computer Vision | MAP@5 (higher) | 0.42885 ± 0.04164 | 0.46635 ± 0.03608 | 0.18327 ± 0.14001 | 0.36061 ± 0.10255 | 0.26214 ± 0.01121 |
+| google-quest-challenge | Medium | Text | Spearman Correlation (higher) | TBC | 0.39365 ± 0.01830 | 0.40873 ± 0.01466 | 0.39802 ± 0.01202 | 0.41488 ± 0.00678 |
 --- 
 
 ## Architecture at a Glance
