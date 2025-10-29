@@ -131,6 +131,27 @@ Begin with a concise checklist (3-7 bullets) summarizing those red flags and you
 Set reasoning_effort = medium; ensure outputs are comprehensive yet focused on key conceptual improvements. For each substantive step, provide succinct validation in 1-2 sentences, referencing specific input fields where appropriate, and self-correct if main requirements appear unmet.
 Conduct a web search to identify ways to improve the competition metric with the given model, but do not look up or rely on actual winning solutions or prior knowledge specific to this competition.
 
+## Shared Suggestions Analysis
+Each entry shows:
+- Which model tried the suggestion
+- What the suggestion was
+- Whether the score improved, worsened, or remained the same
+- The exact score change (before -> after)
+
+Examples:
+- "Model xgboost tried isotonic calibration on OOF (score worsened by 0.05: 0.85 -> 0.80)"
+- "Model lightgbm tried stratified sampling (score improved by 0.03: 0.82 -> 0.85)"
+- "Model catboost tried increasing max_depth to 10 (score remained the same: 0.83 -> 0.83)"
+
+IMPORTANT: When analyzing shared suggestions and generating new ideas:
+1. Look for patterns in suggestions that worsened scores - avoid similar ideas
+2. Look for patterns in suggestions that improved scores (and the raw scores are similar or better) - consider adapting them
+3. Consider model-specific vs universal patterns:
+   - If multiple different models tried similar ideas and all failed → likely universal issue
+   - If one model succeeded but others haven't tried it → worth adapting
+   - If one model failed but it's model-specific (e.g., "use Adam optimizer" for tree models) → might work for other model types
+4. Use semantic understanding - "isotonic calibration on OOF" and "apply isotonic calibration to out-of-fold predictions" are the same
+
 ## Hard Constraints
 - Do NOT look up or use actual winning solutions from this competition.
 - Do NOT rely on prior knowledge of solutions for this competition.
@@ -203,7 +224,7 @@ If no suggestion is viable, or you believe this model family has no hope of gett
 ### Code
 Present a concise Python code snippet (within triple backticks labeled 'python') implementing your new idea. If no suggestion is given, leave this section empty (no code block).
 
-Never repeat an idea from <previous failed ideas>, and avoid blacklisted or previous suggestions.
+Never repeat an idea from <previous failed ideas>, and avoid blacklisted or previous suggestions. Leverage insights from <shared suggestions from ALL models> to avoid redundant or low-impact ideas.
 **IMPORTANT**: Do not use try/except or while loops in your code. Do not code fallback methods.
 
 ### Input Schema
@@ -214,6 +235,7 @@ Never repeat an idea from <previous failed ideas>, and avoid blacklisted or prev
 - <potential identified red flags> (string): Any potential issues or areas of concern identified in the code or logs. It may contain the training time of the initial script.
 - <previous suggestion executed> (string): Most recently attempted suggestion.
 - <previous failed ideas> (optional, list of strings): Suggestions that have previously failed or been blacklisted.
+- <shared suggestions from ALL models> (optional, string): A summary of suggestions attempted by other models, if available.
 
 ### Output Fields
 - Checklist (markdown list)
@@ -234,7 +256,7 @@ def sota_user(
     executed_code_text: str,
     context: str,
     outcome_status: str,
-    successful_ideas_text: str = "No successful ideas yet.",
+    shared_suggestions_text: str = "No shared suggestions yet.",
 ) -> str:
     return f"""<competition description>
 {description}
@@ -246,13 +268,13 @@ def sota_user(
 {red_flags}
 </potential identified red flags>
 
-<previous failed ideas from ALL models> DO NOT TRY THESE AGAIN
+<previous failed ideas from THIS model>
 {failed_ideas_text}
-</previous failed ideas from ALL models>
+</previous failed ideas from THIS model>
 
-<successful ideas from ALL models> CONSIDER ADAPTING THESE
-{successful_ideas_text}
-</successful ideas from ALL models>
+<shared suggestions from ALL models>
+{shared_suggestions_text}
+</shared suggestions from ALL models>
 
 <previous suggestion executed>
 {executed_suggestion_text}
@@ -265,11 +287,5 @@ def sota_user(
 {context}
 
 Outcome status: {outcome_status}
-
-IMPORTANT: When suggesting improvements:
-1. Avoid ideas similar to those in <previous failed ideas from ALL models> - these have been tried across multiple models and failed
-2. Consider adapting ideas from <successful ideas from ALL models> - these worked for other models and may be applicable here
-3. Use your reasoning to determine if a failure is model-specific or universal
-4. Text variations are OK - use semantic understanding to detect if your suggestion is essentially the same as a failed idea
 """
 
