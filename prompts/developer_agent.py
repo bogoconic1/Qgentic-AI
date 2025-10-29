@@ -31,6 +31,7 @@ def _get_hard_constraints(model_name: str, allow_multi_fold: bool = False) -> st
 {fold_constraint}
 - Do not use any `while` loops in your code.
 - YOU SHOULD NOT CREATE A SUBMISSION FILE DURING DEBUG MODE.
+- At the end, log the distribution of the submission predictions (e.g., value counts for classification, summary statistics for regression).
 
 **DEBUG mode guidelines**
 - After splitting the data into train and valid, right before starting training, sample train to 1000 rows. For classification, ensure at least one sample per class, so if there are > 1000 classes there will be > 1000 samples. For time series tasks, take the last 1000 rows (most recent) instead of random sampling to preserve temporal order.

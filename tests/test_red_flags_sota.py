@@ -21,11 +21,11 @@ wandb.init(entity='520f8592abc', project='qgentic-ai', name=f'test_red_flags_sot
 weave.init(project_name='520f8592abc/qgentic-ai')
 
 # Test files
-slug = "whale-categorization-playground"
+slug = "playground-series-s5e10"
 base_dir = Path(__file__).resolve().parents[1] / "task" / slug
-code_file = base_dir / "outputs/2_1/code_2_1_v5.py"
-log_file = base_dir / "outputs/2_1/code_2_1_v5.txt"
-submission_file = base_dir / "outputs/2_1/submission_5.csv"
+code_file = base_dir / "outputs/2_1_enhanced/code_2_1_enhanced_v1.py"
+log_file = base_dir / "outputs/2_1_enhanced/code_2_1_enhanced_v1.txt"
+submission_file = base_dir / "outputs/2_1_enhanced/submission_1.csv"
 description_file = base_dir / "description.md"
 
 # Read files
@@ -53,15 +53,12 @@ print(f"Submission file: {submission_file}")
 
 # STAGE 1: Identify red flags
 print("\n" + "=" * 80)
-print("STAGE 1: Identifying red flags with EDA tool-calling...")
+print("STAGE 1: Identifying red flags via direct analysis...")
 print("=" * 80)
 
 red_flags_response = search_red_flags(
     description=description,
     context=context,
-    data_path=str(base_dir),
-    submission_path=str(submission_file),
-    max_steps=10,
 )
 
 print(f"\nRed flags response length: {len(red_flags_response)} chars")
