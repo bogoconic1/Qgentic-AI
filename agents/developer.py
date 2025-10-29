@@ -608,7 +608,7 @@ class DeveloperAgent:
                 code_path = self.outputs_dir / self._code_filename(v)
                 if code_path.exists():
                     try:
-                        code = code_path.read_text()
+                        code = strip_header_from_code(code_path)
                         return v, code
                     except Exception as e:
                         self.logger.error(f"Failed to read code from v{v}: {e}")

@@ -111,6 +111,18 @@ def call_llm_with_retry(
 ):
     result = None
 
+    for _ in range(40):
+        result = call_llm_with_retry_helper(
+            model=model,
+            instructions=instructions,
+            tools=tools,
+            messages=messages,
+            max_retries=max_retries,
+            web_search_enabled=web_search_enabled
+        )
+        if result is not None:
+            break
+
     while result is None:
         result = call_llm_with_retry_helper(
             model=model,
@@ -121,5 +133,6 @@ def call_llm_with_retry(
             web_search_enabled=web_search_enabled
         )
         time.sleep(60)
+    
     return result
 
