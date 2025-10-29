@@ -85,26 +85,17 @@ def web_search_stack_trace(query: str) -> str:
 def search_red_flags(
     description: str,
     context: str,
-    data_path: str,
-    submission_path: str | None = None,
-    max_steps: int = 10,
 ) -> str:
-    """Stage 1: Use ask_eda tool-calling to identify red flags in the current approach.
+    """Stage 1: Direct analysis to identify red flags in the current approach.
 
     Args:
         description: Competition description
         context: Current code and logs
-        data_path: Path to task/<slug> directory for EDA
-        submission_path: Path to current submission file for analysis
-        max_steps: Maximum tool-calling iterations (default 10)
 
     Returns:
-        Red flags response text (markdown format with tool summaries + final summary)
+        Red flags response text (markdown format with structured analysis)
     """
-    # Import here to avoid circular dependency
-    from tools.researcher import ask_eda
-
-    logger.info("Dispatching red flags identification with tool-calling support")
+    logger.info("Dispatching red flags identification via direct analysis")
 
     system_prompt = prompt_red_flags_system()
     user_prompt = prompt_red_flags_user(
@@ -112,76 +103,18 @@ def search_red_flags(
         context=context,
     )
 
-    # Add submission file path context if available
-    if submission_path:
-        user_prompt += f"\n\n<submission_file_path>\n{submission_path}\n</submission_file_path>\n"
+    # Single-pass analysis with web search enabled
+    response = call_llm_with_retry(
+        model=_DEVELOPER_TOOL_MODEL,
+        instructions=system_prompt,
+        tools=[],
+        messages=[{"role": "user", "content": user_prompt}],
+        web_search_enabled=True
+    )
 
-    # Get tools (only ask_eda for red flags stage)
-    tools = get_tools()
-
-    # Tool-calling loop
-    input_list = [{"role": "user", "content": user_prompt}]
-
-    for step in range(max_steps):
-        logger.info(f"[Red Flags] Step {step + 1}/{max_steps}")
-
-        if step == max_steps - 1:
-            input_list.append({"role": "user", "content": "This is your FINAL step. Output the final red flags summary now!"})
-            logger.info("Reached final step; forcing red flags summary output prompt")
-
-        response = call_llm_with_retry(
-            model=_DEVELOPER_TOOL_MODEL,
-            instructions=system_prompt,
-            tools=tools,
-            messages=input_list,
-            web_search_enabled=False  # No web search in red flags stage
-        )
-
-        input_list += response.output
-        tool_calls = False
-
-        for item in response.output:
-            if item.type == "function_call":
-                tool_calls = True
-                if item.name == "ask_eda":
-                    try:
-                        question = json.loads(item.arguments)["question"]
-                    except Exception as e:
-                        logger.error("Failed to parse ask_eda arguments: %s", e)
-                        question = ""
-                    logger.info(f"Red flags agent calling ask_eda: {question}")
-
-                    if not question:
-                        tool_output = "Error: Missing question parameter"
-                    elif not data_path:
-                        tool_output = "Error: EDA not available (data_path not provided)"
-                    else:
-                        tool_output = ask_eda(
-                            question=question,
-                            description=description,
-                            data_path=data_path,
-                            timeout_seconds=60, # Shorter timeout for red flags stage
-                        )
-
-                        input_list.append({
-                            "type": "function_call_output",
-                            "call_id": item.call_id,
-                            "output": json.dumps({
-                                "insights": tool_output,
-                            })
-                        })
-
-        if tool_calls:
-            continue
-
-        # No tool calls -> final response
-        final_content = response.output_text or ""
-        logger.info(f"Red flags identification completed at step {step + 1}")
-        return final_content
-
-    # Max steps reached
-    logger.warning("Red flags identification reached max_steps, returning current response")
-    return response.output_text or ""
+    final_content = response.output_text or ""
+    logger.info("Red flags identification completed in single pass")
+    return final_content
 
 @weave.op()
 def search_sota_suggestions(
@@ -384,20 +317,3 @@ def execute_code_with_oom_retry(
 
     # No OOM detected - return successfully
     return output, total_wait_time
-
-def get_tools():
-    return [
-        {
-            "type": "function",
-            "name": "ask_eda",
-            "description": "Ask a question to the EDA expert",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "question": {"type": "string", "description": "The question to ask the EDA expert"}
-                },
-            },
-            "additionalProperties": False,
-            "required": ['question']
-        }
-    ]

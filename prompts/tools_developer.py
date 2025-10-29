@@ -43,49 +43,67 @@ Return a single JSON object within ```json backticks with the following fields (
 """
 
 def red_flags_system() -> str:
-    return """You will receive: a Kaggle competition description, an initial script, and associated logs for analysis. Your purpose is to identify red flags in the current approach.
+    return """You will be provided with a Kaggle competition description, an initial code script, and complete logs for your analysis. Your primary task is to identify conceptual red flags in the current approach by directly reviewing both the code and logs.
 
-Begin with a concise checklist (3-7 bullets) highlighting high-level conceptual red flags found from the code/logs and your intended strategies to address them. Focus on conceptual insights rather than implementation specifics. Use '- ' for each bullet. If fewer than three significant points are found, list as many as possible and explicitly state: "Fewer than 3 high-level red flags or strategies identified."
+Begin with a concise checklist (3-7 bullets) highlighting high-level conceptual red flags found from the code/logs and your intended strategies to address them. Focus on conceptual insights rather than implementation specifics. Use '- ' for each bullet. 
+Perform web searches to study how the model used in the code works under the hood, common pitfalls and effective ways to improve performance with this model architecture in similar tasks.
 
 ## Hard Constraints
 - Do NOT look up or use actual winning solutions from this competition.
 - Do NOT rely on prior knowledge of solutions for this competition.
 - If there are certain bugs in the code, you must point them out.
 
-## Tools
-- `ask_eda(question)`: Perform Python-based exploratory data analysis (EDA) on the local dataset or submission files to gather insights or test hypothesis relevant to the code/logs for debugging purposes.
+## Analysis Guidelines
+Thoroughly scan the code and logs for these categories of issues:
+
+**Code Issues:**
+- Data preprocessing bugs
+- Incorrect model setup
+- Bugs in loss/metric implementation
+- Faulty training configuration
+- Inference pipeline errors
+- Presence of risky or score-damaging components
+
+**Log/Performance Issues:**
+- Discrepancies between training/validation/leaderboard scores indicating overfitting/underfitting or bugs in the code
+- NaN/Inf values in losses or metrics
+- Training instability
+- Implausible values in metrics (e.g. class weights)
+- Score far from competitive baselines (you are given a target score)
+- Submission distribution anomalies (e.g. all one class, constant values)
 
 ## Output Format
 
 Your response MUST follow these sections, in order:
 
-### Possible issues in the current code
-- ...(analyze the current score and logs, see how far is it away from a competitive score, and what are the likely causes)
+### Checklist
+- ...(3-7 high-level conceptual bullet points)
 
-Then, summarize the result of each tool call in less than 3 lines in a Markdown format, then at the end, provide a short summary of the overall findings, challenges and recommendations.
+### Detailed Analysis
 
-### Tool Call 1
-- Purpose:
-- Result:
+#### 1. Code Issues
+- ...(preprocessing, model setup, loss/metric bugs, training/inference setup, risky components)
 
-### Tool Call 2
-- Purpose:
-- Result:
+#### 2. Log / Performance Issues
+- ...(training/validation gaps, NaN/Inf values, instability, absurd metrics)
 
-...
+#### 3. Web Search Findings
+- ...(summary of relevant insights from web searches on the model architecture, pitfalls, and improvement strategies)
 
 ### Final Summary
-... (5-10 lines summarizing red flags)
+... (5-10 lines synthesizing the most critical red flags and their likely impact on competition score)
+... (3-5 lines on web search insights that inform potential improvements)
+... (Training time in the logs, if available)
 
 ### Input Schema
 - <competition description> (string): Detailed overview of the Kaggle competition (task, data, evaluation metric).
-- <researcher plans> (optional, list of strings): Previous plans for the task.
 - <initial script> (string): Starting code.
 - <logs> (string): Output logs from training/evaluation of the script.
+- <leaderboard_score> and <analysis> fields: the current leaderboard score and target score for context.
 
 ### Output Fields
 - Checklist (markdown list)
-- Tool call purpose and result (markdown)
+- Detailed Analysis (3 markdown sections)
 - Final Summary (markdown)
 """
 
@@ -105,7 +123,7 @@ def red_flags_user(
 
 def sota_system(allow_multi_fold: bool = False) -> str:
     # Build constraints based on mode
-    fold_constraint = "" if allow_multi_fold else "- Do NOT propose ensembling, blending, multi-fold training, stacking, or calibration."
+    # fold_constraint = "" if allow_multi_fold else "- Do NOT propose ensembling, blending, multi-fold training, stacking, or calibration."
 
     return f"""You will receive: a Kaggle competition description, one or more researcher plans, an initial script/logs, and potential identified red flags.
 
@@ -116,22 +134,22 @@ Conduct a web search to identify ways to improve the competition metric with the
 ## Hard Constraints
 - Do NOT look up or use actual winning solutions from this competition.
 - Do NOT rely on prior knowledge of solutions for this competition.
-{fold_constraint}
 - Do NOT change the model family used in the initial script; only suggest enhancements around it.
 - If there certain bugs in the code which you identified or in <red_flags>, you MUST FIX THEM FIRST.
 
 Generate THREE distinct suggestions, each from a different strategic category:
 1. **Data / Feature Engineering / Validation Enhancement** — Improving data representation or quality, or validation strategies.
 2. **Architectural Enhancement** — Enhancing model design without altering the backbone, such as adding auxiliary heads, applying regularization, or adjusting the training regime.
-3. **Removing Existing Components** - If you believe there are existing components that are unstable or detrimental to performance, suggest removing or replacing them with a brief justification.
+3. **Hyperparameter Enhancement** - Optimizing hyperparameters like learning rate, batch size, or number of epochs to improve model performance.
+4. **Removing Existing Components** - If you believe there are existing components that are unstable or detrimental to performance, suggest removing or replacing them with a brief justification.
 
 For each:
-- Provide one high-impact suggestion to improve the competition metric, with an explanation (~100 words) describing its benefits.
+- Provide one high-impact suggestion to improve the competition metric, with an explanation (~100 words) describing its benefits. The suggestion should be executable within 1 hour.
 - Clearly differentiate suggestions using numbered headings (e.g., '#### 1. Data / Feature Engineering Suggestion').
 - Ensure suggestions are complementary and non-overlapping.
 
 After presenting suggestions, validate the relevance of each to the competition details and metric in 1-2 sentences, precisely specifying your validation criteria and referencing key inputs where possible.
-Rank the suggestions based on how likely they are to improve the competition score, considering feasibility and impact.
+Rank the suggestions based on how likely they are to improve the competition score, considering feasibility and impact, and consider execution time if possible.
 Use the precise output structure and examples below for all scenarios, including errors or missing input.
 
 ## Output Format
@@ -148,7 +166,10 @@ Your response MUST follow these sections, in order:
 #### 2. Architectural Enhancement Suggestion
 - ...(explanation — improvements cannot alter the backbone model from the initial script)
 
-#### 3. Removing Existing Components Suggestion
+#### 3. Hyperparameter Enhancement Suggestion
+- ...(explanation)
+
+#### 4. Removing Existing Components Suggestion
 - ...(explanation)
 
 ### Validation
@@ -190,13 +211,13 @@ Never repeat an idea from <previous failed ideas>, and avoid blacklisted or prev
 - <researcher plans> (optional, list of strings): Previous plans for the task.
 - <initial script> (string): Starting code.
 - <logs> (string): Output logs from training/evaluation of the script.
-- <potential identified red flags> (string): Any potential issues or areas of concern identified in the code or logs.
+- <potential identified red flags> (string): Any potential issues or areas of concern identified in the code or logs. It may contain the training time of the initial script.
 - <previous suggestion executed> (string): Most recently attempted suggestion.
 - <previous failed ideas> (optional, list of strings): Suggestions that have previously failed or been blacklisted.
 
 ### Output Fields
 - Checklist (markdown list)
-- Research and Suggestion (three markdown sections)
+- Research and Suggestion (four markdown sections)
 - Validation (markdown)
 - Previous Suggestion Review (strict JSON)
 - New Suggestion Summary (strict JSON)

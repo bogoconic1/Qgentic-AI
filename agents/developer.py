@@ -876,13 +876,11 @@ class DeveloperAgent:
                     # Format LATER recommendations for context
                     later_context = self._format_later_recommendations()
 
-                    # STAGE 1: Identify red flags using EDA tool-calling
-                    self.logger.info("Stage 1: Identifying red flags with EDA...")
+                    # STAGE 1: Identify red flags via direct analysis
+                    self.logger.info("Stage 1: Identifying red flags via direct analysis...")
                     red_flags_response = search_red_flags(
                         description=self.description,
                         context=code_with_logs,
-                        data_path=str(self.base_dir),
-                        submission_path=str(submission_path) if submission_path else None,
                     )
                     self.logger.info("Red flags response length: %d chars", len(red_flags_response))
 
@@ -1021,8 +1019,6 @@ class DeveloperAgent:
                         red_flags_response = search_red_flags(
                             description=self.description,
                             context=code_with_logs_error,
-                            data_path=str(self.base_dir),
-                            submission_path=None,  # No submission on timeout/OOM
                         )
                         self.logger.info(f"Red flags analysis complete for {error_type} (length: %d chars)", len(red_flags_response))
 
