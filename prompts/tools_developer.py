@@ -234,6 +234,7 @@ def sota_user(
     executed_code_text: str,
     context: str,
     outcome_status: str,
+    successful_ideas_text: str = "No successful ideas yet.",
 ) -> str:
     return f"""<competition description>
 {description}
@@ -245,9 +246,13 @@ def sota_user(
 {red_flags}
 </potential identified red flags>
 
-<previous failed ideas> DO NOT TRY THESE AGAIN
+<previous failed ideas from ALL models> DO NOT TRY THESE AGAIN
 {failed_ideas_text}
-</previous failed ideas>
+</previous failed ideas from ALL models>
+
+<successful ideas from ALL models> CONSIDER ADAPTING THESE
+{successful_ideas_text}
+</successful ideas from ALL models>
 
 <previous suggestion executed>
 {executed_suggestion_text}
@@ -260,5 +265,11 @@ def sota_user(
 {context}
 
 Outcome status: {outcome_status}
+
+IMPORTANT: When suggesting improvements:
+1. Avoid ideas similar to those in <previous failed ideas from ALL models> - these have been tried across multiple models and failed
+2. Consider adapting ideas from <successful ideas from ALL models> - these worked for other models and may be applicable here
+3. Use your reasoning to determine if a failure is model-specific or universal
+4. Text variations are OK - use semantic understanding to detect if your suggestion is essentially the same as a failed idea
 """
 

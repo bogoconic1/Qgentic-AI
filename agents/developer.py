@@ -3,6 +3,7 @@ import math
 import os
 import re
 import time
+import threading
 from pathlib import Path
 from typing import Optional
 import json
@@ -67,6 +68,12 @@ class DeveloperAgent:
     - Success condition: writes submission.csv at
       <task_root>/<slug>/<outputs_dir>/<iteration>/submission.csv
     """
+
+    # Class-level shared state across all parallel DeveloperAgent instances
+    # This enables cross-model learning to avoid duplicate failures
+    _shared_blacklisted_ideas: list[str] = []
+    _shared_successful_ideas: list[str] = []
+    _lock = threading.Lock()
 
     def __init__(self, slug: str, iteration: int, model_name: Optional[str] = None, model_recommendations: Optional[str] = None, later_recommendations: Optional[dict] = None, cpu_core_range: Optional[list[int]] = None, gpu_identifier: Optional[str] = None, gpu_isolation_mode: str = "none"):
         load_dotenv()
@@ -613,8 +620,43 @@ class DeveloperAgent:
         entry = suggestion
         if reason:
             entry = f"{suggestion} -- {reason}"
+
+        # Add to instance-level blacklist
         if entry not in self.blacklisted_ideas:
             self.blacklisted_ideas.append(entry)
+
+        # Add to shared blacklist (thread-safe) for cross-model learning
+        with DeveloperAgent._lock:
+            if entry not in DeveloperAgent._shared_blacklisted_ideas:
+                DeveloperAgent._shared_blacklisted_ideas.append(entry)
+                self.logger.info("Added to shared blacklist: %s", entry)
+
+    def _register_success(self, suggestion: str) -> None:
+        """Register successful idea to both instance and shared pool."""
+        if not suggestion:
+            return
+
+        # Add to instance-level success list
+        if suggestion not in self.successful_ideas:
+            self.successful_ideas.append(suggestion)
+
+        # Add to shared success list (thread-safe) for cross-model learning
+        with DeveloperAgent._lock:
+            if suggestion not in DeveloperAgent._shared_successful_ideas:
+                DeveloperAgent._shared_successful_ideas.append(suggestion)
+                self.logger.info("Added to shared successes: %s", suggestion)
+
+    def _get_all_failed_ideas(self) -> list[str]:
+        """Get combined blacklist from instance + all other threads."""
+        with DeveloperAgent._lock:
+            shared_snapshot = DeveloperAgent._shared_blacklisted_ideas.copy()
+        return list(set(self.blacklisted_ideas + shared_snapshot))
+
+    def _get_all_successful_ideas(self) -> list[str]:
+        """Get combined successes from instance + all other threads."""
+        with DeveloperAgent._lock:
+            shared_snapshot = DeveloperAgent._shared_successful_ideas.copy()
+        return list(set(self.successful_ideas + shared_snapshot))
 
     def _find_most_recent_valid_version(self, current_version: int) -> tuple[int, Optional[str]]:
         """Find the most recent version that is valid for rollback.
@@ -921,13 +963,26 @@ class DeveloperAgent:
 
                     # STAGE 2: Generate SOTA suggestions based on red flags
                     self.logger.info("Stage 2: Generating SOTA suggestions based on red flags...")
+
+                    # Get combined ideas from this model + all other parallel models
+                    all_failed_ideas = self._get_all_failed_ideas()
+                    all_successful_ideas = self._get_all_successful_ideas()
+
+                    self.logger.info("Using %d failed ideas (%d from this model, %d shared from other models)",
+                                   len(all_failed_ideas), len(self.blacklisted_ideas),
+                                   len(all_failed_ideas) - len(self.blacklisted_ideas))
+                    self.logger.info("Using %d successful ideas (%d from this model, %d shared from other models)",
+                                   len(all_successful_ideas), len(self.successful_ideas),
+                                   len(all_successful_ideas) - len(self.successful_ideas))
+
                     sota_suggestions = self._call_sota_suggestions(
                         description=self.description,
                         context=code_with_logs,
                         red_flags=final_summary,
                         executed_suggestion=self.last_suggestion,
                         failed_to_improve_score=not improvement,
-                        failed_ideas=self.blacklisted_ideas,
+                        failed_ideas=all_failed_ideas,
+                        successful_ideas=all_successful_ideas,
                         executed_code=self.last_suggestion_code,
                         later_recommendations=later_context,
                     )
@@ -969,6 +1024,7 @@ class DeveloperAgent:
                     # Register as successful idea if: not blacklisted + executed successfully
                     if self.last_suggestion not in self.successful_ideas:
                         self.successful_ideas.append(self.last_suggestion)
+                        self._register_success(self.last_suggestion)  # Add to shared pool
                         self.logger.info(
                             "Previous suggestion marked as successful: %s (v%s executed successfully and not blacklisted)",
                             self.last_suggestion,
