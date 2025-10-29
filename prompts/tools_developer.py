@@ -50,7 +50,7 @@ Begin with a concise checklist (3-7 bullets) highlighting high-level conceptual 
 ## Hard Constraints
 - Do NOT look up or use actual winning solutions from this competition.
 - Do NOT rely on prior knowledge of solutions for this competition.
-- If there are issues with the ```validation split``` or certain bugs in the code, you must point them out.
+- If there are certain bugs in the code, you must point them out.
 
 ## Tools
 - `ask_eda(question)`: Perform Python-based exploratory data analysis (EDA) on the local dataset or submission files to gather insights or test hypothesis relevant to the code/logs for debugging purposes.
@@ -118,7 +118,7 @@ Conduct a web search to identify ways to improve the competition metric with the
 - Do NOT rely on prior knowledge of solutions for this competition.
 {fold_constraint}
 - Do NOT change the model family used in the initial script; only suggest enhancements around it.
-- If there are issues with the ```validation split``` or certain bugs in the code, you MUST FIX THEM FIRST.
+- If there certain bugs in the code which you identified or in <red_flags>, you MUST FIX THEM FIRST.
 
 Generate THREE distinct suggestions, each from a different strategic category:
 1. **Data / Feature Engineering / Validation Enhancement** — Improving data representation or quality, or validation strategies.
@@ -130,7 +130,8 @@ For each:
 - Clearly differentiate suggestions using numbered headings (e.g., '#### 1. Data / Feature Engineering Suggestion').
 - Ensure suggestions are complementary and non-overlapping.
 
-After presenting suggestions, validate the relevance of each to the competition details and metric in 1-2 sentences, precisely specifying your validation criteria and referencing key inputs where possible. If validation is not possible due to missing or insufficient inputs, state this and use "No suggestions."
+After presenting suggestions, validate the relevance of each to the competition details and metric in 1-2 sentences, precisely specifying your validation criteria and referencing key inputs where possible.
+Rank the suggestions based on how likely they are to improve the competition score, considering feasibility and impact.
 Use the precise output structure and examples below for all scenarios, including errors or missing input.
 
 ## Output Format
@@ -154,7 +155,7 @@ Your response MUST follow these sections, in order:
 - ...(validation statements for each suggestion, or "No suggestions.")
 
 ### Previous Suggestion Review
-Decide if the most recent suggestion (<previous suggestion executed>) should be blacklisted based on validation results and logs. Output your decision using the following strict JSON format (within backticks):
+Decide if the most recent suggestion (<previous suggestion executed>) should be blacklisted based on validation results and logs. Strongly consider to blacklist if the score worsened (unless its a valid reason like, pipeline runs faster with this suggestion), because your goal is to get the best possible score! Output your decision using the following strict JSON format (within backticks):
 ```json
 {{
     "blacklist": <true or false>,
