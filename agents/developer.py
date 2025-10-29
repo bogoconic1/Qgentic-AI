@@ -97,6 +97,7 @@ class DeveloperAgent:
         self.successful_ideas: list[str] = []  # Suggestions that led to successful, non-blacklisted executions
         self.successful_versions: set[int] = set()  # Versions that executed successfully (generated submission)
         self.blacklisted_versions: set[int] = set()  # Versions that were explicitly blacklisted by SOTA
+        self.version_scores: dict[int, float] = {}  # Map version number to its score
         self.last_suggestion: Optional[str] = None
         self.last_suggestion_code: Optional[str] = None
         self.best_code: Optional[str] = None
@@ -827,6 +828,9 @@ class DeveloperAgent:
                         run_score = info.get('score') if info else None
                         self._log_attempt_score(attempt, run_score)
                         self.logger.info("Your result on the test set is %s", run_score)
+                        # Store score for this version
+                        if run_score is not None:
+                            self.version_scores[version] = run_score
                 except Exception as exc:
                     grade_feedback = f"Failed to run grading tool: {exc}"
                     self.logger.exception("Grading command failed for version %s", version)
@@ -962,7 +966,24 @@ class DeveloperAgent:
                 else:
                     summary_line = "The latest attempt did not improve the score; address the issues flagged below."
 
-                if previous_best_display != "N/A" and run_score_display != "N/A":
+                # Choose consistent base for the next patch: use most recent valid when blacklisted, else current version.
+                rollback_code = None
+                rollback_version = None
+                if blacklist_flag:
+                    rollback_version, rollback_code = self._find_most_recent_valid_version(version)
+                    base_version_for_next_patch = rollback_version
+                else:
+                    base_version_for_next_patch = version
+
+                # When blacklisted, show the rollback version's score instead of best_score
+                if blacklist_flag and rollback_version is not None and rollback_version in self.version_scores:
+                    rollback_score = self.version_scores[rollback_version]
+                    rollback_score_display = self._format_score_value(rollback_score)
+                    if rollback_score_display != "N/A" and run_score_display != "N/A":
+                        summary_line += (
+                            f" Rolling back to v{rollback_version} (score: {rollback_score_display}). Current attempt scored: {run_score_display}."
+                        )
+                elif previous_best_display != "N/A" and run_score_display != "N/A":
                     summary_line += (
                         f" Previous best: {previous_best_display}. Current score: {run_score_display}."
                     )
@@ -972,14 +993,6 @@ class DeveloperAgent:
                     f"{suggestion_block}\n"
                     f"Remember:\n- write logs to {next_log_path}\n- and produce the next submission at {next_submission_path}"
                 )
-
-                # Choose consistent base for the next patch: use most recent valid when blacklisted, else current version.
-                rollback_code = None
-                if blacklist_flag:
-                    rollback_version, rollback_code = self._find_most_recent_valid_version(version)
-                    base_version_for_next_patch = rollback_version
-                else:
-                    base_version_for_next_patch = version
                 next_instr = self._append_patch_directive(next_instr, base_version_for_next_patch)
 
                 if blacklist_flag and rollback_code:
