@@ -676,7 +676,7 @@ class DeveloperAgent:
         input_list = [{"role": "user", "content": user_prompt}]
         
         attempt = 0
-        for _ in range(16): # max 16 attempts
+        for _ in range(32):
             now = time.time()
             if max_time_seconds is not None and now >= deadline:
                 self.logger.info("Time budget exhausted (%.2f minutes)", (deadline - start_time) / 60.0)
@@ -685,9 +685,6 @@ class DeveloperAgent:
             attempt += 1
 
             artifact = wandb.Artifact(f'{self.iteration}-{self.slug}', type='files')
-
-            # if len(input_list) > 6:s
-            #     input_list = input_list[:1] + input_list[-5:]
 
             minutes_left = ((deadline - now) / 60.0) if max_time_seconds is not None else float('inf')
             try:

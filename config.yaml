@@ -21,9 +21,8 @@ runtime:
   enable_mig: true  # Use NVIDIA MIG for single-GPU partitioning (auto-detects number of workers from MIG instances)
   enable_multi_gpu: false  # Use multi-GPU setup (auto-detects number of workers from available GPUs)
   enable_cpu_affinity: true  # Pin processes to specific CPU cores
-  # Time limits for developer phases (in seconds)
-  baseline_time_limit: 7200  # 2 hours for baseline development
-  enhancement_time_limit: 7200  # 2 hours for enhancement development
+  # Time limit for developer phase (in seconds)
+  baseline_time_limit: 14400  # 4 hours for baseline development (extended from 2h since Phase 5 removed)
 paths:
   task_root: "task"
   outputs_dirname: "outputs"
