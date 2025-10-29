@@ -93,6 +93,7 @@ Your response MUST follow these sections, in order:
 ### Final Summary
 ... (5-10 lines synthesizing the most critical red flags and their likely impact on competition score)
 ... (3-5 lines on web search insights that inform potential improvements)
+... (Training time in the logs, if available)
 
 ### Input Schema
 - <competition description> (string): Detailed overview of the Kaggle competition (task, data, evaluation metric).
@@ -122,7 +123,7 @@ def red_flags_user(
 
 def sota_system(allow_multi_fold: bool = False) -> str:
     # Build constraints based on mode
-    fold_constraint = "" if allow_multi_fold else "- Do NOT propose ensembling, blending, multi-fold training, stacking, or calibration."
+    # fold_constraint = "" if allow_multi_fold else "- Do NOT propose ensembling, blending, multi-fold training, stacking, or calibration."
 
     return f"""You will receive: a Kaggle competition description, one or more researcher plans, an initial script/logs, and potential identified red flags.
 
@@ -133,22 +134,22 @@ Conduct a web search to identify ways to improve the competition metric with the
 ## Hard Constraints
 - Do NOT look up or use actual winning solutions from this competition.
 - Do NOT rely on prior knowledge of solutions for this competition.
-{fold_constraint}
 - Do NOT change the model family used in the initial script; only suggest enhancements around it.
 - If there certain bugs in the code which you identified or in <red_flags>, you MUST FIX THEM FIRST.
 
 Generate THREE distinct suggestions, each from a different strategic category:
 1. **Data / Feature Engineering / Validation Enhancement** — Improving data representation or quality, or validation strategies.
 2. **Architectural Enhancement** — Enhancing model design without altering the backbone, such as adding auxiliary heads, applying regularization, or adjusting the training regime.
-3. **Removing Existing Components** - If you believe there are existing components that are unstable or detrimental to performance, suggest removing or replacing them with a brief justification.
+3. **Hyperparameter Enhancement** - Optimizing hyperparameters like learning rate, batch size, or number of epochs to improve model performance.
+4. **Removing Existing Components** - If you believe there are existing components that are unstable or detrimental to performance, suggest removing or replacing them with a brief justification.
 
 For each:
-- Provide one high-impact suggestion to improve the competition metric, with an explanation (~100 words) describing its benefits.
+- Provide one high-impact suggestion to improve the competition metric, with an explanation (~100 words) describing its benefits. The suggestion should be executable within 1 hour.
 - Clearly differentiate suggestions using numbered headings (e.g., '#### 1. Data / Feature Engineering Suggestion').
 - Ensure suggestions are complementary and non-overlapping.
 
 After presenting suggestions, validate the relevance of each to the competition details and metric in 1-2 sentences, precisely specifying your validation criteria and referencing key inputs where possible.
-Rank the suggestions based on how likely they are to improve the competition score, considering feasibility and impact.
+Rank the suggestions based on how likely they are to improve the competition score, considering feasibility and impact, and consider execution time if possible.
 Use the precise output structure and examples below for all scenarios, including errors or missing input.
 
 ## Output Format
@@ -165,7 +166,10 @@ Your response MUST follow these sections, in order:
 #### 2. Architectural Enhancement Suggestion
 - ...(explanation — improvements cannot alter the backbone model from the initial script)
 
-#### 3. Removing Existing Components Suggestion
+#### 3. Hyperparameter Enhancement Suggestion
+- ...(explanation)
+
+#### 4. Removing Existing Components Suggestion
 - ...(explanation)
 
 ### Validation
@@ -207,13 +211,13 @@ Never repeat an idea from <previous failed ideas>, and avoid blacklisted or prev
 - <researcher plans> (optional, list of strings): Previous plans for the task.
 - <initial script> (string): Starting code.
 - <logs> (string): Output logs from training/evaluation of the script.
-- <potential identified red flags> (string): Any potential issues or areas of concern identified in the code or logs.
+- <potential identified red flags> (string): Any potential issues or areas of concern identified in the code or logs. It may contain the training time of the initial script.
 - <previous suggestion executed> (string): Most recently attempted suggestion.
 - <previous failed ideas> (optional, list of strings): Suggestions that have previously failed or been blacklisted.
 
 ### Output Fields
 - Checklist (markdown list)
-- Research and Suggestion (three markdown sections)
+- Research and Suggestion (four markdown sections)
 - Validation (markdown)
 - Previous Suggestion Review (strict JSON)
 - New Suggestion Summary (strict JSON)
