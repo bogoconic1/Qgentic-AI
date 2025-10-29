@@ -98,6 +98,7 @@ class DeveloperAgent:
         self.successful_versions: set[int] = set()  # Versions that executed successfully (generated submission)
         self.blacklisted_versions: set[int] = set()  # Versions that were explicitly blacklisted by SOTA
         self.version_scores: dict[int, float] = {}  # Map version number to its score
+        self.global_suggestions: list[str] = []  # All suggestions with score impact: "suggestion (score improved/worsened/remained by DDD: XXX -> YYY)"
         self.last_suggestion: Optional[str] = None
         self.last_suggestion_code: Optional[str] = None
         self.best_code: Optional[str] = None
@@ -533,6 +534,36 @@ class DeveloperAgent:
             return "N/A"
         return f"{value}"
 
+    def _format_suggestion_entry(self, suggestion: str, previous_score: Optional[float], current_score: Optional[float]) -> str:
+        """Format a suggestion entry with score impact information.
+
+        Returns formatted string like:
+        - "suggestion (score improved by DDD: XXX -> YYY)"
+        - "suggestion (score worsened by DDD: XXX -> YYY)"
+        - "suggestion (score remained the same: XXX -> YYY)"
+        """
+        prev_display = self._format_score_value(previous_score)
+        curr_display = self._format_score_value(current_score)
+
+        # If either score is N/A, just append scores without calculating delta
+        if prev_display == "N/A" or curr_display == "N/A":
+            return f"{suggestion} (score: {prev_display} -> {curr_display})"
+
+        # Calculate delta
+        delta = current_score - previous_score
+        abs_delta = abs(delta)
+
+        # Determine if it's an improvement based on metric direction
+        if abs_delta < 1e-9:  # Essentially the same
+            impact = "remained the same"
+            return f"{suggestion} (score {impact}: {prev_display} -> {curr_display})"
+        elif (delta > 0 and not self.is_lower_better) or (delta < 0 and self.is_lower_better):
+            impact = f"improved by {abs_delta:.6f}"
+        else:
+            impact = f"worsened by {abs_delta:.6f}"
+
+        return f"{suggestion} (score {impact}: {prev_display} -> {curr_display})"
+
     def _parse_sota_response(self, raw: str) -> tuple[str, str, bool, str]:
         """Extract new suggestion, code snippet, blacklist decision, and rationale."""
         # ok to fallback if LLM cannot give response
@@ -907,6 +938,22 @@ class DeveloperAgent:
                 self.logger.info("SOTA suggestion: %s", sota_suggestions)
 
                 suggestion_text, code_snippet, blacklist_flag, blacklist_reason = self._parse_sota_response(sota_suggestions)
+
+                # Record the previous suggestion with its score impact (before updating self.last_suggestion)
+                if len(self.version_scores) == 1:
+                    # This is the first successful execution (could be v1, v5, etc.)
+                    initial_entry = f"Initial implementation (score: {self._format_score_value(run_score)})"
+                    self.global_suggestions.append(initial_entry)
+                    self.logger.info("Recorded initial implementation: %s", initial_entry)
+                elif self.last_suggestion and len(self.version_scores) > 1:
+                    # Find the score from the base version (the version this suggestion was built upon)
+                    base_version = self.next_patch_base_version if self.next_patch_base_version is not None else version - 1
+                    base_score = self.version_scores.get(base_version)
+                    current_score = run_score
+
+                    suggestion_entry = self._format_suggestion_entry(self.last_suggestion, base_score, current_score)
+                    self.global_suggestions.append(suggestion_entry)
+                    self.logger.info("Recorded suggestion with impact: %s", suggestion_entry)
 
                 if blacklist_flag and self.last_suggestion:
                     self._register_blacklist(self.last_suggestion, blacklist_reason)
