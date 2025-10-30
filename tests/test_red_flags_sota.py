@@ -92,7 +92,6 @@ sota_suggestions = search_sota_suggestions(
     context=context,
     red_flags=final_summary,
     executed_suggestion="Initial model implementation",
-    failed_to_improve_score=True,
     failed_ideas=[],
     executed_code=None,
     later_recommendations=None,

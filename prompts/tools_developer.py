@@ -262,7 +262,6 @@ def sota_user(
     executed_suggestion_text: str,
     executed_code_text: str,
     context: str,
-    outcome_status: str,
     shared_suggestions_text: str = "No shared suggestions yet.",
 ) -> str:
     return f"""<competition description>
@@ -292,7 +291,5 @@ def sota_user(
 </previous code snippet applied>
 
 {context}
-
-Outcome status: {outcome_status}
 """
 

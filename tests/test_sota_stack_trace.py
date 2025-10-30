@@ -28,8 +28,8 @@ with open("/workspace/gstar-project/task/us-patent-phrase-to-phrase-matching/out
 suggestions = search_sota_suggestions(
     description,
     code + "\n\n" + logs,
+    red_flags="Test red flags",
     executed_suggestion=None,
-    failed_to_improve_score=True,
     failed_ideas=[],
     executed_code=None,
 )

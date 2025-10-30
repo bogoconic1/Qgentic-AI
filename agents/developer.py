@@ -920,40 +920,45 @@ class DeveloperAgent:
 
                 code_with_logs += f"<leaderboard_score>\n{run_score}\n</leaderboard_score>\n"
 
-                previous_best = self.best_score
+                # Calculate target text once
+                if self.gold_threshold is not None:
+                    target_text = f"Let's push further to reach {self.gold_threshold}."
+                else:
+                    target_text = "Let's push further to reach an even stronger result."
+
+                # Compare against base version, not global best
+                base_version = self.next_patch_base_version if self.next_patch_base_version is not None else (version - 1)
+                base_score = self.version_scores.get(base_version, self.best_score)
                 run_score_display = self._format_score_value(run_score)
-                previous_best_display = self._format_score_value(previous_best)
-                improvement = self._is_improvement(run_score, previous_best)
+                improvement = self._is_improvement(run_score, base_score)
 
                 if improvement:
                     self.logger.info(
-                        "New best score achieved: %s (previous best was %s)",
+                        "Score improved from base v%s: %s -> %s (global best: %s)",
+                        base_version,
+                        base_score,
                         run_score,
-                        previous_best,
+                        self.best_score,
                     )
-                    self.best_score = run_score
-                    self.best_version = version
-                    if self.gold_threshold is not None:
-                        target_text = f"Let's push further to reach {self.gold_threshold}."
-                    else:
-                        target_text = "Let's push further to reach an even stronger result."
-
-                    analysis_msg = f"Nice work! The score has improved to {run_score_display}. {target_text}"
+                    # Update global best if this is better than global best
+                    if self._is_improvement(run_score, self.best_score):
+                        self.best_score = run_score
+                        self.best_version = version
+                        self.best_code = code_clean
+                        self.best_code_file = self._code_filename(version)
+                        self.logger.info("New global best achieved!")
                 else:
                     self.logger.info(
-                        "No improvement over previous best score of %s; current score is %s",
-                        previous_best,
+                        "No improvement from base v%s: %s (current score: %s)",
+                        base_version,
+                        base_score,
                         run_score,
                     )
-                    if previous_best_display != "N/A" and run_score_display != "N/A":
-                        analysis_msg = f"The latest run scored {run_score_display}, but the best remains {previous_best_display}. Please investigate the regression before proceeding."
-                    else:
-                        analysis_msg = "The latest run did not improve the benchmark. Please investigate the reasons before continuing."
+
+                # Simple, consistent message regardless of improvement
+                analysis_msg = f"The current score is {run_score_display}. {target_text}"
 
                 code_with_logs += f"<analysis>\n{analysis_msg}\n</analysis>\n"
-                if improvement:
-                    self.best_code = code_clean
-                    self.best_code_file = self._code_filename(version)
                 self.previous_runs.append((code_clean, run_score))
 
                 try:
@@ -985,7 +990,6 @@ class DeveloperAgent:
                         context=code_with_logs,
                         red_flags=final_summary,
                         executed_suggestion=self.last_suggestion,
-                        failed_to_improve_score=not improvement,
                         failed_ideas=self.blacklisted_ideas,  # Keep instance-level for context
                         shared_suggestions=shared_suggestions,  # New: shared across all models
                         executed_code=self.last_suggestion_code,

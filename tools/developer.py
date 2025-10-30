@@ -122,7 +122,6 @@ def search_sota_suggestions(
     context: str,
     red_flags: str,
     executed_suggestion: str | None,
-    failed_to_improve_score: bool,
     failed_ideas: list[str],
     executed_code: str | None = None,
     later_recommendations: str | None = None,
@@ -136,7 +135,6 @@ def search_sota_suggestions(
         context: Current code and logs context
         red_flags: Red flags identified from Stage 1 (final summary text)
         executed_suggestion: Most recently executed suggestion
-        failed_to_improve_score: Whether the last attempt failed to improve
         failed_ideas: List of blacklisted ideas from this model
         executed_code: Code snippet from last attempt
         later_recommendations: LATER recommendations for progressive improvement
@@ -161,7 +159,6 @@ def search_sota_suggestions(
 
     system_prompt = prompt_sota_system(allow_multi_fold=allow_multi_fold)
 
-    outcome_status = "No improvement" if failed_to_improve_score else "Improved or matched"
     user_prompt = prompt_sota_user(
         description=description,
         plans_section=suggestions_section,
@@ -170,7 +167,6 @@ def search_sota_suggestions(
         executed_suggestion_text=executed_suggestion_text,
         executed_code_text=executed_code_text,
         context=context,
-        outcome_status=outcome_status,
         shared_suggestions_text=shared_suggestions_text,
     )
 

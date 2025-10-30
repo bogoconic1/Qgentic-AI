@@ -18,7 +18,7 @@ def _get_hard_constraints(model_name: str, allow_multi_fold: bool = False) -> st
 - Place all `logging.info` statements for validation results (per fold and overall) as well as model loading, train/test set size; only log data loading/setup if directly relevant to validation.
 - Also emit concise `logging.info` statements for any computed quantities that can go really wrong (e.g. class weights, thresholds).
 - Place `logging.basicConfig()` at the start of the script.
-- Deep learning: always use `bfloat16`, **no** gradient checkpointing. Do not code fallback methods. You must call float() before casting to numpy() if needed.
+- Deep learning: **no** gradient checkpointing. Do not code fallback methods.
 - If you use `transformers.Trainer`, use eval_strategy instead of evaluation_strategy.
 - Do not use `try/except` to suppress errors.
 - Log final validation results, best epoch number and total training time after training.
