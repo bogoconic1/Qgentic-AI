@@ -1,10 +1,12 @@
 import os
 import json
 import shutil
+import tempfile
 from pathlib import Path
 from typing import Callable, Optional
 import numpy as np
 import pandas as pd
+from utils.grade import run_grade
 
 
 def move_best_code_to_ensemble_folder(slug: str, iteration: int):
@@ -116,136 +118,296 @@ def move_best_code_to_ensemble_folder(slug: str, iteration: int):
     return ensemble_folder
 
 
-def hill_climb_ensemble(
+def greedy_ensemble(
     submission_files: list[str],
     score_func: Callable[[pd.DataFrame], float],
+    model_names: list[str],
     target_col: str = "target",
     id_col: str = "id",
-    max_iterations: int = 100,
-    step_size: float = 0.05,
-    minimize: bool = False,
+    weight_min: float = -0.6,
+    weight_max: float = 0.6,
+    weight_step: float = 0.05,
+    minimize: bool = True,
     verbose: bool = True
 ) -> tuple[pd.DataFrame, dict]:
     """
-    Blend multiple submission files using hill climbing to find optimal weights.
+    Blend submissions using greedy forward selection.
+
+    Starts with the best single model, then iteratively adds models that improve the ensemble.
 
     Args:
         submission_files: List of paths to submission CSV files
-        score_func: Function that takes a DataFrame (with id and predictions) and returns a score
-                   For validation: pass a function that computes metric against ground truth
-                   For test: pass a function that evaluates predictions (e.g., consistency check)
-        target_col: Name of the prediction column in submission files (default: "target")
-        id_col: Name of the ID column in submission files (default: "id")
-        max_iterations: Maximum number of hill climbing iterations (default: 100)
-        step_size: Step size for weight adjustments (default: 0.05)
-        minimize: If True, minimize score; if False, maximize score (default: False)
+        score_func: Function that takes a DataFrame and returns a score
+        model_names: List of model names (same order as submission_files)
+        target_col: Name of the prediction column (default: "target")
+        id_col: Name of the ID column (default: "id")
+        weight_min: Minimum weight to try when adding a model (default: -0.6)
+        weight_max: Maximum weight to try when adding a model (default: 0.6)
+        weight_step: Step size for weight search (default: 0.001)
+        minimize: If True, minimize score; if False, maximize (default: True)
         verbose: Print progress information (default: True)
 
     Returns:
         Tuple of (blended_submission_df, metadata_dict)
-        - blended_submission_df: DataFrame with id_col and target_col containing weighted predictions
-        - metadata_dict: Dictionary with final weights and best score
     """
     if len(submission_files) < 2:
         raise ValueError("Need at least 2 submission files for ensembling")
 
-    # Load all submissions
+    # Load all submissions and sort by ID for consistent ordering
     submissions = []
     for file_path in submission_files:
         df = pd.read_csv(file_path)
         if id_col not in df.columns or target_col not in df.columns:
             raise ValueError(f"Submission {file_path} must contain '{id_col}' and '{target_col}' columns")
+        df = df.sort_values(by=id_col).reset_index(drop=True)
         submissions.append(df)
 
-    # Verify all submissions have same IDs and order
+    # Verify all submissions have same IDs
     base_ids = submissions[0][id_col].values
     for i, sub in enumerate(submissions[1:], start=1):
         if not np.array_equal(sub[id_col].values, base_ids):
-            raise ValueError(f"Submission {i} has different IDs or order than submission 0")
+            raise ValueError(f"Submission {i} has different IDs than submission 0 (even after sorting)")
 
     # Extract predictions as numpy arrays
     predictions = np.array([sub[target_col].values for sub in submissions])  # shape: (n_models, n_samples)
     n_models = len(submissions)
 
-    # Initialize weights uniformly
-    weights = np.ones(n_models) / n_models
-
-    def blend_predictions(w: np.ndarray) -> pd.DataFrame:
-        """Create blended submission using given weights."""
-        w_normalized = w / w.sum()  # Ensure weights sum to 1
-        blended = (predictions * w_normalized[:, np.newaxis]).sum(axis=0)
-        return pd.DataFrame({id_col: base_ids, target_col: blended})
-
-    # Evaluate initial score
-    best_weights = weights.copy()
-    current_blend = blend_predictions(best_weights)
-    best_score = score_func(current_blend)
+    # Step 1: Find best single model
+    best_model_idx = None
+    best_single_score = float('inf') if minimize else float('-inf')
 
     if verbose:
-        print(f"Initial score: {best_score:.6f} (weights: {best_weights})")
+        print("Finding best single model...")
 
-    # Hill climbing
-    for iteration in range(max_iterations):
-        improved = False
+    for i in range(n_models):
+        df = pd.DataFrame({id_col: base_ids, target_col: predictions[i]})
+        score = score_func(df)
+        if verbose:
+            print(f"  {model_names[i]}: {score:.6f}")
 
-        # Try adjusting each weight
-        for i in range(n_models):
-            # Try increasing weight i
-            new_weights = best_weights.copy()
-            new_weights[i] += step_size
+        is_better = (score < best_single_score) if minimize else (score > best_single_score)
+        if is_better:
+            best_single_score = score
+            best_model_idx = i
 
-            candidate_blend = blend_predictions(new_weights)
-            candidate_score = score_func(candidate_blend)
+    # Initialize ensemble with best single model
+    current_ensemble_preds = predictions[best_model_idx].copy()
+    model_weights = {model_names[best_model_idx]: 1.0}
+    remaining_indices = list(range(n_models))
+    remaining_indices.remove(best_model_idx)
 
-            # Check if improvement (depends on minimize flag)
-            is_better = (candidate_score < best_score) if minimize else (candidate_score > best_score)
+    if verbose:
+        print(f"\nInitial best single model: {model_names[best_model_idx]}, Score: {best_single_score:.6f}\n")
+        print("Starting greedy forward selection...")
 
-            if is_better:
-                best_score = candidate_score
-                best_weights = new_weights
-                improved = True
-                if verbose:
-                    print(f"Iteration {iteration+1}: New best score {best_score:.6f} (weights: {best_weights / best_weights.sum()})")
-                continue
+    # Step 2: Greedy forward selection
+    weight_range = np.arange(weight_min, weight_max, weight_step)
+    iteration = 0
 
-            # Try decreasing weight i (only if current weight allows it)
-            if best_weights[i] > step_size:
-                new_weights = best_weights.copy()
-                new_weights[i] -= step_size
+    while remaining_indices:
+        iteration += 1
+        best_improvement_score = best_single_score
+        best_idx, best_weight = None, None
 
-                candidate_blend = blend_predictions(new_weights)
-                candidate_score = score_func(candidate_blend)
+        # Try adding each remaining model
+        for idx in remaining_indices:
+            for wgt in weight_range:
+                # Blend: (1-wgt) * current_ensemble + wgt * candidate_model
+                candidate_preds = (1 - wgt) * current_ensemble_preds + wgt * predictions[idx]
+                df = pd.DataFrame({id_col: base_ids, target_col: candidate_preds})
+                score = score_func(df)
 
-                is_better = (candidate_score < best_score) if minimize else (candidate_score > best_score)
-
+                is_better = (score < best_improvement_score) if minimize else (score > best_improvement_score)
+                print(f"    Trying {model_names[idx]} with weight {wgt:.3f}: Score = {score:.6f}")
                 if is_better:
-                    best_score = candidate_score
-                    best_weights = new_weights
-                    improved = True
-                    if verbose:
-                        print(f"Iteration {iteration+1}: New best score {best_score:.6f} (weights: {best_weights / best_weights.sum()})")
+                    best_improvement_score = score
+                    best_idx = idx
+                    best_weight = wgt
 
-        # Early stopping if no improvement
-        if not improved:
+        # If improvement found, add the model
+        if best_idx is not None:
+            # Update ensemble predictions
+            current_ensemble_preds = (1 - best_weight) * current_ensemble_preds + best_weight * predictions[best_idx]
+
+            # Update weights: rescale existing weights by (1-best_weight), add new model
+            model_weights = {name: weight * (1 - best_weight) for name, weight in model_weights.items()}
+            model_weights[model_names[best_idx]] = best_weight
+
+            # Remove added model from remaining
+            remaining_indices.remove(best_idx)
+            best_single_score = best_improvement_score
+
             if verbose:
-                print(f"Converged after {iteration+1} iterations (no improvement)")
+                print(f"Iteration {iteration}: Added {model_names[best_idx]}, Weight: {best_weight:.5f}, Score: {best_improvement_score:.6f}")
+        else:
+            # No improvement, stop
+            if verbose:
+                print(f"No improvement found, stopping after {iteration} iterations")
             break
 
     # Create final blended submission
-    final_weights = best_weights / best_weights.sum()
-    final_blend = blend_predictions(best_weights)
+    final_blend = pd.DataFrame({id_col: base_ids, target_col: current_ensemble_preds})
+
+    # Convert weights dict to list in original order
+    weights_list = [model_weights.get(name, 0.0) for name in model_names]
 
     metadata = {
-        "weights": final_weights.tolist(),
-        "raw_weights": best_weights.tolist(),
-        "best_score": float(best_score),
+        "weights": weights_list,
+        "model_weights": model_weights,
+        "best_score": float(best_single_score),
         "submission_files": submission_files,
-        "n_iterations": iteration + 1,
-        "converged": not improved
+        "model_names": model_names,
+        "n_iterations": iteration
     }
 
     if verbose:
-        print(f"\nFinal weights: {final_weights}")
-        print(f"Final score: {best_score:.6f}")
+        print(f"\nFinal weights:")
+        for name, weight in model_weights.items():
+            print(f"  {name}: {weight:.5f}")
+        print(f"Final score: {best_single_score:.6f}")
 
     return final_blend, metadata
+
+
+def main(
+    slug: str,
+    iteration: int,
+    target_col: str = "target",
+    id_col: str = "id",
+    output_filename: str = "submission_ens.csv"
+) -> Path:
+    """
+    Main workflow: Prepare ensemble folder, blend submissions using greedy forward selection, and save result.
+
+    Automatically uses utils/grade.py to score candidates during optimization.
+
+    Args:
+        slug: Competition slug
+        iteration: Iteration number
+        target_col: Name of prediction column (default: "target")
+        id_col: Name of ID column (default: "id")
+        output_filename: Name of output file (default: "submission_ens.csv")
+
+    Returns:
+        Path to the saved ensemble submission file
+    """
+    print(f"\n{'='*60}")
+    print(f"Ensemble Pipeline for {slug} - Iteration {iteration}")
+    print(f"{'='*60}\n")
+
+    # Step 1: Prepare ensemble folder
+    print("Step 1: Preparing ensemble folder...")
+    ensemble_folder = move_best_code_to_ensemble_folder(slug, iteration)
+    print(f"Ensemble folder created at: {ensemble_folder}\n")
+
+    # Step 2: Load ensemble metadata
+    metadata_path = ensemble_folder / "ensemble_metadata.json"
+    with open(metadata_path, "r") as f:
+        ensemble_metadata = json.load(f)
+
+    # Step 3: Collect submission files
+    submission_files = []
+    model_names = []
+    model_scores = []
+
+    for model_name, model_data in ensemble_metadata.items():
+        submission_file = model_data.get("submission_file")
+        if submission_file:
+            submission_path = ensemble_folder / submission_file
+            if submission_path.exists():
+                submission_files.append(str(submission_path))
+                model_names.append(model_name)
+                model_scores.append(model_data.get("best_score"))
+            else:
+                print(f"Warning: Submission file {submission_file} not found, skipping {model_name}")
+        else:
+            print(f"Warning: No submission file for {model_name}, skipping")
+
+    if len(submission_files) < 2:
+        raise ValueError(f"Need at least 2 submissions for ensembling, found {len(submission_files)}")
+
+    print(f"Step 2: Found {len(submission_files)} submissions to blend:")
+    for name, score, file in zip(model_names, model_scores, submission_files):
+        print(f"  - {name}: score={score} ({Path(file).name})")
+    print()
+
+    # Step 3: Create scoring function using utils/grade.py
+    print("Step 3: Blending submissions using greedy forward selection with mlebench grading...")
+
+    def grade_submission(submission_df: pd.DataFrame) -> float:
+        """Score a submission using mlebench grade-sample."""
+        # Save to temporary file
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as tmp:
+            submission_df.to_csv(tmp.name, index=False)
+            tmp_path = tmp.name
+
+        try:
+            # Grade using mlebench
+            info, stdout, returncode, stderr = run_grade(tmp_path, slug)
+
+            if returncode != 0 or info is None:
+                print(f"  Warning: Grading failed (returncode={returncode})")
+                return float('-inf')  # Return worst possible score for failed grading
+
+            score = info.get('score')
+            if score is None:
+                print(f"  Warning: No score in grading output")
+                return float('-inf')
+
+            return float(score)
+        finally:
+            # Clean up temp file
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
+    # Step 4: Run greedy forward selection with automatic grading
+    blended_df, blend_metadata = greedy_ensemble(
+        submission_files=submission_files,
+        score_func=grade_submission,
+        model_names=model_names,
+        target_col=target_col,
+        id_col=id_col,
+        minimize=True,  # Minimize score (lower is better)
+        verbose=True
+    )
+
+    # Step 5: Save blended submission
+    output_path = ensemble_folder / output_filename
+    blended_df.to_csv(output_path, index=False)
+
+    # Save metadata
+    metadata_output_path = ensemble_folder / "ensemble_blend_metadata.json"
+    with open(metadata_output_path, "w") as f:
+        json.dump(blend_metadata, f, indent=2)
+
+    print(f"\n{'='*60}")
+    print(f"✓ Ensemble complete!")
+    print(f"  Output: {output_path}")
+    print(f"  Metadata: {metadata_output_path}")
+    print(f"  Method: Greedy forward selection")
+    print(f"  Final score: {blend_metadata.get('best_score', 'N/A')}")
+    print(f"  Iterations: {blend_metadata.get('n_iterations', 'N/A')}")
+    print(f"{'='*60}\n")
+
+    return output_path
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Ensemble multiple model submissions using greedy forward selection with automatic grading")
+    parser.add_argument("slug", type=str, help="Competition slug")
+    parser.add_argument("iteration", type=int, help="Iteration number")
+    parser.add_argument("--target-col", type=str, default="target", help="Target column name (default: target)")
+    parser.add_argument("--id-col", type=str, default="id", help="ID column name (default: id)")
+    parser.add_argument("--output", type=str, default="submission_ens.csv", help="Output filename (default: submission_ens.csv)")
+
+    args = parser.parse_args()
+
+    main(
+        slug=args.slug,
+        iteration=args.iteration,
+        target_col=args.target_col,
+        id_col=args.id_col,
+        output_filename=args.output
+    )
