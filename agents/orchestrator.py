@@ -74,6 +74,90 @@ def _get_available_gpus() -> list[int]:
     except Exception:
         return []
 
+def _ensure_conda_environments(num_workers: int) -> None:
+    """Create isolated conda environments for parallel baseline execution.
+
+    Args:
+        num_workers: Number of conda environments to create (one per parallel worker)
+    """
+    # Get the base environment name (current active environment)
+    base_env = os.environ.get('CONDA_DEFAULT_ENV', 'qgentic-ai')
+
+    # Check if environments should be reset on each run
+    reset_per_run = _RUNTIME_CFG.get("reset_conda_envs_per_run", True)
+
+    if reset_per_run:
+        print(f"Creating {num_workers} fresh conda environments for isolated execution (reset mode enabled)...")
+        print(f"Base environment: {base_env}")
+    else:
+        print(f"Ensuring {num_workers} conda environments for isolated package installation (reuse mode enabled)...")
+        print(f"Base environment: {base_env}")
+
+    # Check which environments exist
+    try:
+        result = subprocess.run(
+            ["conda", "env", "list"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        existing_envs = result.stdout
+    except Exception as e:
+        print(f"Warning: Could not check conda environments: {e}")
+        print("Skipping conda environment creation")
+        return
+
+    # Create or recreate environments based on config
+    for i in range(1, num_workers + 1):
+        env_name = f"qgentic-model-{i}"
+
+        if reset_per_run:
+            # Reset mode: Delete and recreate for clean slate
+            if env_name in existing_envs:
+                print(f"  Removing existing {env_name}...")
+                try:
+                    subprocess.run(
+                        ["conda", "env", "remove", "-n", env_name, "-y"],
+                        capture_output=True,
+                        text=True,
+                        check=True
+                    )
+                except subprocess.CalledProcessError as e:
+                    print(f"  Warning: Failed to remove {env_name}: {e}")
+
+            print(f"  Creating {env_name} (cloning from {base_env})...")
+            try:
+                subprocess.run(
+                    ["conda", "create", "--name", env_name, "--clone", base_env, "-y", "--quiet"],
+                    check=True,
+                    capture_output=True,
+                    text=True
+                )
+                print(f"  ✓ Created {env_name}")
+            except subprocess.CalledProcessError as e:
+                print(f"  Warning: Failed to create {env_name}: {e}")
+                print(f"  stderr: {e.stderr}")
+        else:
+            # Reuse mode: Only create if missing
+            if env_name in existing_envs:
+                print(f"  ✓ {env_name} already exists (reusing)")
+            else:
+                print(f"  Creating {env_name} (cloning from {base_env})...")
+                try:
+                    subprocess.run(
+                        ["conda", "create", "--name", env_name, "--clone", base_env, "-y", "--quiet"],
+                        check=True,
+                        capture_output=True,
+                        text=True
+                    )
+                    print(f"  ✓ Created {env_name}")
+                except subprocess.CalledProcessError as e:
+                    print(f"  Warning: Failed to create {env_name}: {e}")
+                    print(f"  stderr: {e.stderr}")
+
+    print("Conda environment setup complete!")
+    print()
+
 @weave.op()
 def _run_researcher_once(slug: str, iteration: int, run_id: int) -> tuple[int, str, int]:
     agent = ResearcherAgent(slug, iteration, run_id=run_id)
@@ -92,7 +176,7 @@ def _run_researcher_once(slug: str, iteration: int, run_id: int) -> tuple[int, s
     return run_id, str(plan_path), len(plan or "")
 
 @weave.op()
-def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, now_recommendations: dict, later_recommendations: dict, key: str, cpu_core_pool: Queue | None = None, gpu_pool: Queue | None = None, gpu_isolation_mode: str = "none"):
+def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, now_recommendations: dict, later_recommendations: dict, key: str, cpu_core_pool: Queue | None = None, gpu_pool: Queue | None = None, gpu_isolation_mode: str = "none", conda_env: str | None = None):
     """Run a single baseline DeveloperAgent and return results.
 
     Args:
@@ -105,6 +189,7 @@ def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, n
         cpu_core_pool: Queue of CPU core ranges to grab from (None = no affinity)
         gpu_pool: Queue of GPU identifiers (MIG UUIDs or GPU IDs) to grab from (None = use GPU 0)
         gpu_isolation_mode: Type of GPU isolation ("mig", "multi-gpu", or "none")
+        conda_env: Conda environment name to use for code execution (None = use current env)
     """
     # Acquire resources from pools (blocks until available)
     cpu_core_range = cpu_core_pool.get() if cpu_core_pool else None
@@ -123,7 +208,8 @@ def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, n
             later_recommendations=later_recommendations,
             cpu_core_range=cpu_core_range,
             gpu_identifier=gpu_identifier,
-            gpu_isolation_mode=gpu_isolation_mode
+            gpu_isolation_mode=gpu_isolation_mode,
+            conda_env=conda_env
         )
         best_score, best_code_file, blacklisted_ideas, successful_ideas = dev.run(max_time_seconds=baseline_time_limit)
         return key, best_score, best_code_file, blacklisted_ideas, successful_ideas
@@ -450,6 +536,9 @@ class Orchestrator:
             max_parallel_workers = int(_RUNTIME_CFG.get("baseline_max_parallel_workers", 1))
             print(f"GPU isolation disabled: Using baseline_max_parallel_workers={max_parallel_workers}")
 
+        # Ensure conda environments exist for isolated package installation
+        _ensure_conda_environments(max_parallel_workers)
+
         # Create resource pools for dynamic allocation
         total_cores = os.cpu_count() or 1
         num_models = len(now_recommendations_all)
@@ -498,13 +587,16 @@ class Orchestrator:
                 dev_iter = f"{self.iteration}_{idx}"
                 later_recs = later_recommendations_all.get(model_name, {})
 
+                # Assign isolated conda environment for this model
+                conda_env = f"qgentic-model-{idx}"
+
                 # Skip if this model already has results (unless you want to force rerun)
                 # To force rerun specific models, delete them from baseline_results.json
                 if key in existing_baseline_results:
                     print(f"Skipping {key} (iteration {dev_iter}): already completed")
                     continue
 
-                print(f"Queueing {key} (iteration {dev_iter}) for execution")
+                print(f"Queueing {key} (iteration {dev_iter}) for execution with conda env: {conda_env}")
                 tasks.append((
                     self.slug,
                     dev_iter,
@@ -514,7 +606,8 @@ class Orchestrator:
                     key,
                     cpu_core_pool,
                     gpu_pool,
-                    gpu_isolation_mode
+                    gpu_isolation_mode,
+                    conda_env
                 ))
 
             # Start with existing results (for incremental updates)

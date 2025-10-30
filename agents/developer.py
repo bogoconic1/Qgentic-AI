@@ -75,7 +75,7 @@ class DeveloperAgent:
     _shared_suggestions: list[str] = []
     _lock = threading.Lock()
 
-    def __init__(self, slug: str, iteration: int, model_name: Optional[str] = None, model_recommendations: Optional[str] = None, later_recommendations: Optional[dict] = None, cpu_core_range: Optional[list[int]] = None, gpu_identifier: Optional[str] = None, gpu_isolation_mode: str = "none"):
+    def __init__(self, slug: str, iteration: int, model_name: Optional[str] = None, model_recommendations: Optional[str] = None, later_recommendations: Optional[dict] = None, cpu_core_range: Optional[list[int]] = None, gpu_identifier: Optional[str] = None, gpu_isolation_mode: str = "none", conda_env: Optional[str] = None):
         load_dotenv()
         self.slug = slug
         self.iteration = iteration
@@ -92,6 +92,7 @@ class DeveloperAgent:
         self.cpu_core_range = cpu_core_range  # List of CPU cores to use (e.g., [0,1,2,...,41])
         self.gpu_identifier = gpu_identifier  # GPU identifier: MIG UUID or GPU ID (as string)
         self.gpu_isolation_mode = gpu_isolation_mode  # "mig", "multi-gpu", or "none"
+        self.conda_env = conda_env  # Conda environment name for isolated package installation
 
         # Metric-related defaults; overwritten once benchmark info is available
         self.gold_threshold: Optional[float] = None
@@ -140,6 +141,8 @@ class DeveloperAgent:
             "Initialized DeveloperAgent for slug=%s iteration=%s", self.slug, self.iteration
         )
         self.logger.debug("Outputs directory resolved to: %s", self.outputs_dir)
+        if self.conda_env:
+            self.logger.info("Conda environment assigned: %s", self.conda_env)
 
     def _configure_logger(self) -> None:
         # Create a unique logger for this instance to avoid cross-contamination in parallel execution
@@ -854,7 +857,8 @@ class DeveloperAgent:
             skip_oom_polling = self.gpu_isolation_mode in ["mig", "multi-gpu"]
             output, wait_time = execute_code_with_oom_retry(
                 str(code_path),
-                skip_oom_polling=skip_oom_polling
+                skip_oom_polling=skip_oom_polling,
+                conda_env=self.conda_env
             )
             self.logger.info("Execution output captured for version v%s", version)
             self.logger.debug("Execution output: %s", output)
