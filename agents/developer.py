@@ -111,7 +111,8 @@ class DeveloperAgent:
         self.best_code: Optional[str] = None
         self.best_code_file: Optional[str] = None
         self.best_version: Optional[int] = None
-        self.next_patch_base_version: Optional[int] = None
+        self.next_patch_base_version: Optional[int] = None  # For patch mode: which file to diff against
+        self.last_successful_version: Optional[int] = None  # For score comparison: most recent version with a score
 
         self._load_benchmark_info()
         self.best_score = float("inf") if self.is_lower_better else float("-inf")
@@ -911,12 +912,15 @@ class DeveloperAgent:
                         run_score = info.get('score') if info else None
                         self._log_attempt_score(attempt, run_score)
                         self.logger.info("Your result on the test set is %s", run_score)
-                        # Store score for this version
+                        # Store score for this version and track for comparison
+                        previous_successful_version = self.last_successful_version  # Save before updating
                         if run_score is not None:
                             self.version_scores[version] = run_score
+                            self.last_successful_version = version
                 except Exception as exc:
                     grade_feedback = f"Failed to run grading tool: {exc}"
                     self.logger.exception("Grading command failed for version %s", version)
+                    previous_successful_version = self.last_successful_version
 
                 code_with_logs += f"<leaderboard_score>\n{run_score}\n</leaderboard_score>\n"
 
@@ -926,11 +930,17 @@ class DeveloperAgent:
                 else:
                     target_text = "Let's push further to reach an even stronger result."
 
-                # Compare against base version, not global best
-                base_version = self.next_patch_base_version if self.next_patch_base_version is not None else (version - 1)
-                base_score = self.version_scores.get(base_version, self.best_score)
+                # Compare against most recent successful version (with a score)
+                if previous_successful_version is not None:
+                    base_version = previous_successful_version
+                    base_score = self.version_scores[base_version]
+                else:
+                    # This is the first version with a score, no comparison base
+                    base_version = None
+                    base_score = None
+
                 run_score_display = self._format_score_value(run_score)
-                improvement = self._is_improvement(run_score, base_score)
+                improvement = self._is_improvement(run_score, base_score) if base_score is not None else False
 
                 if improvement:
                     self.logger.info(
@@ -1004,15 +1014,14 @@ class DeveloperAgent:
                 suggestion_text, code_snippet, blacklist_flag, blacklist_reason = self._parse_sota_response(sota_suggestions)
 
                 # Record the previous suggestion with its score impact (before updating self.last_suggestion)
-                if len(self.version_scores) == 1:
-                    # This is the first successful execution (could be v1, v5, etc.)
+                if previous_successful_version is None:
+                    # This is the first successful execution (no previous version to compare against)
                     initial_entry = f"Initial implementation (score: {self._format_score_value(run_score)})"
                     self.global_suggestions.append(initial_entry)
                     self.logger.info("Recorded initial implementation: %s", initial_entry)
-                elif self.last_suggestion and len(self.version_scores) > 1:
-                    # Find the score from the base version (the version this suggestion was built upon)
-                    base_version = self.next_patch_base_version if self.next_patch_base_version is not None else version - 1
-                    base_score = self.version_scores.get(base_version)
+                elif self.last_suggestion:
+                    # We have a previous suggestion and a previous successful version to compare against
+                    # base_score was already calculated above (from previous_successful_version)
                     current_score = run_score
 
                     suggestion_entry = self._format_suggestion_entry(self.last_suggestion, base_score, current_score)
