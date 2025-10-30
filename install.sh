@@ -5,7 +5,7 @@ set -euo pipefail
 KAGGLE_JSON_PATH="${KAGGLE_JSON_PATH:-kaggle.json}"
 TASK_NAME="playground-series-s5e10"
 WORKDIR="${WORKDIR:-$(pwd)}"
-CACHE_DIR="/home/geremieyeo/.cache/mle-bench/data/${TASK_NAME}/prepared"
+CACHE_DIR="/home/ubuntu/.cache/mle-bench/data/${TASK_NAME}/prepared"
 
 # === FUNCTIONS ===
 

@@ -127,6 +127,7 @@ def search_sota_suggestions(
     executed_code: str | None = None,
     later_recommendations: str | None = None,
     allow_multi_fold: bool = False,
+    shared_suggestions: list[str] | None = None,
 ) -> str:
     """Stage 2: Use web search to generate SOTA suggestions based on red flags.
 
@@ -136,10 +137,12 @@ def search_sota_suggestions(
         red_flags: Red flags identified from Stage 1 (final summary text)
         executed_suggestion: Most recently executed suggestion
         failed_to_improve_score: Whether the last attempt failed to improve
-        failed_ideas: List of blacklisted ideas
+        failed_ideas: List of blacklisted ideas from this model
         executed_code: Code snippet from last attempt
         later_recommendations: LATER recommendations for progressive improvement
         allow_multi_fold: If True, allows multi-fold training and ensembling suggestions
+        shared_suggestions: List of all suggestions from all parallel models with outcomes
+                          Format: "Model <model> tried <suggestion> (score improved/worsened/remained by X: A -> B)"
 
     Returns:
         SOTA suggestions text with blacklist decision and new suggestion
@@ -148,7 +151,8 @@ def search_sota_suggestions(
     failed_ideas_text = "No prior ideas are blacklisted."
     executed_suggestion_text = executed_suggestion or "No previous suggestion executed; this is the first attempt."
     executed_code_text = executed_code or "No explicit code snippet was provided for the last attempt."
-    failed_ideas_text = "\n".join(f"- {idea}" for idea in failed_ideas)
+    failed_ideas_text = "\n".join(f"- {idea}" for idea in failed_ideas) if failed_ideas else "No prior ideas are blacklisted."
+    shared_suggestions_text = "\n".join(f"- {suggestion}" for suggestion in (shared_suggestions or [])) if shared_suggestions else "No shared suggestions yet."
 
     # Include LATER recommendations as context for more advanced suggestions
     suggestions_section = ""
@@ -167,6 +171,7 @@ def search_sota_suggestions(
         executed_code_text=executed_code_text,
         context=context,
         outcome_status=outcome_status,
+        shared_suggestions_text=shared_suggestions_text,
     )
 
     response = call_llm_with_retry(

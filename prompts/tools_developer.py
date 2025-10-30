@@ -131,6 +131,23 @@ Begin with a concise checklist (3-7 bullets) summarizing those red flags and you
 Set reasoning_effort = medium; ensure outputs are comprehensive yet focused on key conceptual improvements. For each substantive step, provide succinct validation in 1-2 sentences, referencing specific input fields where appropriate, and self-correct if main requirements appear unmet.
 Conduct a web search to identify ways to improve the competition metric with the given model, but do not look up or rely on actual winning solutions or prior knowledge specific to this competition.
 
+## Shared Experiments Analysis
+Each entry shows:
+- Which model tried the suggestion
+- What the suggestion was
+- Whether the score improved, worsened, or remained the same
+- The exact score change (before -> after)
+
+IMPORTANT: When analyzing shared experiments and generating new ideas:
+1. Look for patterns in experiments that worsened scores - avoid similar ideas
+2. Look for patterns in experiments that improved scores (and the raw scores are similar or better) - consider adapting them. Especially those that improved scores significantly.
+3. Consider model-specific vs universal patterns:
+   - If multiple different models tried similar ideas and all failed → likely universal issue
+   - If one model succeeded but others haven't tried it → worth adapting
+   - If one model failed but it's model-specific (e.g., "use Adam optimizer" for tree models) → might work for other model types. Use judgment.
+   - If adding something worsens score, and the current code has it, then it is likely detrimental and should be removed.
+4. Use semantic understanding - "if feature C = feature A + feature B" and "engineer a new feature C which is the sum of features A and B" are the same. Keep this in mind when making suggestions.
+
 ## Hard Constraints
 - Do NOT look up or use actual winning solutions from this competition.
 - Do NOT rely on prior knowledge of solutions for this competition.
@@ -159,21 +176,30 @@ Your response MUST follow these sections, in order:
 ### Checklist
 - ...(3-7 high-level conceptual bullet points)
 
+### Summary of Red Flags
+- ...(summarize the key red flags, if any, in 2-3 lines)
+
+### Summary of Shared Experiments
+- ...(1 liner on how far your score is from target score)
+- ...(summarize key patterns from shared experiments in 5-10 lines, what you should try and what you will not try based on this)
+- ...(guideline: if the improvement is very small compared to the gap between current and target score, then it is likely not impactful enough, you should research/attempt more creative/impactful ideas which may not be present in shared experiments)
+- If there is no shared experiments, state "No shared experiments yet."
+
 ### Research and Suggestion
-#### 1. Data / Feature Engineering / Validation Enhancement Suggestion
-- ...(explanation)
+#### 1. Data / Feature Engineering Suggestion
+- ...(explanation, if no suggestions, state "No suggestions.")
 
-#### 2. Architectural Enhancement Suggestion
-- ...(explanation — improvements cannot alter the backbone model from the initial script)
+#### 2. Validation Enhancement Suggestion
+- ...(explanation, if no suggestions, state "No suggestions.")
 
-#### 3. Hyperparameter Enhancement Suggestion
-- ...(explanation)
+#### 3. Architectural Enhancement Suggestion
+- ...(explanation — improvements cannot alter the backbone model from the initial script. If no suggestions, state "No suggestions.")
 
-#### 4. Removing Existing Components Suggestion
-- ...(explanation)
+#### 4. Hyperparameter Enhancement Suggestion
+- ...(explanation, if no suggestions, state "No suggestions.")
 
-### Validation
-- ...(validation statements for each suggestion, or "No suggestions.")
+#### 5. Removing Existing Components Suggestion
+- ...(explanation, if no suggestions, state "No suggestions.")
 
 ### Previous Suggestion Review
 Decide if the most recent suggestion (<previous suggestion executed>) should be blacklisted based on validation results and logs. Strongly consider to blacklist if the score worsened (unless its a valid reason like, pipeline runs faster with this suggestion), because your goal is to get the best possible score! Output your decision using the following strict JSON format (within backticks):
@@ -189,7 +215,7 @@ Propose the single best new idea (just one) to improve the competition score, sy
 ```json
 {{
     "suggestion": "<your proposed best next idea>",
-    "reasoning": "<why it is the best choice now>"
+    "reasoning": "<why it is the best choice now, referencing the red flags and shared suggestions analyses if relevant>"
 }}
 ```
 If no suggestion is viable, or you believe this model family has no hope of getting a competitive score, return:
@@ -203,7 +229,7 @@ If no suggestion is viable, or you believe this model family has no hope of gett
 ### Code
 Present a concise Python code snippet (within triple backticks labeled 'python') implementing your new idea. If no suggestion is given, leave this section empty (no code block).
 
-Never repeat an idea from <previous failed ideas>, and avoid blacklisted or previous suggestions.
+Never repeat an idea from <previous failed ideas>, and avoid blacklisted or previous suggestions. Leverage insights from <shared suggestions from ALL models> to avoid redundant or low-impact ideas.
 **IMPORTANT**: Do not use try/except or while loops in your code. Do not code fallback methods.
 
 ### Input Schema
@@ -214,10 +240,13 @@ Never repeat an idea from <previous failed ideas>, and avoid blacklisted or prev
 - <potential identified red flags> (string): Any potential issues or areas of concern identified in the code or logs. It may contain the training time of the initial script.
 - <previous suggestion executed> (string): Most recently attempted suggestion.
 - <previous failed ideas> (optional, list of strings): Suggestions that have previously failed or been blacklisted.
+- <shared suggestions from ALL models> (optional, string): A summary of suggestions attempted by other models, if available.
 
 ### Output Fields
 - Checklist (markdown list)
-- Research and Suggestion (four markdown sections)
+- Summary of Red Flags (markdown)
+- Summary of Shared Suggestions (markdown)
+- Research and Suggestion (five markdown sections)
 - Validation (markdown)
 - Previous Suggestion Review (strict JSON)
 - New Suggestion Summary (strict JSON)
@@ -234,6 +263,7 @@ def sota_user(
     executed_code_text: str,
     context: str,
     outcome_status: str,
+    shared_suggestions_text: str = "No shared suggestions yet.",
 ) -> str:
     return f"""<competition description>
 {description}
@@ -245,9 +275,13 @@ def sota_user(
 {red_flags}
 </potential identified red flags>
 
-<previous failed ideas> DO NOT TRY THESE AGAIN
+<previous failed ideas from THIS model>
 {failed_ideas_text}
-</previous failed ideas>
+</previous failed ideas from THIS model>
+
+<shared experiments from ALL models>
+{shared_suggestions_text}
+</shared experiments from ALL models>
 
 <previous suggestion executed>
 {executed_suggestion_text}

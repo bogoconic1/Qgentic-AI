@@ -3,6 +3,7 @@ import math
 import os
 import re
 import time
+import threading
 from pathlib import Path
 from typing import Optional
 import json
@@ -68,6 +69,12 @@ class DeveloperAgent:
       <task_root>/<slug>/<outputs_dir>/<iteration>/submission.csv
     """
 
+    # Class-level shared state across all parallel DeveloperAgent instances
+    # This enables cross-model learning to avoid duplicate failures
+    # Format: "Model <model_name> tried <suggestion> (score improved/worsened/remained by X: A -> B)"
+    _shared_suggestions: list[str] = []
+    _lock = threading.Lock()
+
     def __init__(self, slug: str, iteration: int, model_name: Optional[str] = None, model_recommendations: Optional[str] = None, later_recommendations: Optional[dict] = None, cpu_core_range: Optional[list[int]] = None, gpu_identifier: Optional[str] = None, gpu_isolation_mode: str = "none"):
         load_dotenv()
         self.slug = slug
@@ -97,6 +104,8 @@ class DeveloperAgent:
         self.successful_ideas: list[str] = []  # Suggestions that led to successful, non-blacklisted executions
         self.successful_versions: set[int] = set()  # Versions that executed successfully (generated submission)
         self.blacklisted_versions: set[int] = set()  # Versions that were explicitly blacklisted by SOTA
+        self.version_scores: dict[int, float] = {}  # Map version number to its score
+        self.global_suggestions: list[str] = []  # All suggestions with score impact: "suggestion (score improved/worsened/remained by DDD: XXX -> YYY)"
         self.last_suggestion: Optional[str] = None
         self.last_suggestion_code: Optional[str] = None
         self.best_code: Optional[str] = None
@@ -532,6 +541,36 @@ class DeveloperAgent:
             return "N/A"
         return f"{value}"
 
+    def _format_suggestion_entry(self, suggestion: str, previous_score: Optional[float], current_score: Optional[float]) -> str:
+        """Format a suggestion entry with score impact information.
+
+        Returns formatted string like:
+        - "suggestion (score improved by DDD: XXX -> YYY)"
+        - "suggestion (score worsened by DDD: XXX -> YYY)"
+        - "suggestion (score remained the same: XXX -> YYY)"
+        """
+        prev_display = self._format_score_value(previous_score)
+        curr_display = self._format_score_value(current_score)
+
+        # If either score is N/A, just append scores without calculating delta
+        if prev_display == "N/A" or curr_display == "N/A":
+            return f"{suggestion} (score: {prev_display} -> {curr_display})"
+
+        # Calculate delta
+        delta = current_score - previous_score
+        abs_delta = abs(delta)
+
+        # Determine if it's an improvement based on metric direction
+        if abs_delta < 1e-9:  # Essentially the same
+            impact = "remained the same"
+            return f"{suggestion} (score {impact}: {prev_display} -> {curr_display})"
+        elif (delta > 0 and not self.is_lower_better) or (delta < 0 and self.is_lower_better):
+            impact = f"improved by {abs_delta:.6f}"
+        else:
+            impact = f"worsened by {abs_delta:.6f}"
+
+        return f"{suggestion} (score {impact}: {prev_display} -> {curr_display})"
+
     def _parse_sota_response(self, raw: str) -> tuple[str, str, bool, str]:
         """Extract new suggestion, code snippet, blacklist decision, and rationale."""
         # ok to fallback if LLM cannot give response
@@ -581,8 +620,53 @@ class DeveloperAgent:
         entry = suggestion
         if reason:
             entry = f"{suggestion} -- {reason}"
+
+        # Add to instance-level blacklist
         if entry not in self.blacklisted_ideas:
             self.blacklisted_ideas.append(entry)
+
+    def _register_shared_suggestion(self, suggestion: str, previous_score: Optional[float], current_score: Optional[float], is_blacklisted: bool = False) -> None:
+        """Register suggestion outcome to shared pool with model name and score impact.
+
+        Format: "Model <model_name> tried <suggestion> (score improved/worsened/remained by X: A -> B)"
+        """
+        if not suggestion:
+            return
+
+        # Format the suggestion entry with model name and score impact
+        prev_display = self._format_score_value(previous_score)
+        curr_display = self._format_score_value(current_score)
+
+        # Build the entry with model name
+        model_prefix = f"Model {self.model_name} tried"
+
+        if prev_display == "N/A" or curr_display == "N/A":
+            entry = f"{model_prefix} {suggestion} (score: {prev_display} -> {curr_display})"
+        else:
+            delta = current_score - previous_score
+            abs_delta = abs(delta)
+
+            if abs_delta < 1e-9:
+                impact = "remained the same"
+                entry = f"{model_prefix} {suggestion} (score {impact}: {prev_display} -> {curr_display})"
+            elif (delta > 0 and not self.is_lower_better) or (delta < 0 and self.is_lower_better):
+                impact = f"improved by {abs_delta:.6f}"
+                entry = f"{model_prefix} {suggestion} (score {impact}: {prev_display} -> {curr_display})"
+            else:
+                impact = f"worsened by {abs_delta:.6f}"
+                entry = f"{model_prefix} {suggestion} (score {impact}: {prev_display} -> {curr_display})"
+
+        # Add to shared pool (thread-safe)
+        with DeveloperAgent._lock:
+            if entry not in DeveloperAgent._shared_suggestions:
+                DeveloperAgent._shared_suggestions.append(entry)
+                status = "blacklisted" if is_blacklisted else "successful"
+                self.logger.info("Added to shared suggestions (%s): %s", status, entry)
+
+    def _get_shared_suggestions(self) -> list[str]:
+        """Get snapshot of all shared suggestions from all models."""
+        with DeveloperAgent._lock:
+            return DeveloperAgent._shared_suggestions.copy()
 
     def _find_most_recent_valid_version(self, current_version: int) -> tuple[int, Optional[str]]:
         """Find the most recent version that is valid for rollback.
@@ -676,7 +760,7 @@ class DeveloperAgent:
         input_list = [{"role": "user", "content": user_prompt}]
         
         attempt = 0
-        for _ in range(16): # max 16 attempts
+        for _ in range(16):
             now = time.time()
             if max_time_seconds is not None and now >= deadline:
                 self.logger.info("Time budget exhausted (%.2f minutes)", (deadline - start_time) / 60.0)
@@ -685,9 +769,6 @@ class DeveloperAgent:
             attempt += 1
 
             artifact = wandb.Artifact(f'{self.iteration}-{self.slug}', type='files')
-
-            # if len(input_list) > 6:s
-            #     input_list = input_list[:1] + input_list[-5:]
 
             minutes_left = ((deadline - now) / 60.0) if max_time_seconds is not None else float('inf')
             try:
@@ -830,6 +911,9 @@ class DeveloperAgent:
                         run_score = info.get('score') if info else None
                         self._log_attempt_score(attempt, run_score)
                         self.logger.info("Your result on the test set is %s", run_score)
+                        # Store score for this version
+                        if run_score is not None:
+                            self.version_scores[version] = run_score
                 except Exception as exc:
                     grade_feedback = f"Failed to run grading tool: {exc}"
                     self.logger.exception("Grading command failed for version %s", version)
@@ -889,13 +973,21 @@ class DeveloperAgent:
 
                     # STAGE 2: Generate SOTA suggestions based on red flags
                     self.logger.info("Stage 2: Generating SOTA suggestions based on red flags...")
+
+                    # Get shared suggestions from all parallel models
+                    shared_suggestions = self._get_shared_suggestions()
+
+                    self.logger.info("Using %d shared suggestions from all models (including this one)",
+                                   len(shared_suggestions))
+
                     sota_suggestions = self._call_sota_suggestions(
                         description=self.description,
                         context=code_with_logs,
                         red_flags=final_summary,
                         executed_suggestion=self.last_suggestion,
                         failed_to_improve_score=not improvement,
-                        failed_ideas=self.blacklisted_ideas,
+                        failed_ideas=self.blacklisted_ideas,  # Keep instance-level for context
+                        shared_suggestions=shared_suggestions,  # New: shared across all models
                         executed_code=self.last_suggestion_code,
                         later_recommendations=later_context,
                     )
@@ -906,6 +998,30 @@ class DeveloperAgent:
                 self.logger.info("SOTA suggestion: %s", sota_suggestions)
 
                 suggestion_text, code_snippet, blacklist_flag, blacklist_reason = self._parse_sota_response(sota_suggestions)
+
+                # Record the previous suggestion with its score impact (before updating self.last_suggestion)
+                if len(self.version_scores) == 1:
+                    # This is the first successful execution (could be v1, v5, etc.)
+                    initial_entry = f"Initial implementation (score: {self._format_score_value(run_score)})"
+                    self.global_suggestions.append(initial_entry)
+                    self.logger.info("Recorded initial implementation: %s", initial_entry)
+                elif self.last_suggestion and len(self.version_scores) > 1:
+                    # Find the score from the base version (the version this suggestion was built upon)
+                    base_version = self.next_patch_base_version if self.next_patch_base_version is not None else version - 1
+                    base_score = self.version_scores.get(base_version)
+                    current_score = run_score
+
+                    suggestion_entry = self._format_suggestion_entry(self.last_suggestion, base_score, current_score)
+                    self.global_suggestions.append(suggestion_entry)
+                    self.logger.info("Recorded suggestion with impact: %s", suggestion_entry)
+
+                    # Register to shared pool with model name and score impact
+                    self._register_shared_suggestion(
+                        self.last_suggestion,
+                        base_score,
+                        current_score,
+                        is_blacklisted=blacklist_flag
+                    )
 
                 if blacklist_flag and self.last_suggestion:
                     self._register_blacklist(self.last_suggestion, blacklist_reason)
@@ -965,7 +1081,24 @@ class DeveloperAgent:
                 else:
                     summary_line = "The latest attempt did not improve the score; address the issues flagged below."
 
-                if previous_best_display != "N/A" and run_score_display != "N/A":
+                # Choose consistent base for the next patch: use most recent valid when blacklisted, else current version.
+                rollback_code = None
+                rollback_version = None
+                if blacklist_flag:
+                    rollback_version, rollback_code = self._find_most_recent_valid_version(version)
+                    base_version_for_next_patch = rollback_version
+                else:
+                    base_version_for_next_patch = version
+
+                # When blacklisted, show the rollback version's score instead of best_score
+                if blacklist_flag and rollback_version is not None and rollback_version in self.version_scores:
+                    rollback_score = self.version_scores[rollback_version]
+                    rollback_score_display = self._format_score_value(rollback_score)
+                    if rollback_score_display != "N/A" and run_score_display != "N/A":
+                        summary_line += (
+                            f" Rolling back to v{rollback_version} (score: {rollback_score_display}). Current attempt scored: {run_score_display}."
+                        )
+                elif previous_best_display != "N/A" and run_score_display != "N/A":
                     summary_line += (
                         f" Previous best: {previous_best_display}. Current score: {run_score_display}."
                     )
@@ -975,14 +1108,6 @@ class DeveloperAgent:
                     f"{suggestion_block}\n"
                     f"Remember:\n- write logs to {next_log_path}\n- and produce the next submission at {next_submission_path}"
                 )
-
-                # Choose consistent base for the next patch: use most recent valid when blacklisted, else current version.
-                rollback_code = None
-                if blacklist_flag:
-                    rollback_version, rollback_code = self._find_most_recent_valid_version(version)
-                    base_version_for_next_patch = rollback_version
-                else:
-                    base_version_for_next_patch = version
                 next_instr = self._append_patch_directive(next_instr, base_version_for_next_patch)
 
                 if blacklist_flag and rollback_code:
