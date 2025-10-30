@@ -760,7 +760,7 @@ class DeveloperAgent:
         input_list = [{"role": "user", "content": user_prompt}]
         
         attempt = 0
-        for _ in range(32):
+        for _ in range(16):
             now = time.time()
             if max_time_seconds is not None and now >= deadline:
                 self.logger.info("Time budget exhausted (%.2f minutes)", (deadline - start_time) / 60.0)
