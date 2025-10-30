@@ -1080,11 +1080,6 @@ class DeveloperAgent:
                 else:
                     suggestion_block += "Suggested code snippet: No code provided.\n"
 
-                if improvement:
-                    summary_line = "The latest attempt improved the score; refine the approach with the guidance below."
-                else:
-                    summary_line = "The latest attempt did not improve the score; address the issues flagged below."
-
                 # Choose consistent base for the next patch: use most recent valid when blacklisted, else current version.
                 rollback_code = None
                 rollback_version = None
@@ -1094,21 +1089,7 @@ class DeveloperAgent:
                 else:
                     base_version_for_next_patch = version
 
-                # When blacklisted, show the rollback version's score instead of best_score
-                if blacklist_flag and rollback_version is not None and rollback_version in self.version_scores:
-                    rollback_score = self.version_scores[rollback_version]
-                    rollback_score_display = self._format_score_value(rollback_score)
-                    if rollback_score_display != "N/A" and run_score_display != "N/A":
-                        summary_line += (
-                            f" Rolling back to v{rollback_version} (score: {rollback_score_display}). Current attempt scored: {run_score_display}."
-                        )
-                elif previous_best_display != "N/A" and run_score_display != "N/A":
-                    summary_line += (
-                        f" Previous best: {previous_best_display}. Current score: {run_score_display}."
-                    )
-
                 next_instr = (
-                    f"{summary_line}\n\n"
                     f"{suggestion_block}\n"
                     f"Remember:\n- write logs to {next_log_path}\n- and produce the next submission at {next_submission_path}"
                 )
