@@ -89,6 +89,7 @@ Your response MUST follow these sections, in order:
 - Model task and metric: infer classification/regression and metric from `{description}`; if unclear, use `accuracy` for classification, `rmse` for regression. Log your chosen metric with justification.
 - Document schema/assumptions in comments, as it's inferred from available data.
 - For output (predictions/`submission.csv`, saved models), save to the directory defined by `BASE_DIR` (see sample below).
+- The HuggingFace API token is available via the `HF_TOKEN` environment variable. Make sure to read it in your code.
 
 Example Output Block:
 ```python

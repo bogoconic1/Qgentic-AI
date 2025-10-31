@@ -35,6 +35,9 @@ logger = logging.getLogger(__name__)
 _CONFIG = get_config()
 _LLM_CFG = _CONFIG.get("llm")
 _DEVELOPER_TOOL_MODEL = _LLM_CFG.get("developer_tool_model")
+_RUNTIME_CFG = _CONFIG.get("runtime")
+_BASELINE_TIME_LIMIT = _RUNTIME_CFG.get("baseline_time_limit")
+_DEFAULT_CODE_TIMEOUT = _BASELINE_TIME_LIMIT // 4  # Code execution timeout is 1/4 of baseline time limit
 
 @weave.op()
 def web_search_stack_trace(query: str) -> str:
@@ -181,21 +184,30 @@ def search_sota_suggestions(
     return response.output_text or ""
 
 @weave.op()
-def execute_code(filepath: str, timeout_seconds: int = 3600) -> str:
+def execute_code(filepath: str, timeout_seconds: int | None = None, conda_env: str | None = None) -> str:
     """Execute a generated Python file and enrich errors with search guidance.
 
     Args:
         filepath: Path to the Python file to execute
-        timeout_seconds: Timeout in seconds (default 3600 = 1 hour)
+        timeout_seconds: Timeout in seconds (default: baseline_time_limit // 4 from config)
+        conda_env: Conda environment name to use for execution (None = use current env)
 
     Returns:
         Execution output or error message
     """
-    logger.info("Executing generated script: %s (timeout: %d seconds)", filepath, timeout_seconds)
+    if timeout_seconds is None:
+        timeout_seconds = _DEFAULT_CODE_TIMEOUT
+    if conda_env:
+        cmd = ["conda", "run", "--no-capture-output", "-n", conda_env, "python", filepath]
+        logger.info("Executing in conda environment '%s': %s (timeout: %d seconds)", conda_env, filepath, timeout_seconds)
+    else:
+        cmd = ["python", filepath]
+        logger.info("Executing generated script: %s (timeout: %d seconds)", filepath, timeout_seconds)
+
     try:
-        logger.debug("Running subprocess command: python %s", filepath)
+        logger.debug("Running subprocess command: %s", " ".join(cmd))
         result = subprocess.run(
-            ["python", filepath],
+            cmd,
             capture_output=True,
             text=True,
             timeout=timeout_seconds,
@@ -247,10 +259,11 @@ def execute_code(filepath: str, timeout_seconds: int = 3600) -> str:
 @weave.op()
 def execute_code_with_oom_retry(
     filepath: str,
-    timeout_seconds: int = 3600,
+    timeout_seconds: int | None = None,
     max_oom_retries: int = 10,
     oom_retry_delay: int = 300,
-    skip_oom_polling: bool = False
+    skip_oom_polling: bool = False,
+    conda_env: str | None = None
 ) -> tuple[str, float]:
     """
     Execute code with automatic OOM retry logic.
@@ -261,10 +274,11 @@ def execute_code_with_oom_retry(
 
     Args:
         filepath: Path to the Python file to execute
-        timeout_seconds: Timeout in seconds for each execution attempt
+        timeout_seconds: Timeout in seconds for each execution attempt (default: baseline_time_limit // 4 from config)
         max_oom_retries: Maximum number of OOM retries (default 10)
         oom_retry_delay: Seconds to wait between OOM retries (default 300 = 5 min)
         skip_oom_polling: If True (e.g., when MIG is enabled), skip polling and treat OOM as a real bug
+        conda_env: Conda environment name to use for execution (None = use current env)
 
     Returns:
         Tuple of (output string, total_wait_time_seconds)
@@ -274,7 +288,7 @@ def execute_code_with_oom_retry(
     total_wait_time = 0.0
 
     # Execute using the existing execute_code function
-    output = execute_code(filepath, timeout_seconds)
+    output = execute_code(filepath, timeout_seconds, conda_env=conda_env)
 
     # Check if output indicates OOM
     if detect_oom(output):
@@ -302,7 +316,7 @@ def execute_code_with_oom_retry(
             logger.info(f"Retrying {filepath} after {wait_duration:.1f}s wait...")
 
             # Retry execution
-            output = execute_code(filepath, timeout_seconds)
+            output = execute_code(filepath, timeout_seconds, conda_env=conda_env)
 
             # Check if OOM is resolved
             if not detect_oom(output):

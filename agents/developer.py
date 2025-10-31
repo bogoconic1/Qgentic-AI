@@ -75,7 +75,7 @@ class DeveloperAgent:
     _shared_suggestions: list[str] = []
     _lock = threading.Lock()
 
-    def __init__(self, slug: str, iteration: int, model_name: Optional[str] = None, model_recommendations: Optional[str] = None, later_recommendations: Optional[dict] = None, cpu_core_range: Optional[list[int]] = None, gpu_identifier: Optional[str] = None, gpu_isolation_mode: str = "none"):
+    def __init__(self, slug: str, iteration: int, model_name: Optional[str] = None, model_recommendations: Optional[str] = None, later_recommendations: Optional[dict] = None, cpu_core_range: Optional[list[int]] = None, gpu_identifier: Optional[str] = None, gpu_isolation_mode: str = "none", conda_env: Optional[str] = None):
         load_dotenv()
         self.slug = slug
         self.iteration = iteration
@@ -92,6 +92,7 @@ class DeveloperAgent:
         self.cpu_core_range = cpu_core_range  # List of CPU cores to use (e.g., [0,1,2,...,41])
         self.gpu_identifier = gpu_identifier  # GPU identifier: MIG UUID or GPU ID (as string)
         self.gpu_isolation_mode = gpu_isolation_mode  # "mig", "multi-gpu", or "none"
+        self.conda_env = conda_env  # Conda environment name for isolated package installation
 
         # Metric-related defaults; overwritten once benchmark info is available
         self.gold_threshold: Optional[float] = None
@@ -140,6 +141,8 @@ class DeveloperAgent:
             "Initialized DeveloperAgent for slug=%s iteration=%s", self.slug, self.iteration
         )
         self.logger.debug("Outputs directory resolved to: %s", self.outputs_dir)
+        if self.conda_env:
+            self.logger.info("Conda environment assigned: %s", self.conda_env)
 
     def _configure_logger(self) -> None:
         # Create a unique logger for this instance to avoid cross-contamination in parallel execution
@@ -854,7 +857,8 @@ class DeveloperAgent:
             skip_oom_polling = self.gpu_isolation_mode in ["mig", "multi-gpu"]
             output, wait_time = execute_code_with_oom_retry(
                 str(code_path),
-                skip_oom_polling=skip_oom_polling
+                skip_oom_polling=skip_oom_polling,
+                conda_env=self.conda_env
             )
             self.logger.info("Execution output captured for version v%s", version)
             self.logger.debug("Execution output: %s", output)
@@ -912,28 +916,25 @@ class DeveloperAgent:
                         run_score = info.get('score') if info else None
                         self._log_attempt_score(attempt, run_score)
                         self.logger.info("Your result on the test set is %s", run_score)
-                        # Store score for this version and track for comparison
-                        previous_successful_version = self.last_successful_version  # Save before updating
+                        # Store score for this version
                         if run_score is not None:
                             self.version_scores[version] = run_score
                             self.last_successful_version = version
                 except Exception as exc:
                     grade_feedback = f"Failed to run grading tool: {exc}"
                     self.logger.exception("Grading command failed for version %s", version)
-                    previous_successful_version = self.last_successful_version
 
                 code_with_logs += f"<leaderboard_score>\n{run_score}\n</leaderboard_score>\n"
 
-                # Calculate target text once
-                if self.gold_threshold is not None:
-                    target_text = f"Let's push further to reach {self.gold_threshold}."
-                else:
-                    target_text = "Let's push further to reach an even stronger result."
-
-                # Compare against most recent successful version (with a score)
-                if previous_successful_version is not None:
-                    base_version = previous_successful_version
-                    base_score = self.version_scores[base_version]
+                # Compare against most recent successful, non-blacklisted version (with a score)
+                # Use _find_most_recent_valid_version to skip blacklisted versions
+                if version > 1:
+                    base_version, _ = self._find_most_recent_valid_version(version)
+                    if base_version is not None and base_version in self.version_scores:
+                        base_score = self.version_scores[base_version]
+                    else:
+                        base_version = None
+                        base_score = None
                 else:
                     # This is the first version with a score, no comparison base
                     base_version = None
@@ -941,6 +942,14 @@ class DeveloperAgent:
 
                 run_score_display = self._format_score_value(run_score)
                 improvement = self._is_improvement(run_score, base_score) if base_score is not None else False
+
+                # Always check and update global best, regardless of base comparison
+                if self._is_improvement(run_score, self.best_score):
+                    self.best_score = run_score
+                    self.best_version = version
+                    self.best_code = code_clean
+                    self.best_code_file = self._code_filename(version)
+                    self.logger.info("New global best achieved: %s (version %s)", run_score, version)
 
                 if improvement:
                     self.logger.info(
@@ -950,23 +959,28 @@ class DeveloperAgent:
                         run_score,
                         self.best_score,
                     )
-                    # Update global best if this is better than global best
-                    if self._is_improvement(run_score, self.best_score):
-                        self.best_score = run_score
-                        self.best_version = version
-                        self.best_code = code_clean
-                        self.best_code_file = self._code_filename(version)
-                        self.logger.info("New global best achieved!")
                 else:
                     self.logger.info(
-                        "No improvement from base v%s: %s (current score: %s)",
+                        "No improvement from base v%s: %s (current score: %s, global best: %s)",
                         base_version,
                         base_score,
                         run_score,
+                        self.best_score,
                     )
 
-                # Simple, consistent message regardless of improvement
-                analysis_msg = f"The current score is {run_score_display}. {target_text}"
+                # Build analysis message with context
+                analysis_msg = f"The current score is {run_score_display}."
+
+                # Add previous score context if available
+                if base_score is not None:
+                    base_score_display = self._format_score_value(base_score)
+                    analysis_msg += f" Your score before implementing this suggestion was {base_score_display}."
+
+                # Add target
+                if self.gold_threshold is not None:
+                    analysis_msg += f" Let's push further to reach the TARGET of {self.gold_threshold}."
+                else:
+                    analysis_msg += " Let's push further to reach an even stronger result."
 
                 code_with_logs += f"<analysis>\n{analysis_msg}\n</analysis>\n"
                 self.previous_runs.append((code_clean, run_score))
@@ -1014,14 +1028,14 @@ class DeveloperAgent:
                 suggestion_text, code_snippet, blacklist_flag, blacklist_reason = self._parse_sota_response(sota_suggestions)
 
                 # Record the previous suggestion with its score impact (before updating self.last_suggestion)
-                if previous_successful_version is None:
-                    # This is the first successful execution (no previous version to compare against)
+                if base_version is None:
+                    # This is the first successful execution (no previous non-blacklisted version to compare against)
                     initial_entry = f"Initial implementation (score: {self._format_score_value(run_score)})"
                     self.global_suggestions.append(initial_entry)
                     self.logger.info("Recorded initial implementation: %s", initial_entry)
                 elif self.last_suggestion:
-                    # We have a previous suggestion and a previous successful version to compare against
-                    # base_score was already calculated above (from previous_successful_version)
+                    # We have a previous suggestion and a previous successful non-blacklisted version to compare against
+                    # base_score was already calculated above (from base_version, which is non-blacklisted)
                     current_score = run_score
 
                     suggestion_entry = self._format_suggestion_entry(self.last_suggestion, base_score, current_score)
