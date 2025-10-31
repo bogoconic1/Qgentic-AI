@@ -946,6 +946,14 @@ class DeveloperAgent:
                 run_score_display = self._format_score_value(run_score)
                 improvement = self._is_improvement(run_score, base_score) if base_score is not None else False
 
+                # Always check and update global best, regardless of base comparison
+                if self._is_improvement(run_score, self.best_score):
+                    self.best_score = run_score
+                    self.best_version = version
+                    self.best_code = code_clean
+                    self.best_code_file = self._code_filename(version)
+                    self.logger.info("New global best achieved: %s (version %s)", run_score, version)
+
                 if improvement:
                     self.logger.info(
                         "Score improved from base v%s: %s -> %s (global best: %s)",
@@ -954,19 +962,13 @@ class DeveloperAgent:
                         run_score,
                         self.best_score,
                     )
-                    # Update global best if this is better than global best
-                    if self._is_improvement(run_score, self.best_score):
-                        self.best_score = run_score
-                        self.best_version = version
-                        self.best_code = code_clean
-                        self.best_code_file = self._code_filename(version)
-                        self.logger.info("New global best achieved!")
                 else:
                     self.logger.info(
-                        "No improvement from base v%s: %s (current score: %s)",
+                        "No improvement from base v%s: %s (current score: %s, global best: %s)",
                         base_version,
                         base_score,
                         run_score,
+                        self.best_score,
                     )
 
                 # Simple, consistent message regardless of improvement
