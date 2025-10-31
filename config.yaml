@@ -8,9 +8,11 @@ llm:
   leakage_followup_model: "gpt-5-mini"
   model_recommender_model: "gpt-5"
   starter_model: "gpt-5"
+  ensembler_model: "gpt-5"
 runtime:
   ask_eda_max_attempts: 3
   researcher_max_steps: 512
+  ensembler_max_steps: 20
   llm_max_retries: 3
   directory_listing_max_files: 10
   researcher_parallel_runs: 1

@@ -10,7 +10,9 @@ from agents.researcher import ResearcherAgent
 from agents.developer import DeveloperAgent
 from agents.starter import StarterAgent
 from agents.model_recommender import ModelRecommenderAgent
+from agents.ensembler import EnsemblerAgent
 from project_config import get_config
+from utils.ensembler import move_best_code_to_ensemble_folder
 from weave.trace.util import ThreadPoolExecutor
 import weave
 
@@ -652,6 +654,31 @@ class Orchestrator:
                     json.dump(baseline_results, f, indent=2)
             else:
                 raise RuntimeError("All developer baseline runs failed")
+
+        # Phase 5: Ensembler Agent - Combine baseline models
+        print("=" * 60)
+        print("PHASE 5: ENSEMBLE DEVELOPMENT")
+        print("=" * 60)
+
+        try:
+            # Prepare ensemble folder
+            ensemble_folder = move_best_code_to_ensemble_folder(self.slug, self.iteration)
+            print(f"Ensemble folder prepared: {ensemble_folder}")
+
+            # Run ensembler
+            ensembler = EnsemblerAgent(self.slug, self.iteration)
+            ensemble_plan = ensembler.run()
+
+            # Save ensemble plan
+            ensemble_plan_path = self.outputs_dir / "ensemble" / "ensemble_plan.md"
+            with open(ensemble_plan_path, "w") as f:
+                f.write(ensemble_plan)
+
+            print("✓ Ensemble completed successfully!")
+            print(f"  Plan saved to: {ensemble_plan_path}")
+        except Exception as e:
+            print(f"Warning: Ensemble stage failed with error: {e}")
+            print("Continuing without ensemble...")
 
         # Return baseline results path
         baseline_path = self.outputs_dir / "baseline_results.json"
