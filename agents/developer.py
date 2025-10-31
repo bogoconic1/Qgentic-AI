@@ -916,28 +916,25 @@ class DeveloperAgent:
                         run_score = info.get('score') if info else None
                         self._log_attempt_score(attempt, run_score)
                         self.logger.info("Your result on the test set is %s", run_score)
-                        # Store score for this version and track for comparison
-                        previous_successful_version = self.last_successful_version  # Save before updating
+                        # Store score for this version
                         if run_score is not None:
                             self.version_scores[version] = run_score
                             self.last_successful_version = version
                 except Exception as exc:
                     grade_feedback = f"Failed to run grading tool: {exc}"
                     self.logger.exception("Grading command failed for version %s", version)
-                    previous_successful_version = self.last_successful_version
 
                 code_with_logs += f"<leaderboard_score>\n{run_score}\n</leaderboard_score>\n"
 
-                # Calculate target text once
-                if self.gold_threshold is not None:
-                    target_text = f"Let's push further to reach {self.gold_threshold}."
-                else:
-                    target_text = "Let's push further to reach an even stronger result."
-
-                # Compare against most recent successful version (with a score)
-                if previous_successful_version is not None:
-                    base_version = previous_successful_version
-                    base_score = self.version_scores[base_version]
+                # Compare against most recent successful, non-blacklisted version (with a score)
+                # Use _find_most_recent_valid_version to skip blacklisted versions
+                if version > 1:
+                    base_version, _ = self._find_most_recent_valid_version(version)
+                    if base_version is not None and base_version in self.version_scores:
+                        base_score = self.version_scores[base_version]
+                    else:
+                        base_version = None
+                        base_score = None
                 else:
                     # This is the first version with a score, no comparison base
                     base_version = None
@@ -971,8 +968,19 @@ class DeveloperAgent:
                         self.best_score,
                     )
 
-                # Simple, consistent message regardless of improvement
-                analysis_msg = f"The current score is {run_score_display}. {target_text}"
+                # Build analysis message with context
+                analysis_msg = f"The current score is {run_score_display}."
+
+                # Add previous score context if available
+                if base_score is not None:
+                    base_score_display = self._format_score_value(base_score)
+                    analysis_msg += f" Your score before implementing this suggestion was {base_score_display}."
+
+                # Add target
+                if self.gold_threshold is not None:
+                    analysis_msg += f" Let's push further to reach the TARGET of {self.gold_threshold}."
+                else:
+                    analysis_msg += " Let's push further to reach an even stronger result."
 
                 code_with_logs += f"<analysis>\n{analysis_msg}\n</analysis>\n"
                 self.previous_runs.append((code_clean, run_score))
@@ -1020,14 +1028,14 @@ class DeveloperAgent:
                 suggestion_text, code_snippet, blacklist_flag, blacklist_reason = self._parse_sota_response(sota_suggestions)
 
                 # Record the previous suggestion with its score impact (before updating self.last_suggestion)
-                if previous_successful_version is None:
-                    # This is the first successful execution (no previous version to compare against)
+                if base_version is None:
+                    # This is the first successful execution (no previous non-blacklisted version to compare against)
                     initial_entry = f"Initial implementation (score: {self._format_score_value(run_score)})"
                     self.global_suggestions.append(initial_entry)
                     self.logger.info("Recorded initial implementation: %s", initial_entry)
                 elif self.last_suggestion:
-                    # We have a previous suggestion and a previous successful version to compare against
-                    # base_score was already calculated above (from previous_successful_version)
+                    # We have a previous suggestion and a previous successful non-blacklisted version to compare against
+                    # base_score was already calculated above (from base_version, which is non-blacklisted)
                     current_score = run_score
 
                     suggestion_entry = self._format_suggestion_entry(self.last_suggestion, base_score, current_score)
