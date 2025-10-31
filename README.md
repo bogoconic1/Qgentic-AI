@@ -9,9 +9,11 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
 ---
 ## News
 
-**[2025/10/26]** Updated some evals on Qgentic-AI without ensembler agent
+**[2025/10/31]** Qgentic-AI supports flexible GPU configurations (Multi-GPU, Single-GPU, and MIG), automatically creating isolated conda environments for parallel model execution! You can execute up till 7x2 = 14 baseline model experiments in parallel on 2x A100 80GB GPUs! 🚀
 
-**[2025/10/25]** Added post-EDA agent to identify red flags in code/logs/submission and CPU/GPU (NVIDIA MIG) parallelism support
+**[2025/10/29]** Added thread-safe cross-model learning: parallel DeveloperAgent instances now share successful and failed suggestions in real-time, eliminating duplicate exploration and reducing wasted GPU compute. Suggestions include model attribution and score impact for intelligent pattern recognition.
+
+**[2025/10/25]** Added first stage to identify red flags in code/logs/submission and CPU/GPU (NVIDIA MIG) parallelism support
 
 **[2025/10/22]** Added ModelRecommender agent - recommend candidate models, preprocessing/architecture, etc
 
@@ -47,7 +49,6 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
 - **Starter Agent (`agents/starter.py`)**
   - Proposes 5 starter model ideas with short example code by referencing the competition description and `docs/state_of_competitions_2024.md`.
   - Persists `starter_suggestions.txt` and `starter_suggestions.json` in `task/<slug>/outputs/<iteration>/`.
-  - Uses `gpt-5-mini` for efficient initial exploration.
 
 - **Researcher Agent (`agents/researcher.py`)**
   - Uses tool-calling (EDA snippets, external dataset search) to understand the task.
@@ -58,14 +59,18 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
   - Recommends up to 6 suitable models with detailed strategies for preprocessing, architecture, loss functions, hyperparameters, and inference.
   - Splits recommendations into NOW (MUST_HAVE) and LATER (NICE_TO_HAVE) categories for iterative development.
   - Supports fold split strategy recommendations and web search for SOTA techniques.
-  - Uses `gpt-5-mini` for cost-effective model recommendations.
 
 - **Developer Agent (`agents/developer.py`)**
   - Implements a two-stage approach for each iteration:
-    1. **Stage 1 (Red Flags)**: Uses `search_red_flags()` with EDA tool-calling to identify issues in code/logs/submissions.
+    1. **Stage 1 (Red Flags)**: Uses `search_red_flags()` with web search to identify issues in code/logs/submissions.
     2. **Stage 2 (SOTA Suggestions)**: Uses `search_sota_suggestions()` based on red flags to generate improvements.
+  - Tracks global best score across all versions and provides detailed feedback:
+    - Compares current score against the most recent non-blacklisted version
+    - Shows previous score context in feedback messages: "Your score before implementing this suggestion was X"
+    - Always updates global best regardless of base comparison (fixes first-version tracking)
   - Tracks both blacklisted ideas (failed strategies) and successful ideas (working strategies) for knowledge accumulation.
   - Supports dynamic resource allocation with CPU affinity and NVIDIA MIG GPU isolation for parallel execution.
+  - Dynamic timeout: Code execution timeout automatically scales as `baseline_time_limit // 4` from config.
   - Each baseline run returns `(best_score, best_code_file, blacklisted_ideas, successful_ideas)`.
   - Results are merged into `baseline_results.json` with full metadata including recommendations and strategy outcomes.
 
@@ -85,7 +90,11 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
   - Work in progress
 
 - **Guardrails (`guardrails/`), Tools (`tools/`) & Shared Config (`project_config.py`)**
-  - `tools.developer` wraps code execution, stack-trace web search, and SOTA suggestions.
+  - `tools.developer` wraps code execution, stack-trace web search, and SOTA suggestions:
+    - `execute_code()`: Runs generated Python files with dynamic timeout (`baseline_time_limit // 4`)
+    - `execute_code_with_oom_retry()`: Automatic OOM retry logic with configurable polling
+    - `search_red_flags()`: Stage 1 red flag identification with web search
+    - `search_sota_suggestions()`: Stage 2 SOTA improvements based on red flags and shared suggestions
   - `tools.researcher` exposes the EDA runtime and dataset downloader.
   - `config.yaml` overrides project defaults (model endpoints, runtime limits, etc.).
 
@@ -138,6 +147,11 @@ EXA_API_KEY=...
 OPENROUTER_API_KEY=...
 E2B_API_KEY=...
 FIRECRAWL_API_KEY=...
+S2_API_KEY=...
+HF_TOKEN=...
+GOOGLE_CLOUD_PROJECT=...
+GOOGLE_CLOUD_LOCATION=global
+GOOGLE_GENAI_USE_VERTEXAI=True
 ```
 
 These keys are loaded via `python-dotenv`. Adjust the environment variables listed in
@@ -200,12 +214,16 @@ Key settings live in `config.yaml` (merged with `project_config.py` defaults):
   - `leakage_review_model` / `leakage_followup_model`: Guardrails (`gpt-5-mini`)
 
 - **runtime**: Execution parameters:
+  - `baseline_time_limit`: Total time budget for baseline iteration in seconds (default: 21600 = 6 hours)
+  - Code execution timeout automatically calculated as `baseline_time_limit // 4` (currently 5400s = 1.5 hours)
   - `ask_eda_max_attempts`: Max retry attempts for EDA tool (default: 3)
   - `researcher_max_steps`: Max steps for researcher exploration (default: 512)
   - `llm_max_retries`: Max retries for LLM calls (default: 3)
   - `baseline_max_parallel_workers`: Max parallel baseline workers when MIG disabled (default: 3)
-  - `enable_mig`: Enable NVIDIA MIG GPU isolation (auto-detects worker count)
+  - `enable_mig`: Enable NVIDIA MIG GPU isolation (auto-detects worker count from available MIG instances)
+  - `enable_multi_gpu`: Enable multi-GPU parallelism across physical GPUs (default: false)
   - `enable_cpu_affinity`: Enable CPU core pinning for parallel processes
+  - `reset_conda_envs_per_run`: Reset conda environments before each run (default: false)
   - `patch_mode_enabled`: Experimental diff-based workflow (default: false)
 
 - **paths**: Root directories and naming templates for generated artifacts.
@@ -220,9 +238,11 @@ Key settings live in `config.yaml` (merged with `project_config.py` defaults):
 > Toggle `runtime.patch_mode_enabled: true` to request unified diffs (with line numbers)
 > from the model instead of full files. This feature is still being tuned.
 
-> **Parallel Execution** – Configure CPU affinity and MIG GPU isolation for running multiple
-> baseline models concurrently. When `enable_mig: true`, the system auto-detects available
-> MIG instances and sets worker count accordingly. Otherwise, uses `baseline_max_parallel_workers`.
+> **Parallel Execution** – Supports flexible GPU configurations (Multi-GPU, Single-GPU, and MIG):
+> - **MIG Mode** (`enable_mig: true`): Auto-detects available MIG instances and isolates each baseline to a dedicated GPU partition. H100 80GB supports up to 7 MIG instances (1g.10gb profile).
+> - **Multi-GPU Mode** (`enable_multi_gpu: true`): Distributes baselines across multiple physical GPUs.
+> - **Single-GPU Mode**: Sequential execution using `baseline_max_parallel_workers` to control concurrency.
+> - Each baseline runs in an isolated conda environment (`qgentic-model-{idx}`) with dedicated CPU cores when `enable_cpu_affinity: true`.
 
 ---
 
