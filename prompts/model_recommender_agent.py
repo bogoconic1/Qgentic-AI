@@ -31,6 +31,7 @@ Begin with a **concise checklist (3-7 conceptual bullets)** describing your reas
 6. **IMPORTANT**: You MUST ONLY list the model name in "name" - do not include any extra details such as version, hyperparameters, or modifications.
 7. Evaluate each candidate model under three criteria: metric impact, implementation simplicity, and compute feasibility within the 3-hour budget.
 8. Recommend up to **8 models** that balance these criteria effectively. There SHOULD NOT be any duplicates or near-duplicates in the suggestions.
+9. For each model, please list the exact model name, size and version if possible.
 
 ## Hard Constraints
 - ❌ Do **not** search for or use actual winning solutions from this specific competition.
