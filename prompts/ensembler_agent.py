@@ -38,7 +38,6 @@ def build_system(
     description: str,
     dir_listing: str,
     file_contents: dict[str, str],
-    benchmark_info: dict,
     baseline_metadata: dict,
     ensemble_strategy: dict,
     blacklisted_ideas: list[str],
@@ -50,7 +49,6 @@ def build_system(
         description: Competition description
         dir_listing: Directory listing of the competition folder
         file_contents: Dict mapping baseline model filenames to their code
-        benchmark_info: Benchmark information (target score, etc.)
         baseline_metadata: Metadata about baseline models (scores, training times, etc.)
         ensemble_strategy: Single strategy dict with "strategy" and "models_needed" keys
         blacklisted_ideas: List of ideas that failed (to avoid repeating)
@@ -82,12 +80,6 @@ def build_system(
     models_needed = ensemble_strategy.get("models_needed", [])
     models_needed_text = ", ".join(f"`{m}`" for m in models_needed) if models_needed else "None specified"
 
-    # Format benchmark info
-    benchmark_section = ""
-    if benchmark_info:
-        target_score = benchmark_info.get("target_score", "N/A")
-        benchmark_section = f"\n**Target Score:** {target_score}\n"
-
     # Format blacklisted ideas
     blacklist_section = ""
     if blacklisted_ideas:
@@ -114,8 +106,6 @@ Single GPU (24GB VRAM)
 {baseline_models_info}
 
 {baseline_code_section}
-
-{benchmark_section}
 
 {blacklist_section}
 

@@ -179,7 +179,6 @@ class EnsemblerAgent(DeveloperAgent):
             description=description,
             dir_listing=dir_listing,
             file_contents=file_contents,
-            benchmark_info=self.benchmark_info or {},
             baseline_metadata=self.baseline_metadata,
             ensemble_strategy=self.strategy,  # Pass single strategy
             blacklisted_ideas=self.blacklisted_ideas,
