@@ -211,8 +211,8 @@ class DeveloperAgent:
         self.is_lower_better = info.get("is_lower_better")
         self.logger.info("is_lower_better=%s", self.is_lower_better)
 
-    def _compose_system(self) -> str:
-        self.logger.debug("Composing system prompt for slug=%s", self.slug)
+    def _compose_system(self, allow_multi_fold: bool = False) -> str:
+        self.logger.debug("Composing system prompt for slug=%s (allow_multi_fold=%s)", self.slug, allow_multi_fold)
         with open(self.base_dir / "description.md", "r") as f:
             self.description = f.read()
         self.logger.debug("Description length: %s characters", len(self.description))
@@ -233,7 +233,31 @@ class DeveloperAgent:
             cpu_core_range=self.cpu_core_range,
             gpu_identifier=self.gpu_identifier,
             gpu_isolation_mode=self.gpu_isolation_mode,
+            allow_multi_fold=allow_multi_fold,
         )
+
+    def _get_external_data_listing(self) -> str:
+        """Get directory listing of external_data_* folders in outputs/<iteration>."""
+        external_data_dirs = [d for d in self.outputs_dir.iterdir() if d.is_dir() and d.name.startswith("external_data_")]
+
+        if not external_data_dirs:
+            return "No external data directories found."
+
+        lines = []
+        for ext_dir in sorted(external_data_dirs):
+            lines.append(f"\n{ext_dir.name}/")
+            dir_listing = _build_directory_listing(str(ext_dir))
+            lines.append(dir_listing)
+
+        return "\n".join(lines)
+
+    def _get_plan_content(self) -> str:
+        """Get content of plan.md if it exists."""
+        plan_path = self.base_dir / "plan.md"
+        if plan_path.exists():
+            with open(plan_path, "r") as f:
+                return f.read()
+        return "No plan.md found."
 
     def _build_user_prompt(self, version: int) -> str:
         self.logger.debug("Building user prompt")
@@ -770,10 +794,10 @@ class DeveloperAgent:
 
         run_score = 0
 
-        system_prompt = self._compose_system()
+        system_prompt = self._compose_system(allow_multi_fold=False)
         user_prompt = self._build_user_prompt(version=1)
         input_list = [{"role": "user", "content": user_prompt}]
-        
+
         attempt = 0
         for _ in range(16):
             now = time.time()
@@ -782,6 +806,11 @@ class DeveloperAgent:
                 break
 
             attempt += 1
+
+            # Rebuild system prompt for attempt 2+ to enable multi-fold training
+            if attempt == 2:
+                self.logger.info("Rebuilding system prompt for attempt 2+ with multi-fold enabled")
+                system_prompt = self._compose_system(allow_multi_fold=True)
 
             artifact = wandb.Artifact(f'{self.iteration}-{self.slug}', type='files')
 
@@ -1019,6 +1048,10 @@ class DeveloperAgent:
                     self.logger.info("Using %d shared suggestions from all models (including this one)",
                                    len(shared_suggestions))
 
+                    # Get external data listing and plan content
+                    external_data_listing = self._get_external_data_listing()
+                    plan_content = self._get_plan_content()
+
                     sota_suggestions = self._call_sota_suggestions(
                         description=self.description,
                         context=code_with_logs,
@@ -1028,6 +1061,8 @@ class DeveloperAgent:
                         shared_suggestions=shared_suggestions,  # New: shared across all models
                         executed_code=self.last_suggestion_code,
                         later_recommendations=later_context,
+                        external_data_listing=external_data_listing,
+                        plan_content=plan_content,
                     )
                 except Exception:
                     self.logger.exception("Failed to fetch red flags or SOTA suggestions for attempt %s", attempt)

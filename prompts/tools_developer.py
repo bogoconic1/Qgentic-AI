@@ -233,6 +233,7 @@ Never repeat an idea from <previous failed ideas>, and avoid blacklisted or prev
 
 ### Input Schema
 - <competition description> (string): Detailed overview of the Kaggle competition (task, data, evaluation metric).
+- <external_data_directory> (string): Contents in the external data directory, if any.
 - <researcher plans> (optional, list of strings): Previous plans for the task.
 - <initial script> (string): Starting code.
 - <logs> (string): Output logs from training/evaluation of the script.
@@ -261,12 +262,17 @@ def sota_user(
     executed_code_text: str,
     context: str,
     shared_suggestions_text: str = "No shared suggestions yet.",
+    external_data_listing: str = "No external data directories found.",
 ) -> str:
     return f"""<competition description>
 {description}
 </competition description>
 
 {plans_section}
+
+<external_data_directory>
+{external_data_listing}
+</external_data_directory>
 
 <potential identified red flags>
 {red_flags}
