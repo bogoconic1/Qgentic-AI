@@ -150,7 +150,7 @@ IMPORTANT: When analyzing shared experiments and generating new ideas:
 - Do NOT rely on prior knowledge of solutions for this competition.
 - {"You may suggest a new model or change the family if you feel is beneficial." if is_ensemble else "Do NOT change the model family used in the initial script; only suggest enhancements around it."}
 - If there certain bugs in the code which you identified or in <red_flags>, you MUST FIX THEM FIRST.
-{"- DO NOT make changes to Data/ Feature Engineering/ Validation unless it is extremely severe issues." if is_ensemble else ""}
+{"- DO NOT make changes to Validation unless it is extremely severe issues." if is_ensemble else ""}
 
 Generate THREE distinct suggestions, each from a different strategic category:
 1. **Data / Feature Engineering / Preprocessing Enhancement** — Creating new features, transforming existing ones, or modifying preprocessing steps.

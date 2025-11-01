@@ -177,6 +177,15 @@ def move_best_code_to_ensemble_folder(slug: str, iteration: int):
         shutil.copy2(code_file_path, dest_code_file)
         print(f"Copied {best_code_file} to ensemble folder")
 
+        # Copy JSON metadata file (contains num_header_lines for strip_header_from_code)
+        json_file_path = code_file_path.with_suffix('.json')
+        if json_file_path.exists():
+            dest_json_file = ensemble_folder / json_file_path.name
+            shutil.copy2(json_file_path, dest_json_file)
+            print(f"Copied {json_file_path.name} to ensemble folder")
+        else:
+            print(f"Warning: JSON metadata file {json_file_path} not found")
+
         # Copy log file if it exists and parse training time
         training_time = "N/A"
         if log_file_path.exists():
@@ -349,7 +358,8 @@ Develop and recommend 8 diverse, independent, and actionable ensemble strategies
 - List exactly 8 strategies as a numbered list, detailed and content-rich.
 - After the list, provide a JSON object (enclosed in triple backticks) with the strategies array formatted per the schema below.
 - Remember to make tool calls only as allowed, and state the intent before any significant tool invocation, describing both the rationale and minimal inputs.
-- The "models needed" MUST correspond to actual model names used in the <baseline_models> section.
+- Models listed under models_needed must correspond to actual model names already defined in the <baseline_models> section.
+- If you want to propose new models that are not yet defined, explicitly mark them as new (e.g., NEW: <model_name>).
 
 ## Example Output
 1. Use a LightGBM, CatBoost, and XGBoost three-way weighted average (models: 'LightGBM', 'CatBoost', 'XGBoost') after tuning each individually by Optuna; weights determined by holdout set RMSE.

@@ -58,10 +58,16 @@ def build_system(
     """
     constraints = _get_hard_constraints()
 
-    # Format baseline metadata for display
+    # Get models needed for this strategy
+    models_needed = ensemble_strategy.get("models_needed", [])
+
+    # Format baseline metadata for display (only models needed for this strategy)
     baseline_models_info = "**Baseline Models Available:**\n"
-    if baseline_metadata:
-        for model_name, metadata in baseline_metadata.items():
+    if baseline_metadata and models_needed:
+        for model_name in models_needed:
+            metadata = baseline_metadata.get(model_name, {})
+            if not metadata:  # Skip if model not found in metadata
+                continue
             score = metadata.get("best_score", "N/A")
             training_time = metadata.get("training_time", "N/A")
             baseline_models_info += f"- `{model_name}`: score={score}, training_time={training_time}\n"
@@ -77,7 +83,6 @@ def build_system(
 
     # Format ensemble strategy
     strategy_text = ensemble_strategy.get("strategy", "No strategy provided")
-    models_needed = ensemble_strategy.get("models_needed", [])
     models_needed_text = ", ".join(f"`{m}`" for m in models_needed) if models_needed else "None specified"
 
     # Format blacklisted ideas
@@ -91,7 +96,7 @@ def build_system(
 Your objective is to deliver a single, self-contained Python script for a Kaggle Competition that implements an ensemble strategy combining multiple baseline models.
 
 Begin with a concise checklist (3-7 bullets) of what you will do; keep items conceptual, not implementation-level.
-You should perform web searches to determine how to implement the ensemble strategy effectively.
+You should perform web searches to determine how to implement the ensemble strategy effectively, or setting up any models marked as "NEW:".
 
 ---
 **Training and Inference Environment:**

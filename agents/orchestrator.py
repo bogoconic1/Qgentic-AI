@@ -222,7 +222,7 @@ def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, n
         if gpu_pool and gpu_identifier is not None:
             gpu_pool.put(gpu_identifier)
 
-
+@weave.op()
 def _run_ensembler_single(slug: str, iteration: int, strategy_index: int, strategy: dict, baseline_metadata: dict, cpu_core_pool: Queue | None = None, gpu_pool: Queue | None = None, gpu_isolation_mode: str = "none", conda_env: str | None = None):
     """Run a single EnsemblerAgent for one ensemble strategy and return results.
 
@@ -579,9 +579,6 @@ class Orchestrator:
             max_parallel_workers = int(_RUNTIME_CFG.get("baseline_max_parallel_workers", 1))
             print(f"GPU isolation disabled: Using baseline_max_parallel_workers={max_parallel_workers}")
 
-        # Ensure conda environments exist for isolated package installation
-        _ensure_conda_environments(max_parallel_workers)
-
         # Create resource pools for dynamic allocation
         total_cores = os.cpu_count() or 1
         num_models = len(now_recommendations_all)
@@ -624,6 +621,9 @@ class Orchestrator:
                 print(f"Warning: Could not load existing baseline results: {e}")
 
         if not os.path.exists(self.outputs_dir / "baseline_results.json") or len(existing_baseline_results) < len(now_recommendations_all):
+            # Ensure conda environments exist for isolated package installation
+            _ensure_conda_environments(max_parallel_workers)
+
             tasks = []
             for idx, (model_name, now_recommendations) in enumerate(now_recommendations_all.items(), start=1):
                 key = model_name
@@ -701,20 +701,48 @@ class Orchestrator:
         print("PHASE 5: ENSEMBLE PHASE")
         print("="*80)
 
-        # Step 1: Move best code to ensemble folder
-        print("Moving best baseline code to ensemble folder...")
-        ensemble_folder = move_best_code_to_ensemble_folder(self.slug, self.iteration)
-        print(f"Ensemble folder created: {ensemble_folder}")
-
-        # Step 2: Generate ensemble strategies
-        print("Generating ensemble strategies...")
-        ensemble_strategies = recommend_ensemble_strategies(self.slug, self.iteration)
-        print(f"Generated {len(ensemble_strategies)} ensemble strategies")
-
-        # Load ensemble metadata with strategies
+        # Check if ensemble metadata already exists with strategies
+        ensemble_folder = self.outputs_dir / "ensemble"
         ensemble_metadata_path = ensemble_folder / "ensemble_metadata.json"
-        with open(ensemble_metadata_path, "r") as f:
-            ensemble_metadata = json.load(f)
+
+        if ensemble_metadata_path.exists():
+            with open(ensemble_metadata_path, "r") as f:
+                ensemble_metadata = json.load(f)
+
+            if "strategies" in ensemble_metadata:
+                print("Ensemble metadata with strategies already exists, skipping generation...")
+                ensemble_strategies = ensemble_metadata["strategies"]
+                print(f"Loaded {len(ensemble_strategies)} existing ensemble strategies")
+            else:
+                print("Ensemble metadata exists but no strategies found, regenerating...")
+                # Step 1: Move best code to ensemble folder
+                print("Moving best baseline code to ensemble folder...")
+                ensemble_folder = move_best_code_to_ensemble_folder(self.slug, self.iteration)
+                print(f"Ensemble folder created: {ensemble_folder}")
+
+                # Step 2: Generate ensemble strategies
+                print("Generating ensemble strategies...")
+                ensemble_strategies = recommend_ensemble_strategies(self.slug, self.iteration)
+                print(f"Generated {len(ensemble_strategies)} ensemble strategies")
+
+                # Reload metadata after generation
+                with open(ensemble_metadata_path, "r") as f:
+                    ensemble_metadata = json.load(f)
+        else:
+            print("No ensemble metadata found, creating from scratch...")
+            # Step 1: Move best code to ensemble folder
+            print("Moving best baseline code to ensemble folder...")
+            ensemble_folder = move_best_code_to_ensemble_folder(self.slug, self.iteration)
+            print(f"Ensemble folder created: {ensemble_folder}")
+
+            # Step 2: Generate ensemble strategies
+            print("Generating ensemble strategies...")
+            ensemble_strategies = recommend_ensemble_strategies(self.slug, self.iteration)
+            print(f"Generated {len(ensemble_strategies)} ensemble strategies")
+
+            # Load ensemble metadata with strategies
+            with open(ensemble_metadata_path, "r") as f:
+                ensemble_metadata = json.load(f)
 
         # Step 3: Re-initialize conda environments if configured
         if _RUNTIME_CFG.get("reset_conda_envs_per_run", False):

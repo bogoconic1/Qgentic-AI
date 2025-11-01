@@ -56,10 +56,14 @@ class EnsemblerAgent(DeveloperAgent):
         strategy_text = strategy.get("strategy", "")
         strategy_name = f"EnsembleStrategy{strategy_index}"
 
-        # Initialize parent with ensemble-specific model_name
+        # Pass modified iteration to parent for automatic file naming
+        # e.g., iteration="5_1_ens" produces code_5_1_ens_v1.py automatically
+        iteration_ens = f"{iteration}_{strategy_index}_ens"
+
+        # Initialize parent with ensemble-specific iteration
         super().__init__(
             slug=slug,
-            iteration=iteration,
+            iteration=iteration_ens,
             model_name=strategy_name,
             model_recommendations=strategy_text,  # Pass strategy as recommendations
             later_recommendations=None,
@@ -69,15 +73,8 @@ class EnsemblerAgent(DeveloperAgent):
             conda_env=conda_env,
         )
 
-        # Override outputs directory to use ensemble naming convention
-        # outputs/4_1_ens/ for strategy 1, outputs/4_2_ens/ for strategy 2, etc.
-        ensemble_suffix = f"{iteration}_{strategy_index}_ens"
-        self.outputs_dir = self.base_dir / self.outputs_dirname / ensemble_suffix
-        self.outputs_dir.mkdir(parents=True, exist_ok=True)
-
-        # Update log path for ensemble
-        self.developer_log_path = self.outputs_dir / f"developer_{ensemble_suffix}.txt"
-        self._configure_logger()
+        # Store original iteration for reference
+        self.original_iteration = iteration
 
         # Locate ensemble folder with baseline outputs
         self.ensemble_folder = self.base_dir / self.outputs_dirname / str(iteration) / "ensemble"
@@ -88,54 +85,9 @@ class EnsemblerAgent(DeveloperAgent):
             strategy_text[:100] + "..." if len(strategy_text) > 100 else strategy_text
         )
 
-    def _get_code_filename(self, version: int) -> str:
-        """
-        Override to use ensemble naming convention.
-
-        Format: code_{iteration}_{strategy_index}_ens_v{version}.py
-
-        Args:
-            version: Version number
-
-        Returns:
-            Filename for this version
-        """
-        return f"code_{self.iteration}_{self.strategy_index}_ens_v{version}.py"
-
-    def _get_log_filename(self, version: int) -> str:
-        """
-        Get log filename for ensemble code.
-
-        Format: code_{iteration}_{strategy_index}_ens_v{version}.txt
-
-        Args:
-            version: Version number
-
-        Returns:
-            Log filename for this version
-        """
-        return f"code_{self.iteration}_{self.strategy_index}_ens_v{version}.txt"
-
-    def _get_submission_filename(self, version: int) -> str:
-        """
-        Get submission filename for ensemble code.
-
-        Format: submission_{version}.csv
-
-        Args:
-            version: Version number
-
-        Returns:
-            Submission filename for this version
-        """
-        return f"submission_{version}.csv"
-
-    def _compose_system(self, allow_multi_fold: bool = True) -> str:
+    def _compose_system(self) -> str:
         """
         Override to use ensemble-specific system prompt.
-
-        Args:
-            allow_multi_fold: Ignored for ensembles (kept for parent class signature compatibility)
 
         Returns:
             System prompt for ensemble agent
@@ -154,10 +106,8 @@ class EnsemblerAgent(DeveloperAgent):
             if code_file:
                 code_path = self.ensemble_folder / code_file
                 if code_path.exists():
-                    with open(code_path, "r") as f:
-                        raw_code = f.read()
-                    # Strip header to get clean code
-                    clean_code = strip_header_from_code(raw_code)
+                    # Strip header to get clean code (function reads the file itself)
+                    clean_code = strip_header_from_code(code_path)
                     file_contents[model_name] = clean_code  # Key is just model name for clarity
                     self.logger.debug("Loaded code for model %s: %s", model_name, code_file)
                 else:
@@ -171,12 +121,12 @@ class EnsemblerAgent(DeveloperAgent):
         description_path = self.base_dir / "description.md"
         if description_path.exists():
             with open(description_path, "r") as f:
-                description = f.read()
+                self.description = f.read()
         else:
-            description = "No competition description available."
+            self.description = "No competition description available."
 
         return prompt_build_system(
-            description=description,
+            description=self.description,
             dir_listing=dir_listing,
             file_contents=file_contents,
             baseline_metadata=self.baseline_metadata,
