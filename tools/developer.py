@@ -37,7 +37,10 @@ _LLM_CFG = _CONFIG.get("llm")
 _DEVELOPER_TOOL_MODEL = _LLM_CFG.get("developer_tool_model")
 _RUNTIME_CFG = _CONFIG.get("runtime")
 _BASELINE_TIME_LIMIT = _RUNTIME_CFG.get("baseline_time_limit")
-_DEFAULT_CODE_TIMEOUT = _BASELINE_TIME_LIMIT // 4  # Code execution timeout is 1/4 of baseline time limit
+_ENSEMBLE_TIME_LIMIT = _RUNTIME_CFG.get("ensemble_time_limit")
+_BASELINE_CODE_TIMEOUT = 5400  # 1.5 hours for baseline code execution
+_ENSEMBLE_CODE_TIMEOUT = 10800  # 3 hours for ensemble code execution
+_DEFAULT_CODE_TIMEOUT = _BASELINE_CODE_TIMEOUT  # Default to baseline timeout
 
 @weave.op()
 def web_search_stack_trace(query: str) -> str:
@@ -128,8 +131,8 @@ def search_sota_suggestions(
     failed_ideas: list[str],
     executed_code: str | None = None,
     later_recommendations: str | None = None,
-    allow_multi_fold: bool = False,
     shared_suggestions: list[str] | None = None,
+    is_ensemble: bool = False,
 ) -> str:
     """Stage 2: Use web search to generate SOTA suggestions based on red flags.
 
@@ -141,9 +144,9 @@ def search_sota_suggestions(
         failed_ideas: List of blacklisted ideas from this model
         executed_code: Code snippet from last attempt
         later_recommendations: LATER recommendations for progressive improvement
-        allow_multi_fold: If True, allows multi-fold training and ensembling suggestions
         shared_suggestions: List of all suggestions from all parallel models with outcomes
                           Format: "Model <model> tried <suggestion> (score improved/worsened/remained by X: A -> B)"
+        is_ensemble: If True, uses ensemble-specific prompts and constraints
 
     Returns:
         SOTA suggestions text with blacklist decision and new suggestion
@@ -160,7 +163,7 @@ def search_sota_suggestions(
     if later_recommendations:
         suggestions_section = f"\n<suggestions>\n{later_recommendations}\n</suggestions>\n"
 
-    system_prompt = prompt_sota_system(allow_multi_fold=allow_multi_fold)
+    system_prompt = prompt_sota_system(is_ensemble=is_ensemble)
 
     user_prompt = prompt_sota_user(
         description=description,
