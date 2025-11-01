@@ -736,8 +736,6 @@ class Orchestrator:
             else:
                 raise RuntimeError("All developer baseline runs failed")
 
-        return True, str(baseline_path)
-
         # Phase 5: Ensemble Phase - Combine baseline models using ensemble strategies
         print("\n" + "="*80)
         print("PHASE 5: ENSEMBLE PHASE")
