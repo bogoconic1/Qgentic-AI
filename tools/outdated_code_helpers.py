@@ -2,6 +2,7 @@ import ast
 import json
 import os
 from pathlib import Path
+from platform import node
 from typing import List, Tuple, Dict, Optional
 
 # import weave
@@ -16,6 +17,13 @@ XGBOOST_DEPRECATED_METHODS = set()
 XGBOOST_DEPRECATED_CLASSES = set()
 XGBOOST_DEPRECATION_INFO = {}  # Map of API name -> full deprecation info
 
+# PyTorch deprecated APIs - loaded from dataset
+PYTORCH_DEPRECATED_PARAMS = set()
+PYTORCH_DEPRECATED_METHODS = set()
+PYTORCH_DEPRECATED_CLASSES = set()
+PYTORCH_DEPRECATED_FUNCTIONS = set()
+PYTORCH_DEPRECATED_ATTRIBUTES = set()
+PYTORCH_DEPRECATION_INFO = {}  # Map of API name -> full deprecation info
 
 def load_xgboost_deprecations():
     """
@@ -67,10 +75,78 @@ def load_xgboost_deprecations():
         # Silently fail if dataset can't be loaded
         pass
 
+def load_pytorch_deprecations():
+    """
+    Load PyTorch deprecation dataset and populate the banned sets.
+    This is called automatically when the module is imported.
+    """
+    global PYTORCH_DEPRECATED_PARAMS, PYTORCH_DEPRECATED_METHODS, PYTORCH_DEPRECATED_CLASSES
+    global PYTORCH_DEPRECATED_FUNCTIONS, PYTORCH_DEPRECATED_ATTRIBUTES, PYTORCH_DEPRECATION_INFO
+    
+    # Try to find the dataset file
+    current_dir = Path(__file__).parent
+    dataset_path = current_dir / "data" / "pytorch_deprecations" / "pytorch_deprecations_dataset.json"
+    
+    if not dataset_path.exists():
+        # Try relative to project root
+        dataset_path = current_dir.parent / "tools" / "data" / "pytorch_deprecations" / "pytorch_deprecations_dataset.json"
+    
+    if not dataset_path.exists():
+        # Dataset not found, silently continue without PyTorch deprecations
+        return
+    
+    try:
+        with open(dataset_path, 'r', encoding='utf-8') as f:
+            deprecations = json.load(f)
+        
+        for dep in deprecations:
+            api = dep.get('deprecated_api', '').strip()
+            category = dep.get('category', '')
+            
+            if not api:
+                continue
+            
+            # Extract the actual API name for AST matching
+            # For APIs like "torch.matrix_rank", extract "matrix_rank"
+            # For APIs like "torch.{is,set}_deterministic", skip (needs manual handling)
+            if '{' in api or '|' in api:
+                # Skip compound/shorthand APIs that can't be directly matched
+                continue
+            
+            # Extract the last part after the last dot for module-qualified names
+            api_name = api.split('.')[-1] if '.' in api else api
+            
+            # Store full info for detailed messages (use original API name as key)
+            key = f"{api}|{category}"
+            PYTORCH_DEPRECATION_INFO[key] = dep
+            
+            # Also store with simplified name for lookups
+            simple_key = f"{api_name}|{category}"
+            if simple_key != key:
+                PYTORCH_DEPRECATION_INFO[simple_key] = dep
+            
+            # Add to appropriate set based on category (use simplified name)
+            if category == 'parameter':
+                PYTORCH_DEPRECATED_PARAMS.add(api_name)
+            elif category == 'method':
+                PYTORCH_DEPRECATED_METHODS.add(api_name)
+            elif category == 'class':
+                PYTORCH_DEPRECATED_CLASSES.add(api_name)
+            elif category == 'function':
+                PYTORCH_DEPRECATED_FUNCTIONS.add(api_name)
+            elif category == 'attribute':
+                PYTORCH_DEPRECATED_ATTRIBUTES.add(api_name)
+        
+        # Add to main banned identifiers
+        BANNED_IDENTIFIERS.update(PYTORCH_DEPRECATED_METHODS)
+        BANNED_IDENTIFIERS.update(PYTORCH_DEPRECATED_CLASSES)
+        
+    except Exception as e:
+        pass
 
 # Load XGBoost deprecations when module is imported
 load_xgboost_deprecations()
-
+load_pytorch_deprecations()
 
 class Issue:
     def __init__(self, filename: str, lineno: int, col: int, code: str, message: str):
@@ -108,7 +184,7 @@ def _get_xgboost_deprecation_message(api: str, category: str, context: str = "")
     
     if info:
         version = info.get('version', 'unknown')
-        replacement = info.get('replacement', 'See XGBoost documentation')
+        replacement = info.get('replacement', '')
         reason = info.get('reason', '')
         dep_context = info.get('context', '')
         
@@ -126,7 +202,61 @@ def _get_xgboost_deprecation_message(api: str, category: str, context: str = "")
     else:
         return f"XGBoost deprecated {category} '{api}' detected. Update to current XGBoost API."
 
-
+def _get_pytorch_deprecation_message(api: str, category: str, context: str = "") -> str:
+    """
+    Get a detailed deprecation message for a PyTorch API.
+    
+    :param api: The deprecated API name
+    :param category: The category (parameter, method, class, function, attribute)
+    :param context: Optional context about where it was found
+    :return: Formatted deprecation message
+    """
+    key = f"{api}|{category}"
+    info = PYTORCH_DEPRECATION_INFO.get(key)
+    
+    if info:
+        version = info.get('version', 'unknown')
+        replacement = info.get('replacement', '')
+        reason = info.get('reason', '')
+        dep_context = info.get('context', '')
+        
+        msg = f"PyTorch deprecated {category} '{api}' detected (deprecated in v{version}"
+        if dep_context:
+            msg += f", {dep_context}"
+        msg += ")."
+        
+        if reason:
+            msg += f" Reason: {reason}."
+        
+        if replacement:
+            msg += f" Replacement: {replacement}"
+        
+        return msg
+    else:
+        return f"PyTorch deprecated {category} '{api}' detected. Update to current PyTorch API."
+    
+def _is_part_of_correct_api(node: ast.Attribute) -> bool:
+    """
+    Check if a deprecated function is being called as part of its correct replacement API.
+    For example, torch.linalg.lstsq is the correct replacement for torch.lstsq.
+    
+    Returns True if this is part of a correct API (should not be flagged).
+    """
+    if not isinstance(node.value, ast.Attribute):
+        return False
+    
+    # Check for torch.linalg.* pattern (correct replacements)
+    if node.value.attr == 'linalg':
+        if isinstance(node.value.value, ast.Name) and node.value.value.id == 'torch':
+            return True
+    
+    # Check for torch.ao.nn.quantized.dynamic.* pattern
+    if node.value.attr == 'dynamic':
+        if isinstance(node.value.value, ast.Attribute) and node.value.value.attr == 'quantized':
+            return True
+    
+    return False
+ 
 class _Checker(ast.NodeVisitor):
     def __init__(self, filename: str, source: str):
         self.filename = filename
@@ -168,7 +298,10 @@ class _Checker(ast.NodeVisitor):
                     if kw.arg in XGBOOST_DEPRECATED_PARAMS:
                         msg = _get_xgboost_deprecation_message(kw.arg, "parameter", "in fit() method")
                         self.issues.append(Issue(self.filename, node.lineno, getattr(node, "col_offset", 0), "XGB002", msg))
-                    
+                    # Check for PyTorch deprecated parameters in fit/train methods
+                    if kw.arg in PYTORCH_DEPRECATED_PARAMS:
+                        msg = _get_pytorch_deprecation_message(kw.arg, "parameter", "in fit/train method")
+                        self.issues.append(Issue(self.filename, node.lineno, getattr(node, "col_offset", 0), "TORCH010", msg))
             
             # Check for deprecated parameters in any XGBoost constructor
             if isinstance(node.func, ast.Name):
@@ -184,6 +317,24 @@ class _Checker(ast.NodeVisitor):
                 if node.func.attr in XGBOOST_DEPRECATED_METHODS:
                     msg = _get_xgboost_deprecation_message(node.func.attr, "method")
                     self.issues.append(Issue(self.filename, node.lineno, getattr(node, "col_offset", 0), "XGB004", msg))
+                
+                # Check for deprecated PyTorch methods
+                if node.func.attr in PYTORCH_DEPRECATED_METHODS:
+                    msg = _get_pytorch_deprecation_message(node.func.attr, "method")
+                    self.issues.append(Issue(self.filename, node.lineno, getattr(node, "col_offset", 0), "TORCH011", msg))
+                
+                # Check for deprecated PyTorch functions (as attributes, e.g., torch.matrix_rank)
+                if node.func.attr in PYTORCH_DEPRECATED_FUNCTIONS:
+                    # Check if this is part of a correct replacement API (e.g., torch.linalg.lstsq)
+                    if not _is_part_of_correct_api(node.func):
+                        msg = _get_pytorch_deprecation_message(node.func.attr, "function")
+                        self.issues.append(Issue(self.filename, node.lineno, getattr(node, "col_offset", 0), "TORCH012", msg))
+            
+            # Check for general function calls with deprecated parameters
+            for kw in node.keywords:
+                if kw.arg in PYTORCH_DEPRECATED_PARAMS:
+                    msg = _get_pytorch_deprecation_message(kw.arg, "parameter", "in function call")
+                    self.issues.append(Issue(self.filename, node.lineno, getattr(node, "col_offset", 0), "TORCH013", msg))
             
             # Existing checks
             if isinstance(node.func, ast.Attribute) and getattr(node.func, "attr", None) == "to_csv":
@@ -207,6 +358,20 @@ class _Checker(ast.NodeVisitor):
                         msg = _get_xgboost_deprecation_message("dask", "import", "from default xgboost import")
                         self.issues.append(Issue(self.filename, node.lineno, getattr(node, "col_offset", 0), "XGB005", msg))
             
+            # Check for deprecated PyTorch imports
+            # Many PyTorch deprecations are in the import category (e.g., torch.onnx.verification)
+            if node.module and "torch" in node.module:
+                for alias in node.names:
+                    # Check if the full import path is deprecated
+                    full_import = f"{node.module}.{alias.name}"
+                    # Check against function/class names that might be imported
+                    if alias.name in PYTORCH_DEPRECATED_FUNCTIONS:
+                        msg = _get_pytorch_deprecation_message(alias.name, "function", f"from {node.module}")
+                        self.issues.append(Issue(self.filename, node.lineno, getattr(node, "col_offset", 0), "TORCH014", msg))
+                    elif alias.name in PYTORCH_DEPRECATED_CLASSES:
+                        msg = _get_pytorch_deprecation_message(alias.name, "class", f"from {node.module}")
+                        self.issues.append(Issue(self.filename, node.lineno, getattr(node, "col_offset", 0), "TORCH015", msg))
+            
             # Existing checks
             if node.module == "transformers":
                 for alias in node.names:
@@ -224,6 +389,16 @@ class _Checker(ast.NodeVisitor):
             if node.id in XGBOOST_DEPRECATED_CLASSES:
                 msg = _get_xgboost_deprecation_message(node.id, "class")
                 self.issues.append(Issue(self.filename, node.lineno, getattr(node, "col_offset", 0), "XGB006", msg))
+            
+            # Check for deprecated PyTorch classes
+            if node.id in PYTORCH_DEPRECATED_CLASSES:
+                msg = _get_pytorch_deprecation_message(node.id, "class")
+                self.issues.append(Issue(self.filename, node.lineno, getattr(node, "col_offset", 0), "TORCH016", msg))
+            
+            # Check for deprecated PyTorch functions (when imported)
+            if node.id in PYTORCH_DEPRECATED_FUNCTIONS:
+                msg = _get_pytorch_deprecation_message(node.id, "function")
+                self.issues.append(Issue(self.filename, node.lineno, getattr(node, "col_offset", 0), "TORCH017", msg))
             
             # Existing checks
             if node.id in BANNED_IDENTIFIERS:
@@ -243,6 +418,16 @@ class _Checker(ast.NodeVisitor):
             if node.attr in XGBOOST_DEPRECATED_METHODS:
                 msg = _get_xgboost_deprecation_message(node.attr, "method")
                 self.issues.append(Issue(self.filename, node.lineno, getattr(node, "col_offset", 0), "XGB007", msg))
+            
+            # Check for deprecated PyTorch methods/attributes
+            if node.attr in PYTORCH_DEPRECATED_METHODS:
+                msg = _get_pytorch_deprecation_message(node.attr, "method")
+                self.issues.append(Issue(self.filename, node.lineno, getattr(node, "col_offset", 0), "TORCH018", msg))
+            
+            # Check for deprecated PyTorch attributes
+            if node.attr in PYTORCH_DEPRECATED_ATTRIBUTES:
+                msg = _get_pytorch_deprecation_message(node.attr, "attribute")
+                self.issues.append(Issue(self.filename, node.lineno, getattr(node, "col_offset", 0), "TORCH019", msg))
             
             # Existing checks
             if node.attr in BANNED_IDENTIFIERS:
