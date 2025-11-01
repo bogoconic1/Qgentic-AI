@@ -178,7 +178,7 @@ def _run_researcher_once(slug: str, iteration: int, run_id: int) -> tuple[int, s
     return run_id, str(plan_path), len(plan or "")
 
 @weave.op()
-def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, now_recommendations: dict, later_recommendations: dict, key: str, cpu_core_pool: Queue | None = None, gpu_pool: Queue | None = None, gpu_isolation_mode: str = "none", conda_env: str | None = None):
+def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, now_recommendations: dict, later_recommendations: dict, key: str, external_data_listing: str, plan_content: str, cpu_core_pool: Queue | None = None, gpu_pool: Queue | None = None, gpu_isolation_mode: str = "none", conda_env: str | None = None):
     """Run a single baseline DeveloperAgent and return results.
 
     Args:
@@ -208,6 +208,8 @@ def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, n
             model_name=model_name,
             model_recommendations=formatted_recommendations,
             later_recommendations=later_recommendations,
+            external_data_listing=external_data_listing,
+            plan_content=plan_content,
             cpu_core_range=cpu_core_range,
             gpu_identifier=gpu_identifier,
             gpu_isolation_mode=gpu_isolation_mode,
@@ -223,7 +225,7 @@ def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, n
             gpu_pool.put(gpu_identifier)
 
 @weave.op()
-def _run_ensembler_single(slug: str, iteration: int, strategy_index: int, strategy: dict, baseline_metadata: dict, cpu_core_pool: Queue | None = None, gpu_pool: Queue | None = None, gpu_isolation_mode: str = "none", conda_env: str | None = None):
+def _run_ensembler_single(slug: str, iteration: int, strategy_index: int, strategy: dict, baseline_metadata: dict, external_data_listing: str, plan_content: str, cpu_core_pool: Queue | None = None, gpu_pool: Queue | None = None, gpu_isolation_mode: str = "none", conda_env: str | None = None):
     """Run a single EnsemblerAgent for one ensemble strategy and return results.
 
     Args:
@@ -249,6 +251,8 @@ def _run_ensembler_single(slug: str, iteration: int, strategy_index: int, strate
             strategy_index=strategy_index,
             strategy=strategy,
             baseline_metadata=baseline_metadata,
+            external_data_listing=external_data_listing,
+            plan_content=plan_content,
             cpu_core_range=cpu_core_range,
             gpu_identifier=gpu_identifier,
             gpu_isolation_mode=gpu_isolation_mode,
@@ -456,6 +460,34 @@ class Orchestrator:
         self.base_dir = _TASK_ROOT / slug
         self.outputs_dir = self.base_dir / _OUTPUTS_DIRNAME / str(iteration)
 
+    def _get_external_data_listing(self) -> str:
+        """Get directory listing of external_data_* folders in outputs/<iteration>."""
+        from tools.helpers import _build_directory_listing
+
+        if not self.outputs_dir.exists():
+            return "No external data directories found."
+
+        external_data_dirs = [d for d in self.outputs_dir.iterdir() if d.is_dir() and d.name.startswith("external_data_")]
+
+        if not external_data_dirs:
+            return "No external data directories found."
+
+        lines = []
+        for ext_dir in sorted(external_data_dirs):
+            lines.append(f"\n{ext_dir.name}/")
+            dir_listing = _build_directory_listing(str(ext_dir))
+            lines.append(dir_listing)
+
+        return "\n".join(lines)
+
+    def _get_plan_content(self) -> str:
+        """Get content of plan.md if it exists."""
+        plan_path = self.outputs_dir / "plan.md"
+        if plan_path.exists():
+            with open(plan_path, "r") as f:
+                return f.read()
+        return "No plan.md found."
+
     @weave.op()
     def run(self, max_time_seconds: int | None = 6 * 3600) -> Tuple[bool, str]:
 
@@ -620,6 +652,12 @@ class Orchestrator:
             except Exception as e:
                 print(f"Warning: Could not load existing baseline results: {e}")
 
+        # Read external data listing and plan content (shared across all models)
+        external_data_listing = self._get_external_data_listing()
+        plan_content = self._get_plan_content()
+        print(f"External data listing: {len(external_data_listing)} chars")
+        print(f"Plan content: {len(plan_content)} chars")
+
         if not os.path.exists(self.outputs_dir / "baseline_results.json") or len(existing_baseline_results) < len(now_recommendations_all):
             # Ensure conda environments exist for isolated package installation
             _ensure_conda_environments(max_parallel_workers)
@@ -647,6 +685,8 @@ class Orchestrator:
                     now_recommendations,
                     later_recs,
                     key,
+                    external_data_listing,
+                    plan_content,
                     cpu_core_pool,
                     gpu_pool,
                     gpu_isolation_mode,
@@ -695,6 +735,8 @@ class Orchestrator:
                     json.dump(baseline_results, f, indent=2)
             else:
                 raise RuntimeError("All developer baseline runs failed")
+
+        return True, str(baseline_path)
 
         # Phase 5: Ensemble Phase - Combine baseline models using ensemble strategies
         print("\n" + "="*80)
@@ -762,6 +804,8 @@ class Orchestrator:
                 strategy_index,
                 strategy,
                 ensemble_metadata,
+                external_data_listing,
+                plan_content,
                 cpu_core_pool,
                 gpu_pool,
                 gpu_isolation_mode,

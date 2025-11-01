@@ -29,6 +29,8 @@ class EnsemblerAgent(DeveloperAgent):
         strategy_index: int,
         strategy: dict,
         baseline_metadata: dict,
+        external_data_listing: Optional[str] = None,
+        plan_content: Optional[str] = None,
         cpu_core_range: Optional[list[int]] = None,
         gpu_identifier: Optional[str] = None,
         gpu_isolation_mode: str = "none",
@@ -67,6 +69,8 @@ class EnsemblerAgent(DeveloperAgent):
             model_name=strategy_name,
             model_recommendations=strategy_text,  # Pass strategy as recommendations
             later_recommendations=None,
+            external_data_listing=external_data_listing,
+            plan_content=plan_content,
             cpu_core_range=cpu_core_range,
             gpu_identifier=gpu_identifier,
             gpu_isolation_mode=gpu_isolation_mode,

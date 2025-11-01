@@ -75,7 +75,7 @@ class DeveloperAgent:
     _shared_suggestions: list[str] = []
     _lock = threading.Lock()
 
-    def __init__(self, slug: str, iteration: int, model_name: Optional[str] = None, model_recommendations: Optional[str] = None, later_recommendations: Optional[dict] = None, cpu_core_range: Optional[list[int]] = None, gpu_identifier: Optional[str] = None, gpu_isolation_mode: str = "none", conda_env: Optional[str] = None):
+    def __init__(self, slug: str, iteration: int, model_name: Optional[str] = None, model_recommendations: Optional[str] = None, later_recommendations: Optional[dict] = None, external_data_listing: Optional[str] = None, plan_content: Optional[str] = None, cpu_core_range: Optional[list[int]] = None, gpu_identifier: Optional[str] = None, gpu_isolation_mode: str = "none", conda_env: Optional[str] = None):
         load_dotenv()
         self.slug = slug
         self.iteration = iteration
@@ -125,6 +125,10 @@ class DeveloperAgent:
         # LATER recommendations for progressive enhancement
         self.later_recommendations: Optional[dict] = later_recommendations
         self.threshold_directive: str = ""
+
+        # External data and plan content (passed from orchestrator)
+        self.external_data_listing: str = external_data_listing or "No external data directories found."
+        self.plan_content: str = plan_content or "No plan.md found."
 
         os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
@@ -235,29 +239,6 @@ class DeveloperAgent:
             gpu_isolation_mode=self.gpu_isolation_mode,
             allow_multi_fold=allow_multi_fold,
         )
-
-    def _get_external_data_listing(self) -> str:
-        """Get directory listing of external_data_* folders in outputs/<iteration>."""
-        external_data_dirs = [d for d in self.outputs_dir.iterdir() if d.is_dir() and d.name.startswith("external_data_")]
-
-        if not external_data_dirs:
-            return "No external data directories found."
-
-        lines = []
-        for ext_dir in sorted(external_data_dirs):
-            lines.append(f"\n{ext_dir.name}/")
-            dir_listing = _build_directory_listing(str(ext_dir))
-            lines.append(dir_listing)
-
-        return "\n".join(lines)
-
-    def _get_plan_content(self) -> str:
-        """Get content of plan.md if it exists."""
-        plan_path = self.base_dir / "plan.md"
-        if plan_path.exists():
-            with open(plan_path, "r") as f:
-                return f.read()
-        return "No plan.md found."
 
     def _build_user_prompt(self, version: int) -> str:
         self.logger.debug("Building user prompt")
@@ -798,6 +779,10 @@ class DeveloperAgent:
         user_prompt = self._build_user_prompt(version=1)
         input_list = [{"role": "user", "content": user_prompt}]
 
+        # Log external data listing and plan content (passed from orchestrator)
+        self.logger.info("External data listing (%d chars): %s", len(self.external_data_listing), self.external_data_listing[:200] + "..." if len(self.external_data_listing) > 200 else self.external_data_listing)
+        self.logger.info("Plan content (%d chars): %s", len(self.plan_content), self.plan_content[:200] + "..." if len(self.plan_content) > 200 else self.plan_content)
+
         attempt = 0
         for _ in range(16):
             now = time.time()
@@ -1048,10 +1033,6 @@ class DeveloperAgent:
                     self.logger.info("Using %d shared suggestions from all models (including this one)",
                                    len(shared_suggestions))
 
-                    # Get external data listing and plan content
-                    external_data_listing = self._get_external_data_listing()
-                    plan_content = self._get_plan_content()
-
                     sota_suggestions = self._call_sota_suggestions(
                         description=self.description,
                         context=code_with_logs,
@@ -1061,8 +1042,8 @@ class DeveloperAgent:
                         shared_suggestions=shared_suggestions,  # New: shared across all models
                         executed_code=self.last_suggestion_code,
                         later_recommendations=later_context,
-                        external_data_listing=external_data_listing,
-                        plan_content=plan_content,
+                        external_data_listing=self.external_data_listing,
+                        plan_content=self.plan_content,
                     )
                 except Exception:
                     self.logger.exception("Failed to fetch red flags or SOTA suggestions for attempt %s", attempt)
