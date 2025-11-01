@@ -200,8 +200,8 @@ class DeveloperAgent:
         self.is_lower_better = info.get("is_lower_better")
         self.logger.info("is_lower_better=%s", self.is_lower_better)
 
-    def _compose_system(self) -> str:
-        self.logger.debug("Composing system prompt for slug=%s", self.slug)
+    def _compose_system(self, allow_multi_fold: bool = False) -> str:
+        self.logger.debug("Composing system prompt for slug=%s (allow_multi_fold=%s)", self.slug, allow_multi_fold)
         with open(self.base_dir / "description.md", "r") as f:
             self.description = f.read()
         self.logger.debug("Description length: %s characters", len(self.description))
@@ -222,6 +222,7 @@ class DeveloperAgent:
             cpu_core_range=self.cpu_core_range,
             gpu_identifier=self.gpu_identifier,
             gpu_isolation_mode=self.gpu_isolation_mode,
+            allow_multi_fold=allow_multi_fold,
         )
 
     def _build_user_prompt(self, version: int) -> str:
@@ -759,10 +760,10 @@ class DeveloperAgent:
 
         run_score = 0
 
-        system_prompt = self._compose_system()
+        system_prompt = self._compose_system(allow_multi_fold=False)
         user_prompt = self._build_user_prompt(version=1)
         input_list = [{"role": "user", "content": user_prompt}]
-        
+
         attempt = 0
         for _ in range(16):
             now = time.time()
@@ -771,6 +772,11 @@ class DeveloperAgent:
                 break
 
             attempt += 1
+
+            # Rebuild system prompt with allow_multi_fold=True starting from attempt 2
+            if attempt == 2:
+                self.logger.info("Rebuilding system prompt with allow_multi_fold=True for attempt 2+")
+                system_prompt = self._compose_system(allow_multi_fold=True)
 
             artifact = wandb.Artifact(f'{self.iteration}-{self.slug}', type='files')
 
