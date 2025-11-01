@@ -680,7 +680,5 @@ class Orchestrator:
             print(f"Warning: Ensemble stage failed with error: {e}")
             print("Continuing without ensemble...")
 
-        # Return baseline results path
-        baseline_path = self.outputs_dir / "baseline_results.json"
         return True, str(baseline_path)
     

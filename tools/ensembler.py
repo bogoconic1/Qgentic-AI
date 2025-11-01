@@ -1,16 +1,16 @@
 """Tools for EnsemblerAgent: Ensemble strategy testing."""
 
-import json
 import logging
 import re
-import uuid
 from pathlib import Path
 
 import weave
 from project_config import get_config
 from tools.developer import execute_code
 from tools.helpers import call_llm_with_retry, _build_directory_listing
+from utils.code_utils import strip_header_from_code
 from utils.grade import run_grade
+from prompts.tools_ensembler import prompt_ask_ensemble_strategy
 
 logger = logging.getLogger(__name__)
 
@@ -23,71 +23,97 @@ _DEFAULT_ASK_ATTEMPTS = _RUNTIME_CFG.get("ask_eda_max_attempts", 3)
 
 
 @weave.op()
-def test_ensemble_strategy(
-    strategy: str,
+def ask_ensemble_strategy(
+    query: str,
+    baseline_code_files: list[str],
+    ensemble_iteration: int,
     ensemble_folder: Path,
     slug: str,
+    description: str,
+    metadata: dict,
     max_attempts: int | None = None,
-    timeout_seconds: int = 300
+    timeout_seconds: int | None = None
 ) -> str:
     """
     Test an ensemble strategy with retry logic (similar to ask_eda).
 
-    Takes a strategy description, generates code via LLM, executes it,
-    grades the result, and returns the score. Automatically retries on errors.
+    Takes a strategy description and baseline code files, generates new code
+    that implements the ensemble strategy by rewriting/combining baseline code,
+    executes it to train the ensemble model, and returns the score.
 
     Args:
-        strategy: Description of ensemble strategy to test
-        ensemble_folder: Path to ensemble artifacts
+        query: Description of ensemble strategy to implement
+        baseline_code_files: List of baseline code files to use (e.g., ["code_5_1_v8.py"])
+        ensemble_iteration: Current iteration number (used for submission filename)
+        ensemble_folder: Path to ensemble artifacts folder
         slug: Competition slug
+        description: Competition description
+        metadata: ensemble_metadata.json contents for mapping files to model names
         max_attempts: Maximum retry attempts (default from config)
-        timeout_seconds: Execution timeout per attempt (default: 5 minutes)
+        timeout_seconds: Execution timeout per attempt (default: baseline_time_limit // 2)
 
     Returns:
         String with score and insights if successful, or error message
     """
-    logger.info(f"Testing ensemble strategy: {strategy}")
+    logger.info(f"Testing ensemble strategy (iteration {ensemble_iteration}): {query}")
+    logger.info(f"Using baseline code files: {baseline_code_files}")
+
+    # Default timeout is half of baseline time limit
+    if timeout_seconds is None:
+        from project_config import get_config
+        runtime_cfg = get_config().get("runtime")
+        baseline_time_limit = runtime_cfg.get("baseline_time_limit", 14400)  # 4 hours default
+        timeout_seconds = baseline_time_limit // 2  # 2 hours default
+        logger.info(f"Using timeout: {timeout_seconds}s (baseline_time_limit // 2)")
 
     # Build directory listing for context
     directory_listing = _build_directory_listing(str(ensemble_folder))
     logger.debug("Prepared directory listing for %s (length=%s)", ensemble_folder, len(directory_listing))
 
-    # Build prompt for code generation
-    PROMPT = f"""You are an expert data scientist testing ensemble strategies.
+    # Build reverse mapping from code filename to model name
+    filename_to_model = {}
+    for model_name, model_info in metadata.items():
+        best_code_file = model_info.get("best_code_file")
+        if best_code_file:
+            filename_to_model[best_code_file] = model_name
 
-Available files in ensemble folder:
-{directory_listing}
+    # Read baseline code files and strip headers
+    baseline_codes = {}
+    for code_filename in baseline_code_files:
+        code_path = ensemble_folder / code_filename
+        if not code_path.exists():
+            logger.error(f"Baseline code file not found: {code_path}")
+            return f"Error: Baseline code file '{code_filename}' not found in ensemble folder."
 
-Competition slug: {slug}
+        # Map filename to model name
+        model_name = filename_to_model.get(code_filename)
+        if not model_name:
+            logger.error(f"Could not find model name for code file: {code_filename}")
+            return f"Error: Could not find model name for '{code_filename}' in ensemble_metadata.json"
 
-Your task is to write Python code that:
-1. Loads submission_model_*.csv files from the current directory
-2. Implements the specified ensemble strategy
-3. Saves the result to '_temp_submission.csv' with correct format (id + target columns)
-4. Grades the submission using mlebench and prints the score
+        try:
+            clean_code = strip_header_from_code(code_path)
+            baseline_codes[model_name] = clean_code  # Use model name as key
+            logger.info(f"Read baseline code from {code_filename} (model={model_name}, length={len(clean_code)})")
+        except Exception as e:
+            logger.error(f"Failed to read baseline code from {code_filename}: {e}")
+            return f"Error: Failed to read baseline code from '{code_filename}': {str(e)}"
 
-Guidelines:
-- Use pandas, numpy for ensemble computation
-- Working directory is: {ensemble_folder}
-- After creating '_temp_submission.csv', grade it using:
-  ```python
-  import subprocess
-  result = subprocess.run(['mlebench', 'grade-sample', '_temp_submission.csv', '{slug}'],
-                          capture_output=True, text=True)
-  print(result.stdout)  # This contains the score
-  ```
-- Print the score clearly
-- Keep output concise and relevant
-
-Output your code in a ```python code block.
-"""
+    # Build prompt
+    PROMPT = prompt_ask_ensemble_strategy(
+        ensemble_folder=str(ensemble_folder),
+        directory_listing=directory_listing,
+        description=description,
+        ensemble_iteration=ensemble_iteration,
+        baseline_codes=baseline_codes
+    )
 
     attempts = max_attempts or _DEFAULT_ASK_ATTEMPTS
-    input_list = [{"role": "user", "content": "Strategy: " + strategy}]
+    input_list = [{"role": "user", "content": "Strategy: " + query}]
     pattern = r'```python\s*(.*?)\s*```'
 
     for attempt in range(1, attempts + 1):
-        logger.info("test_ensemble_strategy attempt %s/%s", attempt, attempts)
+        logger.info("ask_ensemble_strategy attempt %s/%s", attempt, attempts)
 
         response = call_llm_with_retry(
             model=_RESEARCHER_TOOL_OFFLINE_MODEL,
@@ -101,53 +127,62 @@ Output your code in a ```python code block.
         # Extract code from response
         matches = re.findall(pattern, response_text, re.DOTALL)
         code = "\n\n".join(matches).strip()
-        logger.debug("test_ensemble_strategy generated code (truncated): %s...", code[:500])
+        logger.debug("ask_ensemble_strategy generated code (truncated): %s...", code[:500])
 
         if not code:
             input_list.append({"role": "user", "content": "No python code block found. Please try again."})
-            logger.warning("test_ensemble_strategy found no python code block in response.")
+            logger.warning("ask_ensemble_strategy found no python code block in response.")
             continue
 
-        # Write code to temporary file
-        temp_filename = f"_temp_ensemble_test_{uuid.uuid4().hex[:8]}.py"
-        temp_code_path = ensemble_folder / temp_filename
+        # Write code to file (following DeveloperAgent format)
+        code_file = ensemble_folder / f"ensemble_iteration_{ensemble_iteration}.py"
+        with open(code_file, "w") as f:
+            f.write(code)
 
-        # Prepend setup
-        full_code = f"""import os
-os.chdir(r'{ensemble_folder}')
+        # Execute code (logs will be written to ensemble_iteration_{ensemble_iteration}.txt by the code itself)
+        result = execute_code(str(code_file), timeout_seconds=timeout_seconds)
 
-{code}
-"""
-
-        try:
-            with open(temp_code_path, "w") as f:
-                f.write(full_code)
-
-            # Execute code
-            result = execute_code(str(temp_code_path), timeout_seconds=timeout_seconds)
-
-            # Check if execution timed out
-            if "timed out" in result.lower():
-                logger.error("test_ensemble_strategy execution timed out")
-                return result
-
-            # Check if execution had errors (execute_code returns error traces with guidance)
-            if "Traceback" in result or "Error" in result:
-                logger.warning("test_ensemble_strategy execution failed, retrying with error feedback")
-                input_list.append({"role": "user", "content": result})
-                continue
-
-            # Success - return the output
-            logger.info("test_ensemble_strategy succeeded on attempt %s", attempt)
+        # Check if execution timed out
+        if "timed out" in result.lower():
+            logger.error("ask_ensemble_strategy execution timed out")
             return result
 
-        finally:
-            # Clean up temp files
-            temp_code_path.unlink(missing_ok=True)
-            temp_sub_path = ensemble_folder / "_temp_submission.csv"
-            temp_sub_path.unlink(missing_ok=True)
+        # Check if execution had errors (execute_code returns error traces with guidance)
+        if "Traceback" in result or "Error" in result:
+            logger.warning("ask_ensemble_strategy execution failed, retrying with error feedback")
+            input_list.append({"role": "user", "content": result})
+            continue
 
-    logger.error("test_ensemble_strategy exhausted all attempts without success")
+        # Success - grade the submission
+        submission_file = ensemble_folder / f"submission_ens_{ensemble_iteration}.csv"
+
+        if not submission_file.exists():
+            logger.error("Submission file not created: %s", submission_file)
+            error_msg = f"Error: Code executed successfully but did not create {submission_file.name}"
+            input_list.append({"role": "user", "content": error_msg})
+            continue
+
+        # Grade the submission
+        logger.info("Grading submission: %s", submission_file)
+        grade_info, stdout, returncode, stderr = run_grade(str(submission_file), slug)
+
+        if returncode != 0:
+            logger.error("Grading failed: %s", stderr)
+            error_msg = f"Grading failed:\n{stdout}\n{stderr}"
+            input_list.append({"role": "user", "content": error_msg})
+            continue
+
+        # Append grading result to execution output
+        grading_result = f"\n\n=== Grading Result ===\n{stdout}"
+        final_result = result + grading_result
+
+        logger.info("ask_ensemble_strategy succeeded on attempt %s", attempt)
+        if grade_info:
+            logger.info("Score: %s", grade_info)
+
+        return final_result
+
+    logger.error("ask_ensemble_strategy exhausted all attempts without success")
     return "Unable to test the strategy after multiple attempts. Please try rephrasing or simplifying."
 
 
@@ -174,17 +209,22 @@ def get_tools() -> list[dict]:
         {
             "type": "function",
             "function": {
-                "name": "test_ensemble_strategy",
-                "description": "Test an ensemble strategy by generating code, executing it, and grading the result. Describe the strategy you want to test (e.g., 'weighted average by model scores', 'rank averaging', 'simple mean'). The tool will generate code, create submission, grade it with mlebench, and return the score. Automatically retries if code fails.",
+                "name": "ask_ensemble_strategy",
+                "description": "Test an ensemble strategy by rewriting baseline model code, training the ensemble model, and grading the result. Provide the strategy description and baseline code files to use. The tool will generate new code that implements the ensemble, train it from scratch, create submission_ens_{iteration}.csv, grade it with mlebench, and return the score. Automatically retries if code fails.",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "strategy": {
+                        "query": {
                             "type": "string",
-                            "description": "Description of ensemble strategy to test. Examples: 'weighted average using model scores as weights', 'simple arithmetic mean of all predictions', 'rank averaging across all models', 'median of predictions'. The tool will generate code to implement this strategy, save to _temp_submission.csv, grade it, and print the score."
+                            "description": "Description of ensemble strategy to implement. Examples: 'stacking with LightGBM meta-model', 'use first model for first stage, then feed its OOF predictions to second model as a feature', 'blending with optimized weights on validation set'. The tool will rewrite baseline code to implement this strategy and train the ensemble model."
+                        },
+                        "baseline_code_files": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "List of baseline code files to use for the ensemble. Examples: ['code_5_1_v8.py'], ['code_5_1_v8.py', 'code_5_2_v12.py']. These files will be read to understand model architectures and rewritten to implement the ensemble strategy."
                         }
                     },
-                    "required": ["strategy"]
+                    "required": ["query", "baseline_code_files"]
                 }
             }
         }

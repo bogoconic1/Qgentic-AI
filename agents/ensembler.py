@@ -2,14 +2,13 @@
 
 import json
 import logging
-import re
 from pathlib import Path
 
 import weave
 from dotenv import load_dotenv
 
 from project_config import get_config
-from tools.ensembler import test_ensemble_strategy, get_tools
+from tools.ensembler import ask_ensemble_strategy, get_tools
 from tools.researcher import ask_eda
 from prompts.ensembler_agent import (
     build_system as prompt_build_system,
@@ -76,9 +75,8 @@ class EnsemblerAgent:
         with open(self.base_dir / "description.md") as f:
             self.description = f.read()
 
-        # Track tested strategies
-        self.tested_strategies = []  # List of dicts: {step, score, code}
-        self.best_score = None
+        # Ensemble iteration counter (starts at 1)
+        self.ensemble_iteration = 1
 
         self._configure_logger()
 
@@ -111,38 +109,31 @@ class EnsemblerAgent:
         logger.info(f"Models to ensemble: {list(self.metadata.keys())}")
 
     @weave.op()
-    def run(self, max_steps: int | None = None) -> dict:
+    def run(self, max_steps: int | None = None) -> str:
         """
         Main ensembler loop with tool calling.
 
-        Iteratively uses ask_eda and test_ensemble_strategy tools to:
+        Iteratively uses ask_eda and ask_ensemble_strategy tools to:
         1. Analyze model correlations and diversity
         2. Test different ensemble strategies
-        3. Generate final Python code that creates submission_ens.csv
+        3. Generate final plan with <final_submission_file> tag
 
         Args:
             max_steps: Maximum number of tool-calling steps (default from config)
 
         Returns:
-            dict with keys:
-                - success: bool indicating if ensemble was created successfully
-                - final_score: float score of final ensemble
-                - final_submission_path: str path to submission_ens.csv
-                - strategies_tested: list of all tested strategies
-                - error: str error message if failed
+            String containing final plan with ensemble recommendation
         """
         max_steps = max_steps or _DEFAULT_MAX_STEPS
         logger.info("Starting EnsemblerAgent with max_steps=%s", max_steps)
 
         # Build prompts
         system_prompt = prompt_build_system(
-            description=self.description,
-            metadata=self.metadata,
             ensemble_folder=str(self.ensemble_folder),
         )
 
         input_list = [
-            {"role": "user", "content": prompt_initial_user(self.metadata)}
+            {"role": "user", "content": prompt_initial_user(self.description, self.metadata)}
         ]
 
         tools = get_tools()
@@ -154,7 +145,7 @@ class EnsemblerAgent:
             if step == max_steps - 1:
                 input_list.append({
                     "role": "user",
-                    "content": "This is your FINAL step. Output the final ensemble Python code now!"
+                    "content": "This is your FINAL step. Output the final ensemble plan now with <final_submission_file> tag!"
                 })
                 logger.info("Reached final step; forcing finalization")
 
@@ -198,23 +189,34 @@ class EnsemblerAgent:
                             "output": json.dumps({"insights": result})
                         })
 
-                    elif item.name == "test_ensemble_strategy":
+                    elif item.name == "ask_ensemble_strategy":
                         try:
-                            strategy = json.loads(item.arguments)["strategy"]
+                            args = json.loads(item.arguments)
+                            query = args["query"]
+                            baseline_code_files = args["baseline_code_files"]
                         except Exception as e:
-                            logger.error("Failed to parse test_ensemble_strategy arguments: %s", e)
-                            strategy = ""
+                            logger.error("Failed to parse ask_ensemble_strategy arguments: %s", e)
+                            query = ""
+                            baseline_code_files = []
 
-                        if not strategy:
-                            result = "Error: No strategy provided. Please describe an ensemble strategy to test."
+                        if not query or not baseline_code_files:
+                            result = "Error: Both query and baseline_code_files are required. Please provide both."
                         else:
-                            logger.info("Testing strategy: %s", strategy)
+                            logger.info(f"Ensemble Strategy (iteration {self.ensemble_iteration}): {query}")
+                            logger.info(f"Baseline code files: {baseline_code_files}")
 
-                            result = test_ensemble_strategy(
-                                strategy=strategy,
+                            result = ask_ensemble_strategy(
+                                query=query,
+                                baseline_code_files=baseline_code_files,
+                                ensemble_iteration=self.ensemble_iteration,
                                 ensemble_folder=self.ensemble_folder,
-                                slug=self.slug
+                                slug=self.slug,
+                                description=self.description,
+                                metadata=self.metadata
                             )
+
+                            # Increment iteration after successful call
+                            self.ensemble_iteration += 1
 
                         input_list.append({
                             "type": "function_call_output",
