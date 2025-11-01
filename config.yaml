@@ -24,8 +24,9 @@ runtime:
   enable_cpu_affinity: true  # Pin processes to specific CPU cores
   # Conda environment isolation
   reset_conda_envs_per_run: true  # If true, delete and recreate conda environments on each run for clean slate (slower startup). If false, reuse existing environments (faster but accumulates packages over time)
-  # Time limit for developer phase (in seconds)
-  baseline_time_limit: 14400  # 4 hours for baseline development
+  # Time limits (in seconds)
+  baseline_time_limit: 10800  # 3 hours for baseline development
+  ensemble_time_limit: 14400  # 4 hours for ensemble phase
 paths:
   task_root: "task"
   outputs_dirname: "outputs"

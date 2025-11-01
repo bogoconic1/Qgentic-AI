@@ -363,7 +363,7 @@ Develop and recommend 8 diverse, independent, and actionable ensemble strategies
     {{"strategy": "Use a LightGBM, CatBoost, and XGBoost three-way weighted average (models: 'LightGBM', 'CatBoost', 'XGBoost') after tuning each individually by Optuna; weights determined by holdout set RMSE.", "models_needed": ["LightGBM", "CatBoost", "XGBoost"]}},
     {{"strategy": "Implement two-stage stacking: first-level learners are fine-tuned CNN and transformer models ('ResNet50', 'EfficientNet', 'ConvNext'); then train a CatBoost with the outputs of the first stage as features.", "models_needed": ["ResNet50", "EfficientNet", "ConvNext", "CatBoost"]}},
     ...
-    {{"strategy": [], "models_needed": []}}  (8 total)
+    {{"strategy": str, "models_needed": list[str]}},  (8 total)
   ]
 }}
 ```

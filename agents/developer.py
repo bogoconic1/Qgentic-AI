@@ -171,7 +171,18 @@ class DeveloperAgent:
     def _submission_filename(self, version: int) -> str:
         return _SUBMISSION_TEMPLATE.format(iteration=self.iteration, version=version)
 
-    
+    def _get_code_timeout(self) -> int:
+        """
+        Get the timeout for code execution in seconds.
+        Can be overridden by subclasses (e.g., EnsemblerAgent).
+
+        Returns:
+            Timeout in seconds for code execution (5400 = 1.5 hours for baseline)
+        """
+        from tools.developer import _BASELINE_CODE_TIMEOUT
+        return _BASELINE_CODE_TIMEOUT
+
+
 
     def _load_benchmark_info(self) -> None:
         self.benchmark_info = None
@@ -734,7 +745,7 @@ class DeveloperAgent:
         """
         Call SOTA suggestions tool with appropriate parameters.
 
-        Can be overridden by subclasses to modify behavior (e.g., allow_multi_fold).
+        Can be overridden by subclasses to modify behavior (e.g., is_ensemble).
 
         Args:
             **kwargs: Arguments to pass to search_sota_suggestions
@@ -855,8 +866,10 @@ class DeveloperAgent:
             # Execute the code with OOM retry logic
             # If GPU isolation is enabled (MIG or multi-GPU), skip OOM polling (treat OOM as a code bug, not resource contention)
             skip_oom_polling = self.gpu_isolation_mode in ["mig", "multi-gpu"]
+            timeout_seconds = self._get_code_timeout()
             output, wait_time = execute_code_with_oom_retry(
                 str(code_path),
+                timeout_seconds=timeout_seconds,
                 skip_oom_polling=skip_oom_polling,
                 conda_env=self.conda_env
             )
