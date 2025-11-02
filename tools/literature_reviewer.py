@@ -526,8 +526,7 @@ class LiteratureReviewer:
         for paper in papers:
             try:
                 recommendations.extend(
-                    self.client.recommendations(
-                        paper.paper_id, limit=recommendations_per_paper)
+                    self.client.recommendations(paper.paper_id, limit=recommendations_per_paper)
                 )
             except Exception as exc:
                 LOGGER.warning(
