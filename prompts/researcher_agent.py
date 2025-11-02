@@ -485,7 +485,16 @@ Each recommendation containing:
 - **References**: Links to papers, Kaggle discussions, or documentation
 
 ## Section 4: External Data & Resources (if applicable)
-- Enumerate relevant external datasets with specific use cases
+
+### External Datasets (if any)
+For each external dataset used:
+- **Dataset name and source**: Full Kaggle dataset path or URL
+- **Location**: Path where downloaded (e.g., `outputs/X/external_data_1/dataset-name/`)
+- **Key files**: Specific filenames used
+- **How to use**: Clear instructions on how to join/merge with competition data (join keys, columns to extract, missing value handling)
+- **Use cases**: What features or insights were derived
+
+### Other Resources
 - Pre-trained models or embeddings that could be leveraged
 - Links to relevant papers or Kaggle discussions
 
