@@ -3,6 +3,11 @@
 Usage:
     set S2_API_KEY="your-semantic-scholar-api-key" in .env file
     python examples/demo_literature_reviewer.py --query "vision-language agents"
+
+The underlying Semantic Scholar client now runs a multi-query search that expands
+the seed topic with related phrases and influential authors while filtering for
+recent (2022+) publications. This script prints the resulting paper metadata and
+high-level analyzer output.
 """
 
 from __future__ import annotations
@@ -91,6 +96,10 @@ def main() -> None:
         print(f"Title: {review.metadata.title}")
         print(f"Paper ID: {review.metadata.paper_id}")
         print(f"URL: {review.metadata.url or 'N/A'}")
+        print(f"Published: {review.metadata.year or 'Unknown'}")
+        primary_authors = ", ".join(review.metadata.authors[:5]) or "Unknown"
+        print(f"Authors: {primary_authors}")
+        print(f"Open Access: {'Yes' if review.metadata.is_open_access else 'No'}")
         print(f"PDF: {review.pdf_path or 'Not downloaded'}")
         if review.error:
             print(f"Error: {review.error}")
