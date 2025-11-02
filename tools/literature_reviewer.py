@@ -410,7 +410,6 @@ class PaperAnalyzer:
         return buckets
 
     def _split_sentences(self, text: str) -> List[str]:
-        import re
 
         text = text.replace("\r", " ")
         candidate_sentences = re.split(r"(?<=[.!?])\s+", text)
