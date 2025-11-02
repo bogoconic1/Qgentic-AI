@@ -40,7 +40,9 @@ Begin with a concise checklist (3-7 bullets) of the main analytical sub-tasks yo
 # Available Tools
 - `ask_eda(question)`: Executes Python-based exploratory data analysis (EDA) on the local dataset. Use to inspect distributions, data quality, and verify assumptions.
 - `run_ab_test(question)`: Designs and runs A/B tests on modeling/feature engineering ideas to directly assess their impact. (**Mandated before finalizing any hypothesis**)
-- `download_external_datasets(query)`: Fetches relevant external datasets for investigation under `{base_dir}/`. EDA is available on these, too.
+- `download_external_datasets(query)`: Fetches relevant external datasets for investigation under `{base_dir}/`. EDA & AB testing is available on these, too.
+
+**IMPORTANT:** these tools have NO MEMORY, so PLEASE be as specific as possible in your questions. For datasets, it's best if you specify the exact dataset handler <author>/<dataset>, but if you can't, give an English description of the `dataset` you want.
 
 # A/B Test Enforcement Policy
 - Empirically validate every modeling/feature hypothesis using `run_ab_test` before making a recommendation.

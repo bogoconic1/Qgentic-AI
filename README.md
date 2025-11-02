@@ -216,7 +216,8 @@ Key settings live in `config.yaml` (merged with `project_config.py` defaults):
 - **runtime**: Execution parameters:
   - `baseline_time_limit`: Total time budget for baseline iteration in seconds (default: 21600 = 6 hours)
   - Code execution timeout automatically calculated as `baseline_time_limit // 4` (currently 5400s = 1.5 hours)
-  - `ask_eda_max_attempts`: Max retry attempts for EDA tool (default: 3)
+  - `ask_eda_max_attempts`: Max retry attempts for EDA/A/B test code generation (default: 3)
+  - `download_datasets_max_attempts`: Max retry attempts per query phrasing for external dataset discovery (default: 1)
   - `researcher_max_steps`: Max steps for researcher exploration (default: 512)
   - `llm_max_retries`: Max retries for LLM calls (default: 3)
   - `baseline_max_parallel_workers`: Max parallel baseline workers when MIG disabled (default: 3)

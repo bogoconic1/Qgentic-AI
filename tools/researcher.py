@@ -36,6 +36,7 @@ _PATH_CFG = _CONFIG.get("paths")
 _RESEARCHER_TOOL_OFFLINE_MODEL = _LLM_CFG.get("researcher_tool_offline_model")
 _RESEARCHER_TOOL_ONLINE_MODEL = _LLM_CFG.get("researcher_tool_online_model")
 _DEFAULT_ASK_ATTEMPTS = _RUNTIME_CFG.get("ask_eda_max_attempts")
+_DEFAULT_DOWNLOAD_ATTEMPTS = _RUNTIME_CFG.get("download_datasets_max_attempts")
 _TASK_ROOT = Path(_PATH_CFG.get("task_root"))
 _EXTERNAL_DIRNAME = _PATH_CFG.get("external_data_dirname")
 
@@ -123,10 +124,10 @@ def ask_eda(question: str, description: str, data_path: str, max_attempts: int |
     return "Your question cannot be answered."
 
 @weave.op()
-def download_external_datasets(dataset_name: str, slug: str, max_attempts: int | None = None) -> str:
-    """Downloads external datasets"""
-    logger.debug("Dataset name: %s", dataset_name)
-    attempts = max_attempts or _DEFAULT_ASK_ATTEMPTS
+def download_external_datasets(question_1: str, question_2: str, question_3: str, slug: str, max_attempts: int | None = None) -> str:
+    """Downloads external datasets using 3 different phrasings to maximize search coverage"""
+    logger.debug("Dataset queries: q1=%s, q2=%s, q3=%s", question_1, question_2, question_3)
+    attempts = max_attempts or _DEFAULT_DOWNLOAD_ATTEMPTS
     
 
     comp_dir = _TASK_ROOT / slug
@@ -134,33 +135,41 @@ def download_external_datasets(dataset_name: str, slug: str, max_attempts: int |
         COMP_METADATA = yaml.safe_load(f)
 
     PROMPT = prompt_datasets()
-    input_list = [{"role": "user", "content": "Dataset Name: " + dataset_name}]
-    logger.debug("Web search messages: %s", input_list)
-    pattern = r'```json\s*(\{.*?\})\s*```' 
+    pattern = r'```json\s*(\{.*?\})\s*```'
 
     relevant_datasets = []
-    for attempt in range(1, attempts + 1):
-        logger.info("Dataset discovery attempt %s/%s", attempt, attempts)
-        response = call_llm_with_retry(
-            model=_RESEARCHER_TOOL_ONLINE_MODEL,
-            instructions=PROMPT,
-            tools=[],
-            messages=input_list,
-            web_search_enabled=True,
-        )
-        completion = response.output_text or ""
 
-        matches = re.findall(pattern, completion, re.DOTALL)
-        if not matches:
-            logger.warning("No JSON block found in web search response.")
-            continue
-        else:
-            data = json.loads(matches[0])
-            new_datasets = data.get("datasets", [])
-            logger.info("Relevant datasets found: %s", new_datasets)
-            relevant_datasets.extend(new_datasets)
+    # Loop through 3 different query phrasings
+    for q_idx, query in enumerate([question_1, question_2, question_3], start=1):
+        logger.info("Processing query phrasing %s/3: %s", q_idx, query)
+        input_list = [{"role": "user", "content": "Dataset Name: " + query}]
 
-    logger.info("Found %s relevant datasets from web search.", len(relevant_datasets))
+        # For each query, retry up to 'attempts' times
+        for attempt in range(1, attempts + 1):
+            logger.info("Dataset discovery attempt %s/%s for query %s", attempt, attempts, q_idx)
+            response = call_llm_with_retry(
+                model=_RESEARCHER_TOOL_ONLINE_MODEL,
+                instructions=PROMPT,
+                tools=[],
+                messages=input_list,
+                web_search_enabled=True,
+            )
+            completion = response.output_text or ""
+
+            matches = re.findall(pattern, completion, re.DOTALL)
+            if not matches:
+                logger.warning("No JSON block found in web search response for query %s attempt %s.", q_idx, attempt)
+                continue
+            else:
+                data = json.loads(matches[0])
+                new_datasets = data.get("datasets", [])
+                logger.info("Query %s found %s datasets: %s", q_idx, len(new_datasets), new_datasets)
+                relevant_datasets.extend(new_datasets)
+                break  # Success, move to next query
+
+    # Deduplicate datasets
+    relevant_datasets = list(set(relevant_datasets))
+    logger.info("Found %s unique datasets from all 3 query phrasings.", len(relevant_datasets))
 
     # this should fallback - because we will still read the directory
     external_root_env = os.environ.get("EXTERNAL_DATA_DIR").strip()
@@ -234,14 +243,16 @@ def get_tools():
         {
             "type": "function",
             "name": "download_external_datasets",
-            "description": "Download external data to working directory",
+            "description": "Download external data to working directory by searching with 3 different phrasings to maximize search coverage",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "dataset_name": {"type": "string", "description": "The dataset name to download - write an English phrase describing the dataset you want to download"}
+                    "question_1": {"type": "string", "description": "First phrasing of the dataset query"},
+                    "question_2": {"type": "string", "description": "Second phrasing with different wording"},
+                    "question_3": {"type": "string", "description": "Third phrasing using alternative keywords"}
                 },
             },
             "additionalProperties": False,
-            "required": ["dataset_name"],
+            "required": ["question_1", "question_2", "question_3"],
         },
     ]

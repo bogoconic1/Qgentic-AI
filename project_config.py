@@ -22,7 +22,8 @@ _DEFAULT_CONFIG: dict[str, Any] = {
         "model_recommender_model": "gpt-5",
     },
     "runtime": {
-        "ask_eda_max_attempts": 5,
+        "ask_eda_max_attempts": 3,
+        "download_datasets_max_attempts": 1,
         "researcher_max_steps": 512,
         "llm_max_retries": 3,
         "directory_listing_max_files": 10,

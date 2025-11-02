@@ -229,11 +229,15 @@ class ResearcherAgent:
                                 logger.info("No media ingested for this step.")
                             
                     elif item.name == "download_external_datasets":
-                        dataset_name = json.loads(item.arguments)["dataset_name"]
-                        if not dataset_name:
-                            tool_output = "Dataset name missing; please provide a specific dataset name."
+                        args = json.loads(item.arguments)
+                        question_1 = args.get("question_1", "")
+                        question_2 = args.get("question_2", "")
+                        question_3 = args.get("question_3", "")
+
+                        if not question_1 or not question_2 or not question_3:
+                            tool_output = "All 3 question phrasings are required. Please provide question_1, question_2, and question_3."
                         else:
-                            tool_output = download_external_datasets(dataset_name, self.slug)
+                            tool_output = download_external_datasets(question_1, question_2, question_3, self.slug)
 
                         logger.info("External search response length=%s", len(tool_output or ""))
 
