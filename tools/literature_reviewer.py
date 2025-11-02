@@ -23,6 +23,8 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 import re
+import time
+from random import random
 from typing import Dict, Iterable, List, Optional, Sequence
 
 import requests
@@ -48,7 +50,8 @@ LOGGER = logging.getLogger(__name__)
 
 SEMANTIC_SCHOLAR_API_URL = "https://api.semanticscholar.org/graph/v1"
 DEFAULT_FIELDS = (
-    "paperId,title,url,abstract,isOpenAccess,openAccessPdf,authors,externalIds,year"
+    "paperId,title,url,abstract,isOpenAccess,openAccessPdf,authors,externalIds,"
+    "year,corpusId,openAccessCorpusId"
 )
 DEFAULT_LIMIT = 5
 DEFAULT_MAX_WORKERS = 4
@@ -72,6 +75,7 @@ STOPWORDS = {
     "via",
     "with",
 }
+RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504}
 
 
 class PaperDownloadError(Exception):
@@ -90,6 +94,8 @@ class PaperMetadata:
     open_access_pdf_url: Optional[str]
     authors: tuple[str, ...]
     year: Optional[int]
+    corpus_id: Optional[str]
+    open_access_corpus_id: Optional[str]
     external_ids: Dict[str, str] = field(default_factory=dict)
 
 
@@ -250,6 +256,12 @@ class SemanticScholarClient:
             year = int(year_raw)
         except (TypeError, ValueError):
             year = None
+        corpus_id_raw = entry.get("corpusId")
+        corpus_id = str(corpus_id_raw) if corpus_id_raw else None
+        open_access_corpus_id_raw = entry.get("openAccessCorpusId")
+        open_access_corpus_id = (
+            str(open_access_corpus_id_raw) if open_access_corpus_id_raw else None
+        )
         return PaperMetadata(
             paper_id=entry.get("paperId", ""),
             title=entry.get("title", "").strip(),
@@ -259,6 +271,8 @@ class SemanticScholarClient:
             open_access_pdf_url=open_access_pdf.get("url"),
             authors=authors,
             year=year,
+            corpus_id=corpus_id,
+            open_access_corpus_id=open_access_corpus_id,
             external_ids=external_ids,
         )
 
@@ -463,10 +477,20 @@ class PaperDownloader:
         self,
         target_dir: Path | str = "data",
         user_agent: str = "literature-reviewer/1.0",
+        max_attempts_per_url: int = 3,
+        backoff_factor: float = 1.5,
+        max_retry_wait: float = 30.0,
+        retry_status_codes: Optional[Sequence[int]] = None,
     ) -> None:
         self._target_dir = Path(target_dir)
         self._target_dir.mkdir(parents=True, exist_ok=True)
         self._user_agent = user_agent
+        self._max_attempts_per_url = max(1, int(max_attempts_per_url))
+        self._backoff_factor = max(0.1, float(backoff_factor))
+        self._max_retry_wait = max(1.0, float(max_retry_wait))
+        self._retry_status_codes = (
+            set(retry_status_codes) if retry_status_codes else RETRYABLE_STATUS_CODES
+        )
 
     def download(self, paper: PaperMetadata) -> Optional[Path]:
         dest_path = self._build_dest_path(paper)
@@ -569,53 +593,147 @@ class PaperDownloader:
         if doi:
             add(f"https://doi.org/{doi}")
 
+        corpus_candidates = [
+            paper.open_access_corpus_id,
+            paper.corpus_id,
+            external_ids.get("CorpusId") or external_ids.get("CORPUSID"),
+        ]
+        for corpus_candidate in corpus_candidates:
+            normalized_corpus = (
+                str(corpus_candidate).strip()
+                if corpus_candidate is not None
+                else ""
+            )
+            if normalized_corpus:
+                add(f"https://api.semanticscholar.org/CorpusID:{normalized_corpus}.pdf")
+                add(f"https://api.semanticscholar.org/corpusid:{normalized_corpus}.pdf")
+
         add(paper.url)
         return urls
+
+    def _should_retry_status(self, status: int) -> bool:
+        return status in self._retry_status_codes
+
+    def _compute_backoff(
+        self,
+        attempt: int,
+        retry_after_header: Optional[str] = None,
+    ) -> float:
+        if retry_after_header:
+            candidate = retry_after_header.strip()
+            if candidate:
+                try:
+                    wait_time = float(candidate)
+                    if wait_time > 0:
+                        return min(wait_time, self._max_retry_wait)
+                except ValueError:
+                    pass
+        base = self._backoff_factor * (2 ** max(0, attempt - 1))
+        jitter_multiplier = 0.5 + random()
+        wait = base * jitter_multiplier
+        return min(wait, self._max_retry_wait)
 
     def _download_from_url(self, url: str, dest_path: Path) -> None:
         headers = {"user-agent": self._user_agent}
         with requests.Session() as session:
-            with session.get(
-                url,
-                headers=headers,
-                stream=True,
-                timeout=120,
-                allow_redirects=True,
-                verify=False,  # noqa: S501 (semanticscholar hosts many certs)
-            ) as response:
-                response.raise_for_status()
-                content_type = response.headers.get("content-type", "")
-                first_chunk: Optional[bytes] = None
-                file_handle = None
+            attempt = 0
+            last_exc: Optional[Exception] = None
+            while attempt < self._max_attempts_per_url:
+                attempt += 1
                 try:
-                    for chunk in response.iter_content(chunk_size=CHUNK_SIZE):
-                        if not chunk:
+                    with session.get(
+                        url,
+                        headers=headers,
+                        stream=True,
+                        timeout=120,
+                        allow_redirects=True,
+                        verify=False,  # noqa: S501 (semanticscholar hosts many certs)
+                    ) as response:
+                        if self._should_retry_status(response.status_code):
+                            wait_time = self._compute_backoff(
+                                attempt,
+                                response.headers.get("retry-after"),
+                            )
+                            last_exc = PaperDownloadError(
+                                f"HTTP {response.status_code} received while downloading {url}"
+                            )
+                            LOGGER.debug(
+                                "Retryable status %s for %s (attempt %s/%s). Waiting %.1fs.",
+                                response.status_code,
+                                url,
+                                attempt,
+                                self._max_attempts_per_url,
+                                wait_time,
+                            )
+                            time.sleep(wait_time)
                             continue
-                        if first_chunk is None:
-                            first_chunk = chunk
-                            if not self._looks_like_pdf(content_type, first_chunk):
-                                raise PaperDownloadError(
-                                    f"URL did not return PDF content (content-type='{content_type}')"
-                                )
-                            file_handle = dest_path.open("wb")
-                            file_handle.write(first_chunk)
-                        else:
+                        response.raise_for_status()
+                        content_type = response.headers.get("content-type", "")
+                        first_chunk: Optional[bytes] = None
+                        file_handle = None
+                        try:
+                            for chunk in response.iter_content(chunk_size=CHUNK_SIZE):
+                                if not chunk:
+                                    continue
+                                if first_chunk is None:
+                                    first_chunk = chunk
+                                    if not self._looks_like_pdf(
+                                        content_type, first_chunk
+                                    ):
+                                        raise PaperDownloadError(
+                                            f"URL did not return PDF content (content-type='{content_type}')"
+                                        )
+                                    file_handle = dest_path.open("wb")
+                                    file_handle.write(first_chunk)
+                                else:
+                                    if file_handle is None:
+                                        file_handle = dest_path.open("wb")
+                                    file_handle.write(chunk)
                             if file_handle is None:
-                                file_handle = dest_path.open("wb")
-                            file_handle.write(chunk)
-                    if file_handle is None:
-                        raise PaperDownloadError(
-                            "Empty response when downloading PDF."
-                        )
-                except Exception:
-                    if file_handle is not None:
-                        file_handle.close()
-                    if dest_path.exists():
-                        dest_path.unlink(missing_ok=True)
-                    raise
-                else:
-                    if file_handle is not None:
-                        file_handle.close()
+                                raise PaperDownloadError(
+                                    "Empty response when downloading PDF."
+                                )
+                        except Exception:
+                            if file_handle is not None:
+                                file_handle.close()
+                            if dest_path.exists():
+                                dest_path.unlink(missing_ok=True)
+                            raise
+                        else:
+                            if file_handle is not None:
+                                file_handle.close()
+                        return
+                except PaperDownloadError as exc:
+                    last_exc = exc
+                    if attempt >= self._max_attempts_per_url:
+                        raise
+                    wait_time = self._compute_backoff(attempt)
+                    LOGGER.debug(
+                        "Encountered PDF validation issue for %s (attempt %s/%s): %s. Retrying in %.1fs.",
+                        url,
+                        attempt,
+                        self._max_attempts_per_url,
+                        exc,
+                        wait_time,
+                    )
+                    time.sleep(wait_time)
+                except requests.RequestException as exc:
+                    last_exc = exc
+                    if attempt >= self._max_attempts_per_url:
+                        raise
+                    wait_time = self._compute_backoff(attempt)
+                    LOGGER.debug(
+                        "Request error for %s (attempt %s/%s): %s. Retrying in %.1fs.",
+                        url,
+                        attempt,
+                        self._max_attempts_per_url,
+                        exc,
+                        wait_time,
+                    )
+                    time.sleep(wait_time)
+            if last_exc is not None:
+                raise last_exc
+            raise PaperDownloadError(f"Failed to download PDF from {url}.")
 
     @staticmethod
     def _looks_like_pdf(content_type: str, first_chunk: bytes) -> bool:
