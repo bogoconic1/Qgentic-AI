@@ -2,6 +2,8 @@
 
 Usage:
     set S2_API_KEY="your-semantic-scholar-api-key" in .env file
+    set GEMINI_API_KEY="your-gemini-api-key" in .env file
+    set TAVILY_API_KEY="your-tavily-api-key" in .env file
     python examples/demo_literature_reviewer.py --query "vision-language agents"
 
 The underlying Semantic Scholar client now runs a multi-query search that expands
@@ -13,6 +15,9 @@ The downloader now retries transient failures (rate limits, timeouts) with
 exponential backoff and falls back to CorpusID-hosted PDFs when available.
 CLI flags expose the retry configuration so you can tweak behavior when running
 large review batches.
+
+Query expansion now leverages Gemini for similar-query brainstorming and Tavily for
+author-centric paper lookups; the script warns when those API keys are absent.
 """
 
 from __future__ import annotations
@@ -99,6 +104,16 @@ def main() -> None:
     if not api_key:
         LOGGER.warning(
             "Environment variable S2_API_KEY is not set. Requests may be rate-limited."
+        )
+    gemini_key = os.getenv("GEMINI_API_KEY")
+    if not gemini_key:
+        LOGGER.warning(
+            "GEMINI_API_KEY is not set. Similar query expansion will fall back to heuristics."
+        )
+    tavily_key = os.getenv("TAVILY_API_KEY")
+    if not tavily_key:
+        LOGGER.warning(
+            "TAVILY_API_KEY is not set. Author-based query expansion will use simple fallbacks."
         )
 
     downloader = PaperDownloader(

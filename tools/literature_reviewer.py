@@ -17,6 +17,7 @@ Example:
 from __future__ import annotations
 
 import concurrent.futures
+import json
 import logging
 import os
 from collections import Counter
@@ -29,6 +30,8 @@ from typing import Dict, Iterable, List, Optional, Sequence
 
 import requests
 from dotenv import load_dotenv
+
+from tools.helpers import call_gemini_api, tavily_search
 
 try:
     import pymupdf
@@ -316,10 +319,12 @@ class SemanticScholarClient:
     ) -> List[str]:
         if not seed_papers:
             return []
-        similar_queries = self._extract_similar_queries(
-            base_query, seed_papers)
+        llm_queries = self._generate_llm_similar_queries(base_query)
+        if not llm_queries:
+            llm_queries = self._extract_similar_queries(
+                base_query, seed_papers)
         author_queries = self._build_author_queries(base_query, seed_papers)
-        combined = similar_queries + author_queries
+        combined = llm_queries + author_queries
         return self._deduplicate_queries(combined)
 
     @staticmethod
@@ -337,6 +342,35 @@ class SemanticScholarClient:
             if len(target) >= limit:
                 return True
         return False
+
+    def _generate_llm_similar_queries(
+        self,
+        base_query: str,
+        max_queries: int = 10,
+    ) -> List[str]:
+        prompt = (
+            "You assist with academic literature search.\n"
+            "Suggest up to 10 alternative search queries closely related to the topic below.\n"
+            "Each query should be concise, between 3 and 10 words, and suitable for academic search engines.\n"
+            "Return the queries as a JSON array of strings with no additional commentary.\n"
+            f"Topic: {base_query.strip()}"
+        )
+        if not os.getenv("GEMINI_API_KEY"):
+            return []
+        messages = [{"role": "user", "content": prompt}]
+        try:
+            raw_response = call_gemini_api(
+                messages=messages)  # type: ignore[arg-type]
+        except Exception as exc:
+            LOGGER.debug("Gemini API call failed for query expansion: %s", exc)
+            return []
+        if not raw_response:
+            return []
+        parsed = self._parse_query_list(raw_response, max_queries)
+        if not parsed:
+            LOGGER.debug(
+                "Unable to parse Gemini response for query expansion: %s", raw_response)
+        return parsed
 
     def _extract_similar_queries(
         self,
@@ -412,11 +446,116 @@ class SemanticScholarClient:
             return []
 
         queries: List[str] = []
+        processed_authors = 0
         for author, _ in author_counter.most_common():
-            candidate = f"{author} {topic_phrase}".strip()
-            if candidate:
-                queries.append(candidate)
-            if len(queries) >= max_authors:
+            tavily_queries = self._tavily_author_queries(
+                author,
+                topic_phrase,
+            )
+            if tavily_queries:
+                queries.extend(tavily_queries)
+            else:
+                fallback = f"{author} {topic_phrase}".strip()
+                if fallback:
+                    queries.append(fallback)
+            processed_authors += 1
+            if processed_authors >= max_authors:
+                break
+        return queries
+
+    @staticmethod
+    def _parse_query_list(raw_text: str, limit: int) -> List[str]:
+        if not raw_text:
+            return []
+        raw_text = raw_text.strip()
+        candidates: List[str] = []
+        try:
+            parsed = json.loads(raw_text)
+        except json.JSONDecodeError:
+            matches = re.search(r"\[[\s\S]*\]", raw_text)
+            if matches:
+                try:
+                    parsed = json.loads(matches.group(0))
+                except json.JSONDecodeError:
+                    parsed = None
+            else:
+                parsed = None
+        if isinstance(parsed, list):
+            for item in parsed:
+                if isinstance(item, str):
+                    normalized = item.strip()
+                    if normalized:
+                        candidates.append(normalized)
+                elif isinstance(item, dict):
+                    text_value: Optional[str] = None
+                    for key in ("query", "text", "value"):
+                        candidate_value = item.get(key)
+                        if isinstance(candidate_value, str) and candidate_value.strip():
+                            text_value = candidate_value.strip()
+                            break
+                    if text_value:
+                        candidates.append(text_value)
+        if not candidates:
+            lines = [line.strip()
+                     for line in raw_text.splitlines() if line.strip()]
+            for line in lines:
+                cleaned = re.sub(r"^[\s\-\*\d\.\)\(]+", "", line).strip()
+                if cleaned:
+                    candidates.append(cleaned)
+        unique: List[str] = []
+        seen: set[str] = set()
+        for candidate in candidates:
+            lowered = candidate.lower()
+            if lowered in seen:
+                continue
+            unique.append(candidate)
+            seen.add(lowered)
+            if len(unique) >= limit:
+                break
+        return unique
+
+    def _tavily_author_queries(
+        self,
+        author: str,
+        topic_phrase: str,
+        max_results: int = 5,
+    ) -> List[str]:
+        search_query = f"{author} {topic_phrase}".strip()
+        if not search_query:
+            return []
+        if not os.getenv("TAVILY_API_KEY"):
+            return []
+        try:
+            response = tavily_search(
+                query=search_query,
+                search_depth="advanced",
+                include_answer=False,
+                max_results=max_results,
+            )
+        except Exception as exc:
+            LOGGER.debug(
+                "Tavily search failed for author '%s': %s", author, exc)
+            return []
+        if not response:
+            return []
+        results = response.get("results") if isinstance(
+            response, dict) else None
+        if not results or not isinstance(results, list):
+            return []
+        queries: List[str] = []
+        for item in results:
+            if not isinstance(item, dict):
+                continue
+            title = (item.get("title") or "").strip()
+            if title:
+                candidate = f"{author} {title}".strip()
+                if candidate:
+                    queries.append(candidate)
+            else:
+                url = (item.get("url") or "").strip()
+                if url:
+                    queries.append(f"{author} {url}")
+            if len(queries) >= max_results:
                 break
         return queries
 
@@ -605,8 +744,10 @@ class PaperDownloader:
                 else ""
             )
             if normalized_corpus:
-                add(f"https://api.semanticscholar.org/CorpusID:{normalized_corpus}.pdf")
-                add(f"https://api.semanticscholar.org/corpusid:{normalized_corpus}.pdf")
+                add(
+                    f"https://api.semanticscholar.org/CorpusID:{normalized_corpus}.pdf")
+                add(
+                    f"https://api.semanticscholar.org/corpusid:{normalized_corpus}.pdf")
 
         add(paper.url)
         return urls
