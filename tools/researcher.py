@@ -234,7 +234,7 @@ def get_tools():
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "question": {"type": "string", "description": "The A/B testing question (e.g., 'Run a 5-fold CV on 50,000 rows using XGBoost comparing raw vs log-transformed target and report RMSE')"}
+                    "question": {"type": "string", "description": "The A/B testing question (e.g., 'Train XGBoost on 50,000 rows with single 80/20 split comparing raw vs log-transformed target and report RMSE')"}
                 },
             },
             "additionalProperties": False,
