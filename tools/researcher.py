@@ -42,7 +42,7 @@ _EXTERNAL_DIRNAME = _PATH_CFG.get("external_data_dirname")
 
 
 @weave.op()
-def ask_eda(question: str, description: str, data_path: str, max_attempts: int | None = None, timeout_seconds: int = 600) -> str:
+def ask_eda(question: str, description: str, data_path: str, max_attempts: int | None = None, timeout_seconds: int = 3600) -> str:
     """Asks a question about the data provided for exploratory data analysis (EDA)
 
     Args:
@@ -50,7 +50,7 @@ def ask_eda(question: str, description: str, data_path: str, max_attempts: int |
         description: Competition description
         data_path: Path to the data directory
         max_attempts: Maximum number of attempts (default from config)
-        timeout_seconds: Timeout for code execution in seconds (default 600 = 10 minutes)
+        timeout_seconds: Timeout for code execution in seconds (default 3600 = 1 hour)
     """
     # Prepare media directory for EDA charts and expose to executed code
     try:
@@ -230,11 +230,11 @@ def get_tools():
         {
             "type": "function",
             "name": "run_ab_test",
-            "description": "Run short (≤10-minute) A/B tests to validate modeling or feature engineering choices by comparing their impact on performance",
+            "description": "Run A/B tests to validate modeling or feature engineering choices by comparing their impact on performance.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "question": {"type": "string", "description": "The A/B testing question (e.g., 'Train XGBoost on 50,000 rows with single 80/20 split comparing raw vs log-transformed target and report RMSE')"}
+                    "question": {"type": "string", "description": "The A/B testing question (e.g., 'Train XGBoost with 80/20 split comparing baseline features vs baseline + interaction features and report cross-validated AUC')"}
                 },
             },
             "additionalProperties": False,

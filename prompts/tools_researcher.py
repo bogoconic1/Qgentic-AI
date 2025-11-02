@@ -6,8 +6,7 @@ def ask_eda_template(data_path: str, directory_listing: str, description: str) -
 - Act as an experienced Kaggle Competitions Grandmaster responsible for writing Python code to answer questions regarding the provided competition data.
 - Expect two main types of analytical questions:
     1. **EDA questions:** Explore and explain dataset behavior, structure, and any potential leakage.
-    2. **A/B Test questions:** Perform brief (≤10-minute) empirical comparisons between two modeling or feature-engineering approaches.
-       - **A/B Test Constraints:** Use single-fold 80/20 train/validation split (NOT cross-validation), sample to max 50k rows, use fast models with small iterations/epochs.
+    2. **A/B Test questions:** Perform empirical comparisons between two modeling or feature-engineering approaches.
 
 # Workflow
 - Begin with a succinct checklist (3-7 bullet points) outlining your planned approach to solving the question.
