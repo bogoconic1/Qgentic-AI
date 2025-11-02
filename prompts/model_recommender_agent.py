@@ -111,12 +111,19 @@ Begin with a concise checklist (3-7 bullets) describing your *process* (conceptu
 
 ## Objective
 1. Examine `<competition_description>`, `<task_type>`, `<task_summary>`, `<model_name>`, and `<research_plan>`.
-2. Perform **targeted web searches** (when helpful) to surface **state-of-the-art, competition-relevant** preprocessing strategies for the task, data, and model.
-3. Select the **MOST RELEVANT** preprocessing categories (you may introduce justified additional categories beyond the list above).
-4. Incorporate data characteristics and constraints from `<research_plan>`.
-5. Prioritize recommendations using this hierarchy:
-   1) **Metric impact**, 2) **Implementation simplicity**, 3) **Compute efficiency** within the **3-hour** budget.
-6. Produce **MUST_HAVE** (needed for top-notch results) vs **NICE_TO_HAVE** (may not be needed for top-notch results but can provide small gains) recommendations per selected category.
+2. **CRITICAL**: Review `<research_plan>` Section 2 (Validated Findings) and Section 3 (Advanced Strategies) to identify:
+   - **A/B tested features** that showed positive or high-gain results
+   - **Feature engineering techniques** validated by the Researcher
+   - **Specific features by name** that performed well (e.g., mean_X_by_Y, OOF target encodings, interactions)
+3. **MUST_HAVE recommendations MUST include**:
+   - All validated features from the research plan that showed positive impact or high feature importance
+   - The specific feature engineering techniques that were A/B tested successfully
+4. Perform **targeted web searches** (when helpful) to surface **state-of-the-art, competition-relevant** preprocessing strategies for the task, data, and model.
+5. Select the **MOST RELEVANT** preprocessing categories (you may introduce justified additional categories beyond the list above).
+6. Prioritize recommendations using this hierarchy:
+   1) **Features validated in research plan** (HIGHEST PRIORITY)
+   2) **Metric impact**, 3) **Implementation simplicity**, 4) **Compute efficiency** within the **3-hour** budget.
+7. Produce **MUST_HAVE** (needed for top-notch results) vs **NICE_TO_HAVE** (may not be needed for top-notch results but can provide small gains) recommendations per selected category.
 
 ## Hard Constraints
 - Do **not** search for or use actual winning solutions from this specific competition.
@@ -124,6 +131,7 @@ Begin with a concise checklist (3-7 bullets) describing your *process* (conceptu
 - Do **not** discuss or recommend CV/fold splitting strategies - this is handled elsewhere.
 - **Do not** recommend creating features merely to prune them later—propose **top candidates only**.
 - **Do not** duplicate the same strategy across multiple categories.
+- **Do not** ignore validated features from the research plan—they MUST appear in MUST_HAVE recommendations.
 - Anything under ensembling/stacking/calibration/blending MUST be in the NICE_TO_HAVE section.
 
 ## Evidence & Safety
@@ -135,7 +143,7 @@ Begin with a concise checklist (3-7 bullets) describing your *process* (conceptu
 ## Output Format
 
 ### Checklist (3-7 bullets)
-High-level steps you will follow (conceptual only).
+High-level steps you will follow (conceptual only). **MUST include reviewing validated features from `<research_plan>` Section 2 as the first step.**
 
 ### Most Relevant Categories
 List the selected categories with **1-2 sentences** explaining *why* each is relevant for this competition and model.
