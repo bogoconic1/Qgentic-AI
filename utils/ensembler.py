@@ -1,12 +1,117 @@
 import os
 import json
+import logging
 import shutil
 import tempfile
 from pathlib import Path
 from typing import Callable, Optional
+from datetime import datetime
+import re
 import numpy as np
 import pandas as pd
 from utils.grade import run_grade
+from tools.helpers import call_llm_with_retry
+from project_config import get_config
+
+logger = logging.getLogger(__name__)
+
+_CONFIG = get_config()
+_LLM_CFG = _CONFIG.get("llm")
+_PATH_CFG = _CONFIG.get("paths")
+_TASK_ROOT = Path(_PATH_CFG.get("task_root"))
+_OUTPUTS_DIRNAME = _PATH_CFG.get("outputs_dirname")
+_ENSEMBLER_MODEL = _LLM_CFG.get("ensembler_model")
+
+
+def _parse_training_time_from_log(log_file_path: Path) -> str:
+    """
+    Parse training time from log file by computing time difference between first and last lines.
+
+    Args:
+        log_file_path: Path to the log file
+
+    Returns:
+        Training time as a formatted string (e.g., "2h 15m 30s") or "N/A" if parsing fails
+    """
+    try:
+        with open(log_file_path, "r", encoding="utf-8", errors="ignore") as f:
+            lines = f.readlines()
+
+        if len(lines) < 2:
+            return "N/A"
+
+        # Common timestamp formats to try
+        timestamp_patterns = [
+            r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?)',  # 2025-01-15 10:30:45 or 2025-01-15 10:30:45.123
+            r'(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?)',  # 2025-01-15T10:30:45
+            r'\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?)\]',  # [2025-01-15 10:30:45]
+            r'(\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2})',  # 01/15/2025 10:30:45
+        ]
+
+        datetime_formats = [
+            "%Y-%m-%d %H:%M:%S.%f",
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%dT%H:%M:%S.%f",
+            "%Y-%m-%dT%H:%M:%S",
+            "%m/%d/%Y %H:%M:%S",
+        ]
+
+        def extract_timestamp(line: str) -> Optional[datetime]:
+            """Try to extract timestamp from a line using various patterns."""
+            for pattern in timestamp_patterns:
+                match = re.search(pattern, line)
+                if match:
+                    timestamp_str = match.group(1)
+                    # Try parsing with different formats
+                    for fmt in datetime_formats:
+                        try:
+                            return datetime.strptime(timestamp_str, fmt)
+                        except ValueError:
+                            continue
+            return None
+
+        # Extract first timestamp
+        first_timestamp = None
+        for line in lines[:50]:  # Check first 50 lines
+            first_timestamp = extract_timestamp(line)
+            if first_timestamp:
+                break
+
+        # Extract last timestamp
+        last_timestamp = None
+        for line in reversed(lines[-50:]):  # Check last 50 lines
+            last_timestamp = extract_timestamp(line)
+            if last_timestamp:
+                break
+
+        if not first_timestamp or not last_timestamp:
+            return "N/A"
+
+        # Calculate time difference
+        time_diff = last_timestamp - first_timestamp
+        total_seconds = int(time_diff.total_seconds())
+
+        if total_seconds < 0:
+            return "N/A"
+
+        # Format as human-readable string
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+
+        parts = []
+        if hours > 0:
+            parts.append(f"{hours}h")
+        if minutes > 0:
+            parts.append(f"{minutes}m")
+        if seconds > 0 or not parts:  # Always show seconds if no other parts
+            parts.append(f"{seconds}s")
+
+        return " ".join(parts)
+
+    except Exception as e:
+        logger.debug("Failed to parse training time from %s: %s", log_file_path, str(e))
+        return "N/A"
 
 
 def move_best_code_to_ensemble_folder(slug: str, iteration: int):
@@ -72,11 +177,25 @@ def move_best_code_to_ensemble_folder(slug: str, iteration: int):
         shutil.copy2(code_file_path, dest_code_file)
         print(f"Copied {best_code_file} to ensemble folder")
 
-        # Copy log file if it exists
+        # Copy JSON metadata file (contains num_header_lines for strip_header_from_code)
+        json_file_path = code_file_path.with_suffix('.json')
+        if json_file_path.exists():
+            dest_json_file = ensemble_folder / json_file_path.name
+            shutil.copy2(json_file_path, dest_json_file)
+            print(f"Copied {json_file_path.name} to ensemble folder")
+        else:
+            print(f"Warning: JSON metadata file {json_file_path} not found")
+
+        # Copy log file if it exists and parse training time
+        training_time = "N/A"
         if log_file_path.exists():
             dest_log_file = ensemble_folder / log_file_path.name
             shutil.copy2(log_file_path, dest_log_file)
             print(f"Copied {log_file_path.name} to ensemble folder")
+
+            # Parse training time from log
+            training_time = _parse_training_time_from_log(log_file_path)
+            print(f"Parsed training time: {training_time}")
         else:
             print(f"Warning: Log file {log_file_path} not found")
 
@@ -105,6 +224,7 @@ def move_best_code_to_ensemble_folder(slug: str, iteration: int):
             "best_code_file": best_code_file,
             "best_score": best_score,
             "submission_file": submission_file_copied,
+            "training_time": training_time,
             "blacklisted_ideas": model_data.get("blacklisted_ideas", []),
             "successful_ideas": model_data.get("successful_ideas", [])
         }
@@ -118,296 +238,231 @@ def move_best_code_to_ensemble_folder(slug: str, iteration: int):
     return ensemble_folder
 
 
-def greedy_ensemble(
-    submission_files: list[str],
-    score_func: Callable[[pd.DataFrame], float],
-    model_names: list[str],
-    target_col: str = "target",
-    id_col: str = "id",
-    weight_min: float = -0.6,
-    weight_max: float = 0.6,
-    weight_step: float = 0.05,
-    minimize: bool = True,
-    verbose: bool = True
-) -> tuple[pd.DataFrame, dict]:
+def recommend_ensemble_strategies(slug: str, iteration: int) -> list[dict]:
     """
-    Blend submissions using greedy forward selection.
+    Generate 8 diverse ensemble strategy recommendations using LLM with web search.
 
-    Starts with the best single model, then iteratively adds models that improve the ensemble.
-
-    Args:
-        submission_files: List of paths to submission CSV files
-        score_func: Function that takes a DataFrame and returns a score
-        model_names: List of model names (same order as submission_files)
-        target_col: Name of the prediction column (default: "target")
-        id_col: Name of the ID column (default: "id")
-        weight_min: Minimum weight to try when adding a model (default: -0.6)
-        weight_max: Maximum weight to try when adding a model (default: 0.6)
-        weight_step: Step size for weight search (default: 0.001)
-        minimize: If True, minimize score; if False, maximize (default: True)
-        verbose: Print progress information (default: True)
-
-    Returns:
-        Tuple of (blended_submission_df, metadata_dict)
-    """
-    if len(submission_files) < 2:
-        raise ValueError("Need at least 2 submission files for ensembling")
-
-    # Load all submissions and sort by ID for consistent ordering
-    submissions = []
-    for file_path in submission_files:
-        df = pd.read_csv(file_path)
-        if id_col not in df.columns or target_col not in df.columns:
-            raise ValueError(f"Submission {file_path} must contain '{id_col}' and '{target_col}' columns")
-        df = df.sort_values(by=id_col).reset_index(drop=True)
-        submissions.append(df)
-
-    # Verify all submissions have same IDs
-    base_ids = submissions[0][id_col].values
-    for i, sub in enumerate(submissions[1:], start=1):
-        if not np.array_equal(sub[id_col].values, base_ids):
-            raise ValueError(f"Submission {i} has different IDs than submission 0 (even after sorting)")
-
-    # Extract predictions as numpy arrays
-    predictions = np.array([sub[target_col].values for sub in submissions])  # shape: (n_models, n_samples)
-    n_models = len(submissions)
-
-    # Step 1: Find best single model
-    best_model_idx = None
-    best_single_score = float('inf') if minimize else float('-inf')
-
-    if verbose:
-        print("Finding best single model...")
-
-    for i in range(n_models):
-        df = pd.DataFrame({id_col: base_ids, target_col: predictions[i]})
-        score = score_func(df)
-        if verbose:
-            print(f"  {model_names[i]}: {score:.6f}")
-
-        is_better = (score < best_single_score) if minimize else (score > best_single_score)
-        if is_better:
-            best_single_score = score
-            best_model_idx = i
-
-    # Initialize ensemble with best single model
-    current_ensemble_preds = predictions[best_model_idx].copy()
-    model_weights = {model_names[best_model_idx]: 1.0}
-    remaining_indices = list(range(n_models))
-    remaining_indices.remove(best_model_idx)
-
-    if verbose:
-        print(f"\nInitial best single model: {model_names[best_model_idx]}, Score: {best_single_score:.6f}\n")
-        print("Starting greedy forward selection...")
-
-    # Step 2: Greedy forward selection
-    weight_range = np.arange(weight_min, weight_max, weight_step)
-    iteration = 0
-
-    while remaining_indices:
-        iteration += 1
-        best_improvement_score = best_single_score
-        best_idx, best_weight = None, None
-
-        # Try adding each remaining model
-        for idx in remaining_indices:
-            for wgt in weight_range:
-                # Blend: (1-wgt) * current_ensemble + wgt * candidate_model
-                candidate_preds = (1 - wgt) * current_ensemble_preds + wgt * predictions[idx]
-                df = pd.DataFrame({id_col: base_ids, target_col: candidate_preds})
-                score = score_func(df)
-
-                is_better = (score < best_improvement_score) if minimize else (score > best_improvement_score)
-                print(f"    Trying {model_names[idx]} with weight {wgt:.3f}: Score = {score:.6f}")
-                if is_better:
-                    best_improvement_score = score
-                    best_idx = idx
-                    best_weight = wgt
-
-        # If improvement found, add the model
-        if best_idx is not None:
-            # Update ensemble predictions
-            current_ensemble_preds = (1 - best_weight) * current_ensemble_preds + best_weight * predictions[best_idx]
-
-            # Update weights: rescale existing weights by (1-best_weight), add new model
-            model_weights = {name: weight * (1 - best_weight) for name, weight in model_weights.items()}
-            model_weights[model_names[best_idx]] = best_weight
-
-            # Remove added model from remaining
-            remaining_indices.remove(best_idx)
-            best_single_score = best_improvement_score
-
-            if verbose:
-                print(f"Iteration {iteration}: Added {model_names[best_idx]}, Weight: {best_weight:.5f}, Score: {best_improvement_score:.6f}")
-        else:
-            # No improvement, stop
-            if verbose:
-                print(f"No improvement found, stopping after {iteration} iterations")
-            break
-
-    # Create final blended submission
-    final_blend = pd.DataFrame({id_col: base_ids, target_col: current_ensemble_preds})
-
-    # Convert weights dict to list in original order
-    weights_list = [model_weights.get(name, 0.0) for name in model_names]
-
-    metadata = {
-        "weights": weights_list,
-        "model_weights": model_weights,
-        "best_score": float(best_single_score),
-        "submission_files": submission_files,
-        "model_names": model_names,
-        "n_iterations": iteration
-    }
-
-    if verbose:
-        print(f"\nFinal weights:")
-        for name, weight in model_weights.items():
-            print(f"  {name}: {weight:.5f}")
-        print(f"Final score: {best_single_score:.6f}")
-
-    return final_blend, metadata
-
-
-def main(
-    slug: str,
-    iteration: int,
-    target_col: str = "target",
-    id_col: str = "id",
-    output_filename: str = "submission_ens.csv"
-) -> Path:
-    """
-    Main workflow: Prepare ensemble folder, blend submissions using greedy forward selection, and save result.
-
-    Automatically uses utils/grade.py to score candidates during optimization.
+    Similar to ModelRecommenderAgent, this function:
+    1. Reads ensemble_metadata.json and competition description
+    2. Uses LLM with web search to find SOTA ensemble/tuning strategies
+    3. Generates 8 diverse strategies (stacking, blending, hyperparameter tuning, pre-training, etc.)
+    4. Saves strategies to ensemble_metadata.json under "strategies" field
 
     Args:
         slug: Competition slug
         iteration: Iteration number
-        target_col: Name of prediction column (default: "target")
-        id_col: Name of ID column (default: "id")
-        output_filename: Name of output file (default: "submission_ens.csv")
 
     Returns:
-        Path to the saved ensemble submission file
+        List of 8 strategy dicts with format: {"strategy": "...", "models_needed": [...]}
     """
-    print(f"\n{'='*60}")
-    print(f"Ensemble Pipeline for {slug} - Iteration {iteration}")
-    print(f"{'='*60}\n")
+    logger.info("Generating ensemble strategy recommendations for slug=%s iteration=%s", slug, iteration)
 
-    # Step 1: Prepare ensemble folder
-    print("Step 1: Preparing ensemble folder...")
-    ensemble_folder = move_best_code_to_ensemble_folder(slug, iteration)
-    print(f"Ensemble folder created at: {ensemble_folder}\n")
-
-    # Step 2: Load ensemble metadata
+    # Define paths
+    base_path = _TASK_ROOT / slug
+    outputs_dir = base_path / _OUTPUTS_DIRNAME / str(iteration)
+    ensemble_folder = outputs_dir / "ensemble"
     metadata_path = ensemble_folder / "ensemble_metadata.json"
+    description_path = base_path / "description.md"
+
+    # Check if ensemble metadata exists
+    if not metadata_path.exists():
+        raise FileNotFoundError(
+            f"ensemble_metadata.json not found at {metadata_path}. "
+            "Please run move_best_code_to_ensemble_folder() first."
+        )
+
+    # Load ensemble metadata
     with open(metadata_path, "r") as f:
         ensemble_metadata = json.load(f)
 
-    # Step 3: Collect submission files
-    submission_files = []
-    model_names = []
-    model_scores = []
+    # Load competition description
+    if description_path.exists():
+        with open(description_path, "r") as f:
+            description = f.read()
+    else:
+        logger.warning("No description.md found at %s", description_path)
+        description = ""
+
+    # Build prompt for strategy recommendation
+    metadata_summary = []
+    all_blacklisted_ideas = []
 
     for model_name, model_data in ensemble_metadata.items():
-        submission_file = model_data.get("submission_file")
-        if submission_file:
-            submission_path = ensemble_folder / submission_file
-            if submission_path.exists():
-                submission_files.append(str(submission_path))
-                model_names.append(model_name)
-                model_scores.append(model_data.get("best_score"))
-            else:
-                print(f"Warning: Submission file {submission_file} not found, skipping {model_name}")
-        else:
-            print(f"Warning: No submission file for {model_name}, skipping")
+        # Skip the "strategies" field if it exists
+        if model_name == "strategies" or not isinstance(model_data, dict):
+            continue
 
-    if len(submission_files) < 2:
-        raise ValueError(f"Need at least 2 submissions for ensembling, found {len(submission_files)}")
+        score = model_data.get("best_score", "N/A")
+        training_time = model_data.get("training_time", "N/A")
+        blacklisted = model_data.get("blacklisted_ideas", [])
 
-    print(f"Step 2: Found {len(submission_files)} submissions to blend:")
-    for name, score, file in zip(model_names, model_scores, submission_files):
-        print(f"  - {name}: score={score} ({Path(file).name})")
-    print()
+        metadata_summary.append(f"- {model_name}: score={score}, training_time={training_time}")
 
-    # Step 3: Create scoring function using utils/grade.py
-    print("Step 3: Blending submissions using greedy forward selection with mlebench grading...")
+        # Collect all blacklisted ideas
+        for idea in blacklisted:
+            all_blacklisted_ideas.append(f"  [{model_name}] {idea}")
 
-    def grade_submission(submission_df: pd.DataFrame) -> float:
-        """Score a submission using mlebench grade-sample."""
-        # Save to temporary file
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as tmp:
-            submission_df.to_csv(tmp.name, index=False)
-            tmp_path = tmp.name
+    metadata_summary_str = "\n".join(metadata_summary)
 
+    # Format blacklisted ideas
+    if all_blacklisted_ideas:
+        blacklisted_ideas_str = "\n".join(all_blacklisted_ideas)
+    else:
+        blacklisted_ideas_str = "None"
+
+    system_prompt = f"""You are an expert Kaggle competitor specializing in ensemble methods and model optimization.
+
+# Role and Objective
+Develop and recommend 8 diverse, independent, and actionable ensemble strategies to outperform current baseline models in a Kaggle competition setting.
+
+# Instructions
+- Begin with a concise conceptual checklist (3-7 bullets) outlining your overall approach (not implementation specifics).
+- For each strategy, provide:
+  - A detailed description
+  - Specific models used (as strings)
+  - The ensemble methodology (as a named string)
+  - Implementation guidance
+- Draw inspiration from these ensemble topics:
+  1. **Hyperparameter tuning**
+  2. **Stacking**
+  3. **Blending**
+  4. **Multi-Stage training**
+  5. **Pseudo Labeling**
+  6. **Advanced ensembling techniques**
+- Ensure recommendations:
+  - Are specific and actionable (no vague or generic suggestions)
+  - Are feasible to implement
+  - Span multiple ensemble categories above
+  - Can be executed within 3 hours on a single GPU (24GB VRAM)
+- Present strategies as a numbered list (1-8), following the format guidelines below.
+- Before any web search or recommendation of contemporary techniques (2024-2025), explicitly state your intention and the minimal necessary inputs for the action.
+- Do not search for or reference winning solutions for this particular competition.
+- Avoid suggesting strategies similar to those in the provided blacklist; if an item is unfillable, state: "No suitable strategy could be found for this item."
+- After listing, validate that all strategies are distinct, actionable, independent, and do not overlap the blacklist. If duplicates or overlaps are found, substitute accordingly to maximize diversity.
+- After completing the strategies, provide a brief validation summary indicating success or the need for substitutions.
+- Set reasoning_effort = medium and keep outputs neither terse nor overly verbose.
+
+# Context
+- <competition_description>
+  {description}
+  </competition_description>
+- <baseline_models> (model names [string] and training times [string, e.g., '2h'])
+  {metadata_summary_str}
+  </baseline_models>
+- <blacklisted_ideas>
+  The following did NOT improve performance. Avoid similar approaches:
+  {blacklisted_ideas_str}
+  </blacklisted_ideas>
+
+# Output Format
+- List exactly 8 strategies as a numbered list, detailed and content-rich.
+- After the list, provide a JSON object (enclosed in triple backticks) with the strategies array formatted per the schema below.
+- Remember to make tool calls only as allowed, and state the intent before any significant tool invocation, describing both the rationale and minimal inputs.
+- Models listed under models_needed must correspond to actual model names already defined in the <baseline_models> section.
+- If you want to propose new models that are not yet defined, explicitly mark them as new (e.g., NEW: <model_name>).
+
+## Example Output
+1. Use a LightGBM, CatBoost, and XGBoost three-way weighted average (models: 'LightGBM', 'CatBoost', 'XGBoost') after tuning each individually by Optuna; weights determined by holdout set RMSE.
+2. Implement two-stage stacking: first-level learners are fine-tuned CNN and transformer models ('ResNet50', 'EfficientNet', 'ConvNext'); then train a CatBoost with the outputs of the first stage as features.
+...
+8. [Eighth strategy]
+
+```json
+{{
+  "strategies": [
+    {{"strategy": "Use a LightGBM, CatBoost, and XGBoost three-way weighted average (models: 'LightGBM', 'CatBoost', 'XGBoost') after tuning each individually by Optuna; weights determined by holdout set RMSE.", "models_needed": ["LightGBM", "CatBoost", "XGBoost"]}},
+    {{"strategy": "Implement two-stage stacking: first-level learners are fine-tuned CNN and transformer models ('ResNet50', 'EfficientNet', 'ConvNext'); then train a CatBoost with the outputs of the first stage as features.", "models_needed": ["ResNet50", "EfficientNet", "ConvNext", "CatBoost"]}},
+    ...
+    {{"strategy": str, "models_needed": list[str]}},  (8 total)
+  ]
+}}
+```
+
+## Output Schema
+- strategies: array of 8 richly detailed strings, each matching a numbered strategy above.
+- For items that can't be completed, use: "No suitable strategy could be found for this item."
+"""
+
+    user_prompt = "Generate 8 diverse ensemble strategies for this competition."
+
+    # Call LLM with web search enabled
+    response = call_llm_with_retry(
+        model=_ENSEMBLER_MODEL,
+        instructions=system_prompt,
+        tools=[],
+        
+        messages=[{"role": "user", "content": user_prompt}],
+        web_search_enabled=True
+    )
+
+    response_text = response.output_text or ""
+    logger.debug("Strategy recommendation response: %s", response_text[:500])
+
+    # Parse strategies from JSON block
+    strategies = []
+
+    # Try to extract JSON block from response
+    json_match = re.search(r'```json\s*\n(.*?)\n```', response_text, re.DOTALL)
+    if json_match:
         try:
-            # Grade using mlebench
-            info, stdout, returncode, stderr = run_grade(tmp_path, slug)
+            json_str = json_match.group(1)
+            parsed_data = json.loads(json_str)
+            strategies_raw = parsed_data.get("strategies", [])
 
-            if returncode != 0 or info is None:
-                print(f"  Warning: Grading failed (returncode={returncode})")
-                return float('-inf')  # Return worst possible score for failed grading
+            # Handle both old format (strings) and new format (objects with strategy + models_needed)
+            number_pattern = r'^\s*\d+\.\s*'
+            for strategy_item in strategies_raw:
+                if isinstance(strategy_item, dict):
+                    # New format: {"strategy": "...", "models_needed": [...]}
+                    strategy_text = strategy_item.get("strategy", "")
+                    models_needed = strategy_item.get("models_needed", [])
 
-            score = info.get('score')
-            if score is None:
-                print(f"  Warning: No score in grading output")
-                return float('-inf')
+                    if strategy_text and strategy_text != "...":
+                        # Remove numbering if present
+                        cleaned_text = re.sub(number_pattern, '', strategy_text).strip()
+                        if cleaned_text:
+                            # Preserve the full object structure
+                            strategies.append({
+                                "strategy": cleaned_text,
+                                "models_needed": models_needed
+                            })
+                elif isinstance(strategy_item, str):
+                    # Old format: just strings (for backward compatibility)
+                    cleaned = re.sub(number_pattern, '', strategy_item).strip()
+                    if cleaned and cleaned != "...":
+                        strategies.append({"strategy": cleaned, "models_needed": []})
 
-            return float(score)
-        finally:
-            # Clean up temp file
-            if os.path.exists(tmp_path):
-                os.unlink(tmp_path)
+            logger.info("Parsed %d strategies from JSON block", len(strategies))
+        except json.JSONDecodeError as e:
+            logger.warning("Failed to parse JSON block: %s", str(e))
 
-    # Step 4: Run greedy forward selection with automatic grading
-    blended_df, blend_metadata = greedy_ensemble(
-        submission_files=submission_files,
-        score_func=grade_submission,
-        model_names=model_names,
-        target_col=target_col,
-        id_col=id_col,
-        minimize=True,  # Minimize score (lower is better)
-        verbose=True
-    )
+    # Fallback: parse numbered list from entire response if JSON parsing failed
+    if not strategies:
+        logger.info("Falling back to numbered list parsing")
+        pattern = r'^\s*(\d+)\.\s*(.+)$'
+        for line in response_text.split('\n'):
+            match = re.match(pattern, line.strip())
+            if match:
+                strategy_text = match.group(2).strip()
+                strategies.append({"strategy": strategy_text, "models_needed": []})
 
-    # Step 5: Save blended submission
-    output_path = ensemble_folder / output_filename
-    blended_df.to_csv(output_path, index=False)
+    if len(strategies) < 8:
+        logger.warning("Only found %d strategies, expected 8", len(strategies))
 
-    # Save metadata
-    metadata_output_path = ensemble_folder / "ensemble_blend_metadata.json"
-    with open(metadata_output_path, "w") as f:
-        json.dump(blend_metadata, f, indent=2)
+    strategies = strategies[:8]  # Take first 8
 
-    print(f"\n{'='*60}")
-    print(f"✓ Ensemble complete!")
-    print(f"  Output: {output_path}")
-    print(f"  Metadata: {metadata_output_path}")
-    print(f"  Method: Greedy forward selection")
-    print(f"  Final score: {blend_metadata.get('best_score', 'N/A')}")
-    print(f"  Iterations: {blend_metadata.get('n_iterations', 'N/A')}")
-    print(f"{'='*60}\n")
+    logger.info("Generated %d ensemble strategies", len(strategies))
+    for i, strategy_obj in enumerate(strategies, 1):
+        strategy_text = strategy_obj.get("strategy", "") if isinstance(strategy_obj, dict) else str(strategy_obj)
+        logger.info("  %d. %s", i, strategy_text[:100] + "..." if len(strategy_text) > 100 else strategy_text)
 
-    return output_path
+    # Add strategies to ensemble_metadata.json
+    ensemble_metadata["strategies"] = strategies
 
+    # Save updated metadata
+    with open(metadata_path, "w") as f:
+        json.dump(ensemble_metadata, f, indent=2)
 
-if __name__ == "__main__":
-    import argparse
+    logger.info("Saved strategies to %s", metadata_path)
 
-    parser = argparse.ArgumentParser(description="Ensemble multiple model submissions using greedy forward selection with automatic grading")
-    parser.add_argument("slug", type=str, help="Competition slug")
-    parser.add_argument("iteration", type=int, help="Iteration number")
-    parser.add_argument("--target-col", type=str, default="target", help="Target column name (default: target)")
-    parser.add_argument("--id-col", type=str, default="id", help="ID column name (default: id)")
-    parser.add_argument("--output", type=str, default="submission_ens.csv", help="Output filename (default: submission_ens.csv)")
-
-    args = parser.parse_args()
-
-    main(
-        slug=args.slug,
-        iteration=args.iteration,
-        target_col=args.target_col,
-        id_col=args.id_col,
-        output_filename=args.output
-    )
+    return strategies

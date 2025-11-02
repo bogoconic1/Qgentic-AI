@@ -75,7 +75,7 @@ class DeveloperAgent:
     _shared_suggestions: list[str] = []
     _lock = threading.Lock()
 
-    def __init__(self, slug: str, iteration: int, model_name: Optional[str] = None, model_recommendations: Optional[str] = None, later_recommendations: Optional[dict] = None, cpu_core_range: Optional[list[int]] = None, gpu_identifier: Optional[str] = None, gpu_isolation_mode: str = "none", conda_env: Optional[str] = None):
+    def __init__(self, slug: str, iteration: int, model_name: Optional[str] = None, model_recommendations: Optional[str] = None, later_recommendations: Optional[dict] = None, external_data_listing: Optional[str] = None, plan_content: Optional[str] = None, cpu_core_range: Optional[list[int]] = None, gpu_identifier: Optional[str] = None, gpu_isolation_mode: str = "none", conda_env: Optional[str] = None):
         load_dotenv()
         self.slug = slug
         self.iteration = iteration
@@ -126,6 +126,10 @@ class DeveloperAgent:
         self.later_recommendations: Optional[dict] = later_recommendations
         self.threshold_directive: str = ""
 
+        # External data and plan content (passed from orchestrator)
+        self.external_data_listing: str = external_data_listing or "No external data directories found."
+        self.plan_content: str = plan_content or "No plan.md found."
+
         os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
         # Patch mode configuration
@@ -171,7 +175,18 @@ class DeveloperAgent:
     def _submission_filename(self, version: int) -> str:
         return _SUBMISSION_TEMPLATE.format(iteration=self.iteration, version=version)
 
-    
+    def _get_code_timeout(self) -> int:
+        """
+        Get the timeout for code execution in seconds.
+        Can be overridden by subclasses (e.g., EnsemblerAgent).
+
+        Returns:
+            Timeout in seconds for code execution (5400 = 1.5 hours for baseline)
+        """
+        from tools.developer import _BASELINE_CODE_TIMEOUT
+        return _BASELINE_CODE_TIMEOUT
+
+
 
     def _load_benchmark_info(self) -> None:
         self.benchmark_info = None
@@ -735,7 +750,7 @@ class DeveloperAgent:
         """
         Call SOTA suggestions tool with appropriate parameters.
 
-        Can be overridden by subclasses to modify behavior (e.g., allow_multi_fold).
+        Can be overridden by subclasses to modify behavior (e.g., is_ensemble).
 
         Args:
             **kwargs: Arguments to pass to search_sota_suggestions
@@ -764,6 +779,10 @@ class DeveloperAgent:
         user_prompt = self._build_user_prompt(version=1)
         input_list = [{"role": "user", "content": user_prompt}]
 
+        # Log external data listing and plan content (passed from orchestrator)
+        self.logger.info("External data listing (%d chars): %s", len(self.external_data_listing), self.external_data_listing[:200] + "..." if len(self.external_data_listing) > 200 else self.external_data_listing)
+        self.logger.info("Plan content (%d chars): %s", len(self.plan_content), self.plan_content[:200] + "..." if len(self.plan_content) > 200 else self.plan_content)
+
         attempt = 0
         for _ in range(16):
             now = time.time()
@@ -773,9 +792,9 @@ class DeveloperAgent:
 
             attempt += 1
 
-            # Rebuild system prompt with allow_multi_fold=True starting from attempt 2
+            # Rebuild system prompt for attempt 2+ to enable multi-fold training
             if attempt == 2:
-                self.logger.info("Rebuilding system prompt with allow_multi_fold=True for attempt 2+")
+                self.logger.info("Rebuilding system prompt for attempt 2+ with multi-fold enabled")
                 system_prompt = self._compose_system(allow_multi_fold=True)
 
             artifact = wandb.Artifact(f'{self.iteration}-{self.slug}', type='files')
@@ -861,8 +880,10 @@ class DeveloperAgent:
             # Execute the code with OOM retry logic
             # If GPU isolation is enabled (MIG or multi-GPU), skip OOM polling (treat OOM as a code bug, not resource contention)
             skip_oom_polling = self.gpu_isolation_mode in ["mig", "multi-gpu"]
+            timeout_seconds = self._get_code_timeout()
             output, wait_time = execute_code_with_oom_retry(
                 str(code_path),
+                timeout_seconds=timeout_seconds,
                 skip_oom_polling=skip_oom_polling,
                 conda_env=self.conda_env
             )
@@ -1021,6 +1042,8 @@ class DeveloperAgent:
                         shared_suggestions=shared_suggestions,  # New: shared across all models
                         executed_code=self.last_suggestion_code,
                         later_recommendations=later_context,
+                        external_data_listing=self.external_data_listing,
+                        plan_content=self.plan_content,
                     )
                 except Exception:
                     self.logger.exception("Failed to fetch red flags or SOTA suggestions for attempt %s", attempt)

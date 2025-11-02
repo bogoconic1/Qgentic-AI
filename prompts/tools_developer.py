@@ -121,11 +121,8 @@ def red_flags_user(
 """
 
 
-def sota_system(allow_multi_fold: bool = False) -> str:
-    # Build constraints based on mode
-    # fold_constraint = "" if allow_multi_fold else "- Do NOT propose ensembling, blending, multi-fold training, stacking, or calibration."
-
-    return f"""You will receive: a Kaggle competition description, one or more researcher plans, an initial script/logs, and potential identified red flags.
+def sota_system(is_ensemble: bool = False) -> str:
+    return f"""You will receive: a Kaggle competition description, one or more researcher plans, the contents of the external data directory (if external data is available), an initial script/logs, and potential identified red flags.
 
 Begin with a concise checklist (3-7 bullets) summarizing those red flags and your intended strategies to address them. Focus on conceptual insights rather than implementation specifics. Use '- ' for each bullet. If fewer than three significant points are found, list as many as possible and explicitly state: "Fewer than 3 high-level red flags or strategies identified."
 Set reasoning_effort = medium; ensure outputs are comprehensive yet focused on key conceptual improvements. For each substantive step, provide succinct validation in 1-2 sentences, referencing specific input fields where appropriate, and self-correct if main requirements appear unmet.
@@ -151,17 +148,19 @@ IMPORTANT: When analyzing shared experiments and generating new ideas:
 ## Hard Constraints
 - Do NOT look up or use actual winning solutions from this competition.
 - Do NOT rely on prior knowledge of solutions for this competition.
-- Do NOT change the model family used in the initial script; only suggest enhancements around it.
+- {"You may suggest a new model or change the family if you feel is beneficial." if is_ensemble else "Do NOT change the model family used in the initial script; only suggest enhancements around it."}
 - If there certain bugs in the code which you identified or in <red_flags>, you MUST FIX THEM FIRST.
+{"- DO NOT make changes to Validation unless it is extremely severe issues." if is_ensemble else ""}
 
 Generate THREE distinct suggestions, each from a different strategic category:
-1. **Data / Feature Engineering / Validation Enhancement** — Improving data representation or quality, or validation strategies.
-2. **Architectural Enhancement** — Enhancing model design without altering the backbone, such as adding auxiliary heads, applying regularization, or adjusting the training regime.
-3. **Hyperparameter Enhancement** - Optimizing hyperparameters like learning rate, batch size, or number of epochs to improve model performance.
-4. **Removing Existing Components** - If you believe there are existing components that are unstable or detrimental to performance, suggest removing or replacing them with a brief justification.
+1. **Data / Feature Engineering / Preprocessing Enhancement** — Creating new features, transforming existing ones, or modifying preprocessing steps.
+2. **Validation Enhancement** — Improving validation strategies, such as changing cross-validation schemes, data splits, or evaluation metrics.
+3. **Architectural Enhancement** — Enhancing model design without altering the backbone, such as adding auxiliary heads, applying regularization, or adjusting the training regime.
+4. **Hyperparameter Enhancement** - Optimizing hyperparameters like learning rate, batch size, or number of epochs to improve model performance.
+5. **Removing Existing Components** - If you believe there are existing components that are unstable or detrimental to performance, suggest removing or replacing them with a brief justification.
 
 For each:
-- Provide one high-impact suggestion to improve the competition metric, with an explanation (~100 words) describing its benefits. The suggestion should be executable within 1 hour.
+- Provide one high-impact suggestion to improve the competition metric, with an explanation (~100 words) describing its benefits. The suggestion should be executable within {"3 hours" if is_ensemble else "1 hour"}.
 - Clearly differentiate suggestions using numbered headings (e.g., '#### 1. Data / Feature Engineering Suggestion').
 - Ensure suggestions are complementary and non-overlapping.
 
@@ -186,7 +185,7 @@ Your response MUST follow these sections, in order:
 - If there is no shared experiments, state "No shared experiments yet."
 
 ### Research and Suggestion
-#### 1. Data / Feature Engineering Suggestion
+#### 1. Data / Feature Engineering / Preprocessing Suggestion
 - ...(explanation, if no suggestions, state "No suggestions.")
 
 #### 2. Validation Enhancement Suggestion
@@ -234,6 +233,7 @@ Never repeat an idea from <previous failed ideas>, and avoid blacklisted or prev
 
 ### Input Schema
 - <competition description> (string): Detailed overview of the Kaggle competition (task, data, evaluation metric).
+- <external_data_directory> (string): Contents in the external data directory, if any.
 - <researcher plans> (optional, list of strings): Previous plans for the task.
 - <initial script> (string): Starting code.
 - <logs> (string): Output logs from training/evaluation of the script.
@@ -253,7 +253,6 @@ Never repeat an idea from <previous failed ideas>, and avoid blacklisted or prev
 - Code (Python, if a suggestion is present)
 """
 
-
 def sota_user(
     description: str,
     plans_section: str,
@@ -263,12 +262,17 @@ def sota_user(
     executed_code_text: str,
     context: str,
     shared_suggestions_text: str = "No shared suggestions yet.",
+    external_data_listing: str = "No external data directories found.",
 ) -> str:
     return f"""<competition description>
 {description}
 </competition description>
 
 {plans_section}
+
+<external_data_directory>
+{external_data_listing}
+</external_data_directory>
 
 <potential identified red flags>
 {red_flags}

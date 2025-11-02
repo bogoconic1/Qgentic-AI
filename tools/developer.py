@@ -37,7 +37,10 @@ _LLM_CFG = _CONFIG.get("llm")
 _DEVELOPER_TOOL_MODEL = _LLM_CFG.get("developer_tool_model")
 _RUNTIME_CFG = _CONFIG.get("runtime")
 _BASELINE_TIME_LIMIT = _RUNTIME_CFG.get("baseline_time_limit")
-_DEFAULT_CODE_TIMEOUT = _BASELINE_TIME_LIMIT // 4  # Code execution timeout is 1/4 of baseline time limit
+_ENSEMBLE_TIME_LIMIT = _RUNTIME_CFG.get("ensemble_time_limit")
+_BASELINE_CODE_TIMEOUT = 5400  # 1.5 hours for baseline code execution
+_ENSEMBLE_CODE_TIMEOUT = 10800  # 3 hours for ensemble code execution
+_DEFAULT_CODE_TIMEOUT = _BASELINE_CODE_TIMEOUT  # Default to baseline timeout
 
 @weave.op()
 def web_search_stack_trace(query: str) -> str:
@@ -128,8 +131,10 @@ def search_sota_suggestions(
     failed_ideas: list[str],
     executed_code: str | None = None,
     later_recommendations: str | None = None,
-    allow_multi_fold: bool = False,
     shared_suggestions: list[str] | None = None,
+    is_ensemble: bool = False,
+    external_data_listing: str | None = None,
+    plan_content: str | None = None,
 ) -> str:
     """Stage 2: Use web search to generate SOTA suggestions based on red flags.
 
@@ -141,9 +146,11 @@ def search_sota_suggestions(
         failed_ideas: List of blacklisted ideas from this model
         executed_code: Code snippet from last attempt
         later_recommendations: LATER recommendations for progressive improvement
-        allow_multi_fold: If True, allows multi-fold training and ensembling suggestions
         shared_suggestions: List of all suggestions from all parallel models with outcomes
                           Format: "Model <model> tried <suggestion> (score improved/worsened/remained by X: A -> B)"
+        is_ensemble: If True, uses ensemble-specific prompts and constraints
+        external_data_listing: Directory listing of external_data_* folders
+        plan_content: Content of plan.md file
 
     Returns:
         SOTA suggestions text with blacklist decision and new suggestion
@@ -155,22 +162,25 @@ def search_sota_suggestions(
     failed_ideas_text = "\n".join(f"- {idea}" for idea in failed_ideas) if failed_ideas else "No prior ideas are blacklisted."
     shared_suggestions_text = "\n".join(f"- {suggestion}" for suggestion in (shared_suggestions or [])) if shared_suggestions else "No shared suggestions yet."
 
-    # Include LATER recommendations as context for more advanced suggestions
-    suggestions_section = ""
+    # Build plans_section: combine plan.md and later_recommendations
+    plans_section = ""
+    if plan_content:
+        plans_section += f"\n<plan>\n{plan_content}\n</plan>\n"
     if later_recommendations:
-        suggestions_section = f"\n<suggestions>\n{later_recommendations}\n</suggestions>\n"
+        plans_section += f"\n<suggestions>\n{later_recommendations}\n</suggestions>\n"
 
-    system_prompt = prompt_sota_system(allow_multi_fold=allow_multi_fold)
+    system_prompt = prompt_sota_system(is_ensemble=is_ensemble)
 
     user_prompt = prompt_sota_user(
         description=description,
-        plans_section=suggestions_section,
+        plans_section=plans_section,
         red_flags=red_flags,
         failed_ideas_text=failed_ideas_text,
         executed_suggestion_text=executed_suggestion_text,
         executed_code_text=executed_code_text,
         context=context,
         shared_suggestions_text=shared_suggestions_text,
+        external_data_listing=external_data_listing or "No external data directories found.",
     )
 
     response = call_llm_with_retry(

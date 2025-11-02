@@ -10,7 +10,7 @@ Begin with a **concise checklist (3-7 conceptual bullets)** describing your reas
 ## Hard Constraints
 - Do **not** search for or use actual winning solutions from this specific competition.
 - Do **not** rely on prior competition knowledge.
-- Only recommend single models; do **not** suggest ensembles, stacks, or blends.
+- Only recommend single models; do **not** suggest ensembles, stacks, or blends. The only exception that is allowed is **pseudo-labeling with OOF control** (i.e. using Model 1 to predict first, then use Model 1's OOFs as features for Model 2).
 
 ## Hard Computational Constraints
 - **Total wall-clock budget:** **≤ 3 hours** end-to-end (data loading + training + validation)

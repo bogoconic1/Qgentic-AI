@@ -8,11 +8,13 @@ from queue import Queue
 
 from agents.researcher import ResearcherAgent
 from agents.developer import DeveloperAgent
+from agents.ensembler import EnsemblerAgent
 from agents.starter import StarterAgent
 from agents.model_recommender import ModelRecommenderAgent
 from project_config import get_config
 from weave.trace.util import ThreadPoolExecutor
 import weave
+from utils.ensembler import move_best_code_to_ensemble_folder, recommend_ensemble_strategies
 
 
 _CONFIG = get_config()
@@ -176,7 +178,7 @@ def _run_researcher_once(slug: str, iteration: int, run_id: int) -> tuple[int, s
     return run_id, str(plan_path), len(plan or "")
 
 @weave.op()
-def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, now_recommendations: dict, later_recommendations: dict, key: str, cpu_core_pool: Queue | None = None, gpu_pool: Queue | None = None, gpu_isolation_mode: str = "none", conda_env: str | None = None):
+def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, now_recommendations: dict, later_recommendations: dict, key: str, external_data_listing: str, plan_content: str, cpu_core_pool: Queue | None = None, gpu_pool: Queue | None = None, gpu_isolation_mode: str = "none", conda_env: str | None = None):
     """Run a single baseline DeveloperAgent and return results.
 
     Args:
@@ -206,6 +208,8 @@ def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, n
             model_name=model_name,
             model_recommendations=formatted_recommendations,
             later_recommendations=later_recommendations,
+            external_data_listing=external_data_listing,
+            plan_content=plan_content,
             cpu_core_range=cpu_core_range,
             gpu_identifier=gpu_identifier,
             gpu_isolation_mode=gpu_isolation_mode,
@@ -220,6 +224,49 @@ def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, n
         if gpu_pool and gpu_identifier is not None:
             gpu_pool.put(gpu_identifier)
 
+@weave.op()
+def _run_ensembler_single(slug: str, iteration: int, strategy_index: int, strategy: dict, baseline_metadata: dict, external_data_listing: str, plan_content: str, cpu_core_pool: Queue | None = None, gpu_pool: Queue | None = None, gpu_isolation_mode: str = "none", conda_env: str | None = None):
+    """Run a single EnsemblerAgent for one ensemble strategy and return results.
+
+    Args:
+        slug: Competition slug
+        iteration: Iteration number
+        strategy_index: Index of this strategy (1-8)
+        strategy: Strategy dict with "strategy" and "models_needed" keys
+        baseline_metadata: Metadata from ensemble_metadata.json
+        cpu_core_pool: Queue of CPU core ranges to grab from (None = no affinity)
+        gpu_pool: Queue of GPU identifiers (MIG UUIDs or GPU IDs) to grab from (None = use GPU 0)
+        gpu_isolation_mode: Type of GPU isolation ("mig", "multi-gpu", or "none")
+        conda_env: Conda environment name to use for code execution (None = use current env)
+    """
+    # Acquire resources from pools (blocks until available)
+    cpu_core_range = cpu_core_pool.get() if cpu_core_pool else None
+    gpu_identifier = gpu_pool.get() if gpu_pool else None
+
+    try:
+        ensemble_time_limit = _RUNTIME_CFG["ensemble_time_limit"]
+        agent = EnsemblerAgent(
+            slug=slug,
+            iteration=iteration,
+            strategy_index=strategy_index,
+            strategy=strategy,
+            baseline_metadata=baseline_metadata,
+            external_data_listing=external_data_listing,
+            plan_content=plan_content,
+            cpu_core_range=cpu_core_range,
+            gpu_identifier=gpu_identifier,
+            gpu_isolation_mode=gpu_isolation_mode,
+            conda_env=conda_env
+        )
+        best_score, best_code_file, blacklisted_ideas, successful_ideas = agent.run(max_time_seconds=ensemble_time_limit)
+        strategy_key = f"EnsembleStrategy{strategy_index}"
+        return strategy_key, best_score, best_code_file, blacklisted_ideas, successful_ideas
+    finally:
+        # Return resources to pools for next task
+        if cpu_core_pool and cpu_core_range is not None:
+            cpu_core_pool.put(cpu_core_range)
+        if gpu_pool and gpu_identifier is not None:
+            gpu_pool.put(gpu_identifier)
 
 
 def _extract_now_recommendations(recommendations: dict) -> dict:
@@ -413,6 +460,34 @@ class Orchestrator:
         self.base_dir = _TASK_ROOT / slug
         self.outputs_dir = self.base_dir / _OUTPUTS_DIRNAME / str(iteration)
 
+    def _get_external_data_listing(self) -> str:
+        """Get directory listing of external_data_* folders in outputs/<iteration>."""
+        from tools.helpers import _build_directory_listing
+
+        if not self.outputs_dir.exists():
+            return "No external data directories found."
+
+        external_data_dirs = [d for d in self.outputs_dir.iterdir() if d.is_dir() and d.name.startswith("external_data_")]
+
+        if not external_data_dirs:
+            return "No external data directories found."
+
+        lines = []
+        for ext_dir in sorted(external_data_dirs):
+            lines.append(f"\n{ext_dir.name}/")
+            dir_listing = _build_directory_listing(str(ext_dir))
+            lines.append(dir_listing)
+
+        return "\n".join(lines)
+
+    def _get_plan_content(self) -> str:
+        """Get content of plan.md if it exists."""
+        plan_path = self.outputs_dir / "plan.md"
+        if plan_path.exists():
+            with open(plan_path, "r") as f:
+                return f.read()
+        return "No plan.md found."
+
     @weave.op()
     def run(self, max_time_seconds: int | None = 6 * 3600) -> Tuple[bool, str]:
 
@@ -437,6 +512,8 @@ class Orchestrator:
             _run_researcher_once(self.slug, self.iteration, 1)
             if not plan_path.exists():
                 raise RuntimeError("No plan found")
+
+        return
 
         # Phase 3: Model Recommender Agent - Get model-specific recommendations
         # First dynamically selects suitable models, then generates recommendations for each
@@ -536,9 +613,6 @@ class Orchestrator:
             max_parallel_workers = int(_RUNTIME_CFG.get("baseline_max_parallel_workers", 1))
             print(f"GPU isolation disabled: Using baseline_max_parallel_workers={max_parallel_workers}")
 
-        # Ensure conda environments exist for isolated package installation
-        _ensure_conda_environments(max_parallel_workers)
-
         # Create resource pools for dynamic allocation
         total_cores = os.cpu_count() or 1
         num_models = len(now_recommendations_all)
@@ -580,7 +654,16 @@ class Orchestrator:
             except Exception as e:
                 print(f"Warning: Could not load existing baseline results: {e}")
 
+        # Read external data listing and plan content (shared across all models)
+        external_data_listing = self._get_external_data_listing()
+        plan_content = self._get_plan_content()
+        print(f"External data listing: {len(external_data_listing)} chars")
+        print(f"Plan content: {len(plan_content)} chars")
+
         if not os.path.exists(self.outputs_dir / "baseline_results.json") or len(existing_baseline_results) < len(now_recommendations_all):
+            # Ensure conda environments exist for isolated package installation
+            _ensure_conda_environments(max_parallel_workers)
+
             tasks = []
             for idx, (model_name, now_recommendations) in enumerate(now_recommendations_all.items(), start=1):
                 key = model_name
@@ -604,6 +687,8 @@ class Orchestrator:
                     now_recommendations,
                     later_recs,
                     key,
+                    external_data_listing,
+                    plan_content,
                     cpu_core_pool,
                     gpu_pool,
                     gpu_isolation_mode,
@@ -652,6 +737,117 @@ class Orchestrator:
                     json.dump(baseline_results, f, indent=2)
             else:
                 raise RuntimeError("All developer baseline runs failed")
+
+        # Phase 5: Ensemble Phase - Combine baseline models using ensemble strategies
+        print("\n" + "="*80)
+        print("PHASE 5: ENSEMBLE PHASE")
+        print("="*80)
+
+        # Check if ensemble metadata already exists with strategies
+        ensemble_folder = self.outputs_dir / "ensemble"
+        ensemble_metadata_path = ensemble_folder / "ensemble_metadata.json"
+
+        if ensemble_metadata_path.exists():
+            with open(ensemble_metadata_path, "r") as f:
+                ensemble_metadata = json.load(f)
+
+            if "strategies" in ensemble_metadata:
+                print("Ensemble metadata with strategies already exists, skipping generation...")
+                ensemble_strategies = ensemble_metadata["strategies"]
+                print(f"Loaded {len(ensemble_strategies)} existing ensemble strategies")
+            else:
+                print("Ensemble metadata exists but no strategies found, regenerating...")
+                # Step 1: Move best code to ensemble folder
+                print("Moving best baseline code to ensemble folder...")
+                ensemble_folder = move_best_code_to_ensemble_folder(self.slug, self.iteration)
+                print(f"Ensemble folder created: {ensemble_folder}")
+
+                # Step 2: Generate ensemble strategies
+                print("Generating ensemble strategies...")
+                ensemble_strategies = recommend_ensemble_strategies(self.slug, self.iteration)
+                print(f"Generated {len(ensemble_strategies)} ensemble strategies")
+
+                # Reload metadata after generation
+                with open(ensemble_metadata_path, "r") as f:
+                    ensemble_metadata = json.load(f)
+        else:
+            print("No ensemble metadata found, creating from scratch...")
+            # Step 1: Move best code to ensemble folder
+            print("Moving best baseline code to ensemble folder...")
+            ensemble_folder = move_best_code_to_ensemble_folder(self.slug, self.iteration)
+            print(f"Ensemble folder created: {ensemble_folder}")
+
+            # Step 2: Generate ensemble strategies
+            print("Generating ensemble strategies...")
+            ensemble_strategies = recommend_ensemble_strategies(self.slug, self.iteration)
+            print(f"Generated {len(ensemble_strategies)} ensemble strategies")
+
+            # Load ensemble metadata with strategies
+            with open(ensemble_metadata_path, "r") as f:
+                ensemble_metadata = json.load(f)
+
+        # Step 3: Re-initialize conda environments if configured
+        if _RUNTIME_CFG.get("reset_conda_envs_per_run", False):
+            print("Re-initializing conda environments for ensemble phase...")
+            num_strategies = len(ensemble_strategies)
+            num_ensemble_workers = min(num_strategies, max_parallel_workers)
+            _ensure_conda_environments(num_ensemble_workers)
+
+        # Step 4: Prepare ensemble tasks for parallel execution
+        ensemble_tasks = []
+        for strategy_index, strategy in enumerate(ensemble_strategies, start=1):
+            conda_env = f"qgentic-model-{strategy_index}"
+            print(f"Queueing EnsembleStrategy{strategy_index} with conda env: {conda_env}")
+            ensemble_tasks.append((
+                self.slug,
+                self.iteration,
+                strategy_index,
+                strategy,
+                ensemble_metadata,
+                external_data_listing,
+                plan_content,
+                cpu_core_pool,
+                gpu_pool,
+                gpu_isolation_mode,
+                conda_env
+            ))
+
+        # Step 5: Run ensemble agents in parallel
+        ensemble_results = {}
+        if ensemble_tasks:
+            print(f"Running {len(ensemble_tasks)} ensemble strategies in parallel")
+            with ThreadPoolExecutor(max_workers=max_parallel_workers) as executor:
+                futures = [
+                    executor.submit(_run_ensembler_single, *task_args)
+                    for task_args in ensemble_tasks
+                ]
+
+                for future in futures:
+                    try:
+                        strategy_key, best_score, best_code_file, blacklisted_ideas, successful_ideas = future.result()
+                        ensemble_results[strategy_key] = {
+                            "strategy_name": strategy_key,
+                            "best_score": best_score,
+                            "best_code_file": best_code_file or "",
+                            "blacklisted_ideas": blacklisted_ideas,
+                            "successful_ideas": successful_ideas
+                        }
+                        # Incrementally persist after each completion
+                        ensemble_results_path = self.outputs_dir / "ensemble_results.json"
+                        with open(ensemble_results_path, "w") as f:
+                            json.dump(ensemble_results, f, indent=2)
+                    except Exception as e:
+                        print(f"Error in ensemble task: {e}")
+                        continue
+
+            # Persist ensemble results (final)
+            if ensemble_results:
+                ensemble_results_path = self.outputs_dir / "ensemble_results.json"
+                with open(ensemble_results_path, "w") as f:
+                    json.dump(ensemble_results, f, indent=2)
+                print(f"Ensemble results saved to {ensemble_results_path}")
+            else:
+                print("Warning: All ensemble strategies failed")
 
         # Return baseline results path
         baseline_path = self.outputs_dir / "baseline_results.json"
