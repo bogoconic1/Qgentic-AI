@@ -19,6 +19,7 @@ from __future__ import annotations
 import concurrent.futures
 import logging
 import os
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 import re
@@ -47,11 +48,30 @@ LOGGER = logging.getLogger(__name__)
 
 SEMANTIC_SCHOLAR_API_URL = "https://api.semanticscholar.org/graph/v1"
 DEFAULT_FIELDS = (
-    "paperId,title,url,abstract,isOpenAccess,openAccessPdf,authors,externalIds"
+    "paperId,title,url,abstract,isOpenAccess,openAccessPdf,authors,externalIds,year"
 )
 DEFAULT_LIMIT = 5
 DEFAULT_MAX_WORKERS = 4
 CHUNK_SIZE = 8192
+MIN_PUBLICATION_YEAR = 2022
+STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "by",
+    "for",
+    "from",
+    "in",
+    "into",
+    "of",
+    "on",
+    "or",
+    "the",
+    "to",
+    "using",
+    "via",
+    "with",
+}
 
 
 class PaperDownloadError(Exception):
@@ -69,6 +89,7 @@ class PaperMetadata:
     is_open_access: bool
     open_access_pdf_url: Optional[str]
     authors: tuple[str, ...]
+    year: Optional[int]
     external_ids: Dict[str, str] = field(default_factory=dict)
 
 
@@ -114,19 +135,49 @@ class SemanticScholarClient:
         if not query:
             raise ValueError("Query string cannot be empty.")
 
-        params = {"query": query, "limit": limit, "fields": fields}
-        url = f"{self._base_url}/paper/search"
-        LOGGER.debug("Searching Semantic Scholar: %s", params)
-        response = requests.get(
-            url,
-            headers=self._headers(),
-            params=params,
-            timeout=self._timeout,
+        effective_fields = fields or DEFAULT_FIELDS
+        per_query_limit = max(limit, 10)
+
+        seed_results = self._search_single_query(
+            query=query,
+            limit=per_query_limit,
+            fields=effective_fields,
         )
-        response.raise_for_status()
-        payload = response.json()
-        papers = payload.get("data", [])
-        return [self._parse_paper(entry) for entry in papers]
+        recent_seed_results = self._filter_by_year(
+            seed_results,
+            MIN_PUBLICATION_YEAR,
+        )
+        expansion_seed = recent_seed_results or seed_results
+        expanded_queries = self._expand_queries(query, expansion_seed)
+
+        results: List[PaperMetadata] = []
+        seen_ids: set[str] = set()
+
+        if self._extend_with_unique(
+            results, recent_seed_results, seen_ids, limit
+        ):
+            return results
+
+        for expanded_query in expanded_queries:
+            if len(results) >= limit:
+                break
+            if expanded_query.strip().lower() == query.strip().lower():
+                continue
+            candidate_results = self._search_single_query(
+                query=expanded_query,
+                limit=per_query_limit,
+                fields=effective_fields,
+            )
+            filtered_candidates = self._filter_by_year(
+                candidate_results,
+                MIN_PUBLICATION_YEAR,
+            )
+            if self._extend_with_unique(
+                results, filtered_candidates, seen_ids, limit
+            ):
+                break
+
+        return results
 
     def recommendations(
         self,
@@ -147,7 +198,11 @@ class SemanticScholarClient:
         )
         response.raise_for_status()
         payload = response.json()
-        papers = payload.get("recommendedPapers", [])
+        papers = sorted(
+            payload.get("recommendedPapers", []),
+            key=lambda entry: entry.get("relevanceScore") or 0,
+            reverse=True,
+        )
         return [self._parse_paper(entry) for entry in papers]
 
     def get_paper(
@@ -190,6 +245,11 @@ class SemanticScholarClient:
                 external_ids[key] = str(value[0])
             else:
                 external_ids[key] = str(value)
+        year_raw = entry.get("year")
+        try:
+            year = int(year_raw)
+        except (TypeError, ValueError):
+            year = None
         return PaperMetadata(
             paper_id=entry.get("paperId", ""),
             title=entry.get("title", "").strip(),
@@ -198,8 +258,202 @@ class SemanticScholarClient:
             is_open_access=bool(entry.get("isOpenAccess")),
             open_access_pdf_url=open_access_pdf.get("url"),
             authors=authors,
+            year=year,
             external_ids=external_ids,
         )
+
+    def _search_single_query(
+        self,
+        query: str,
+        limit: int,
+        fields: str,
+    ) -> List[PaperMetadata]:
+        params = {"query": query, "limit": limit, "fields": fields}
+        url = f"{self._base_url}/paper/search"
+        LOGGER.debug("Searching Semantic Scholar: %s", params)
+        response = requests.get(
+            url,
+            headers=self._headers(),
+            params=params,
+            timeout=self._timeout,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        papers = payload.get("data", [])
+        return [self._parse_paper(entry) for entry in papers]
+
+    @staticmethod
+    def _filter_by_year(
+        papers: Sequence[PaperMetadata],
+        min_year: int,
+    ) -> List[PaperMetadata]:
+        filtered: List[PaperMetadata] = []
+        for paper in papers:
+            if paper.year is None:
+                continue
+            if paper.year >= min_year:
+                filtered.append(paper)
+        return filtered
+
+    def _expand_queries(
+        self,
+        base_query: str,
+        seed_papers: Sequence[PaperMetadata],
+    ) -> List[str]:
+        if not seed_papers:
+            return []
+        similar_queries = self._extract_similar_queries(
+            base_query, seed_papers)
+        author_queries = self._build_author_queries(base_query, seed_papers)
+        combined = similar_queries + author_queries
+        return self._deduplicate_queries(combined)
+
+    @staticmethod
+    def _extend_with_unique(
+        target: List[PaperMetadata],
+        candidates: Sequence[PaperMetadata],
+        seen_ids: set[str],
+        limit: int,
+    ) -> bool:
+        for paper in candidates:
+            if not paper.paper_id or paper.paper_id in seen_ids:
+                continue
+            target.append(paper)
+            seen_ids.add(paper.paper_id)
+            if len(target) >= limit:
+                return True
+        return False
+
+    def _extract_similar_queries(
+        self,
+        base_query: str,
+        seed_papers: Sequence[PaperMetadata],
+        max_terms: int = 5,
+    ) -> List[str]:
+        if not seed_papers:
+            return []
+
+        base_tokens = set(self._significant_tokens(base_query))
+        if not base_tokens:
+            base_tokens = set(self._tokenize_text(base_query))
+        normalized_base_query = self._normalize_phrase(base_query)
+
+        candidate_counter: Counter[str] = Counter()
+        for paper in seed_papers:
+            sources = filter(None, (paper.title, paper.abstract))
+            for source in sources:
+                tokens = self._tokenize_text(source)
+                if len(tokens) < 2:
+                    continue
+                normalized_tokens = [
+                    self._normalize_token(token) for token in tokens]
+                for start in range(len(normalized_tokens)):
+                    max_length = min(4, len(normalized_tokens) - start)
+                    for length in range(2, max_length + 1):
+                        phrase_tokens = normalized_tokens[start:start + length]
+                        if not any(
+                            token
+                            and token in base_tokens
+                            and not self._is_stopword(token)
+                            for token in phrase_tokens
+                        ):
+                            continue
+                        phrase = " ".join(
+                            token for token in phrase_tokens if token
+                        )
+                        if (
+                            not phrase
+                            or phrase == normalized_base_query
+                            or all(self._is_stopword(token) for token in phrase_tokens if token)
+                        ):
+                            continue
+                        candidate_counter[phrase] += 1
+
+        ordered_phrases: List[str] = []
+        for phrase, _ in candidate_counter.most_common():
+            if phrase not in ordered_phrases:
+                ordered_phrases.append(phrase)
+            if len(ordered_phrases) >= max_terms:
+                break
+        return ordered_phrases
+
+    def _build_author_queries(
+        self,
+        base_query: str,
+        seed_papers: Sequence[PaperMetadata],
+        max_authors: int = 3,
+    ) -> List[str]:
+        if not seed_papers:
+            return []
+        author_counter: Counter[str] = Counter()
+        for paper in seed_papers:
+            for author in paper.authors:
+                normalized = author.strip()
+                if normalized:
+                    author_counter[normalized] += 1
+        if not author_counter:
+            return []
+        topic_phrase = base_query.strip()
+        if not topic_phrase:
+            return []
+
+        queries: List[str] = []
+        for author, _ in author_counter.most_common():
+            candidate = f"{author} {topic_phrase}".strip()
+            if candidate:
+                queries.append(candidate)
+            if len(queries) >= max_authors:
+                break
+        return queries
+
+    @staticmethod
+    def _significant_tokens(text: str) -> List[str]:
+        tokens = [
+            SemanticScholarClient._normalize_token(token)
+            for token in SemanticScholarClient._tokenize_text(text)
+        ]
+        return [
+            token for token in tokens if token and not SemanticScholarClient._is_stopword(token)
+        ]
+
+    @staticmethod
+    def _tokenize_text(text: Optional[str]) -> List[str]:
+        if not text:
+            return []
+        sanitized = re.sub(r"[-_/]+", " ", text.lower())
+        return re.findall(r"[a-z0-9]+", sanitized)
+
+    @staticmethod
+    def _normalize_token(token: str) -> str:
+        token = token.lower()
+        token = re.sub(r"[^a-z0-9]+", "", token)
+        if len(token) > 4 and token.endswith("s"):
+            token = token[:-1]
+        return token
+
+    @staticmethod
+    def _normalize_phrase(text: str) -> str:
+        tokens = [
+            SemanticScholarClient._normalize_token(token)
+            for token in SemanticScholarClient._tokenize_text(text)
+        ]
+        return " ".join(token for token in tokens if token)
+
+    @staticmethod
+    def _deduplicate_queries(queries: Sequence[str]) -> List[str]:
+        seen: set[str] = set()
+        deduped: List[str] = []
+        for query in queries:
+            normalized = query.strip().lower()
+            if not normalized or normalized in seen:
+                continue
+            deduped.append(query.strip())
+            seen.add(normalized)
+        return deduped
+
+    @staticmethod
+    def _is_stopword(token: str) -> bool:
+        return token in STOPWORDS
 
 
 class PaperDownloader:
@@ -455,7 +709,8 @@ class LiteratureReviewer:
             papers.extend(recs)
 
         unique_papers = self._deduplicate(papers)
-        LOGGER.info("Processing %s papers for query '%s'", len(unique_papers), query)
+        LOGGER.info("Processing %s papers for query '%s'",
+                    len(unique_papers), query)
 
         results: List[PaperReview] = []
         with concurrent.futures.ThreadPoolExecutor(
@@ -513,7 +768,8 @@ class LiteratureReviewer:
                 error = error or "PDF not available via open-access or fallback sources."
         except Exception as exc:
             error = str(exc)
-            LOGGER.warning("Issue while processing %s: %s", paper.paper_id, exc)
+            LOGGER.warning("Issue while processing %s: %s",
+                           paper.paper_id, exc)
 
         return PaperReview(metadata=metadata, pdf_path=pdf_path, insights=insights, error=error)
 
@@ -526,7 +782,8 @@ class LiteratureReviewer:
         for paper in papers:
             try:
                 recommendations.extend(
-                    self.client.recommendations(paper.paper_id, limit=recommendations_per_paper)
+                    self.client.recommendations(
+                        paper.paper_id, limit=recommendations_per_paper)
                 )
             except Exception as exc:
                 LOGGER.warning(
