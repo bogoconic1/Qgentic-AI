@@ -70,7 +70,9 @@ Thoroughly scan the code and logs for these categories of issues:
 - NaN/Inf values in losses or metrics
 - Training instability
 - Implausible values in metrics (e.g. class weights)
-- **CRITICAL**: Calculate gap between current validation/leaderboard score and target score (provided in logs/context). Quantify how far from competitive performance.
+- **CRITICAL**: Compare current validation/leaderboard score to target score (provided in logs/context):
+  - If below target: Calculate gap and quantify how far from competitive performance
+  - If at/above target: Note current standing and focus on further incremental improvements
 - Submission distribution anomalies (e.g. all one class, constant values)
 - Training time from logs (important for planning next steps within time budget)
 
@@ -142,8 +144,9 @@ Each entry shows:
 
 1. **Copy Big Wins Immediately**:
    - Identify suggestions with LARGEST absolute score improvements from shared experiments
-   - If a suggestion closed significant portion (>10%) of the gap to target score → HIGHEST PRIORITY to adapt it
-   - Example: If gap is 0.01 and one model gained 0.002 → that's 20% of gap, try similar approach
+   - Calculate what % of gap each improvement closed (improvement / gap_to_target × 100%)
+   - Prioritize adapting strategies that closed significant portions of the gap
+   - Example: If gap is 0.01 and one model gained 0.002 → that's 20% of gap, high priority to try similar approach
    - You MUST try adapting these successful strategies (adjusted for your model architecture if needed)
 
 2. **Avoid Confirmed Universal Failures**:
@@ -156,9 +159,9 @@ Each entry shows:
 
 4. **Strategic vs Micro-Optimization**:
    - Calculate: what % of current gap to target do shared experiment improvements represent?
-   - If improvements are <5% of gap → those are micro-optimizations, need CREATIVE strategies instead
-   - If improvements are >20% of gap → those are strategic wins, must adapt them
-   - Only micro-optimize when you're very close to target
+   - If improvements are very small % of gap → those are micro-optimizations, need CREATIVE strategies instead
+   - If improvements are substantial % of gap → those are strategic wins, must adapt them
+   - Judge based on actual numbers and context, not fixed thresholds
 
 5. **Semantic Deduplication**:
    - "feature C = feature A + feature B" and "create feature C as sum of A and B" are IDENTICAL
@@ -206,8 +209,9 @@ Each entry shows:
 - **Tabular/Time Series**: Prioritize #1 (Feature Engineering) first, then #5 (Removing), then #4 (Hyperparameters). Skip #2 (Validation) unless severe issues. #3 only for neural nets.
 - **CV/NLP/Audio**: Prioritize #1 (Data Augmentation/Preprocessing), #3 (Architecture), #4 (Hyperparameters). #2 (Validation) is low priority.
 - **If bugs/detrimental components found**: Always include #5 (Removing) as one of the 3 suggestions.
-- **If close to target (<5% gap)**: Include #4 (Hyperparameters) for micro-optimization.
-- **If far from target (>10% gap)**: Focus on #1 and #3 for strategic improvements.
+- **If far from target**: Focus on #1 and #3 for strategic, high-impact improvements; avoid micro-optimizations.
+- **If close to target**: Include #4 (Hyperparameters) for incremental polishing.
+- **If at/above target**: Focus on #4 (Hyperparameters) and #1 (polishing); avoid risky architectural changes.
 
 Generate exactly THREE suggestions from different categories, prioritized by the guidelines above. For each:
 - Provide one high-impact suggestion with explanation (~100 words) describing benefits
@@ -230,9 +234,10 @@ Your response MUST follow these sections, in order:
 - ...(summarize the key red flags, if any, in 2-3 lines)
 
 ### Summary of Shared Experiments
-- ...(1 liner on how far your score is from target score)
+- ...(1 liner comparing your score to target score: if below target, state gap; if at/above target, state that you've reached/exceeded target and focus on further improvements)
 - ...(summarize key patterns from shared experiments in 5-10 lines, what you should try and what you will not try based on this)
-- ...(guideline: if the improvement is very small compared to the gap between current and target score, then it is likely not impactful enough, you should research/attempt more creative/impactful ideas which may not be present in shared experiments)
+- ...(guideline for below-target: if the improvement is very small compared to the gap between current and target score, then it is likely not impactful enough, you should research/attempt more creative/impactful ideas which may not be present in shared experiments)
+- ...(guideline for at/above-target: focus on incremental improvements and polishing; micro-optimizations become more valuable)
 - If there is no shared experiments, state "No shared experiments yet."
 
 ### Research and Suggestion

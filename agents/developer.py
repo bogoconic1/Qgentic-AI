@@ -1000,9 +1000,21 @@ class DeveloperAgent:
                     base_score_display = self._format_score_value(base_score)
                     analysis_msg += f" Your score before implementing this suggestion was {base_score_display}."
 
-                # Add target
+                # Add target context
                 if self.gold_threshold is not None:
-                    analysis_msg += f" Let's push further to reach the TARGET of {self.gold_threshold}."
+                    # Compare current score to target (accounting for metric direction)
+                    if self.is_lower_better:
+                        if run_score <= self.gold_threshold:
+                            analysis_msg += f" You have reached/exceeded the TARGET of {self.gold_threshold}! Focus on further incremental improvements."
+                        else:
+                            gap = run_score - self.gold_threshold
+                            analysis_msg += f" Current gap to TARGET ({self.gold_threshold}): {gap:.6f}. Let's close this gap."
+                    else:
+                        if run_score >= self.gold_threshold:
+                            analysis_msg += f" You have reached/exceeded the TARGET of {self.gold_threshold}! Focus on further incremental improvements."
+                        else:
+                            gap = self.gold_threshold - run_score
+                            analysis_msg += f" Current gap to TARGET ({self.gold_threshold}): {gap:.6f}. Let's close this gap."
                 else:
                     analysis_msg += " Let's push further to reach an even stronger result."
 

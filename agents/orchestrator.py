@@ -561,8 +561,6 @@ class Orchestrator:
         with open(later_rec_path, "w") as f:
             json.dump(later_recommendations_all, f, indent=2)
 
-        return
-
         # Phase 4: Baseline Developer Stage - Evaluate models in parallel with NOW recommendations
         baseline_results = {}
 
@@ -737,6 +735,8 @@ class Orchestrator:
                     json.dump(baseline_results, f, indent=2)
             else:
                 raise RuntimeError("All developer baseline runs failed")
+
+        return
 
         # Phase 5: Ensemble Phase - Combine baseline models using ensemble strategies
         print("\n" + "="*80)
