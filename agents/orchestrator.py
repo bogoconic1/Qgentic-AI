@@ -561,6 +561,8 @@ class Orchestrator:
         with open(later_rec_path, "w") as f:
             json.dump(later_recommendations_all, f, indent=2)
 
+        return
+
         # Phase 4: Baseline Developer Stage - Evaluate models in parallel with NOW recommendations
         baseline_results = {}
 

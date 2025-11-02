@@ -63,14 +63,16 @@ Thoroughly scan the code and logs for these categories of issues:
 - Faulty training configuration
 - Inference pipeline errors
 - Presence of risky or score-damaging components
+- **Missing validated techniques from research plan**: Check if plan Section 2 (Validated Findings) identified successful strategies that are NOT implemented in current code
 
 **Log/Performance Issues:**
 - Discrepancies between training/validation/leaderboard scores indicating overfitting/underfitting or bugs in the code
 - NaN/Inf values in losses or metrics
 - Training instability
 - Implausible values in metrics (e.g. class weights)
-- Score far from competitive baselines (you are given a target score)
+- **CRITICAL**: Calculate gap between current validation/leaderboard score and target score (provided in logs/context). Quantify how far from competitive performance.
 - Submission distribution anomalies (e.g. all one class, constant values)
+- Training time from logs (important for planning next steps within time budget)
 
 ## Output Format
 
@@ -128,22 +130,42 @@ Begin with a concise checklist (3-7 bullets) summarizing those red flags and you
 Set reasoning_effort = medium; ensure outputs are comprehensive yet focused on key conceptual improvements. For each substantive step, provide succinct validation in 1-2 sentences, referencing specific input fields where appropriate, and self-correct if main requirements appear unmet.
 Conduct a web search to identify ways to improve the competition metric with the given model, but do not look up or rely on actual winning solutions or prior knowledge specific to this competition.
 
-## Shared Experiments Analysis
+## Shared Experiments Analysis (CRITICAL - MUST ANALYZE FIRST!)
+
 Each entry shows:
 - Which model tried the suggestion
 - What the suggestion was
 - Whether the score improved, worsened, or remained the same
 - The exact score change (before -> after)
 
-IMPORTANT: When analyzing shared experiments and generating new ideas:
-1. Look for patterns in experiments that worsened scores - avoid similar ideas
-2. Look for patterns in experiments that improved scores (and the raw scores are similar or better) - consider adapting them. Especially those that improved scores significantly.
-3. Consider model-specific vs universal patterns:
-   - If multiple different models tried similar ideas and all failed → likely universal issue
-   - If one model succeeded but others haven't tried it → worth adapting
-   - If one model failed but it's model-specific (e.g., "use Adam optimizer" for tree models) → might work for other model types. Use judgment.
-   - If adding something worsens score, and the current code has it, then it is likely detrimental and should be removed.
-4. Use semantic understanding - "if feature C = feature A + feature B" and "engineer a new feature C which is the sum of features A and B" are the same. Keep this in mind when making suggestions.
+**MANDATORY RULES for Cross-Model Learning:**
+
+1. **Copy Big Wins Immediately**:
+   - Identify suggestions with LARGEST absolute score improvements from shared experiments
+   - If a suggestion closed significant portion (>10%) of the gap to target score → HIGHEST PRIORITY to adapt it
+   - Example: If gap is 0.01 and one model gained 0.002 → that's 20% of gap, try similar approach
+   - You MUST try adapting these successful strategies (adjusted for your model architecture if needed)
+
+2. **Avoid Confirmed Universal Failures**:
+   - If 2+ different model families tried similar ideas and ALL failed → likely universal issue, avoid completely
+   - If only 1 model failed but it's model-specific (e.g., "use Adam for XGBoost") → might still work for neural nets
+
+3. **Remove Detrimental Components**:
+   - If adding component X worsened scores across multiple models, and YOUR current code has X → REMOVE IT immediately
+   - Cross-model failures are strong negative signals
+
+4. **Strategic vs Micro-Optimization**:
+   - Calculate: what % of current gap to target do shared experiment improvements represent?
+   - If improvements are <5% of gap → those are micro-optimizations, need CREATIVE strategies instead
+   - If improvements are >20% of gap → those are strategic wins, must adapt them
+   - Only micro-optimize when you're very close to target
+
+5. **Semantic Deduplication**:
+   - "feature C = feature A + feature B" and "create feature C as sum of A and B" are IDENTICAL
+   - Check for semantic duplicates across shared experiments before suggesting
+   - Don't repeat the same idea with different wording
+
+**IMPORTANT**: The "Summary of Shared Experiments" section is MANDATORY. You must analyze shared experiments and calculate gap percentages before generating new suggestions!
 
 ## Hard Constraints
 - Do NOT look up or use actual winning solutions from this competition.
@@ -152,17 +174,46 @@ IMPORTANT: When analyzing shared experiments and generating new ideas:
 - If there certain bugs in the code which you identified or in <red_flags>, you MUST FIX THEM FIRST.
 {"- DO NOT make changes to Validation unless it is extremely severe issues." if is_ensemble else ""}
 
-Generate THREE distinct suggestions, each from a different strategic category:
+## Making Specific, Actionable Suggestions (ALL Task Types)
+
+**MANDATORY steps before generating suggestions**:
+1. **Review `<plan>` Section 1** to understand the data/task (data schema for tabular, image specs for CV, text format for NLP, audio format for audio)
+2. **Review `<initial script>` code** to see what's already implemented:
+   - What preprocessing/augmentation is already applied
+   - What techniques are already in the code
+   - What features/transformations already exist
+3. **Review `<plan>` Section 2 (Validated Findings)** to identify strategies that were A/B tested successfully
+4. **Prioritize suggesting techniques validated in plan but NOT yet in current code**
+5. **Be SPECIFIC, not vague**:
+   - **Tabular**: Use actual column names (Good: "credit_score × debt_to_income_ratio", Bad: "add interactions")
+   - **CV**: Specify exact augmentation (Good: "RandAugment(N=2, M=10)", Bad: "add more augmentation")
+   - **NLP**: Specify exact technique (Good: "Back-translation with MarianMT for 2x data", Bad: "augment data")
+   - **Audio**: Specify exact method (Good: "SpecAugment(freq_mask=15, time_mask=20)", Bad: "augment spectrograms")
+6. **DO NOT suggest what's already in the code** (check `<initial script>` carefully)
+
+**Anti-pattern**: Generic suggestions like "improve preprocessing" or "try better techniques" are LOW VALUE. Always be concrete and specific!
+
+## Suggestion Categories (Pick 3 most relevant based on task type and situation)
+
+**Available categories**:
 1. **Data / Feature Engineering / Preprocessing Enhancement** — Creating new features, transforming existing ones, or modifying preprocessing steps.
 2. **Validation Enhancement** — Improving validation strategies, such as changing cross-validation schemes, data splits, or evaluation metrics.
 3. **Architectural Enhancement** — Enhancing model design without altering the backbone, such as adding auxiliary heads, applying regularization, or adjusting the training regime.
 4. **Hyperparameter Enhancement** - Optimizing hyperparameters like learning rate, batch size, or number of epochs to improve model performance.
 5. **Removing Existing Components** - If you believe there are existing components that are unstable or detrimental to performance, suggest removing or replacing them with a brief justification.
 
-For each:
-- Provide one high-impact suggestion to improve the competition metric, with an explanation (~100 words) describing its benefits. The suggestion should be executable within {"3 hours" if is_ensemble else "1 hour"}.
-- Clearly differentiate suggestions using numbered headings (e.g., '#### 1. Data / Feature Engineering Suggestion').
-- Ensure suggestions are complementary and non-overlapping.
+**Priority Guidelines**:
+- **Tabular/Time Series**: Prioritize #1 (Feature Engineering) first, then #5 (Removing), then #4 (Hyperparameters). Skip #2 (Validation) unless severe issues. #3 only for neural nets.
+- **CV/NLP/Audio**: Prioritize #1 (Data Augmentation/Preprocessing), #3 (Architecture), #4 (Hyperparameters). #2 (Validation) is low priority.
+- **If bugs/detrimental components found**: Always include #5 (Removing) as one of the 3 suggestions.
+- **If close to target (<5% gap)**: Include #4 (Hyperparameters) for micro-optimization.
+- **If far from target (>10% gap)**: Focus on #1 and #3 for strategic improvements.
+
+Generate exactly THREE suggestions from different categories, prioritized by the guidelines above. For each:
+- Provide one high-impact suggestion with explanation (~100 words) describing benefits
+- Suggestion should be executable within {"180 minutes" if is_ensemble else "90 minutes"}
+- Clearly differentiate using numbered headings (e.g., '#### 1. Feature Engineering Suggestion')
+- Ensure suggestions are complementary and non-overlapping
 
 After presenting suggestions, validate the relevance of each to the competition details and metric in 1-2 sentences, precisely specifying your validation criteria and referencing key inputs where possible.
 Rank the suggestions based on how likely they are to improve the competition score, considering feasibility and impact, and consider execution time if possible.
@@ -185,19 +236,16 @@ Your response MUST follow these sections, in order:
 - If there is no shared experiments, state "No shared experiments yet."
 
 ### Research and Suggestion
-#### 1. Data / Feature Engineering / Preprocessing Suggestion
+#### 1. Suggestion 1
+- ...(category and title)
 - ...(explanation, if no suggestions, state "No suggestions.")
 
-#### 2. Validation Enhancement Suggestion
+#### 2. Suggestion 2
+- ...(category and title)
 - ...(explanation, if no suggestions, state "No suggestions.")
 
-#### 3. Architectural Enhancement Suggestion
-- ...(explanation — improvements cannot alter the backbone model from the initial script. If no suggestions, state "No suggestions.")
-
-#### 4. Hyperparameter Enhancement Suggestion
-- ...(explanation, if no suggestions, state "No suggestions.")
-
-#### 5. Removing Existing Components Suggestion
+#### 3. Suggestion 3
+- ...(category and title)
 - ...(explanation, if no suggestions, state "No suggestions.")
 
 ### Previous Suggestion Review
