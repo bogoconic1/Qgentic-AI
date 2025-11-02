@@ -511,8 +511,7 @@ class LiteratureReviewer:
                 error = error or "PDF not available via open-access or fallback sources."
         except Exception as exc:
             error = str(exc)
-            LOGGER.warning("Issue while processing %s: %s",
-                           paper.paper_id, exc)
+            LOGGER.warning("Issue while processing %s: %s", paper.paper_id, exc)
 
         return PaperReview(metadata=metadata, pdf_path=pdf_path, insights=insights, error=error)
 
