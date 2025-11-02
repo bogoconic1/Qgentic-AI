@@ -390,7 +390,10 @@ class PaperAnalyzer:
     def _extract_insights(self, raw_text: str) -> Dict[str, List[str]]:
         sentences = self._split_sentences(raw_text)
         buckets: Dict[str, List[str]] = {
-            "model": [], "architecture": [], "dataset": []}
+            "model": [],
+            "architecture": [],
+            "dataset": [],
+        }
 
         for sentence in sentences:
             lower_sentence = sentence.lower()
