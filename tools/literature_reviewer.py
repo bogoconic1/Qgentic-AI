@@ -453,8 +453,7 @@ class LiteratureReviewer:
             papers.extend(recs)
 
         unique_papers = self._deduplicate(papers)
-        LOGGER.info("Processing %s papers for query '%s'",
-                    len(unique_papers), query)
+        LOGGER.info("Processing %s papers for query '%s'", len(unique_papers), query)
 
         results: List[PaperReview] = []
         with concurrent.futures.ThreadPoolExecutor(
