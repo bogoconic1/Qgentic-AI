@@ -220,6 +220,19 @@ def get_tools():
         },
         {
             "type": "function",
+            "name": "run_ab_test",
+            "description": "Run short (≤10-minute) A/B tests to validate modeling or feature engineering choices by comparing their impact on performance",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "question": {"type": "string", "description": "The A/B testing question (e.g., 'Run a 5-fold CV on 50,000 rows using XGBoost comparing raw vs log-transformed target and report RMSE')"}
+                },
+            },
+            "additionalProperties": False,
+            "required": ['question']
+        },
+        {
+            "type": "function",
             "name": "download_external_datasets",
             "description": "Download external data to working directory",
             "parameters": {

@@ -191,7 +191,8 @@ class ResearcherAgent:
                 model=_RESEARCHER_AGENT_MODEL,
                 instructions=system_prompt,
                 tools=tools,
-                messages=input_list
+                messages=input_list,
+                web_search_enabled=True,
             )
 
             input_list += response.output
@@ -200,7 +201,7 @@ class ResearcherAgent:
             for item in response.output:
                 if item.type == "function_call":
                     tool_calls = True
-                    if item.name == "ask_eda":
+                    if item.name == "ask_eda" or item.name == "run_ab_test":
                         try:
                             question = json.loads(item.arguments)["question"]
                         except Exception as e:
