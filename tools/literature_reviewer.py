@@ -449,7 +449,9 @@ class LiteratureReviewer:
         papers = self.client.search(query, limit=limit)
         if include_recommendations:
             recs = self._fetch_recommendations(
-                papers, recommendations_per_paper)
+                papers,
+                recommendations_per_paper,
+            )
             papers.extend(recs)
 
         unique_papers = self._deduplicate(papers)
