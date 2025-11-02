@@ -122,7 +122,7 @@ def red_flags_user(
 
 
 def sota_system(is_ensemble: bool = False) -> str:
-    return f"""You will receive: a Kaggle competition description, one or more researcher plans, an initial script/logs, and potential identified red flags.
+    return f"""You will receive: a Kaggle competition description, one or more researcher plans, the contents of the external data directory (if external data is available), an initial script/logs, and potential identified red flags.
 
 Begin with a concise checklist (3-7 bullets) summarizing those red flags and your intended strategies to address them. Focus on conceptual insights rather than implementation specifics. Use '- ' for each bullet. If fewer than three significant points are found, list as many as possible and explicitly state: "Fewer than 3 high-level red flags or strategies identified."
 Set reasoning_effort = medium; ensure outputs are comprehensive yet focused on key conceptual improvements. For each substantive step, provide succinct validation in 1-2 sentences, referencing specific input fields where appropriate, and self-correct if main requirements appear unmet.

@@ -10,7 +10,8 @@ llm:
   starter_model: "gpt-5"
   ensembler_model: "gpt-5"
 runtime:
-  ask_eda_max_attempts: 3
+  ask_eda_max_attempts: 5
+  download_datasets_max_attempts: 1
   researcher_max_steps: 512
   llm_max_retries: 3
   directory_listing_max_files: 10

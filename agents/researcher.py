@@ -69,6 +69,10 @@ class ResearcherAgent:
         per_run_log_dir = self.outputs_dir / "researcher" / f"run_{self.run_id}"
         per_run_log_dir.mkdir(parents=True, exist_ok=True)
         self.researcher_log_path = per_run_log_dir / f"researcher_{self.run_id}.txt"
+
+        # Track previous questions for memory
+        self.previous_questions: list[str] = []
+
         self._configure_logger()
 
     def _configure_logger(self) -> None:
@@ -191,7 +195,8 @@ class ResearcherAgent:
                 model=_RESEARCHER_AGENT_MODEL,
                 instructions=system_prompt,
                 tools=tools,
-                messages=input_list
+                messages=input_list,
+                web_search_enabled=True,
             )
 
             input_list += response.output
@@ -200,7 +205,7 @@ class ResearcherAgent:
             for item in response.output:
                 if item.type == "function_call":
                     tool_calls = True
-                    if item.name == "ask_eda":
+                    if item.name == "ask_eda" or item.name == "run_ab_test":
                         try:
                             question = json.loads(item.arguments)["question"]
                         except Exception as e:
@@ -211,7 +216,9 @@ class ResearcherAgent:
                             tool_output = "An error occurred. Please retry."
                         else:
                             before_media = self._list_media_files()
-                            tool_output = ask_eda(question, self.description, data_path=str(self.base_dir))
+                            tool_output = ask_eda(question, self.description, data_path=str(self.base_dir), previous_questions=self.previous_questions)
+                            # Track this question for future memory
+                            self.previous_questions.append(question)
                             input_list.append({
                                 "type": "function_call_output",
                                 "call_id": item.call_id,
@@ -228,11 +235,15 @@ class ResearcherAgent:
                                 logger.info("No media ingested for this step.")
                             
                     elif item.name == "download_external_datasets":
-                        dataset_name = json.loads(item.arguments)["dataset_name"]
-                        if not dataset_name:
-                            tool_output = "Dataset name missing; please provide a specific dataset name."
+                        args = json.loads(item.arguments)
+                        question_1 = args.get("question_1", "")
+                        question_2 = args.get("question_2", "")
+                        question_3 = args.get("question_3", "")
+
+                        if not question_1 or not question_2 or not question_3:
+                            tool_output = "All 3 question phrasings are required. Please provide question_1, question_2, and question_3."
                         else:
-                            tool_output = download_external_datasets(dataset_name, self.slug)
+                            tool_output = download_external_datasets(question_1, question_2, question_3, self.slug)
 
                         logger.info("External search response length=%s", len(tool_output or ""))
 
