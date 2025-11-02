@@ -51,7 +51,7 @@ LOGGER = logging.getLogger(__name__)
 SEMANTIC_SCHOLAR_API_URL = "https://api.semanticscholar.org/graph/v1"
 DEFAULT_FIELDS = (
     "paperId,title,url,abstract,isOpenAccess,openAccessPdf,authors,externalIds,"
-    "year,corpusId,openAccessCorpusId"
+    "year,corpusId"
 )
 DEFAULT_LIMIT = 5
 DEFAULT_MAX_WORKERS = 4
