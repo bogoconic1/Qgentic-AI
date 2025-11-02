@@ -265,15 +265,86 @@ You MUST explore at minimum:
 - **Multiple model families** (statistical + GBDT + deep learning)
 - **Note**: Ensembling is out of scope for Researcher (handled in later stages)"""
 
-    else:  # audio or fallback
+    elif task_type == "audio":
+        return """## Audio-Specific Exploration Requirements (2024-2025 Winning Strategies)
+
+**Focus: Feature extraction, augmentation, transformer architectures > raw waveforms**
+
+You MUST explore at minimum:
+
+### 1. Feature Extraction (MANDATORY - Test at least 3)
+- **Mel Spectrograms**: Best overall performance in 2024 benchmarks
+- **MFCC (Mel-Frequency Cepstral Coefficients)**: Traditional SOTA, still highly effective
+- **CQT (Constant-Q Transform)**: Better for music tasks with pitch information
+- **Chroma Features**: For music/harmonic content analysis
+- **Multi-Feature Fusion**: Combine mel spectrogram + MFCC + chroma
+- **Spectrogram Parameters**: Test different window sizes, hop lengths, n_mels
+- **Example A/B test**: `run_ab_test("Extract mel spectrograms with 80/20 split comparing (A) n_mels=128 vs (B) n_mels=256 and train lightweight CNN, report validation accuracy")`
+
+### 2. Model Architecture Survey (MANDATORY - Recommend at least 3)
+- **Audio Spectrogram Transformer (AST)**: SOTA in 2024 (0.485 mAP on AudioSet)
+- **BEATs, PaSST, ATST**: Advanced transformer variants
+- **Hybrid CNN-Transformer**: Combines local + global features
+- **Traditional CNNs**: ResNet, EfficientNet on spectrograms (baseline)
+- **FastAST**: Efficient variant with knowledge distillation
+- **Note**: Architecture comparison happens in later stages; recommend multiple for Developer to test
+
+### 3. Data Augmentation (MANDATORY - Test at least 3)
+- **SpecMix**: Best in 2024 (outperforms others by +2-4%), mixes spectrograms
+- **SpecAugment**: Time/frequency masking on spectrograms
+- **Mixup**: Linear interpolation of audio samples and labels
+- **Time-domain augmentations**: Time shift, time stretch, pitch shift
+- **Noise injection**: Add background noise at various SNR levels
+- **Example A/B test**: `run_ab_test("Train ResNet18 on mel spectrograms with 80/20 split comparing (A) no augmentation vs (B) SpecMix + SpecAugment and report validation accuracy")`
+
+### 4. Training Strategies (MANDATORY - Test at least 2)
+- **Multi-stage training**: Pre-train on large corpus, fine-tune on competition data
+- **Self-supervised pre-training**: SSAST-style masked spectrogram modeling
+- **Semi-supervised learning**: MixMatch, ReMixMatch for unlabeled data
+- **Knowledge distillation**: Distill from large model to efficient model
+- **Example A/B test**: `run_ab_test("Train AST with 80/20 split comparing (A) random initialization vs (B) pre-trained on AudioSet and report validation accuracy")`
+
+### 5. Preprocessing & Normalization (MANDATORY - Test at least 2)
+- **Spectrogram normalization**: Per-sample vs global statistics
+- **Log-mel vs linear**: Log-mel spectrograms typically better
+- **Sampling rate**: Test 16kHz vs 22.05kHz vs 44.1kHz
+- **Audio length**: Test different clip lengths (1s, 3s, 5s, 10s)
+- **Example A/B test**: `run_ab_test("Extract mel spectrograms with 80/20 split comparing (A) per-sample normalization vs (B) global dataset normalization and train CNN, report validation accuracy")`
+
+### 6. Multi-Model Ensemble
+- Out of scope for Researcher (handled in later stages)
+
+### Minimum Exploration Standard:
+- **At least 3 feature extraction methods** validated via A/B testing
+- **At least 3 augmentation strategies** validated via A/B testing
+- **At least 2 training strategies** explored via research/A/B testing
+- **At least 3 model architectures** recommended (model comparison happens in Developer phase)
+- **At least 4 A/B tests** for feature/augmentation/preprocessing strategies
+
+### Known Anti-Patterns to Avoid:
+- ❌ Using raw waveforms without feature extraction (spectrograms work better)
+- ❌ Single feature type (mel spectrogram alone, no MFCC/CQT fusion)
+- ❌ No augmentation (audio benefits heavily from augmentation)
+- ❌ Not testing pre-trained models (AudioSet pre-training provides huge boost)
+- ❌ Fixed audio length without testing (optimal length varies by task)
+
+### 2024-2025 Winning Patterns:
+- **Audio Spectrogram Transformer (AST)** and variants dominate
+- **Mel spectrograms** consistently outperform other features (+3-5% over MFCC)
+- **SpecMix augmentation** best in class (2024 benchmark winner)
+- **Multi-stage training**: Pre-train on AudioSet → fine-tune on competition data
+- **Multi-feature fusion** (mel + MFCC + chroma) for robust performance
+- **Hybrid CNN-Transformer** architectures for efficiency
+- **Note**: Ensembling is out of scope for Researcher (handled in later stages)"""
+
+    else:  # fallback
         return """## General Exploration Requirements
 
 You MUST explore at minimum:
 - **At least 3 different modeling approaches**
 - **At least 3 different feature engineering strategies**
 - **At least 5 A/B tests** validating key hypotheses
-- Research winning solutions from similar competitions via web search
-- Test ensemble strategies combining different approaches"""
+- Research winning solutions from similar competitions via web search"""
 
 
 def build_system(base_dir: str, task_type: str = "tabular") -> str:
@@ -287,6 +358,8 @@ def build_system(base_dir: str, task_type: str = "tabular") -> str:
         task_type = "nlp"
     elif "time" in task_type or "series" in task_type or "forecast" in task_type:
         task_type = "time_series"
+    elif "audio" in task_type or "sound" in task_type or "speech" in task_type:
+        task_type = "audio"
     elif "tabular" in task_type or "structured" in task_type:
         task_type = "tabular"
 
