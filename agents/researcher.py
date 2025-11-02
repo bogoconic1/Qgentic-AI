@@ -69,6 +69,10 @@ class ResearcherAgent:
         per_run_log_dir = self.outputs_dir / "researcher" / f"run_{self.run_id}"
         per_run_log_dir.mkdir(parents=True, exist_ok=True)
         self.researcher_log_path = per_run_log_dir / f"researcher_{self.run_id}.txt"
+
+        # Track previous questions for memory
+        self.previous_questions: list[str] = []
+
         self._configure_logger()
 
     def _configure_logger(self) -> None:
@@ -212,7 +216,9 @@ class ResearcherAgent:
                             tool_output = "An error occurred. Please retry."
                         else:
                             before_media = self._list_media_files()
-                            tool_output = ask_eda(question, self.description, data_path=str(self.base_dir))
+                            tool_output = ask_eda(question, self.description, data_path=str(self.base_dir), previous_questions=self.previous_questions)
+                            # Track this question for future memory
+                            self.previous_questions.append(question)
                             input_list.append({
                                 "type": "function_call_output",
                                 "call_id": item.call_id,

@@ -16,7 +16,7 @@ You MUST explore at minimum:
 - **Ratio**: `feature_A / (feature_B + epsilon)` for meaningful ratios
 - **Additive**: `feature_A + feature_B` when domain suggests combined effect
 - **Group interactions**: Mean/std of numeric_feature by categorical_feature
-- **Example A/B test**: `run_ab_test("Train LightGBM with 80/20 split comparing (A) baseline features vs (B) baseline + 5 interaction features (credit_score×DTI, income×loan_amount, etc.) and report validation AUC and feature importances")`
+- **Example A/B test**: `run_ab_test("Train XGBoost with GPU with 80/20 split comparing (A) baseline features vs (B) baseline + 5 interaction features (credit_score×DTI, income×loan_amount, etc.) and report validation AUC and feature importances")`
 
 ### 2. Domain-Specific Features (MANDATORY - Create at least 5)
 - Study the competition domain (finance, retail, healthcare, etc.)
@@ -25,21 +25,21 @@ You MUST explore at minimum:
   - Finance: `monthly_payment = f(loan_amount, interest_rate, term)`, `payment_to_income_ratio`
   - Retail: `recency`, `frequency`, `monetary_value` (RFM analysis)
   - Healthcare: `BMI = weight / height²`, `age_group_risk`
-- **Example A/B test**: `run_ab_test("Train LightGBM with 80/20 split comparing (A) baseline features vs (B) baseline + 5 domain features and report validation metric and feature importances")`
+- **Example A/B test**: `run_ab_test("Train XGBoost with GPU with 80/20 split comparing (A) baseline features vs (B) baseline + 5 domain features and report validation metric and feature importances")`
 
 ### 3. Polynomial/Transform Features (MANDATORY - Test at least 3)
 - **Polynomial**: `feature²`, `feature³` for key numerics
 - **Logarithmic**: `log(feature + 1)` for skewed distributions
 - **Square root**: `sqrt(feature)` for count data
 - **Binning**: Convert continuous to categorical bins (e.g., age_group, income_bracket)
-- **Example A/B test**: `run_ab_test("Train LightGBM with 80/20 split comparing (A) baseline features vs (B) baseline + polynomial features (top_feature², top_feature³) and report validation metric and feature importances")`
+- **Example A/B test**: `run_ab_test("Train XGBoost with GPU with 80/20 split comparing (A) baseline features vs (B) baseline + polynomial features (top_feature², top_feature³) and report validation metric and feature importances")`
 
 ### 4. Aggregation Features (MANDATORY - Test at least 3)
 - **Group statistics**: `mean(numeric) by categorical`, `std(numeric) by categorical`
 - **Target encoding**: Proper out-of-fold target encoding with smoothing
 - **Frequency encoding**: Count/proportion of each category
 - **Rank encoding**: Rank within groups
-- **Example A/B test**: `run_ab_test("Train LightGBM with 80/20 split comparing (A) baseline features vs (B) baseline + group aggregation features (mean_income_by_job, std_amount_by_category) and report validation metric and feature importances")`
+- **Example A/B test**: `run_ab_test("Train XGBoost with GPU with 80/20 split comparing (A) baseline features vs (B) baseline + group aggregation features (mean_income_by_job, std_amount_by_category) and report validation metric and feature importances")`
 
 ### 5. Pseudo-Labeling & External Data (Recommended)
 - Generate pseudo-labels for unlabeled test data using strong baseline
@@ -343,7 +343,7 @@ Begin with a concise checklist (5-10 bullets) of the main analytical sub-tasks y
 - `run_ab_test(question)`: Designs and runs A/B tests on modeling/feature engineering ideas to directly assess their impact.
 - `download_external_datasets(question_1, question_2, question_3)`: Fetches relevant external datasets using 3 different query phrasings to maximize coverage. Datasets appear under `{base_dir}/`. EDA & AB testing is available on these too.
 
-**IMPORTANT:** These tools have NO MEMORY, so PLEASE be as specific as possible in your questions. For datasets, specify exact dataset handler <author>/<dataset>, or give detailed English description.
+**IMPORTANT:** For datasets, specify exact dataset handler <author>/<dataset>, or give detailed English description. Do not input any column names in the description.
 
 # A/B Test Policy
 
@@ -363,7 +363,7 @@ Begin with a concise checklist (5-10 bullets) of the main analytical sub-tasks y
 **A/B Test Constraints:**
 - Use **single 80/20 train/validation split** (do NOT use cross-validation)
 - Use **lightweight models** for quick testing:
-  - Tabular: LightGBM with small iterations
+  - Tabular: XGBoost with GPU (tree_method='gpu_hist')
   - CV: Small models (e.g., ResNet18, EfficientNet-B0)
   - NLP: Small transformers (e.g., deberta-v3-xsmall, distilbert-base)
   - Time Series: LightGBM with small iterations

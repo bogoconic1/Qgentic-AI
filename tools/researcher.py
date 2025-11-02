@@ -42,7 +42,7 @@ _EXTERNAL_DIRNAME = _PATH_CFG.get("external_data_dirname")
 
 
 @weave.op()
-def ask_eda(question: str, description: str, data_path: str, max_attempts: int | None = None, timeout_seconds: int = 3600) -> str:
+def ask_eda(question: str, description: str, data_path: str, max_attempts: int | None = None, timeout_seconds: int = 3600, previous_questions: list[str] | None = None) -> str:
     """Asks a question about the data provided for exploratory data analysis (EDA)
 
     Args:
@@ -51,6 +51,7 @@ def ask_eda(question: str, description: str, data_path: str, max_attempts: int |
         data_path: Path to the data directory
         max_attempts: Maximum number of attempts (default from config)
         timeout_seconds: Timeout for code execution in seconds (default 3600 = 1 hour)
+        previous_questions: List of previously asked questions for memory context
     """
     # Prepare media directory for EDA charts and expose to executed code
     try:
@@ -69,7 +70,16 @@ def ask_eda(question: str, description: str, data_path: str, max_attempts: int |
 
     attempts = max_attempts or _DEFAULT_ASK_ATTEMPTS
     PROMPT = prompt_ask_eda(data_path, directory_listing, description)
-    input_list = [{"role": "user", "content": "Question: " + question}]
+
+    # Build input_list with memory: prepend previous questions with dummy "Solved" responses
+    input_list = []
+    if previous_questions:
+        for prev_q in previous_questions:
+            input_list.append({"role": "user", "content": "Question: " + prev_q})
+            input_list.append({"role": "assistant", "content": "Solved"})
+
+    # Add the current question
+    input_list.append({"role": "user", "content": "Question: " + question})
 
     pattern = r'```python\s*(.*?)\s*```'
 
