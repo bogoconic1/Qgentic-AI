@@ -454,7 +454,12 @@ class DeveloperAgent:
             Tuple of (postprocessed_code, num_header_lines_added)
         """
         # Check if the code already has the resource allocation header (e.g., from patch mode)
-        if 'BASE_DIR = "task/' in code and 'CUDA_VISIBLE_DEVICES' in code:
+        # Must check for actual assignment of CUDA_VISIBLE_DEVICES, not just reading it
+        has_cpu_affinity = 'psutil.Process(os.getpid()).cpu_affinity' in code
+        has_cuda_assignment = 'os.environ["CUDA_VISIBLE_DEVICES"]' in code
+        has_base_dir = 'BASE_DIR = "task/' in code
+
+        if has_cpu_affinity and has_base_dir and has_cuda_assignment:
             self.logger.debug("Code already contains resource allocation header, skipping postprocessing")
             return code, 0
 
