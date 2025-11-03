@@ -103,10 +103,11 @@ def ask_eda(question: str, description: str, data_path: str, max_attempts: int |
             logger.warning("ask_eda found no python code block in response.")
             continue
         else:
-            # Write code to temporary file
+            # Write code to temporary file with OpenBLAS thread limiting prefix
             code_file = Path(data_path) / "eda_temp.py"
+            openblas_prefix = 'import os\nos.environ["OPENBLAS_NUM_THREADS"] = "32"\n\n'
             with open(code_file, "w") as f:
-                f.write(code)
+                f.write(openblas_prefix + code)
 
             # Import execute_code here to avoid circular import at module level
             from tools.developer import execute_code

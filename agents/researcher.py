@@ -237,6 +237,12 @@ class ResearcherAgent:
                                 if code_file.exists():
                                     with open(code_file, "r") as f:
                                         executed_code = f.read()
+
+                                    # Strip OpenBLAS prefix if present (first 3 lines)
+                                    if executed_code.startswith('import os\nos.environ["OPENBLAS_NUM_THREADS"]'):
+                                        lines = executed_code.split('\n')
+                                        executed_code = '\n'.join(lines[3:])
+
                                     self.ab_test_history.append({
                                         'question': question,
                                         'code': executed_code
