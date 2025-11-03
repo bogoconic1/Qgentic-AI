@@ -42,7 +42,7 @@ _EXTERNAL_DIRNAME = _PATH_CFG.get("external_data_dirname")
 
 
 @weave.op()
-def ask_eda(question: str, description: str, data_path: str, max_attempts: int | None = None, timeout_seconds: int = 3600, previous_questions: list[str] | None = None) -> str:
+def ask_eda(question: str, description: str, data_path: str, max_attempts: int | None = None, timeout_seconds: int = 3600, previous_ab_tests: list[dict] | None = None) -> str:
     """Asks a question about the data provided for exploratory data analysis (EDA)
 
     Args:
@@ -51,7 +51,7 @@ def ask_eda(question: str, description: str, data_path: str, max_attempts: int |
         data_path: Path to the data directory
         max_attempts: Maximum number of attempts (default from config)
         timeout_seconds: Timeout for code execution in seconds (default 3600 = 1 hour)
-        previous_questions: List of previously asked questions for memory context
+        previous_ab_tests: List of previous AB test dicts with 'question' and 'code' keys (empty for EDA, last 6 for AB tests)
     """
     # Prepare media directory for EDA charts and expose to executed code
     try:
@@ -71,12 +71,12 @@ def ask_eda(question: str, description: str, data_path: str, max_attempts: int |
     attempts = max_attempts or _DEFAULT_ASK_ATTEMPTS
     PROMPT = prompt_ask_eda(data_path, directory_listing, description)
 
-    # Build input_list with memory: prepend previous questions with dummy "Solved" responses
+    # Build input_list with AB test history: prepend previous AB tests (question + code)
     input_list = []
-    if previous_questions:
-        for prev_q in previous_questions:
-            input_list.append({"role": "user", "content": "Question: " + prev_q})
-            input_list.append({"role": "assistant", "content": "Solved"})
+    if previous_ab_tests:
+        for ab_test in previous_ab_tests:
+            input_list.append({"role": "user", "content": "Question: " + ab_test['question']})
+            input_list.append({"role": "assistant", "content": f"```python\n{ab_test['code']}\n```"})
 
     # Add the current question
     input_list.append({"role": "user", "content": "Question: " + question})
