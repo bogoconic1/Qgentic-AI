@@ -76,6 +76,7 @@ For meaningful categorical groupings, create:
 - **When encodings fail**: If target encoding fails, test WOE, frequency, and hash encodings before concluding
 - **When transforms fail**: If log fails, test Box-Cox, Yeo-Johnson, or quantile transforms
 - **Never conclude after 2-3 failures**: Each category should have 4-5 attempts minimum
+- **Remember:** it is common practice on Kaggle Competitions to engineer 100+ features (even complex ones) and prune down later.
 
 ### Progress Tracking
 At each milestone, report:
@@ -87,6 +88,443 @@ At each milestone, report:
 Search for: "[task_domain] feature engineering kaggle 2024 2025" (e.g., "credit risk feature engineering kaggle 2024")
 Look for: Winning solution write-ups, feature importance patterns, domain-specific transforms
 """
+
+    elif task_type == "nlp":
+        return """
+## MANDATORY Task-Specific Requirements: NLP/LLM
+
+### Minimum Experiment Coverage
+Conduct at least **25-30 A/B tests**. Modern competitions use decoder LLMs (Gemma, Qwen, Llama) + encoder models (DeBERTa v3) depending on task.
+
+### 1. Text Preprocessing (Test at least 5)
+- **Case handling**: Lowercase vs preserve case (preserve for NER, instruction tasks)
+- **Tokenization**: Subword (BPE, WordPiece, SentencePiece) vs character-level
+- **Punctuation**: Remove vs keep (keep for sentiment, instruction following)
+- **Spelling correction**: TextBlob, SymSpell, contextual BERT-based
+- **Special tokens**: URLs, mentions, emojis (remove, replace with tokens, extract as features)
+- **Stopword removal**: Standard vs custom vs none
+
+### 2. Traditional Text Features (Test at least 4)
+**Statistical Features** (combine with transformer embeddings):
+- **Length metrics**: Character, word, sentence counts; avg word length
+- **Lexical diversity**: Type-token ratio, vocabulary richness
+- **Readability**: Flesch-Kincaid, Gunning Fog scores
+- **Capitalization patterns**: All caps ratio, title case ratio
+
+**Classical NLP**:
+- **TF-IDF**: max_features (1k, 5k, 10k, 50k), n-grams (1-2, 1-3, 2-3)
+- **N-grams**: Character (3-5), word (2-3)
+- **POS tagging**: Part-of-speech distributions
+- **Named Entities**: Count PERSON, ORG, LOC entities
+- **Sentiment**: VADER, TextBlob scores
+
+### 3. Model Selection (Test at least 8)
+**Encoder Models** (for classification, token tasks):
+- **DeBERTa v3**: SOTA accuracy (base, large, xsmall for A/B)
+- **ModernBERT**: Faster inference than DeBERTa, better than BERT/RoBERTa
+- **RoBERTa**: Solid baseline
+- **Domain-specific**: BioBERT, SciBERT, LegalBERT, FinBERT
+
+**Small Language Models (SLMs)** (2-14B params, efficient for Kaggle constraints):
+- **Gemma 2**: 2B, 9B (Google, strong performance, used in winners)
+- **Qwen2.5**: 0.5B, 1.5B, 3B, 7B, 14B (Alibaba, SOTA on many benchmarks)
+- **Phi-3.5**: 3.8B mini, 14B medium (Microsoft, competitive with larger models)
+- **Llama 3.1**: 8B (Meta, strong baseline)
+- **Mistral**: 7B (strong reasoning, used in winners)
+
+**Large Models** (for distillation or deep reasoning):
+- **Qwen2.5**: 32B, 72B
+- **Llama 3.1**: 70B
+- **DeepSeek-R1**: 14B distilled versions, 32B (reasoning tasks)
+- **QwQ-32B**: Reasoning model (AIMO winner)
+
+### 4. Fine-tuning Strategies (Test at least 6)
+**Parameter-Efficient (standard approach)**:
+- **LoRA**: Rank r=8, 16, 32, 64; alpha=16 or 2×r; test different values
+- **QLoRA**: 4-bit quantization + LoRA (33% memory savings)
+- **Target modules**: "all-linear" (all layers) vs selective (q_proj, v_proj, o_proj)
+- **LoRA dropout**: 0.05, 0.1
+
+**Full Fine-tuning**:
+- All parameters trainable (for smaller models <3B)
+- Layer-wise LR: Decay 0.9-0.95 per layer from top to bottom
+- Gradual unfreezing: Freeze → unfreeze top layers → unfreeze all
+
+**For Encoder Models**:
+- **Pooling**: [CLS] vs mean vs max vs attention-weighted vs concat
+- **Long texts (>512)**: Head+tail (256+256), sliding window, Longformer
+
+**For Decoder LLMs**:
+- **Chat templates**: Use model-specific format (e.g., Llama: <|user|>, <|assistant|>)
+- **System prompts**: Test different task instructions ("You are a helpful assistant...")
+- **Max tokens**: Test truncation lengths (512, 1024, 2048, 4096)
+- **Generation config**: Temperature (0.5-0.7), top_p (0.9, 0.95), max_new_tokens
+
+### 5. Data Augmentation (Test at least 6)
+**Text-Level** (proven techniques):
+- **Back-translation**: English→German→English, English→French→English
+- **EDA (Easy Data Augmentation)**: Synonym replacement, random insert/swap/delete (p=0.1, 0.2)
+- **Paraphrasing**: T5-based, GPT-based, LLM-generated variations
+- **Contextual substitution**: BERT/RoBERTa masked predictions
+- **AEDA**: Random punctuation insertion
+
+**Advanced**:
+- **Pseudo-labeling**: High-confidence test predictions → retrain (especially with ensemble)
+- **LLM generation**: Use GPT-3.5/GPT-4 to generate training samples (winning approach)
+- **External data**: SQuAD, SNLI, MNLI, Quora, domain-specific datasets
+
+**Class Imbalance**:
+- Oversampling minority with augmentation
+- Focal loss (gamma=2.0)
+
+### 6. Training & Optimization (Test at least 6)
+**Learning Rate**:
+- **Warmup**: Linear 5-10% steps, then decay
+- **Schedules**: Cosine annealing, cosine with restarts, one-cycle
+- **LR values**: 1e-5, 2e-5, 3e-5, 5e-5 (transformers)
+- **Single-epoch**: Multi-epoch often degrades; use early stopping
+
+**Optimizers**:
+- **AdamW**: Standard (weight decay 0.01, 0.001)
+- **Adam** with gradient clipping (clip_norm=1.0)
+- **8-bit AdamW**: Memory-efficient for large models
+
+**Loss Functions**:
+- **CrossEntropy** vs **Focal Loss** (imbalance)
+- **Label smoothing**: epsilon=0.1
+- **Bi-Tempered Loss**: Noisy labels
+
+**Regularization**:
+- Dropout: 0.1 (transformer), 0.3 (dense)
+- Gradient clipping: max_norm=1.0
+- **Adversarial training**: FGM/PGD on embeddings
+- **Multi-sample dropout**: Dropout at inference, average
+
+**Batch & Precision**:
+- Batch: 8, 16, 32, 64
+- Gradient accumulation: 4-8 steps if memory limited
+- Mixed precision: FP16, BF16
+
+### 7. Advanced Techniques (Test at least 4)
+**Distillation** (winning strategy):
+- Train large model (Llama 70B, Qwen 72B) → distill to small (Gemma 2B, 9B)
+- Use soft labels from ensemble of large models
+- 8-bit quantization of distilled model for inference
+
+**Quantization** (for Kaggle inference limits):
+- **8-bit**: bitsandbytes library
+- **4-bit**: AWQ, GPTQ quantization
+- Test inference time vs accuracy tradeoff
+
+**RAG (Retrieval-Augmented Generation)** (for knowledge tasks):
+- External knowledge: Wikipedia dumps, domain corpora
+- Vector DB: FAISS, ChromaDB
+- Retrieval strategies: Dense (sentence-transformers), sparse (BM25), hybrid
+
+**Prompt Engineering**:
+- Zero-shot vs few-shot (1-shot, 3-shot, 5-shot examples)
+- Chain-of-Thought (CoT): "Let's think step by step"
+- System prompt variations
+
+### 8. Cross-Validation (Test at least 3)
+- **Stratified K-Fold**: 5-fold, preserve class distribution
+- **Group K-Fold**: Same author/topic grouped
+- **Adversarial validation**: Detect train-test shift
+- Out-of-fold predictions for stacking
+
+### 9. Ensemble Strategies (Test at least 3)
+**Model Diversity** (winning approach):
+- Different model families: DeBERTa v3 + Gemma 2 + Qwen2.5 + classical TF-IDF
+- Different sizes: Small (2B) + medium (7B-14B) + large (32B-72B)
+- Encoder + decoder: DeBERTa + Llama
+
+**Aggregation**:
+- **Weighted average**: Optimize weights by validation
+- **Stacking**: LightGBM/XGBoost on OOF predictions
+- **Power average**: predictions^p, then root
+- **Rank averaging**: Convert to ranks, average
+
+**Diversity Techniques**:
+- Different preprocessing
+- Different random seeds (5-10 per model)
+- Different K-fold splits
+
+### Iteration Policy for NLP
+- **When encoder underperforms**: Try decoder LLMs (Gemma, Qwen) with LoRA
+- **When decoder underperforms**: Try encoder (DeBERTa v3) or domain-specific models
+- **When augmentation fails**: Try LLM-based generation (GPT-3.5), back-translation with multiple languages
+- **When hitting memory limits**: Use QLoRA, 8-bit quantization, smaller models (2B-7B)
+- **When inference too slow**: Distill to smaller model, quantize, or use ModernBERT
+- **Never conclude after 3-4 models**: Test at least 6-8 different architectures
+
+### Progress Tracking
+At each milestone, report:
+- Total A/B tests: X/25 minimum
+- Coverage: Preprocessing (X/5), Features (X/4), Models (X/8), Fine-tuning (X/6), Augmentation (X/6), Training (X/6), Advanced (X/4), Ensemble (X/3)
+- Best single model vs ensemble
+- Inference time per sample
+
+### Web Search Guidance for NLP
+Search for: "NLP [task_type] kaggle 2025" (e.g., "text classification kaggle 2025 gemma qwen")
+Look for:
+- LoRA/QLoRA fine-tuning strategies for Gemma, Qwen, Llama
+- Distillation pipelines (large→small models)
+- Quantization techniques (AWQ, 4-bit, 8-bit)
+- RAG implementations for knowledge tasks
+- Chat templates and instruction tuning
+- Inference optimization (Kaggle time/memory constraints)
+
+### Key Techniques to Prioritize
+- **Gemma 2 (2B, 9B)**: Google SLMs, used in winners, efficient for Kaggle
+- **Qwen2.5**: Strong SOTA performance, 0.5B-72B range
+- **DeepSeek-R1 distilled**: Reasoning tasks (AIMO winner used QwQ-32B)
+- **DeBERTa v3**: Still SOTA for encoder tasks
+- **Distillation**: Train large, distill to small (winner strategy)
+- **LoRA "all-linear"**: Apply to all layers, not just q/v
+- **8-bit quantization**: For final submission (balances speed/accuracy)
+- **RAG**: LLM Science Exam winner used RAG with Wikipedia
+- **Single-epoch + early stopping**: Multi-epoch hurts
+- **Chat templates**: Critical for instruction-tuned models
+"""
+
+    elif task_type == "computer_vision":
+        return """
+## MANDATORY Task-Specific Requirements: Computer Vision
+
+### Minimum Experiment Coverage
+Conduct at least **20-25 A/B tests**. Modern competitions use Vision Transformers + modern CNNs + foundation models.
+
+### 1. Image Preprocessing (Test at least 5)
+- **Normalization**: ImageNet stats vs dataset-specific stats vs no normalization
+- **Resize strategies**: Aspect-preserving padding vs squash vs center crop
+- **Color space**: RGB vs HSV vs LAB
+- **Histogram equalization**: CLAHE vs standard vs adaptive
+- **Image quality**: JPEG compression quality, denoising
+- **Channel manipulation**: Grayscale conversion, channel dropping
+
+### 2. Data Augmentation (Test at least 8)
+**Geometric Transforms**:
+- **Basic**: Horizontal/vertical flips, random rotation (degrees: 15, 30, 45)
+- **Crops**: Random crop, center crop, five-crop, random resized crop
+- **Affine**: Scale, translate, shear, perspective transforms
+- **Advanced**: Elastic deformation, grid distortion
+
+**Color/Intensity Augmentations**:
+- **Adjustments**: Brightness, contrast, saturation, hue shifts
+- **Noise**: Gaussian noise, salt-and-pepper, speckle noise
+- **Filters**: Gaussian blur, motion blur, median blur
+- **Color jitter**: Random color perturbations
+
+**Modern Augmentations** (standard approach):
+- **Cutout**: Random patch dropout (size: 16×16, 32×32, 64×64)
+- **Random erasing**: Similar to cutout with different probability
+- **MixUp**: Linear interpolation of images and labels (alpha=0.2, 0.4, 1.0)
+- **CutMix**: Cut and paste patches between images (alpha=1.0, beta=1.0)
+- **GridMask**: Structured region dropout
+- **Mosaic**: Combine 4 images into 1 (YOLOv4 technique)
+- **AutoAugment**: Learned augmentation policies
+- **RandAugment**: Random augmentation with magnitude control
+- **TrivialAugment**: Simplified single augmentation per image
+
+### 3. Model Selection (Test at least 8)
+**Vision Transformers** (SOTA for large datasets):
+- **ViT (Vision Transformer)**: ViT-B/16, ViT-L/16 (best with large datasets)
+- **Swin Transformer**: Hierarchical architecture, shifted windows (Swin-T, Swin-S, Swin-B)
+- **DeiT (Data-efficient ViT)**: Better for smaller datasets, distillation-based
+- **BEiT**: BERT-like pretraining for images
+- **MaxViT**: Multi-axis attention, hybrid CNN-ViT
+
+**Modern CNNs** (competitive, easier to train):
+- **ConvNeXt**: Modern CNN design, competitive with Swin (ConvNeXt-T, ConvNeXt-S, ConvNeXt-B)
+- **ConvNeXt V2**: Improved version with better training
+- **EfficientNet V2**: Best accuracy/parameter ratio (B0-B7), faster training
+- **EfficientNet**: Original, still strong (B0-B7)
+- **NFNet**: Normalizer-Free networks, no batch norm
+
+**Classic Architectures** (baselines):
+- **ResNet**: ResNet50, ResNet101, ResNet152 (reliable baseline)
+- **ResNeXt**: Grouped convolutions variant
+- **DenseNet**: Dense connections (DenseNet121, DenseNet169)
+- **MobileNet V3/V4**: Lightweight for fast inference
+
+**Foundation Models** (emerging):
+- **CLIP**: Vision-language model, zero-shot classification, feature extraction
+- **SAM (Segment Anything)**: Segmentation tasks, zero-shot
+- **DINOv2**: Self-supervised, strong features without labels
+- **MAE (Masked Autoencoders)**: Self-supervised pretraining
+
+### 4. Training Strategies (Test at least 6)
+**Multi-Scale & Progressive Training**:
+- **Progressive resizing**: Start small (224×224) → increase to large (384×384, 512×512)
+- **Multi-scale training**: Randomly vary input size during training (224, 256, 288, 320)
+- **High-resolution fine-tuning**: Train at 224×224, fine-tune at 384×384 or 512×512
+
+**Transfer Learning**:
+- **Pretrained sources**: ImageNet-1k, ImageNet-21k, JFT-300M, LAION-400M (CLIP)
+- **Freeze/unfreeze**: Freeze backbone → train head → unfreeze top layers → unfreeze all
+- **Layer-wise LR**: Lower LR for early layers, higher for head (decay 0.9-0.95 per layer)
+
+**Optimization**:
+- **Learning rates**: 1e-4, 3e-4, 1e-3 (CNNs), 5e-5, 1e-4, 5e-4 (ViTs)
+- **Warmup**: Linear warmup 5-10 epochs, critical for ViTs
+- **Schedules**: Cosine annealing, cosine with restarts, step decay, exponential decay
+- **Optimizers**: AdamW (ViTs), SGD with momentum (CNNs), LAMB (large batch)
+
+**Regularization**:
+- **Dropout**: 0.1-0.3 in classifier head, spatial dropout in CNNs
+- **DropPath/Stochastic Depth**: For ViTs and deep CNNs (rate=0.1, 0.2)
+- **Label smoothing**: epsilon=0.1 to prevent overconfidence
+- **Weight decay**: 0.01 (ViTs), 1e-4 (CNNs)
+- **Gradient clipping**: max_norm=1.0 for ViTs
+
+**Batch & Precision**:
+- Batch size: 32, 64, 128, 256 (larger for ViTs)
+- Gradient accumulation if GPU limited (4-8 steps)
+- Mixed precision: FP16, BF16 (2-3× speedup)
+
+### 5. Self-Supervised Learning (Test at least 3)
+**Pretraining Methods** (when labeled data limited):
+- **MAE (Masked Autoencoders)**: Mask 75% of patches, reconstruct (ViT backbone)
+- **DINO/DINOv2**: Self-distillation, no labels needed (ViT backbone)
+- **SimCLR**: Contrastive learning with augmentations (requires large batches)
+- **MoCo**: Momentum contrast, memory bank (more efficient than SimCLR)
+
+**When to Use**:
+- Limited labeled data (<10k images)
+- Domain-specific datasets (medical, satellite, etc.)
+- Pretrain on unlabeled competition data, fine-tune on labeled
+
+### 6. Fine-tuning Strategies (Test at least 4)
+**For ViTs**:
+- **Full fine-tuning**: All parameters trainable
+- **Linear probing**: Freeze backbone, train only classifier head
+- **Partial fine-tuning**: Unfreeze last N transformer blocks (N=3, 6, 9)
+- **LoRA for ViT**: Low-rank adaptation of attention weights (emerging)
+
+**For CNNs**:
+- **Freeze early layers**: Freeze conv1-conv3, train conv4-conv5 + head
+- **Discriminative fine-tuning**: Layer-wise learning rates
+- **Feature pyramid networks**: Multi-scale feature fusion
+
+**Input Resolution**:
+- Low resolution (224×224) for fast experiments
+- Medium (384×384) for better accuracy
+- High (512×512, 768×768) for final models
+- Test speed vs accuracy tradeoff
+
+### 7. Test-Time Augmentation (TTA) (Test at least 3)
+**Basic TTA**:
+- **Horizontal flip**: Average predictions (original + flipped)
+- **Vertical flip**: Average predictions (less common, test if applicable)
+- **Multi-crop**: Five-crop (4 corners + center), ten-crop (with flips)
+- **Multi-scale**: Test at different resolutions (224, 256, 384), average predictions
+
+**Advanced TTA**:
+- **Rotation**: 0°, 90°, 180°, 270° rotations, average
+- **Color perturbations**: Slight brightness/contrast variations
+- **Cutout at test time**: Multiple masks, average predictions
+- **Soft voting**: Average class probabilities vs hard voting (argmax each prediction)
+
+**Aggregation**:
+- Simple average (most common)
+- Weighted average (optimize weights on validation)
+- Geometric mean of probabilities
+- Rank averaging
+
+### 8. Ensemble Strategies (Test at least 4)
+**Model Diversity** (winning approach):
+- **Architecture mixing**: ViT + ConvNeXt + EfficientNet
+- **Scale diversity**: Small (B0, Tiny) + medium (B3, Small) + large (B5, Base)
+- **Different pretraining**: ImageNet-1k + ImageNet-21k + CLIP
+- **Different augmentation**: Standard aug + AutoAugment + RandAugment
+
+**Training Diversity**:
+- Different random seeds (5-10 models)
+- Different K-fold splits (5-fold models)
+- Different input resolutions (224, 384, 512)
+- Snapshot ensembling (save checkpoints at different epochs)
+
+**Aggregation Methods**:
+- **Weighted average**: Optimize weights on validation set
+- **Stacking**: LightGBM/XGBoost on model predictions + metadata features
+- **Rank averaging**: Convert predictions to ranks, average ranks
+- **Power mean**: Predictions^p, mean, then ^(1/p)
+
+### 9. Advanced Techniques (Test at least 3)
+**Foundation Model Features**:
+- **CLIP embeddings**: Extract features, train classifier on top
+- **CLIP zero-shot**: Text prompts for classification without training
+- **SAM features**: Segmentation masks as additional input
+- **DINOv2 features**: Self-supervised features for transfer learning
+
+**Knowledge Distillation**:
+- Train large teacher (Swin-L, ViT-L) → distill to small student (ConvNeXt-T, ViT-S)
+- Ensemble of teachers → single student
+- Feature distillation vs logit distillation
+
+**Pseudo-Labeling**:
+- High-confidence predictions on test set → add to training
+- Iterative pseudo-labeling (multiple rounds)
+- Use ensemble for pseudo-labels (more reliable)
+
+### 10. Cross-Validation (Test at least 3)
+- **Stratified K-Fold**: 5-fold, preserve class distribution
+- **Group K-Fold**: If images from same source/patient/location grouped
+- **Time-based split**: For temporal datasets (satellite, medical longitudinal)
+- **Adversarial validation**: Detect train-test distribution shift
+
+### Iteration Policy for CV
+- **When ViT underperforms**: Try modern CNNs (ConvNeXt), smaller datasets favor CNNs
+- **When CNN plateaus**: Try ViT with stronger augmentation (RandAugment, CutMix)
+- **When augmentation hurts**: Reduce magnitude, try simpler transforms
+- **When training unstable (ViT)**: Increase warmup epochs, reduce LR, use LayerNorm
+- **When inference too slow**: Distill to smaller model, use EfficientNet, quantize
+- **Never conclude after 3-4 models**: Test at least 6-8 architectures (mix ViT + CNN)
+
+### Progress Tracking
+At each milestone, report:
+- Total A/B tests: X/20 minimum
+- Coverage: Preprocessing (X/5), Augmentation (X/8), Models (X/8), Training (X/6), Self-supervised (X/3), Fine-tuning (X/4), TTA (X/3), Ensemble (X/4), Advanced (X/3)
+- Best single model vs ensemble
+- Inference time per image
+
+### Web Search Guidance for CV
+Search for: "computer vision [task_type] kaggle 2025" (e.g., "image classification kaggle 2025 vit convnext")
+Look for:
+- ViT vs ConvNeXt comparisons for dataset size
+- MixUp, CutMix, RandAugment strategies
+- Progressive resizing schedules
+- Foundation model (CLIP, DINOv2, SAM) integration
+- TTA strategies for final submissions
+- Ensemble diversity techniques
+
+### Key Techniques to Prioritize
+- **ConvNeXt V2**: Modern CNN, easier than ViT, competitive accuracy
+- **ViT with strong aug**: RandAugment + CutMix + large datasets
+- **Swin Transformer**: Hierarchical ViT, better than vanilla ViT
+- **EfficientNet V2**: Best parameter efficiency, fast training
+- **DINOv2 features**: Self-supervised, strong transfer learning
+- **CLIP embeddings**: For zero-shot or low-data scenarios
+- **Progressive resizing**: 224→384→512 (faster convergence)
+- **MixUp + CutMix**: Standard for SOTA results (alpha=1.0)
+- **TTA with flips + crops**: Free performance boost (2-5% improvement)
+- **Architecture ensemble**: ViT + ConvNeXt + EfficientNet diversity
+"""
+
+    else:  # Fallback for unknown task types
+        return """
+## MANDATORY Task-Specific Requirements: General
+
+### Minimum Experiment Coverage
+Conduct at least **15 A/B tests** covering:
+- Preprocessing variations (at least 5)
+- Feature engineering (at least 5)
+- Data augmentation if applicable (at least 3)
+- Training techniques (at least 2)
+
+Use web search to identify task-specific best practices for 2024-2025.
+"""
+
 
 def build_system(base_dir: str, task_type: str = "tabular") -> str:
     """Build research system prompt with task-specific requirements."""
@@ -158,7 +596,7 @@ Set reasoning_effort = medium. Adjust analysis depth according to the complexity
 - `run_ab_test(question)`: Designs and runs A/B tests regarding modeling or feature engineering for direct impact assessment.
 - `download_external_datasets(question_1, question_2, question_3)`: Retrieves relevant external datasets using three differently phrased queries; datasets appear in `{base_dir}/`. Both EDA and A/B testing may be used on them.
 
-**IMPORTANT:** When referencing datasets, ONLY input the handler `<author>/<dataset>` whenever possible. Otherwise use a brief English phrase (avoid lengthy detail or field lists).
+**IMPORTANT:** ONLY input the dataset URL `<author>/<dataset>` in your query if possible. Otherwise use a brief English phrase (avoid lengthy detail or field lists).
 
 # A/B Test Policy
 
