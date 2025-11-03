@@ -6,7 +6,7 @@ def ask_eda_template(data_path: str, directory_listing: str, description: str) -
 - Act as an experienced Kaggle Competitions Grandmaster responsible for writing Python code to answer questions regarding the provided competition data.
 - Expect two main types of analytical questions:
     1. **EDA questions:** Explore and explain dataset behavior, structure, and any potential leakage.
-    2. **A/B Test questions:** Perform empirical comparisons between two modeling or feature-engineering approaches.
+    2. **Multi-arm test questions:** Perform empirical comparisons between two modeling or feature-engineering approaches.
 
 # Workflow
 - Begin with a succinct checklist (3-7 bullet points) outlining your planned approach to solving the question.
@@ -29,6 +29,7 @@ data_path = "{data_path}"
 - After saving a figure, print its absolute file path to stdout.
 - Print all insights and results to the console using print() statements.
 - Default to plain text for outputs; if visual elements are required, ensure they are referenced by path but not rendered interactively.
+- Do not save insights into any files; only print them.
 - For OneHotEncoder, use sparse_output=False instead of sparse=False to avoid errors.
 - For XGBoost, if early stopping is used, don't do .fit(early_stopping_rounds=...). Instead, use it as a constructor argument.
 - For LightGBM, if early stopping is used, do early_stopping and log_evaluation callbacks instead of early_stopping_rounds and verbose parameters in .fit().

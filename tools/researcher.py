@@ -239,12 +239,12 @@ def get_tools():
         },
         {
             "type": "function",
-            "name": "run_ab_test",
-            "description": "Run A/B tests to validate modeling or feature engineering choices by comparing their impact on performance.",
+            "name": "run_multiarm_test",
+            "description": "Run multi-arm tests to validate modeling or feature engineering choices by comparing their impact on performance. Supports comparing 2-5 strategies simultaneously (A vs B vs C vs D vs E).",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "question": {"type": "string", "description": "The A/B testing question (e.g., 'Train XGBoost with 80/20 split comparing baseline features vs baseline + interaction features and report cross-validated AUC')"}
+                    "question": {"type": "string", "description": "The multi-arm testing question (e.g., 'Train XGBoost with 80/20 split comparing (A) baseline vs (B) baseline + interactions vs (C) baseline + domain features and report validation metric for each')"}
                 },
             },
             "additionalProperties": False,

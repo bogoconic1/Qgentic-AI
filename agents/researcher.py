@@ -205,7 +205,7 @@ class ResearcherAgent:
             for item in response.output:
                 if item.type == "function_call":
                     tool_calls = True
-                    if item.name == "ask_eda" or item.name == "run_ab_test":
+                    if item.name == "ask_eda" or item.name == "run_multiarm_test":
                         try:
                             question = json.loads(item.arguments)["question"]
                         except Exception as e:
@@ -218,7 +218,7 @@ class ResearcherAgent:
                             before_media = self._list_media_files()
 
                             # Determine if this is an AB test or EDA question
-                            is_ab_test = (item.name == "run_ab_test")
+                            is_ab_test = (item.name == "run_multiarm_test")
 
                             # Get last 6 AB tests for AB test questions, empty list for EDA
                             previous_ab_tests = self.ab_test_history[-6:] if is_ab_test else []
