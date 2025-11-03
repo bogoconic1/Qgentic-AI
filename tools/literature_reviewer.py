@@ -59,7 +59,7 @@ DEFAULT_FIELDS = (
 DEFAULT_LIMIT = 5
 DEFAULT_MAX_WORKERS = 4
 CHUNK_SIZE = 8192
-MIN_PUBLICATION_YEAR = 2022
+MIN_PUBLICATION_YEAR = 2020
 STOPWORDS = {
     "a",
     "an",
@@ -425,6 +425,7 @@ class SemanticScholarClient:
                 break
         return ordered_phrases
 
+    # TODO: THIS IS NOT WORKING WELL.
     def _build_author_queries(
         self,
         base_query: str,
