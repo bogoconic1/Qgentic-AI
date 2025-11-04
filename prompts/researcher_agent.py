@@ -1,8 +1,41 @@
 from __future__ import annotations
 
 
-def _get_task_specific_requirements(task_type: str) -> str:
-    """Return task-specific feature engineering and exploration requirements."""
+def _get_task_specific_requirements(task_type: str | list[str]) -> str:
+    """Return task-specific feature engineering and exploration requirements.
+
+    Args:
+        task_type: Single task type string or list of task types (for multimodal)
+    """
+    # Handle multimodal case: combine multiple task types
+    if isinstance(task_type, list):
+        if len(task_type) == 1:
+            task_type = task_type[0]
+        else:
+            # Multimodal: combine requirements from all task types
+            sections = []
+            for t in task_type:
+                sections.append(_get_task_specific_requirements(t))
+
+            # Add multimodal-specific guidance
+            multimodal_header = f"""
+## MULTIMODAL Competition Detected: {' + '.join(task_type).upper()}
+
+This competition requires handling multiple data modalities. In addition to the task-specific requirements below, consider:
+
+### Multimodal Fusion Strategies (Test at least 3)
+- **Early fusion**: Concatenate features from all modalities before model input (simple, effective baseline)
+- **Late fusion**: Train separate models per modality, ensemble predictions (reduces overfitting risk)
+- **Cross-attention**: Attention mechanisms between modalities (captures interactions)
+- **Stacking**: Use predictions from unimodal models as features for meta-model
+
+### Data Alignment
+- Ensure all modalities are correctly aligned per sample (matching IDs, timestamps)
+- Handle missing modalities gracefully (imputation, separate pathways)
+
+---
+"""
+            return multimodal_header + "\n\n".join(sections)
 
     if task_type == "tabular":
         return """

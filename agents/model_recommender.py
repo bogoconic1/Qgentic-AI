@@ -108,25 +108,27 @@ class ModelRecommenderAgent:
             logger.warning("No description.md found at %s", description_path)
             inputs["description"] = ""
 
-        # Load task_type and task_summary from starter_suggestions.json
+        # Load task_types and task_summary from starter_suggestions.json
         starter_path = self.outputs_dir / "starter_suggestions.json"
         if starter_path.exists():
             try:
                 with open(starter_path, "r") as f:
                     starter_data = json.load(f)
-                inputs["task_type"] = starter_data.get("task_type", "")
+                task_types = starter_data.get("task_types", [])
+                # Pass as list to support multimodal competitions
+                inputs["task_type"] = task_types
                 inputs["task_summary"] = starter_data.get("task_summary", "")
                 logger.info(
-                    "Loaded task_type=%s from starter_suggestions.json",
+                    "Loaded task_types=%s from starter_suggestions.json",
                     inputs["task_type"],
                 )
             except Exception as e:
                 logger.warning("Failed to parse starter_suggestions.json: %s", e)
-                inputs["task_type"] = ""
+                inputs["task_type"] = []
                 inputs["task_summary"] = ""
         else:
             logger.warning("No starter_suggestions.json found at %s", starter_path)
-            inputs["task_type"] = ""
+            inputs["task_type"] = []
             inputs["task_summary"] = ""
 
         # Load research plan (optional)
