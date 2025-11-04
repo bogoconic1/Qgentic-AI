@@ -682,6 +682,7 @@ Set reasoning_effort = medium. Adjust analysis depth according to the complexity
 - Cross-validation is for the Developer phase
 - A/B tests should be quick, intended for directional guidance, not final selection
 - Sequentially leverage prior A/B test results to design new tests for a coherent discovery process
+- All A/B tests should be executed in GPU whenever possible
 
 **IMPORTANT: Do NOT conclude "skip X" after just 2-3 negative A/B tests!**
 - If simple features fail, elevate to complex feature research and recommend those instead
