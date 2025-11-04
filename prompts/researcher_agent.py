@@ -11,7 +11,17 @@ def _get_task_specific_requirements(task_type: str) -> str:
 ### Minimum Experiment Coverage
 You MUST conduct at least **20-30 A/B tests** covering the following categories. Track your progress and ensure sufficient breadth before concluding research.
 
-### 1. Numerical Feature Transformations (Test at least 5)
+### 1. Numerical Feature Transformations (Test at least 6)
+
+**Quasi-discrete numeric encodings**:
+- **Identification of discrete-like numerics**: Identify low-cardinality numeric features and treat as categoricals
+- **Frequency-based**: Count encoding, rank encoding by frequency
+- **Target-based** (with proper CV): Target encoding, Leave-One-Out, Weight of Evidence (WOE), M-Estimate, CatBoost encoding
+- **Ordinal encoding**: For naturally ordered categories or by target mean
+- **Hash/Binary encoding**: For high-cardinality features (>50 categories)
+- **Entity embeddings**: Neural network learned representations
+
+**Standard numeric transforms**:
 - **Distribution normalization**: Log, square root, Box-Cox, Yeo-Johnson for skewed features (|skew| > 1.0)
 - **Outlier handling**: Winsorization (cap at 1st/99th percentile), clipping, or log compression
 - **Discretization**: Equal-width binning, equal-frequency (quantile) binning, custom domain bins
@@ -20,10 +30,10 @@ You MUST conduct at least **20-30 A/B tests** covering the following categories.
 
 ### 2. Categorical Encodings (Test at least 5 beyond baseline OHE)
 - **Frequency-based**: Count encoding, rank encoding by frequency
-- **Target-based** (with proper CV): Target encoding, Leave-One-Out, Weight of Evidence (WOE - standard for credit/finance), M-Estimate, CatBoost encoding
+- **Target-based** (with proper CV): Target encoding, Leave-One-Out, Weight of Evidence (WOE), M-Estimate, CatBoost encoding
 - **Ordinal encoding**: For naturally ordered categories or by target mean
 - **Hash/Binary encoding**: For high-cardinality features (>50 categories)
-- **Entity embeddings**: Neural network learned representations (if time permits)
+- **Entity embeddings**: Neural network learned representations
 
 ### 3. Interaction Features (Test at least 6)
 **Categorical × Categorical**:
@@ -33,7 +43,7 @@ You MUST conduct at least **20-30 A/B tests** covering the following categories.
 
 **Numerical × Numerical**:
 - Arithmetic operations: addition, subtraction, multiplication, division (ratios)
-- Domain-specific ratios (e.g., debt_to_income, utilization_rate, efficiency_metrics)
+- Domain-specific ratios
 
 **Categorical × Numerical** (GroupBy aggregations):
 - For each categorical or pair, compute: mean, std, min, max, median, count
@@ -85,7 +95,7 @@ At each milestone, report:
 - Top 3 most promising directions for further exploration
 
 ### Web Search Guidance for Tabular
-Search for: "[task_domain] feature engineering kaggle 2024 2025" (e.g., "credit risk feature engineering kaggle 2024")
+Search for: "[task_domain] feature engineering kaggle 2024 2025" (e.g., "binary classification feature engineering kaggle 2024")
 Look for: Winning solution write-ups, feature importance patterns, domain-specific transforms
 """
 
@@ -155,7 +165,7 @@ Conduct at least **25-30 A/B tests**. Modern competitions use decoder LLMs (Gemm
 - **Long texts (>512)**: Head+tail (256+256), sliding window, Longformer
 
 **For Decoder LLMs**:
-- **Chat templates**: Use model-specific format (e.g., Llama: <|user|>, <|assistant|>)
+- **Chat templates**: Use model-specific format
 - **System prompts**: Test different task instructions ("You are a helpful assistant...")
 - **Max tokens**: Test truncation lengths (512, 1024, 2048, 4096)
 - **Generation config**: Temperature (0.5-0.7), top_p (0.9, 0.95), max_new_tokens
@@ -222,7 +232,7 @@ Conduct at least **25-30 A/B tests**. Modern competitions use decoder LLMs (Gemm
 - Retrieval strategies: Dense (sentence-transformers), sparse (BM25), hybrid
 
 **Prompt Engineering**:
-- Zero-shot vs few-shot (1-shot, 3-shot, 5-shot examples)
+- Zero-shot vs few-shot
 - Chain-of-Thought (CoT): "Let's think step by step"
 - System prompt variations
 
@@ -265,7 +275,7 @@ At each milestone, report:
 - Inference time per sample
 
 ### Web Search Guidance for NLP
-Search for: "NLP [task_type] kaggle 2025" (e.g., "text classification kaggle 2025 gemma qwen")
+Search for: "NLP [task_type] kaggle 2025" (e.g., "text classification kaggle 2025 llama qwen")
 Look for:
 - LoRA/QLoRA fine-tuning strategies for Gemma, Qwen, Llama
 - Distillation pipelines (large→small models)
@@ -489,7 +499,7 @@ At each milestone, report:
 - Inference time per image
 
 ### Web Search Guidance for CV
-Search for: "computer vision [task_type] kaggle 2025" (e.g., "image classification kaggle 2025 vit convnext")
+Search for: "computer vision [task_type] kaggle 2025" (e.g., "image classification kaggle 2025 vit swin")
 Look for:
 - ViT vs ConvNeXt comparisons for dataset size
 - MixUp, CutMix, RandAugment strategies
