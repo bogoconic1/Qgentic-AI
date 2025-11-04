@@ -1006,7 +1006,7 @@ class DeveloperAgent:
                     analysis_msg += f" Your score before implementing this suggestion was {base_score_display}."
 
                 # Add target context
-                if self.gold_threshold is not None:
+                if self.gold_threshold is not None and run_score is not None:
                     # Compare current score to target (accounting for metric direction)
                     if self.is_lower_better:
                         if run_score <= self.gold_threshold:
@@ -1020,6 +1020,8 @@ class DeveloperAgent:
                         else:
                             gap = self.gold_threshold - run_score
                             analysis_msg += f" Current gap to TARGET ({self.gold_threshold}): {gap:.6f}. Let's close this gap."
+                elif run_score is None:
+                    analysis_msg += " The submission failed to produce a valid score. Please review the error logs and fix any issues."
                 else:
                     analysis_msg += " Let's push further to reach an even stronger result."
 
