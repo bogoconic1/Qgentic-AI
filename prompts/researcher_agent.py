@@ -1,8 +1,41 @@
 from __future__ import annotations
 
 
-def _get_task_specific_requirements(task_type: str) -> str:
-    """Return task-specific feature engineering and exploration requirements."""
+def _get_task_specific_requirements(task_type: str | list[str]) -> str:
+    """Return task-specific feature engineering and exploration requirements.
+
+    Args:
+        task_type: Single task type string or list of task types (for multimodal)
+    """
+    # Handle multimodal case: combine multiple task types
+    if isinstance(task_type, list):
+        if len(task_type) == 1:
+            task_type = task_type[0]
+        else:
+            # Multimodal: combine requirements from all task types
+            sections = []
+            for t in task_type:
+                sections.append(_get_task_specific_requirements(t))
+
+            # Add multimodal-specific guidance
+            multimodal_header = f"""
+## MULTIMODAL Competition Detected: {' + '.join(task_type).upper()}
+
+This competition requires handling multiple data modalities. In addition to the task-specific requirements below, consider:
+
+### Multimodal Fusion Strategies (Test at least 3)
+- **Early fusion**: Concatenate features from all modalities before model input (simple, effective baseline)
+- **Late fusion**: Train separate models per modality, ensemble predictions (reduces overfitting risk)
+- **Cross-attention**: Attention mechanisms between modalities (captures interactions)
+- **Stacking**: Use predictions from unimodal models as features for meta-model
+
+### Data Alignment
+- Ensure all modalities are correctly aligned per sample (matching IDs, timestamps)
+- Handle missing modalities gracefully (imputation, separate pathways)
+
+---
+"""
+            return multimodal_header + "\n\n".join(sections)
 
     if task_type == "tabular":
         return """
@@ -536,31 +569,48 @@ Use web search to identify task-specific best practices for 2024-2025.
 """
 
 
-def build_system(base_dir: str, task_type: str = "tabular") -> str:
-    """Build research system prompt with task-specific requirements."""
+def build_system(base_dir: str, task_type: str | list[str] = "tabular") -> str:
+    """Build research system prompt with task-specific requirements.
 
-    # Normalize task_type
-    task_type = task_type.lower().replace(" ", "_").replace("-", "_")
-    if "computer" in task_type or "vision" in task_type or "image" in task_type:
-        task_type = "computer_vision"
-    elif "nlp" in task_type or "text" in task_type or "language" in task_type:
-        task_type = "nlp"
-    elif "time" in task_type or "series" in task_type or "forecast" in task_type:
-        task_type = "time_series"
-    elif "audio" in task_type or "sound" in task_type or "speech" in task_type:
-        task_type = "audio"
-    elif "tabular" in task_type or "structured" in task_type:
-        task_type = "tabular"
+    Args:
+        base_dir: Base directory path
+        task_type: Single task type string or list of task types (for multimodal)
+    """
+
+    # Normalize task_type(s)
+    def normalize_single_task_type(tt: str) -> str:
+        tt = tt.lower().replace(" ", "_").replace("-", "_")
+        if "computer" in tt or "vision" in tt or "image" in tt:
+            return "computer_vision"
+        elif "nlp" in tt or "text" in tt or "language" in tt:
+            return "nlp"
+        elif "time" in tt or "series" in tt or "forecast" in tt:
+            return "time_series"
+        elif "audio" in tt or "sound" in tt or "speech" in tt:
+            return "audio"
+        elif "tabular" in tt or "structured" in tt:
+            return "tabular"
+        return tt
+
+    # Handle both string and list inputs
+    if isinstance(task_type, list):
+        normalized_task_types = [normalize_single_task_type(tt) for tt in task_type]
+        task_type_display = " + ".join(normalized_task_types) if len(normalized_task_types) > 1 else normalized_task_types[0]
+        task_type_for_requirements = normalized_task_types
+    else:
+        normalized_task_type = normalize_single_task_type(task_type)
+        task_type_display = normalized_task_type
+        task_type_for_requirements = normalized_task_type
 
     # Get task-specific requirements
-    task_requirements = _get_task_specific_requirements(task_type)
+    task_requirements = _get_task_specific_requirements(task_type_for_requirements)
 
     return f"""# Role
 Lead Research Strategist for Kaggle Machine Learning Competition Team
 
 # Inputs
 - `<competition_description>`
-- `<task_type>`: "{task_type}"
+- `<task_type>`: "{task_type_display}"
 - `<task_summary>` (concise description of labels, objectives, evaluation metric, and submission format)
 
 # Objective
@@ -581,7 +631,7 @@ Before starting, if any required input (`<competition_description>`, `<task_type
 2. Analyze dataset characteristics: target distribution, label balance, missing values, feature and target ranges, dataset size.
 3. Investigate structure of the inputs (e.g., length distribution, category counts, sequence lengths, image dimensions), identifying potential data issues.
 4. Detect temporal/spatial ordering and distribution shifts between train/test splits.
-5. You MUST web search to survey 2024-2025 winning strategies for `{task_type}` (do **not** search for this specific competition) to guide your exploration.
+5. You MUST web search to survey 2024-2025 winning strategies for `{task_type_display}` (do **not** search for this specific competition) to guide your exploration.
 6. Formulate and validate hypotheses using A/B tests.
 7. **Complete all MANDATORY, task-specific exploration** as listed in the requirements—do **not** skip this phase!
 8. List relevant external datasets, explaining their roles and expected contributions.
@@ -632,6 +682,7 @@ Set reasoning_effort = medium. Adjust analysis depth according to the complexity
 - Cross-validation is for the Developer phase
 - A/B tests should be quick, intended for directional guidance, not final selection
 - Sequentially leverage prior A/B test results to design new tests for a coherent discovery process
+- All A/B tests should be executed in GPU whenever possible
 
 **IMPORTANT: Do NOT conclude "skip X" after just 2-3 negative A/B tests!**
 - If simple features fail, elevate to complex feature research and recommend those instead

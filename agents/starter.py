@@ -112,23 +112,34 @@ class StarterAgent:
             if json_text:
                 suggestions = json.loads(json_text)
 
-                # Validate and normalize task_type
-                if "task_type" not in suggestions:
-                    raise ValueError("StarterAgent response missing required field 'task_type'")
+                # Validate and normalize task_types (list)
+                if "task_types" not in suggestions:
+                    raise ValueError("StarterAgent response missing required field 'task_types'")
 
-                raw_task_type = suggestions["task_type"]
-                normalized_task_type = normalize_task_type(raw_task_type)
+                raw_task_types = suggestions["task_types"]
+                if not isinstance(raw_task_types, list):
+                    raise ValueError(f"task_types must be a list, got {type(raw_task_types)}")
 
-                if raw_task_type.lower() != normalized_task_type:
-                    logger.info(f"Normalized task_type from '{raw_task_type}' to '{normalized_task_type}'")
+                if len(raw_task_types) == 0:
+                    raise ValueError("task_types list cannot be empty")
 
-                if normalized_task_type not in VALID_TASK_TYPES:
-                    raise ValueError(
-                        f"Invalid task_type '{raw_task_type}' (normalized: '{normalized_task_type}'). "
-                        f"Must be one of {VALID_TASK_TYPES}"
-                    )
+                # Validate and normalize each task type
+                normalized_task_types = []
+                for raw_task_type in raw_task_types:
+                    normalized_task_type = normalize_task_type(raw_task_type)
 
-                suggestions["task_type"] = normalized_task_type
+                    if raw_task_type.lower() != normalized_task_type:
+                        logger.info(f"Normalized task_type from '{raw_task_type}' to '{normalized_task_type}'")
+
+                    if normalized_task_type not in VALID_TASK_TYPES:
+                        raise ValueError(
+                            f"Invalid task_type '{raw_task_type}' (normalized: '{normalized_task_type}'). "
+                            f"Must be one of {VALID_TASK_TYPES}"
+                        )
+
+                    normalized_task_types.append(normalized_task_type)
+
+                suggestions["task_types"] = normalized_task_types
 
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse JSON from starter response: {e}")

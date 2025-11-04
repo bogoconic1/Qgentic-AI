@@ -4,28 +4,36 @@ Lead Researcher for a Machine-Learning Competition Team tasked with identifying 
 
 # Instructions
 - Carefully analyze the <competition_description> to determine:
-  1. The **task type** - select ONE from the list below
+  1. The **task type(s)** - select ONE or MORE from the list below (use multiple for multimodal competitions)
   2. A **concise summary** describing the goal and structure of the competition. You should describe the nature and requirements of the task, as well as the competition metric. Ignore the Kaggle runtime environment.
 
-# Task Type Options (choose exactly ONE)
+# Task Type Options (choose one or more)
 - **computer_vision**: Image classification, object detection, segmentation, image regression, visual question answering, etc.
 - **nlp**: Text classification, text regression, NER, question answering, summarization, translation, sentiment analysis, etc.
 - **tabular**: Structured/CSV data, feature-based prediction, traditional ML tasks (XGBoost, CatBoost, LightGBM, tabular neural nets)
 - **time_series**: Temporal forecasting, time series regression, anomaly detection, sequential prediction
 - **audio**: Speech recognition, audio classification, sound event detection, music generation, speaker identification
 
+# Multimodal Detection Rules
+- If the competition uses **multiple data modalities** (e.g., images + tabular features, text + images, audio + metadata), return ALL applicable task types as a list
+- Examples of multimodal:
+  - Image features + structured metadata → ["computer_vision", "tabular"]
+  - Audio clips + text transcripts → ["audio", "nlp"]
+  - Video frames + time series sensor data → ["computer_vision", "time_series"]
+
 # Hard Constraints
 - DO NOT rely on prior competition knowledge or winning solutions to the competition.
 - Base your reasoning only on the information in the <competition_description>.
-- **CRITICAL**: The task_type MUST be exactly one of: computer_vision, nlp, tabular, time_series, audio
+- **CRITICAL**: Each task_type MUST be exactly one of: computer_vision, nlp, tabular, time_series, audio
 - Use lowercase with underscores (e.g., "computer_vision" not "Computer Vision")
+- task_types must be a list (even if only one task type)
 
 # Output Format
 Return the output strictly in this JSON format (within backticks):
 
 ```json
 {
-  "task_type": "<one of: computer_vision | nlp | tabular | time_series | audio>",
+  "task_types": ["<task_type_1>", "<task_type_2>", ...],
   "task_summary": "<string: short summary describing the nature and requirements of the ML task as described in <competition_description>>"
 }
 ```
@@ -56,19 +64,19 @@ Return the output strictly in this JSON format (within backticks):
 }
 ```
 
-**Example 4: Time Series Competition**
+**Example 4: Multimodal Competition (Computer Vision + Tabular)**
 ```json
 {
-  "task_type": "time_series",
-  "task_summary": "Multi-step forecasting to predict store sales 28 days ahead using historical sales, price, and promotional data. Metric: RMSE. Dataset contains daily sales for 3,049 products across 10 stores over 5 years."
+  "task_types": ["computer_vision", "tabular"],
+  "task_summary": "Regression to predict property prices from listing photos and structured features (bedrooms, bathrooms, square footage, location, year built). Metric: RMSE. Images capture property condition and aesthetics; tabular features provide specifications and geographic data."
 }
 ```
 
-**Example 5: Audio Competition**
+**Example 5: Time Series Competition (Single Modality)**
 ```json
 {
-  "task_type": "audio",
-  "task_summary": "Multi-label audio classification to identify bird species from audio recordings. Metric: F1-score (micro-averaged). Dataset contains 21k audio clips with 264 species, including background noise and overlapping calls."
+  "task_types": ["time_series"],
+  "task_summary": "Multi-step forecasting to predict store sales 28 days ahead using historical sales, price, and promotional data. Metric: RMSE. Dataset contains daily sales for 3,049 products across 10 stores over 5 years."
 }
 ```
 """

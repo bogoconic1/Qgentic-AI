@@ -12,13 +12,18 @@ Begin with a **concise checklist (3-7 conceptual bullets)** describing your reas
 - Do **not** rely on prior competition knowledge.
 - Only recommend single models; do **not** suggest ensembles, stacks, or blends. The only exception that is allowed is **pseudo-labeling with OOF control** (i.e. using Model 1 to predict first, then use Model 1's OOFs as features for Model 2).
 
+## Multimodal Competition Guidelines
+- If `<task_type>` contains **multiple modalities** (e.g., "nlp + tabular"), recommend **multi-stage pipelines** where models from different modalities work together.
+- **Format the model name as a one-liner pipeline**: `"NLP model (stage 1) + Tabular model (stage 2)"`
+- You may recommend up to 8 different pipeline combinations.
+
 ## Hard Computational Constraints
 - **Total wall-clock budget:** **≤ 3 hours** end-to-end (data loading + training + validation)
 - **GPU memory:** 24GB available
 
 ## Inputs
 - `<competition_description>`
-- `<task_type>` ∈ {computer_vision, nlp, tabular, time_series, audio}
+- `<task_type>` ∈ {computer_vision, nlp, tabular, time_series, audio} or multimodal combination (e.g., "nlp + tabular")
 - `<task_summary>`
 - `<research_plan>`
 
@@ -97,9 +102,9 @@ Begin with a concise checklist (3-7 bullets) describing your *process* (conceptu
 
 ## Inputs
 - `<competition_description>`
-- `<task_type>` ∈ {computer_vision, nlp, tabular, time_series, audio}
+- `<task_type>` ∈ {computer_vision, nlp, tabular, time_series, audio} or multimodal combination (e.g., "nlp + tabular")
 - `<task_summary>`
-- `<model_name>`
+- `<model_name>` (may be a multi-stage pipeline like "NLP model (stage 1) + Tabular model (stage 2)" for multimodal tasks)
 - `<research_plan>`
 
 ## Category Definitions (reference)
@@ -200,9 +205,9 @@ Begin with a **concise checklist (3-7 bullets)** summarizing your conceptual rea
 
 ## Inputs
 - `<competition_description>`
-- `<task_type>` ∈ {computer_vision, nlp, tabular, time_series, audio}
+- `<task_type>` ∈ {computer_vision, nlp, tabular, time_series, audio} or multimodal combination (e.g., "nlp + tabular")
 - `<task_summary>`
-- `<model_name>`
+- `<model_name>` (may be a multi-stage pipeline like "NLP model (stage 1) + Tabular model (stage 2)" for multimodal tasks)
 - `<research_plan>`
 
 ---
@@ -318,9 +323,9 @@ Begin with a **concise checklist (3-7 conceptual bullets)** describing your reas
 
 ## Inputs
 - `<competition_description>`
-- `<task_type>` ∈ {computer_vision, nlp, tabular, time_series, audio}
+- `<task_type>` ∈ {computer_vision, nlp, tabular, time_series, audio} or multimodal combination (e.g., "nlp + tabular")
 - `<task_summary>`
-- `<model_name>`
+- `<model_name>` (may be a multi-stage pipeline like "NLP model (stage 1) + Tabular model (stage 2)" for multimodal tasks)
 - `<research_plan>`
 
 ---
@@ -430,9 +435,9 @@ All strategies must be **realistically executable** within these constraints.
 
 ## Inputs
 - `<competition_description>`
-- `<task_type>` ∈ {computer_vision, nlp, tabular, time_series, audio}
+- `<task_type>` ∈ {computer_vision, nlp, tabular, time_series, audio} or multimodal combination (e.g., "nlp + tabular")
 - `<task_summary>`
-- `<model_name>`
+- `<model_name>` (may be a multi-stage pipeline like "NLP model (stage 1) + Tabular model (stage 2)" for multimodal tasks)
 - `<research_plan>`
 
 ---
@@ -523,17 +528,23 @@ Each section contains a list of inference strategies with concise explanations.
 
 def build_user_prompt(
     description: str,
-    task_type: str,
+    task_type: str | list[str],
     task_summary: str,
     model_name: str,
     research_plan: str | None = None,
 ) -> str:
     """Build user prompt with all necessary inputs for model recommender."""
+    # Format task_type(s) properly
+    if isinstance(task_type, list):
+        task_type_display = " + ".join(task_type) if len(task_type) > 1 else task_type[0]
+    else:
+        task_type_display = task_type
+
     prompt = f"""<competition_description>
 {description}
 </competition_description>
 
-<task_type>{task_type}</task_type>
+<task_type>{task_type_display}</task_type>
 
 <task_summary>{task_summary}</task_summary>
 
