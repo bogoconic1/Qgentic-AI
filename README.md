@@ -9,6 +9,11 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
 ---
 ## News
 
+**[2025/11/04]** 🏆 **Qgentic-AI achieves #1 single-model public notebook on https://www.kaggle.com/competitions/playground-series-s5e11** (Top 6%, 40/700) with fully
+  autonomous A/B testing!
+
+**[2025/11/02]** Added Ensembling agent
+
 **[2025/10/31]** Qgentic-AI supports flexible GPU configurations (Multi-GPU, Single-GPU, and MIG), automatically creating isolated conda environments for parallel model execution! You can execute up till 7x2 = 14 baseline model experiments in parallel on 2x A100 80GB GPUs! 🚀
 
 **[2025/10/29]** Added thread-safe cross-model learning: parallel DeveloperAgent instances now share successful and failed suggestions in real-time, eliminating duplicate exploration and reducing wasted GPU compute. Suggestions include model attribution and score impact for intelligent pattern recognition.
@@ -25,21 +30,24 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
 
 ## Present Competitions
 
-| Kaggle Competition | Public LB score | Notebook |
-| --- | --- | --- |
-| playground-series-s5e10 | TBC | [Here](https://www.kaggle.com/code/yeoyunsianggeremie/ps5e10-agentic-ai-solution) |
+| Kaggle Competition | LB score | Ranking | Notebook |
+| --- | --- | --- | --- |
+| csiro-biomass | TBC | TBC | TBC |
+| playground-series-s5e11 | 0.92684 | Top 6% (40/700) - **Best Single Model Public Notebook** 🚀 | [Notebook 1](https://www.kaggle.com/code/yeoyunsianggeremie/ps5e11-agentic-ai-solution-single-xgb) |
+| playground-series-s5e10 | 0.05576 | Top 15% (606/4082) | [Notebook 1](https://www.kaggle.com/code/yeoyunsianggeremie/ps5e10-agentic-ai-solution), [Notebook 2](https://www.kaggle.com/code/yeoyunsianggeremie/ps5e10-agentic-ai-xgb) |
+
 
 ## Past Competitions
 
-| Kaggle Competition | Difficulty | Type | Metric | Qgentic-AI (no ensembler) | FM Agent | InternAgent | Operand | R&D-Agent |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| us-patent-phrase-to-phrase-matching | Medium | Information Retrieval | PCC (higher) | 0.88072 | 0.86169 ± 0.01725 | 0.86793 ± 0.00294 | 0.69230 ± 0.20529 | 0.80092 ± 0.04586 |
-| learning-agency-lab-automated-essay-scoring-2 | Medium | Text | QWK (higher) | 0.84303 ± 0.00719 | 0.84471 ± 0.00549 | 0.82996 ± 0.00908 | 0.83013 | 0.82450 ± 0.01155 |
-| tabular-playground-series-dec-2021 | Easy | Tabular | Accuracy % (higher) | 0.96322 | 0.95988 ± 0.00158 | 0.96268 ± 0.00046 | 0.96266 ± 0.00071 | 0.96294 ± 0.00018 |
-| statoil-iceberg-classifier-challenge | Medium | Image Classification | Logloss (lower) | 0.19081 | 1.25837 ± 0.95314 | 0.20303 ± 0.00651 | Failed | Failed |
-| denoising-dirty-documents | Medium | Computer Vision | RMSE (lower) | TBC | 0.01958 ± 0.00749 | 0.02283 ± 0.01652 | 0.02301 ± 0.01474 | 0.01122 ± 0.00107 |
-| whale-categorization-playground | Medium | Computer Vision | MAP@5 (higher) | 0.42885 ± 0.04164 | 0.46635 ± 0.03608 | 0.18327 ± 0.14001 | 0.36061 ± 0.10255 | 0.26214 ± 0.01121 |
-| google-quest-challenge | Medium | Text | Spearman Correlation (higher) | TBC | 0.39365 ± 0.01830 | 0.40873 ± 0.01466 | 0.39802 ± 0.01202 | 0.41488 ± 0.00678 |
+| Kaggle Competition | Difficulty | Type | Metric | Qgentic-AI (no ensembler) | FM Agent | InternAgent | Operand | R&D-Agent | MLE-STAR-PRO |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| us-patent-phrase-to-phrase-matching | Medium | Information Retrieval | PCC (higher) | 0.88072 | 0.86169 ± 0.01725 | 0.86793 ± 0.00294 | 0.69230 ± 0.20529 | 0.80092 ± 0.04586 | 0.75311 ± 0.14290 |
+| learning-agency-lab-automated-essay-scoring-2 | Medium | Text | QWK (higher) | 0.84303 ± 0.00719 | 0.84471 ± 0.00549 | 0.82996 ± 0.00908 | 0.83013 | 0.82450 ± 0.01155 | 0.83171 ± 0.00660 |
+| tabular-playground-series-dec-2021 | Easy | Tabular | Accuracy % (higher) | 0.96322 | 0.95988 ± 0.00158 | 0.96268 ± 0.00046 | 0.96266 ± 0.00071 | 0.96294 ± 0.00018 | 0.96267 ± 0.00059 |
+| statoil-iceberg-classifier-challenge | Medium | Image Classification | Logloss (lower) | 0.19081 | 1.25837 ± 0.95314 | 0.20303 ± 0.00651 | Failed | Failed | 0.24558 ± 0.02098 |
+| denoising-dirty-documents | Medium | Computer Vision | RMSE (lower) | TBC | 0.01958 ± 0.00749 | 0.02283 ± 0.01652 | 0.02301 ± 0.01474 | 0.01122 ± 0.00107 | 0.01145 ± 0.00059 |
+| whale-categorization-playground | Medium | Computer Vision | MAP@5 (higher) | 0.42885 ± 0.04164 | 0.46635 ± 0.03608 | 0.18327 ± 0.14001 | 0.36061 ± 0.10255 | 0.26214 ± 0.01121 | 0.35985 ± 0.04825 |
+| google-quest-challenge | Medium | Text | Spearman Correlation (higher) | TBC | 0.39365 ± 0.01830 | 0.40873 ± 0.01466 | 0.39802 ± 0.01202 | 0.41488 ± 0.00678 | 0.39628 ± 0.00535 |
 --- 
 
 ## Architecture at a Glance
@@ -51,12 +59,15 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
   - Persists `starter_suggestions.txt` and `starter_suggestions.json` in `task/<slug>/outputs/<iteration>/`.
 
 - **Researcher Agent (`agents/researcher.py`)**
-  - Uses tool-calling (EDA snippets, external dataset search) to understand the task.
+  - Uses tool-calling (EDA snippets, A/B testing, external dataset search) to understand the task.
+  - **A/B Testing**: Runs controlled experiments comparing modeling approaches (e.g., different normalizations, augmentations, optimizers) with automatic code generation and execution.
+  - Tracks A/B test history (last 6 tests) to avoid redundant experiments and inform future tests.
   - Logs every step to `task/<slug>/outputs/<iteration>/researcher/`.
   - Persists the final plan in `plan.md` – consumed verbatim by downstream stages.
 
 - **Model Recommender Agent (`agents/model_recommender.py`)**
-  - Recommends up to 6 suitable models with detailed strategies for preprocessing, architecture, loss functions, hyperparameters, and inference.
+  - Recommends up to 8 suitable models with detailed strategies for preprocessing, architecture, loss functions, hyperparameters, and inference.
+  - **Multimodal Support**: For competitions with multiple data modalities (e.g., CV + tabular), recommends multi-stage pipelines where models work together (e.g., "EfficientNet (stage 1) + XGBoost (stage 2)").
   - Splits recommendations into NOW (MUST_HAVE) and LATER (NICE_TO_HAVE) categories for iterative development.
   - Supports fold split strategy recommendations and web search for SOTA techniques.
 
@@ -87,7 +98,11 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
     - `baseline_max_parallel_workers`: Fallback worker count when MIG is disabled
 
 - **Ensembling Agent (`agents/ensembler.py`)**
-  - Work in progress
+  - Combines multiple baseline models using diverse ensemble strategies (stacking, blending, weighted averaging, etc.).
+  - Inherits from DeveloperAgent and follows the same two-stage flow (red flags + SOTA suggestions).
+  - Operates in parallel with one agent per strategy for efficient exploration.
+  - Multi-fold ensembling enabled by default for robust performance.
+  - Uses ensemble-specific system prompts and naming conventions: `code_{iteration}_{strategy_index}_ens_v{version}.py`
 
 - **Guardrails (`guardrails/`), Tools (`tools/`) & Shared Config (`project_config.py`)**
   - `tools.developer` wraps code execution, stack-trace web search, and SOTA suggestions:
