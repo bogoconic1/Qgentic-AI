@@ -15,6 +15,7 @@ def _get_hard_constraints(model_name: str, allow_multi_fold: bool = False) -> st
 - Use ONLY `{model_name}` (no substitutions or fallback models).
 - Deliver a fully-contained, single-file script.
 - Use CUDA if available.
+- **DO NOT** explicitly set `os.environ['CUDA_VISIBLE_DEVICES']` in your code.
 - Place all `logging.info` statements for validation results (per fold and overall) as well as model loading, train/test set size; only log data loading/setup if directly relevant to validation.
 - Also emit concise `logging.info` statements for any computed quantities that can go really wrong (e.g. class weights, thresholds).
 - Place `logging.basicConfig()` at the start of the script.

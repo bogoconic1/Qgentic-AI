@@ -454,7 +454,12 @@ class DeveloperAgent:
             Tuple of (postprocessed_code, num_header_lines_added)
         """
         # Check if the code already has the resource allocation header (e.g., from patch mode)
-        if 'BASE_DIR = "task/' in code and 'CUDA_VISIBLE_DEVICES' in code:
+        # Must check for actual assignment of CUDA_VISIBLE_DEVICES, not just reading it
+        has_cpu_affinity = 'psutil.Process(os.getpid()).cpu_affinity' in code
+        has_cuda_assignment = 'os.environ["CUDA_VISIBLE_DEVICES"]' in code
+        has_base_dir = 'BASE_DIR = "task/' in code
+
+        if has_cpu_affinity and has_base_dir and has_cuda_assignment:
             self.logger.debug("Code already contains resource allocation header, skipping postprocessing")
             return code, 0
 
@@ -1000,9 +1005,21 @@ class DeveloperAgent:
                     base_score_display = self._format_score_value(base_score)
                     analysis_msg += f" Your score before implementing this suggestion was {base_score_display}."
 
-                # Add target
+                # Add target context
                 if self.gold_threshold is not None:
-                    analysis_msg += f" Let's push further to reach the TARGET of {self.gold_threshold}."
+                    # Compare current score to target (accounting for metric direction)
+                    if self.is_lower_better:
+                        if run_score <= self.gold_threshold:
+                            analysis_msg += f" You have reached/exceeded the TARGET of {self.gold_threshold}! Focus on further incremental improvements."
+                        else:
+                            gap = run_score - self.gold_threshold
+                            analysis_msg += f" Current gap to TARGET ({self.gold_threshold}): {gap:.6f}. Let's close this gap."
+                    else:
+                        if run_score >= self.gold_threshold:
+                            analysis_msg += f" You have reached/exceeded the TARGET of {self.gold_threshold}! Focus on further incremental improvements."
+                        else:
+                            gap = self.gold_threshold - run_score
+                            analysis_msg += f" Current gap to TARGET ({self.gold_threshold}): {gap:.6f}. Let's close this gap."
                 else:
                     analysis_msg += " Let's push further to reach an even stronger result."
 
