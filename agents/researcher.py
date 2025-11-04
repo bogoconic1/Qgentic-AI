@@ -160,7 +160,32 @@ class ResearcherAgent:
         return [{"role": "user", "content": content}]
 
     def _compose_system(self) -> str:
-        return prompt_build_system(str(self.base_dir))
+        # Load task_types from starter_suggestions.json
+        json_path = self.outputs_dir / "starter_suggestions.json"
+
+        if not json_path.exists():
+            raise FileNotFoundError(
+                f"starter_suggestions.json not found at {json_path}. "
+                "Run starter agent first."
+            )
+
+        with open(json_path, "r") as f:
+            starter_data = json.load(f)
+
+        if "task_types" not in starter_data:
+            raise ValueError(
+                f"starter_suggestions.json missing required field 'task_types'. "
+                f"Found keys: {list(starter_data.keys())}"
+            )
+
+        task_types = starter_data["task_types"]
+
+        if not isinstance(task_types, list) or len(task_types) == 0:
+            raise ValueError(
+                f"task_types must be a non-empty list, got: {task_types}"
+            )
+
+        return prompt_build_system(str(self.base_dir), task_type=task_types)
 
     def _read_starter_suggestions(self) -> str:
         # Prefer raw starter_suggestions.txt; fallback to JSON; else 'None'
