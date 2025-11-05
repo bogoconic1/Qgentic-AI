@@ -70,27 +70,14 @@ Model 2
 ...
 
 ### Final Recommendations
-Provide a single JSON block within ```json backticks with **fold_split_strategy** and **recommended_models**.
+Provide recommendations with **fold_split_strategy** and **recommended_models**.
 The **fold_split_strategy** must be a single, specific strategy.
 
-```json
-{
-  "fold_split_strategy": {
-    "strategy": "the single specific CV fold splitting strategy",
-  },
-  "recommended_models": [
-    {
-      "name": "Model 1",
-      "reason": "why is this model recommended for this competition/data/metric"
-    },
-    {
-      "name": "Model 2",
-      "reason": "why is this model recommended for this competition/data/metric"
-    },
-    ...
-  ]
-}
-```
+**fold_split_strategy**: An object with a "strategy" field containing the single specific CV fold splitting strategy
+
+**recommended_models**: A list of model recommendations, each with:
+- "name": The model name
+- "reason": Why this model is recommended for this competition/data/metric
 
 """
 
@@ -165,29 +152,15 @@ List the selected categories with **1-2 sentences** explaining *why* each is rel
 - …(add more if justified)
 
 ### Suggestions
-Provide a single JSON block within ```json backticks with **MUST_HAVE** and **NICE_TO_HAVE** sections.
 Provide **MUST_HAVE** and **NICE_TO_HAVE** recommendations **per selected category**. Each item must include a crisp rationale and compute awareness.
 
-**Schema (example; adapt categories to the task):**
-```json
-{
-  "feature_creation": {
-    "MUST_HAVE": [
-      {
-        "strategy": "string",
-        "explanation": "why this is a must have for a top-notch solution",
-      }
-    ],
-    "NICE_TO_HAVE": [
-      {
-        "strategy": "string",
-        "explanation": "why this is a nice to have for a top-notch solution and not strictly necessary",
-      }
-    ]
-  },
-  "data_augmentation": { "MUST_HAVE": [...], "NICE_TO_HAVE": [...] }
-}
-```
+For each relevant category (e.g., feature_creation, data_augmentation, preprocessing, tokenization, etc.), provide:
+- **MUST_HAVE**: A list of strategy items, each with "strategy" and "explanation" fields
+- **NICE_TO_HAVE**: A list of strategy items, each with "strategy" and "explanation" fields
+
+Each strategy item should include:
+- "strategy": The specific strategy to apply
+- "explanation": Why this is must-have or nice-to-have for a top-notch solution
 """
 
 def loss_function_system_prompt() -> str:
@@ -285,25 +258,17 @@ List up to 5 candidate losses briefly explaining why each was considered.
 
 ### Final Recommendation
 
-Provide a single JSON block within ```json backticks with **MUST_HAVE** and **NICE_TO_HAVE** sections.
+Provide recommendations with **MUST_HAVE** and **NICE_TO_HAVE** sections.
 The **MUST_HAVE** section contains exactly one loss;
 the **NICE_TO_HAVE** section may contain multiple.
 
-```json
-{
-  "MUST_HAVE": {
-    "loss_function": "the single best loss function choice for this competition, data, and model",
-    "explanation": "3-5 sentences on why this loss aligns with the competition metric and dataset traits. Why is it better than other loss functions considered?",
-  },
-  "NICE_TO_HAVE": [
-    {
-      "loss_function": "string",
-      "explanation": "why this is a nice to have for a top-notch solution but not strictly necessary",
-    },
-    ...
-  ]
-}
-```
+**MUST_HAVE**: An object with:
+- "loss_function": The single best loss function choice for this competition, data, and model
+- "explanation": 3-5 sentences on why this loss aligns with the competition metric and dataset traits. Why is it better than other loss functions considered?
+
+**NICE_TO_HAVE**: A list of loss function items, each with:
+- "loss_function": Alternative loss function
+- "explanation": Why this is a nice to have for a top-notch solution but not strictly necessary
 """
 
 def hyperparameter_tuning_system_prompt() -> str:
@@ -388,33 +353,19 @@ When selecting hyperparameters or architectures:
 ---
 
 ## Output Format
-Provide a single JSON block within ```json backticks with **MUST_HAVE** and **NICE_TO_HAVE** sections.
+Provide recommendations with **MUST_HAVE** and **NICE_TO_HAVE** sections.
 Each contains two lists: `hyperparameters` and `architectures`.
 
 **CRITICAL**: MUST_HAVE hyperparameters must include SPECIFIC VALUES, NOT ranges.
 
-```json
-{
-  "MUST_HAVE": {
-    "hyperparameters": [
-      { "hyperparameter": "string", "explanation": "why this is a must have for a top-notch solution" },
-    ],
-    "architectures": [
-      { "architecture": "string", "explanation": "why this architecture is essential for achieving top performance" }
-    ]
-  },
-  "NICE_TO_HAVE": {
-    "hyperparameters": [
-      { "hyperparameter": "string", "explanation": "why this is a nice to have for a top-notch solution but not strictly necessary" },
-      ...
-    ],
-    "architectures": [
-      { "architecture": "string", "explanation": "why this architecture is a nice to have for a top-notch solution but not strictly necessary" },
-      ...
-    ]
-  }
-}
-```
+Both **MUST_HAVE** and **NICE_TO_HAVE** should have:
+- **hyperparameters**: A list of hyperparameter items, each with:
+  - "hyperparameter": The hyperparameter specification (specific value for MUST_HAVE, range for NICE_TO_HAVE)
+  - "explanation": Why this is must-have or nice-to-have for a top-notch solution
+
+- **architectures**: A list of architecture items, each with:
+  - "architecture": The architecture design or modification
+  - "explanation": Why this architecture is essential (MUST_HAVE) or nice-to-have (NICE_TO_HAVE)
 """
 
 def inference_strategy_system_prompt() -> str:
@@ -503,31 +454,13 @@ When selecting inference strategies:
 ---
 
 ## Output Format
-Provide a single JSON block within ```json backticks with **MUST_HAVE** and **NICE_TO_HAVE** sections.
+Provide recommendations with **MUST_HAVE** and **NICE_TO_HAVE** sections.
 Each section contains a list of inference strategies with concise explanations.
 
-```json
-{
-  "MUST_HAVE": {
-    "inference_strategies": [
-      {
-        "strategy": "string",
-        "explanation": "why this is a must have for a top-notch solution",
-      },
-      ...
-    ]
-  },
-  "NICE_TO_HAVE": {
-    "inference_strategies": [
-      {
-        "strategy": "string",
-        "explanation": "why this is a nice to have for a top-notch solution but not strictly necessary",
-      },
-      ...
-    ]
-  }
-}
-```
+Both **MUST_HAVE** and **NICE_TO_HAVE** should have:
+- **inference_strategies**: A list of inference strategy items, each with:
+  - "strategy": The inference strategy to apply
+  - "explanation": Why this is must-have or nice-to-have for a top-notch solution
 """
 
 def build_user_prompt(

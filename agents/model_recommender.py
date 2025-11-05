@@ -20,6 +20,13 @@ from prompts.model_recommender_agent import (
     inference_strategy_system_prompt,
     build_user_prompt,
 )
+from schemas.model_recommender import (
+    ModelSelection,
+    PreprocessingRecommendations,
+    LossFunctionRecommendations,
+    HyperparameterRecommendations,
+    InferenceStrategyRecommendations,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -143,108 +150,6 @@ class ModelRecommenderAgent:
 
         return inputs
 
-    @staticmethod
-    def _extract_json_block(text: str) -> Optional[str]:
-        """Extract JSON block from LLM response.
-
-        Tries to find ```json ... ``` block first, then falls back to
-        finding outermost braces.
-
-        Args:
-            text: LLM response text
-
-        Returns:
-            JSON string or None if not found
-        """
-        if not text:
-            return None
-
-        # Prefer fenced JSON block
-        try:
-            m = re.search(r"```json\s*(\{[\s\S]*?\})\s*```", text, re.IGNORECASE)
-            if m:
-                return m.group(1).strip()
-        except Exception:
-            pass
-
-        # Fallback: find outermost braces
-        try:
-            start = text.index("{")
-            end = text.rindex("}") + 1
-            return text[start:end]
-        except Exception:
-            return None
-
-    def _call_llm_for_recommendation(
-        self, system_prompt: str, model_name: str, recommendation_type: str
-    ) -> Optional[Dict[str, Any]]:
-        """Call LLM to get a specific type of recommendation.
-
-        Args:
-            system_prompt: System prompt function output
-            model_name: Model name (e.g., "deberta-v3-large")
-            recommendation_type: Type of recommendation for logging
-
-        Returns:
-            Parsed JSON dict or None on failure
-        """
-        user_prompt = build_user_prompt(
-            description=self.inputs["description"],
-            task_type=self.inputs["task_type"],
-            task_summary=self.inputs["task_summary"],
-            model_name=model_name,
-            research_plan=self.inputs.get("plan"),
-        )
-
-        messages = [{"role": "user", "content": user_prompt}]
-
-        logger.info(
-            "[%s] Requesting %s recommendations", model_name, recommendation_type
-        )
-
-        try:
-            response = call_llm_with_retry(
-                model=_MODEL_RECOMMENDER_MODEL,
-                instructions=system_prompt,
-                tools=[],
-                messages=messages,
-                web_search_enabled=_ENABLE_WEB_SEARCH,
-            )
-            content = response.output_text or ""
-
-            # Extract JSON
-            json_text = self._extract_json_block(content)
-            if not json_text:
-                logger.warning(
-                    "[%s] No JSON block found in %s response",
-                    model_name,
-                    recommendation_type,
-                )
-                return None
-
-            # Parse JSON
-            parsed = json.loads(json_text)
-            logger.info(
-                "[%s] Successfully parsed %s recommendations",
-                model_name,
-                recommendation_type,
-            )
-            return parsed
-
-        except json.JSONDecodeError as e:
-            logger.warning(
-                "[%s] JSON parsing failed for %s: %s", model_name, recommendation_type, e
-            )
-            return None
-        except Exception as e:
-            logger.error(
-                "[%s] Error getting %s recommendations: %s",
-                model_name,
-                recommendation_type,
-                e,
-            )
-            return None
-
     def _recommend_preprocessing(self, model_name: str) -> Dict[str, Any]:
         """Get preprocessing recommendations for a model."""
         # Build user prompt with categories
@@ -267,59 +172,128 @@ class ModelRecommenderAgent:
                 tools=[],
                 messages=messages,
                 web_search_enabled=_ENABLE_WEB_SEARCH,
+                text_format=PreprocessingRecommendations,
             )
-            content = response.output_text or ""
 
-            # Extract JSON
-            json_text = self._extract_json_block(content)
-            if not json_text:
-                logger.warning("[%s] No JSON block found in preprocessing response", model_name)
-                return {"preprocessing": [], "feature_creation": [], "feature_selection": [], "feature_transformation": [], "tokenization": [], "data_augmentation": []}
+            # Use structured output
+            if not response or not hasattr(response, 'output_parsed') or not response.output_parsed:
+                logger.warning("[%s] No structured output for preprocessing", model_name)
+                return {}
 
-            # Parse JSON
-            result = json.loads(json_text)
+            # Convert Pydantic model to dict (since it has extra="allow")
+            result = response.output_parsed.model_dump()
             logger.info("[%s] Successfully parsed preprocessing recommendations", model_name)
 
             return result
 
-        except json.JSONDecodeError as e:
-            logger.warning("[%s] JSON parsing failed for preprocessing: %s", model_name, e)
-            return {"preprocessing": [], "feature_creation": [], "feature_selection": [], "feature_transformation": [], "tokenization": [], "data_augmentation": []}
         except Exception as e:
             logger.error("[%s] Error getting preprocessing recommendations: %s", model_name, e)
-            return {"preprocessing": [], "feature_creation": [], "feature_selection": [], "feature_transformation": [], "tokenization": [], "data_augmentation": []}
+            return {}
 
     def _recommend_loss_function(self, model_name: str) -> Dict[str, Any]:
         """Get loss function recommendation for a model."""
-        result = self._call_llm_for_recommendation(
-            loss_function_system_prompt(), model_name, "loss_function"
+        user_prompt = build_user_prompt(
+            description=self.inputs["description"],
+            task_type=self.inputs["task_type"],
+            task_summary=self.inputs["task_summary"],
+            model_name=model_name,
+            research_plan=self.inputs.get("plan"),
         )
-        if result is None:
-            logger.warning("[%s] Using empty loss function recommendation", model_name)
-            return {"loss_function": "", "explanation": ""}
-        return result
+
+        system_prompt = loss_function_system_prompt()
+        messages = [{"role": "user", "content": user_prompt}]
+
+        try:
+            response = call_llm_with_retry(
+                model=_MODEL_RECOMMENDER_MODEL,
+                instructions=system_prompt,
+                tools=[],
+                messages=messages,
+                web_search_enabled=_ENABLE_WEB_SEARCH,
+                text_format=LossFunctionRecommendations,
+            )
+
+            if not response or not hasattr(response, 'output_parsed') or not response.output_parsed:
+                logger.warning("[%s] No structured output for loss function", model_name)
+                return {}
+
+            result = response.output_parsed.model_dump()
+            logger.info("[%s] Successfully parsed loss function recommendations", model_name)
+            return result
+
+        except Exception as e:
+            logger.error("[%s] Error getting loss function recommendations: %s", model_name, e)
+            return {}
 
     def _recommend_hyperparameters(self, model_name: str) -> Dict[str, Any]:
         """Get hyperparameter and architecture recommendations for a model."""
-        result = self._call_llm_for_recommendation(
-            hyperparameter_tuning_system_prompt(), model_name, "hyperparameters"
+        user_prompt = build_user_prompt(
+            description=self.inputs["description"],
+            task_type=self.inputs["task_type"],
+            task_summary=self.inputs["task_summary"],
+            model_name=model_name,
+            research_plan=self.inputs.get("plan"),
         )
-        if result is None:
-            logger.warning(
-                "[%s] Using empty hyperparameter recommendations", model_name
+
+        system_prompt = hyperparameter_tuning_system_prompt()
+        messages = [{"role": "user", "content": user_prompt}]
+
+        try:
+            response = call_llm_with_retry(
+                model=_MODEL_RECOMMENDER_MODEL,
+                instructions=system_prompt,
+                tools=[],
+                messages=messages,
+                web_search_enabled=_ENABLE_WEB_SEARCH,
+                text_format=HyperparameterRecommendations,
             )
-            return {"hyperparameters": [], "architectures": []}
-        return result
+
+            if not response or not hasattr(response, 'output_parsed') or not response.output_parsed:
+                logger.warning("[%s] No structured output for hyperparameters", model_name)
+                return {}
+
+            result = response.output_parsed.model_dump()
+            logger.info("[%s] Successfully parsed hyperparameter recommendations", model_name)
+            return result
+
+        except Exception as e:
+            logger.error("[%s] Error getting hyperparameter recommendations: %s", model_name, e)
+            return {}
 
     def _recommend_inference(self, model_name: str) -> Dict[str, Any]:
         """Get inference strategy recommendations for a model."""
-        result = self._call_llm_for_recommendation(
-            inference_strategy_system_prompt(), model_name, "inference"
+        user_prompt = build_user_prompt(
+            description=self.inputs["description"],
+            task_type=self.inputs["task_type"],
+            task_summary=self.inputs["task_summary"],
+            model_name=model_name,
+            research_plan=self.inputs.get("plan"),
         )
-        if result is None:
-            logger.warning("[%s] Using empty inference recommendations", model_name)
-            return {"inference_strategies": []}
-        return result
+
+        system_prompt = inference_strategy_system_prompt()
+        messages = [{"role": "user", "content": user_prompt}]
+
+        try:
+            response = call_llm_with_retry(
+                model=_MODEL_RECOMMENDER_MODEL,
+                instructions=system_prompt,
+                tools=[],
+                messages=messages,
+                web_search_enabled=_ENABLE_WEB_SEARCH,
+                text_format=InferenceStrategyRecommendations,
+            )
+
+            if not response or not hasattr(response, 'output_parsed') or not response.output_parsed:
+                logger.warning("[%s] No structured output for inference strategies", model_name)
+                return {}
+
+            result = response.output_parsed.model_dump()
+            logger.info("[%s] Successfully parsed inference strategy recommendations", model_name)
+            return result
+
+        except Exception as e:
+            logger.error("[%s] Error getting inference strategy recommendations: %s", model_name, e)
+            return {}
 
     @weave.op()
     def _recommend_for_model(self, model_name: str) -> Dict[str, Any]:
@@ -372,34 +346,23 @@ class ModelRecommenderAgent:
             tools=[],
             messages=messages,
             web_search_enabled=_ENABLE_WEB_SEARCH,
+            text_format=ModelSelection,
         )
 
-        content = response.output_text or ""
-        logger.debug("Model selection response length: %d", len(content))
-
-        # Extract JSON block
-        json_str = self._extract_json_block(content)
-        if not json_str:
-            logger.warning("No JSON block found in model selection response, using default models")
-            return _DEFAULT_MODELS
-
-        # Parse JSON
+        # Use structured output
         try:
-            data = json.loads(json_str)
-            recommended_models = data.get("recommended_models", [])
-            fold_split_strategy = data.get("fold_split_strategy", {})
+            if not response or not hasattr(response, 'output_parsed') or not response.output_parsed:
+                logger.warning("No structured output received, using default models")
+                return _DEFAULT_MODELS
 
-            if not recommended_models:
+            parsed = response.output_parsed
+
+            if not parsed.recommended_models:
                 logger.warning("No models in recommended_models array, using default models")
                 return _DEFAULT_MODELS
 
             # Extract model names
-            model_names = []
-            for item in recommended_models:
-                if isinstance(item, dict):
-                    name = item.get("name", "").strip()
-                    if name:
-                        model_names.append(name)
+            model_names = [model.name.strip() for model in parsed.recommended_models if model.name.strip()]
 
             if not model_names:
                 logger.warning("No valid model names extracted, using default models")
@@ -408,12 +371,12 @@ class ModelRecommenderAgent:
             logger.info("Selected %d models: %s", len(model_names), model_names)
 
             # Save fold split strategy to file for reference
-            if fold_split_strategy:
+            if parsed.fold_split_strategy:
                 fold_split_path = self.outputs_dir / "fold_split_strategy.json"
                 try:
                     with open(fold_split_path, "w") as f:
-                        json.dump(fold_split_strategy, f, indent=2)
-                    logger.info("Saved fold split strategy: %s", fold_split_strategy.get("strategy", ""))
+                        json.dump({"strategy": parsed.fold_split_strategy.strategy}, f, indent=2)
+                    logger.info("Saved fold split strategy: %s", parsed.fold_split_strategy.strategy)
                 except Exception:
                     logger.debug("Failed to save fold split strategy")
 
@@ -421,18 +384,15 @@ class ModelRecommenderAgent:
             selected_models_path = self.outputs_dir / "selected_models.json"
             try:
                 with open(selected_models_path, "w") as f:
-                    json.dump({
-                        "selected_models": model_names,
-                        "raw_response": content
-                    }, f, indent=2)
+                    json.dump({"selected_models": model_names}, f, indent=2)
                 logger.info("Selected models saved to %s", selected_models_path)
             except Exception as e:
                 logger.warning("Failed to save selected models: %s", e)
 
             return model_names
 
-        except json.JSONDecodeError as e:
-            logger.warning("Failed to parse model selection JSON: %s, using default models", e)
+        except Exception as e:
+            logger.warning("Error in model selection: %s, using default models", e)
             return _DEFAULT_MODELS
 
     @weave.op()
