@@ -48,9 +48,8 @@ def datasets_prompt() -> str:
 - For each proposed dataset, ensure its URL begins with **https://www.kaggle.com/datasets/**.
 
 # Output Format
-- Respond **only** using the following JSON structure, enclosed in triple backticks with `json` (no additional explanations or text):
-```json
-{"datasets": ["https://www.kaggle.com/datasets/exampleuser/first-dataset", "https://www.kaggle.com/datasets/exampleuser/second-dataset"]}
-```
+- Return a list of dataset URLs in the `datasets` field.
+- Each URL should be a complete Kaggle dataset URL (e.g., "https://www.kaggle.com/datasets/username/dataset-name").
+- If no relevant datasets are found, return an empty list.
 """
 

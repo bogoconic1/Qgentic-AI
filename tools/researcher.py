@@ -19,6 +19,7 @@ from prompts.tools_researcher import (
     ask_eda_template as prompt_ask_eda,
     datasets_prompt as prompt_datasets,
 )
+from schemas.researcher import DatasetDiscovery
 load_dotenv()
 
 
@@ -146,8 +147,6 @@ def download_external_datasets(question_1: str, question_2: str, question_3: str
         COMP_METADATA = yaml.safe_load(f)
 
     PROMPT = prompt_datasets()
-    pattern = r'```json\s*(\{.*?\})\s*```'
-
     relevant_datasets = []
 
     # Loop through 3 different query phrasings
@@ -164,19 +163,18 @@ def download_external_datasets(question_1: str, question_2: str, question_3: str
                 tools=[],
                 messages=input_list,
                 web_search_enabled=True,
+                text_format=DatasetDiscovery,
             )
-            completion = response.output_text or ""
 
-            matches = re.findall(pattern, completion, re.DOTALL)
-            if not matches:
-                logger.warning("No JSON block found in web search response for query %s attempt %s.", q_idx, attempt)
-                continue
-            else:
-                data = json.loads(matches[0])
-                new_datasets = data.get("datasets", [])
+            # Use structured output parsing
+            if response and hasattr(response, 'output_parsed') and response.output_parsed:
+                new_datasets = response.output_parsed.datasets
                 logger.info("Query %s found %s datasets: %s", q_idx, len(new_datasets), new_datasets)
                 relevant_datasets.extend(new_datasets)
                 break  # Success, move to next query
+            else:
+                logger.warning("No valid structured output for query %s attempt %s.", q_idx, attempt)
+                continue
 
     # Deduplicate datasets
     relevant_datasets = list(set(relevant_datasets))
