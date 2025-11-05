@@ -155,8 +155,10 @@ def ask_eda(question: str, description: str, data_path: str, max_attempts: int |
                 input_list.append({"role": "user", "content": result})
                 continue
 
-            # Success - return the output
+            # Success - truncate to last 30000 characters and return
             logger.info("ask_eda succeeded on attempt %s", attempt)
+            if len(result) > 30000:
+                result = "... (output truncated to last 30000 characters)\n\n" + result[-30000:]
             return result
 
     logger.error("ask_eda exhausted all attempts without success")
@@ -274,7 +276,6 @@ def get_tools(max_parallel_workers: int = 1):
                         "type": "array",
                         "description": f"List of A/B testing questions to run in parallel (max {max_parallel_workers}). Each question should be a comparison test (e.g., 'Train XGBoost with 80/20 split comparing baseline features vs baseline + interaction features and report cross-validated AUC')",
                         "items": {"type": "string"},
-                        "maxItems": max_parallel_workers
                     }
                 },
             },

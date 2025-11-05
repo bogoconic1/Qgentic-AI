@@ -5,10 +5,11 @@ import base64
 import mimetypes
 import threading
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import as_completed
 
 from dotenv import load_dotenv
 from project_config import get_config
+from weave.trace.util import ThreadPoolExecutor
 
 from tools.researcher import ask_eda, download_external_datasets, get_tools
 from prompts.researcher_agent import (
@@ -193,7 +194,7 @@ class ResearcherAgent:
                 f"task_types must be a non-empty list, got: {task_types}"
             )
 
-        return prompt_build_system(str(self.base_dir), task_type=task_types)
+        return prompt_build_system(str(self.base_dir), task_type=task_types, max_parallel_workers=self.max_parallel_workers)
 
     def _read_starter_suggestions(self) -> str:
         # Prefer raw starter_suggestions.txt; fallback to JSON; else 'None'
@@ -202,7 +203,11 @@ class ResearcherAgent:
             starter_suggestions = json.load(f)
         res = ""
         for key in starter_suggestions.keys():
-            res += f"<{key}>\n{starter_suggestions[key]}\n</{key}>\n"
+            value = starter_suggestions[key]
+            # Format lists as comma-separated strings instead of Python list representation
+            if isinstance(value, list):
+                value = ", ".join(str(item) for item in value)
+            res += f"<{key}>\n{value}\n</{key}>\n"
         return res
 
     def _execute_single_ab_test(self, question: str, index: int) -> tuple[str, str]:
@@ -328,6 +333,15 @@ class ResearcherAgent:
                     })
                 })
             else:
+                # Truncate to max_parallel_workers if too many questions provided
+                truncation_warning = ""
+                if len(questions) > self.max_parallel_workers:
+                    logger.warning(f"Received {len(questions)} questions but max_parallel_workers is {self.max_parallel_workers}. Truncating to first {self.max_parallel_workers} questions.")
+                    skipped_questions = questions[self.max_parallel_workers:]
+                    logger.info(f"Skipped questions: {skipped_questions}")
+                    truncation_warning = f"\n\nWARNING: You provided {len(questions)} questions but the maximum allowed is {self.max_parallel_workers}. Only the first {self.max_parallel_workers} were executed. The following questions were skipped:\n" + "\n".join([f"- {q}" for q in skipped_questions])
+                    questions = questions[:self.max_parallel_workers]
+
                 logger.info(f"Running {len(questions)} AB tests in parallel")
                 before_media = self._list_media_files()
 
@@ -349,7 +363,7 @@ class ResearcherAgent:
                             results.append(f"Question: {question}\nResult: Error - {str(e)}")
 
                 # Combine all results
-                combined_output = "\n\n---\n\n".join(results)
+                combined_output = "\n\n---\n\n".join(results) + truncation_warning
 
                 input_list.append({
                     "type": "function_call_output",
