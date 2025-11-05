@@ -1,26 +1,8 @@
 import logging
-import os
 import ast
 from typing import Any, Dict, List, Optional
 
-from dotenv import load_dotenv
-from openai import OpenAI
-from project_config import get_config
-
-from tools.helpers import call_llm_with_retry
-from prompts.guardrails import (
-    leakage_review as prompt_leakage_review,
-    debug_sequence_review as prompt_debug_sequence_review,
-)
-
-
-load_dotenv()
 logger = logging.getLogger(__name__)
-
-_CONFIG = get_config()
-_LLM_CFG = _CONFIG.get("llm")
-_LEAKAGE_REVIEW_MODEL = _LLM_CFG.get("leakage_review_model")
-_LEAKAGE_FOLLOWUP_MODEL = _LLM_CFG.get("leakage_followup_model")
 
 # -----------------------------
 # Guardrails: Static logging AST
@@ -138,46 +120,3 @@ def check_logging_basicconfig_order(code: str) -> Dict[str, Any]:
         "basicConfig_line": basic_line,
         "violations": violations,
     }
-
-
-# ----------------------------------------------
-# Guardrails: LLM-based data leakage risk review
-# ----------------------------------------------
-def llm_leakage_review(code: str) -> str:
-    """
-    Ask an LLM to review potential data leakage risks in the generated code.
-    Uses the configured leakage review model via OpenRouter. Returns raw model text.
-    """
-    system_prompt = prompt_leakage_review()
-
-    input_list = [
-        {"role": "user", "content": "Python Training Script: \n\n" + code}
-    ]
-
-    response = call_llm_with_retry(
-        model=_LEAKAGE_REVIEW_MODEL,
-        instructions=system_prompt,
-        tools=[],
-        messages=input_list,
-    )
-
-    return response.output_text or ""
-
-
-
-def llm_debug_sequence_review(code: str) -> str:
-    """Ensure generated code runs DEBUG then FULL modes and guards against NaNs/zeros."""
-    content_payload = prompt_debug_sequence_review()
-
-    input_list = [
-        {"role": "user", "content": "Python Training Pipeline: \n\n" + code}
-    ]
-
-    response = call_llm_with_retry(
-        model=_LEAKAGE_FOLLOWUP_MODEL,
-        instructions=content_payload,
-        tools=[],
-        messages=input_list,
-    )
-
-    return response.output_text or ""
