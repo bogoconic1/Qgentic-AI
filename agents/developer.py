@@ -781,7 +781,7 @@ class DeveloperAgent:
         log_content: str,
         version: int,
         attempt: int
-    ) -> tuple[str, float]:
+    ) -> tuple[str, float, Optional[int], Optional[float]]:
         """Evaluate submission and build enriched code context.
 
         Args:
@@ -791,9 +791,11 @@ class DeveloperAgent:
             attempt: Attempt number
 
         Returns:
-            Tuple of (code_with_logs, run_score)
+            Tuple of (code_with_logs, run_score, previous_successful_version, base_score)
             - code_with_logs: Code with execution logs, score, and analysis
             - run_score: Score from grading (or inf/-inf if no submission)
+            - previous_successful_version: Most recent successful version before this one
+            - base_score: Score of the previous successful version
         """
         submission_path = self.outputs_dir / self._submission_filename(version)
         code_with_logs = "<code>\n" + code_clean + "\n</code>\n"
@@ -801,6 +803,10 @@ class DeveloperAgent:
             code_with_logs += f"<validation_log>\n{log_content[-30000:]}\n</validation_log>\n"  # to avoid token limit issues
 
         run_score = float("inf") if self.is_lower_better else float("-inf")
+
+        # Initialize variables that will be returned (set properly if submission exists)
+        previous_successful_version: Optional[int] = None
+        base_score: Optional[float] = None
 
         if submission_path.exists():
             self.latest_submission_path = submission_path
@@ -907,7 +913,9 @@ class DeveloperAgent:
             code_with_logs += f"<analysis>\n{analysis_msg}\n</analysis>\n"
             self.previous_runs.append((code_clean, run_score))
 
-        return code_with_logs, run_score
+        # Return previous_successful_version and base_score for use in run() method
+        # These are None if no submission was generated or if this is the first successful version
+        return code_with_logs, run_score, previous_successful_version, base_score
 
     def _gather_sota_feedback(self, code_with_logs: str) -> any:
         """Gather SOTA feedback through red flags analysis and SOTA suggestions.
@@ -1077,7 +1085,7 @@ class DeveloperAgent:
             output, log_content = self._execute_and_read_log(code_path, version)
 
             # Evaluate submission and build enriched context
-            code_with_logs, run_score = self._evaluate_submission(code_clean, log_content, version, attempt)
+            code_with_logs, run_score, previous_successful_version, base_score = self._evaluate_submission(code_clean, log_content, version, attempt)
 
             # Only continue gathering feedback if submission exists
             if self.latest_submission_path:
