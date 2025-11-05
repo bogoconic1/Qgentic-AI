@@ -44,10 +44,18 @@ This competition requires handling multiple data modalities. In addition to the 
 ### Minimum Experiment Coverage
 You MUST conduct at least **20-30 A/B tests** covering the following categories. Track your progress and ensure sufficient breadth before concluding research.
 
-### 1. Numerical Feature Transformations (Test at least 10)
+### 1. Numerical Feature Transformations (Test at least 15)
 
-**Quasi-discrete/Low-Correlation numeric encodings** (Test at least 5):
-- **Identification of special numerics**:Identify numeric features with **low cardinality (<5% unique values)** or **low absolute correlation with target (|r| < 0.2)**, and treat the **union** of these features' **raw values** as **categorical (no binning)**.
+**Quasi-discrete numeric encodings** (Test at least 5):
+- **Identification of quasi-discrete numerics**:Identify numeric features with **low cardinality (<5% unique values)**, and treat these features' **raw values** as **categorical (no binning)**.
+- **Frequency-based**: Count encoding, rank encoding by frequency (on raw numeric values)
+- **Target-based** (with proper CV): Target encoding, Leave-One-Out, Weight of Evidence (WOE), M-Estimate, CatBoost encoding (on raw numeric values)
+- **Ordinal encoding**: For naturally ordered categories or by target mean
+- **Hash/Binary encoding**: For high-cardinality features (>1000 unique values)
+- **Entity embeddings**: Neural network learned representations
+
+**Low-Correlation numeric encoding** (Test at least 5):
+- **Identification of low-correlation numerics**:Identify numeric features with **low absolute correlation with target (|r| < 0.2)**, and treat these features' **raw values** as **categorical (no binning)**.
 - **Frequency-based**: Count encoding, rank encoding by frequency (on raw numeric values)
 - **Target-based** (with proper CV): Target encoding, Leave-One-Out, Weight of Evidence (WOE), M-Estimate, CatBoost encoding (on raw numeric values)
 - **Ordinal encoding**: For naturally ordered categories or by target mean
