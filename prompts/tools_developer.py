@@ -16,30 +16,12 @@ Guide the assistant in generating a structured and actionable debugging workflow
 - Do not recommend downgrading packages except as a last resort after all other solutions have been explored.
 
 # Output Format
-Return a single JSON object within ```json backticks with the following fields (in this order):
-- `checklist`: JSON array (3-7 high-level debugging steps as strings).
-- `web_search_findings`: Brief summary of the most relevant insights from the web search, mentioning key community/documentation sources if directly used.
-- `reasoning_and_solution`: Clear, detailed description explaining both the reasoning ('why') and the fix ('how').
+Provide the following fields:
+- `checklist`: Array of 3-7 high-level debugging steps as strings (e.g., "Examine the error message to find the failing module or function", "Pinpoint relevant code locations from the stack trace", "Research known issues via documentation").
+- `web_search_findings`: Brief summary of the most relevant insights from the web search, mentioning key community/documentation sources if directly used (e.g., "Stack Overflow threads highlight that this error commonly stems from mismatched input types; official docs recommend checking input shapes").
+- `reasoning_and_solution`: Clear, detailed description explaining both the reasoning ('why') and the fix ('how') (e.g., "The function expects a NumPy array, but a list was provided. Convert the list to numpy.array before calling the function as a fix").
 - `validation`: 1-2 lines confirming your recommendation addresses the specific error or stack trace. If the recommendation does not fully resolve the error based on validation, provide a minimal self-correction and re-validate.
 - `further_steps`: Any additional required actions, or a confirmation that the issue should now be resolved.
-
-# Example Output
-```json
-{
-  "checklist": [
-    "Examine the error message to find the failing module or function.",
-    "Pinpoint relevant code locations from the stack trace.",
-    "Identify search keywords based on the exception and context.",
-    "Research known issues and solutions via documentation and communities.",
-    "Formulate a suitable fix or workaround.",
-    "Test your changes to confirm resolution."
-  ],
-  "web_search_findings": "Stack Overflow threads highlight that this error commonly stems from mismatched input types; official docs recommend checking input shapes.",
-  "reasoning_and_solution": "The function expects a NumPy array, but a list was provided. Convert the list to numpy.array before calling the function as a fix.",
-  "validation": "This approach resolves the ValueError by ensuring input type compatibility as per the stack trace.",
-  "further_steps": "No further action needed; confirm resolution post-fix."
-}
-```
 """
 
 def red_flags_system() -> str:
@@ -237,28 +219,11 @@ Provide a 1–3 sentence milestone micro-update at key logical boundaries: after
     - Key takeaways from shared suggestions analysis
     - If there is no shared experiments, state "No shared experiments yet."
 - Research and Suggestion (three numbered, one per category)
-- Previous Suggestion Review: strict JSON (with a boolean and reason), using this exact format within backticks:
-```json
-{{
-    "blacklist": <true or false>,
-    "reason": "<succinct justification>"
-}}
-```
-- New Suggestion Summary: strict JSON (single best idea and reasoning), using this exact format within backticks:
-```json
-{{
-    "suggestion": "<your proposed best next idea>",
-    "reasoning": "<why it is the best choice now, referencing the red flags and shared suggestions analyses if relevant>"
-}}
-```
-If no suggestion is viable, or you believe this model family has no hope of getting a competitive score, return:
-```json
-{{
-    "suggestion": "No suggestions.",
-    "reasoning": "<explain why you deem the model family unviable for competitive performance>"
-}}
-```
-- Code: Python snippet of the new suggestion, or no code if not applicable
+- Previous Suggestion Review and New Suggestion: Provide the following fields:
+  - `blacklist`: Boolean indicating whether the previous suggestion should be blacklisted (true or false)
+  - `blacklist_reason`: Succinct justification for the blacklist decision
+  - `suggestion`: Your proposed best next idea (or "No suggestions." if no suggestion is viable)
+  - `suggestion_reason`: Why it is the best choice now, referencing the red flags and shared suggestions analyses if relevant (or explain why you deem the model family unviable for competitive performance if no suggestion)
 - Input Schema: enumeration of all input fields
 - Output Fields: enumeration of all output fields in markdown
 
@@ -271,7 +236,6 @@ def sota_user(
     red_flags: str,
     failed_ideas_text: str,
     executed_suggestion_text: str,
-    executed_code_text: str,
     context: str,
     shared_suggestions_text: str = "No shared suggestions yet.",
     external_data_listing: str = "No external data directories found.",
@@ -301,10 +265,6 @@ def sota_user(
 <previous suggestion executed>
 {executed_suggestion_text}
 </previous suggestion executed>
-
-<previous code snippet applied>
-{executed_code_text}
-</previous code snippet applied>
 
 {context}
 """

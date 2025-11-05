@@ -14,7 +14,7 @@ import weave
 import wandb
 
 from tools.developer import (
-    execute_code_with_oom_retry,
+    execute_code,
     search_red_flags,
     search_sota_suggestions,
 )
@@ -47,8 +47,6 @@ _RUNTIME_CFG = _CONFIG.get("runtime")
 _GUARDRAIL_CFG = _CONFIG.get("guardrails")
 
 _ENABLE_LOGGING_GUARD = bool(_GUARDRAIL_CFG.get("logging_basicconfig_order"))
-_ENABLE_NAN_GUARD = bool(_GUARDRAIL_CFG.get("nan_guard"))
-_ENABLE_LEAKAGE_GUARD = bool(_GUARDRAIL_CFG.get("leakage_review"))
 
 _PATCH_MODE_ENABLED = bool(_RUNTIME_CFG.get("patch_mode_enabled"))
 
@@ -108,7 +106,6 @@ class DeveloperAgent:
         self.version_scores: dict[int, float] = {}  # Map version number to its score
         self.global_suggestions: list[str] = []  # All suggestions with score impact: "suggestion (score improved/worsened/remained by DDD: XXX -> YYY)"
         self.last_suggestion: Optional[str] = None
-        self.last_suggestion_code: Optional[str] = None
         self.best_code: Optional[str] = None
         self.best_code_file: Optional[str] = None
         self.best_version: Optional[int] = None
@@ -596,48 +593,27 @@ class DeveloperAgent:
 
         return f"{suggestion} (score {impact}: {prev_display} -> {curr_display})"
 
-    def _parse_sota_response(self, raw: str) -> tuple[str, str, bool, str]:
-        """Extract new suggestion, code snippet, blacklist decision, and rationale."""
+    def _parse_sota_response(self, response) -> tuple[str, bool, str]:
+        """Extract new suggestion, blacklist decision, and rationale from structured output."""
         # ok to fallback if LLM cannot give response
         suggestion_text = ""
-        code_snippet = ""
         blacklist_flag = False
         blacklist_reason = ""
 
-        if not raw:
-            return suggestion_text, code_snippet, blacklist_flag, blacklist_reason
+        if not response:
+            return suggestion_text, blacklist_flag, blacklist_reason
 
-        json_blocks = []
-        try:
-            json_blocks = re.findall(r"```json\s*(\{.*?\})\s*```", raw, re.DOTALL | re.IGNORECASE)
-        except Exception:
-            self.logger.debug("Unable to locate JSON blocks in SOTA suggestions output.")
+        # Use structured output
+        if hasattr(response, 'output_parsed') and response.output_parsed:
+            parsed = response.output_parsed
+            suggestion_text = parsed.suggestion.strip()
+            blacklist_flag = bool(parsed.blacklist)
+            blacklist_reason = parsed.blacklist_reason.strip()
+            self.logger.debug("Using structured SOTA output: suggestion=%s, blacklist=%s", suggestion_text, blacklist_flag)
+        else:
+            self.logger.warning("No structured output in SOTA response, falling back to empty values")
 
-        decision_payload = {}
-        suggestion_payload = {}
-
-        if json_blocks:
-            try:
-                decision_payload = json.loads(json_blocks[0])
-            except Exception:
-                self.logger.debug("Failed to parse blacklist decision JSON block.")
-        if len(json_blocks) >= 2:
-            try:
-                suggestion_payload = json.loads(json_blocks[1])
-            except Exception:
-                self.logger.debug("Failed to parse suggestion JSON block.")
-
-        blacklist_flag = bool(decision_payload.get("blacklist", False))
-        blacklist_reason = (decision_payload.get("reason") or "").strip()
-        suggestion_text = (suggestion_payload.get("suggestion") or "").strip()
-        if not suggestion_text:
-            suggestion_text = (decision_payload.get("suggestion") or "").strip()
-
-        code_match = re.search(r"```python\s*(.*?)\s*```", raw, re.DOTALL | re.IGNORECASE)
-        if code_match:
-            code_snippet = code_match.group(1).strip()
-
-        return suggestion_text, code_snippet, blacklist_flag, blacklist_reason
+        return suggestion_text, blacklist_flag, blacklist_reason
 
     def _register_blacklist(self, suggestion: str, reason: str | None = None) -> None:
         if not suggestion:
@@ -857,8 +833,6 @@ class DeveloperAgent:
             guard_report = evaluate_guardrails(
                 code_text=code_text,
                 enable_logging_guard=_ENABLE_LOGGING_GUARD,
-                enable_nan_guard=_ENABLE_NAN_GUARD,
-                enable_leakage_guard=_ENABLE_LEAKAGE_GUARD,
             )
 
             try:
@@ -882,25 +856,15 @@ class DeveloperAgent:
                 # continue to next attempt without execution
                 continue
 
-            # Execute the code with OOM retry logic
-            # If GPU isolation is enabled (MIG or multi-GPU), skip OOM polling (treat OOM as a code bug, not resource contention)
-            skip_oom_polling = self.gpu_isolation_mode in ["mig", "multi-gpu"]
+            # Execute the code
             timeout_seconds = self._get_code_timeout()
-            output, wait_time = execute_code_with_oom_retry(
+            output = execute_code(
                 str(code_path),
                 timeout_seconds=timeout_seconds,
-                skip_oom_polling=skip_oom_polling,
                 conda_env=self.conda_env
             )
             self.logger.info("Execution output captured for version v%s", version)
             self.logger.debug("Execution output: %s", output)
-
-            # Extend deadline to exclude OOM waiting time from budget
-            if wait_time > 0:
-                deadline += wait_time
-                self.logger.info(
-                    f"Extended deadline by {wait_time/60:.1f} minutes to exclude OOM retry wait time"
-                )
 
             log_path = self.outputs_dir / self._log_filename(version)
             log_content = ""
@@ -1052,25 +1016,23 @@ class DeveloperAgent:
                     self.logger.info("Using %d shared suggestions from all models (including this one)",
                                    len(shared_suggestions))
 
-                    sota_suggestions = self._call_sota_suggestions(
+                    sota_response = self._call_sota_suggestions(
                         description=self.description,
                         context=code_with_logs,
                         red_flags=final_summary,
                         executed_suggestion=self.last_suggestion,
                         failed_ideas=self.blacklisted_ideas,  # Keep instance-level for context
                         shared_suggestions=shared_suggestions,  # New: shared across all models
-                        executed_code=self.last_suggestion_code,
                         later_recommendations=later_context,
                         external_data_listing=self.external_data_listing,
                         plan_content=self.plan_content,
                     )
                 except Exception:
                     self.logger.exception("Failed to fetch red flags or SOTA suggestions for attempt %s", attempt)
-                    sota_suggestions = ""
+                    sota_response = None
 
-                self.logger.info("SOTA suggestion: %s", sota_suggestions)
-
-                suggestion_text, code_snippet, blacklist_flag, blacklist_reason = self._parse_sota_response(sota_suggestions)
+                suggestion_text, blacklist_flag, blacklist_reason = self._parse_sota_response(sota_response)
+                self.logger.info("SOTA suggestion: %s (blacklist=%s)", suggestion_text, blacklist_flag)
 
                 # Record the previous suggestion with its score impact (before updating self.last_suggestion)
                 if previous_successful_version is None:
@@ -1132,8 +1094,6 @@ class DeveloperAgent:
                     # if suggestion missing but blacklist decision made, reset last suggestion
                     self.last_suggestion = None
 
-                self.last_suggestion_code = code_snippet if code_snippet else None
-
                 next_log_path = self.outputs_dir / self._log_filename(version + 1)
                 next_submission_path = self.outputs_dir / self._submission_filename(version + 1)
 
@@ -1142,11 +1102,6 @@ class DeveloperAgent:
                     suggestion_block += f"<suggestion>\n{suggestion_text}\n</suggestion>\n"
                 else:
                     suggestion_block += "<suggestion>\nNo suggestion provided.\n</suggestion>\n"
-
-                if code_snippet:
-                    suggestion_block += "Suggested code snippet:\n```python\n" + code_snippet + "\n```\n"
-                else:
-                    suggestion_block += "Suggested code snippet: No code provided.\n"
 
                 # Choose consistent base for the next patch: use most recent valid when blacklisted, else current version.
                 rollback_code = None
