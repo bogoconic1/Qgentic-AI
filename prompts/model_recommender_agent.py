@@ -153,15 +153,29 @@ List the selected categories with **1-2 sentences** explaining *why* each is rel
 - …(add more if justified)
 
 ### Suggestions
+Provide a single JSON block within ```json backticks with **MUST_HAVE** and **NICE_TO_HAVE** sections.
 Provide **MUST_HAVE** and **NICE_TO_HAVE** recommendations **per selected category**. Each item must include a crisp rationale and compute awareness.
 
-For each relevant category (e.g., feature_creation, data_augmentation, preprocessing, tokenization, etc.), provide:
-- **MUST_HAVE**: A list of strategy items, each with "strategy" and "explanation" fields
-- **NICE_TO_HAVE**: A list of strategy items, each with "strategy" and "explanation" fields
-
-Each strategy item should include:
-- "strategy": The specific strategy to apply
-- "explanation": Why this is must-have or nice-to-have for a top-notch solution
+**Schema (example; adapt categories to the task):**
+```json
+{
+  "feature_creation": {
+    "MUST_HAVE": [
+      {
+        "strategy": "string",
+        "explanation": "why this is a must have for a top-notch solution",
+      }
+    ],
+    "NICE_TO_HAVE": [
+      {
+        "strategy": "string",
+        "explanation": "why this is a nice to have for a top-notch solution and not strictly necessary",
+      }
+    ]
+  },
+  "data_augmentation": { "MUST_HAVE": [...], "NICE_TO_HAVE": [...] }
+}
+```
 """
 
 def loss_function_system_prompt() -> str:

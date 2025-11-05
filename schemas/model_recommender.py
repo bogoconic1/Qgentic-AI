@@ -36,6 +36,7 @@ class CategoryRecommendations(BaseModel):
     NICE_TO_HAVE: list[StrategyItem]
 
 
+# THIS IS BUGGY AND NOT USED
 class PreprocessingRecommendations(BaseModel):
     """Schema for preprocessing recommendations - flexible categories."""
     # Allow any category name with MUST_HAVE/NICE_TO_HAVE structure

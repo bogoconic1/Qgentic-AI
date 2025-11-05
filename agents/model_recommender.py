@@ -172,16 +172,25 @@ class ModelRecommenderAgent:
                 tools=[],
                 messages=messages,
                 web_search_enabled=_ENABLE_WEB_SEARCH,
-                text_format=PreprocessingRecommendations,
             )
 
-            # Use structured output
-            if not response or not hasattr(response, 'output_parsed') or not response.output_parsed:
-                logger.warning("[%s] No structured output for preprocessing", model_name)
+            # Parse JSON from response text
+            if not response or not response.output_text:
+                logger.warning("[%s] No response for preprocessing", model_name)
                 return {}
 
-            # Convert Pydantic model to dict (since it has extra="allow")
-            result = response.output_parsed.model_dump()
+            # Extract JSON from code blocks
+            import re
+            import json
+            response_text = response.output_text
+            json_pattern = r'```json\s*(.*?)\s*```'
+            matches = re.findall(json_pattern, response_text, re.DOTALL)
+
+            if not matches:
+                logger.warning("[%s] No JSON block found in preprocessing response", model_name)
+                return {}
+
+            result = json.loads(matches[0])
             logger.info("[%s] Successfully parsed preprocessing recommendations", model_name)
 
             return result
