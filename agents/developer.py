@@ -563,6 +563,40 @@ class DeveloperAgent:
             return "N/A"
         return f"{value}"
 
+    def _execute_and_read_log(self, code_path: Path, version: int) -> tuple[str, str]:
+        """Execute code and read execution log.
+
+        Args:
+            code_path: Path to the code file to execute
+            version: Version number for logging
+
+        Returns:
+            Tuple of (execution_output, log_content)
+        """
+        timeout_seconds = self._get_code_timeout()
+        output = execute_code(
+            str(code_path),
+            timeout_seconds=timeout_seconds,
+            conda_env=self.conda_env
+        )
+        self.logger.info("Execution output captured for version v%s", version)
+        self.logger.debug("Execution output: %s", output)
+
+        log_path = self.outputs_dir / self._log_filename(version)
+        log_content = ""
+        try:
+            if log_path.exists():
+                log_content = log_path.read_text().strip()
+                self.logger.debug(
+                    "Loaded execution log from %s (length=%s)",
+                    log_path,
+                    len(log_content),
+                )
+        except Exception:
+            self.logger.exception("Failed to read execution log at %s", log_path)
+
+        return output, log_content
+
     def _format_suggestion_entry(self, suggestion: str, previous_score: Optional[float], current_score: Optional[float]) -> str:
         """Format a suggestion entry with score impact information.
 
@@ -741,6 +775,189 @@ class DeveloperAgent:
         """
         return search_sota_suggestions(**kwargs)
 
+    def _evaluate_submission(
+        self,
+        code_clean: str,
+        log_content: str,
+        version: int,
+        attempt: int
+    ) -> tuple[str, float]:
+        """Evaluate submission and build enriched code context.
+
+        Args:
+            code_clean: Clean code without markdown fences
+            log_content: Execution log content
+            version: Version number
+            attempt: Attempt number
+
+        Returns:
+            Tuple of (code_with_logs, run_score)
+            - code_with_logs: Code with execution logs, score, and analysis
+            - run_score: Score from grading (or inf/-inf if no submission)
+        """
+        submission_path = self.outputs_dir / self._submission_filename(version)
+        code_with_logs = "<code>\n" + code_clean + "\n</code>\n"
+        if log_content:
+            code_with_logs += f"<validation_log>\n{log_content[-30000:]}\n</validation_log>\n"  # to avoid token limit issues
+
+        run_score = float("inf") if self.is_lower_better else float("-inf")
+
+        if submission_path.exists():
+            self.latest_submission_path = submission_path
+            # Mark this version as successful (generated submission)
+            self.successful_versions.add(version)
+            self.logger.info(
+                "Submission detected at %s after attempt %s (marking v%s as successful)",
+                submission_path, attempt, version
+            )
+            grade_feedback = ""
+            previous_successful_version = self.last_successful_version  # Initialize before try
+            try:
+                info, grade_feedback, returncode, stderr = run_grade(str(submission_path), self.slug)
+                try:
+                    self.logger.info("Grade feedback: %s", grade_feedback)
+                except Exception:
+                    self.logger.debug("Failed to log grade feedback for version %s", version)
+                if returncode != 0:
+                    self.logger.warning(
+                        "Grading command returned non-zero exit (%s). stderr=\n%s",
+                        returncode,
+                        stderr,
+                    )
+                else:
+                    self.logger.info("Grading command completed successfully for version %s", version)
+                    run_score = info.get('score') if info else None
+                    self._log_attempt_score(attempt, run_score)
+                    self.logger.info("Your result on the test set is %s", run_score)
+                    # Store score for this version and track for comparison
+                    if run_score is not None:
+                        self.version_scores[version] = run_score
+                        self.last_successful_version = version
+            except Exception as exc:
+                grade_feedback = f"Failed to run grading tool: {exc}"
+                self.logger.exception("Grading command failed for version %s", version)
+
+            code_with_logs += f"<leaderboard_score>\n{run_score}\n</leaderboard_score>\n"
+
+            # Compare against most recent successful version (with a score)
+            if previous_successful_version is not None:
+                base_version = previous_successful_version
+                base_score = self.version_scores[base_version]
+            else:
+                # This is the first version with a score, no comparison base
+                base_version = None
+                base_score = None
+
+            run_score_display = self._format_score_value(run_score)
+            improvement = self._is_improvement(run_score, base_score) if base_score is not None else False
+
+            # Always check and update global best, regardless of base comparison
+            if self._is_improvement(run_score, self.best_score):
+                self.best_score = run_score
+                self.best_version = version
+                self.best_code = code_clean
+                self.best_code_file = self._code_filename(version)
+                self.logger.info("New global best achieved: %s (version %s)", run_score, version)
+
+            if improvement:
+                self.logger.info(
+                    "Score improved from base v%s: %s -> %s (global best: %s)",
+                    base_version,
+                    base_score,
+                    run_score,
+                    self.best_score,
+                )
+            else:
+                self.logger.info(
+                    "No improvement from base v%s: %s (current score: %s, global best: %s)",
+                    base_version,
+                    base_score,
+                    run_score,
+                    self.best_score,
+                )
+
+            # Build analysis message with context
+            analysis_msg = f"The current score is {run_score_display}."
+
+            # Add previous score context if available
+            if base_score is not None:
+                base_score_display = self._format_score_value(base_score)
+                analysis_msg += f" Your score before implementing this suggestion was {base_score_display}."
+
+            # Add target context
+            if self.gold_threshold is not None and run_score is not None:
+                # Compare current score to target (accounting for metric direction)
+                if self.is_lower_better:
+                    if run_score <= self.gold_threshold:
+                        analysis_msg += f" You have reached/exceeded the TARGET of {self.gold_threshold}! Focus on further incremental improvements."
+                    else:
+                        gap = run_score - self.gold_threshold
+                        analysis_msg += f" Current gap to TARGET ({self.gold_threshold}): {gap:.6f}. Let's close this gap."
+                else:
+                    if run_score >= self.gold_threshold:
+                        analysis_msg += f" You have reached/exceeded the TARGET of {self.gold_threshold}! Focus on further incremental improvements."
+                    else:
+                        gap = self.gold_threshold - run_score
+                        analysis_msg += f" Current gap to TARGET ({self.gold_threshold}): {gap:.6f}. Let's close this gap."
+            elif run_score is None:
+                analysis_msg += " The submission failed to produce a valid score. Please review the error logs and fix any issues."
+            else:
+                analysis_msg += " Let's push further to reach an even stronger result."
+
+            code_with_logs += f"<analysis>\n{analysis_msg}\n</analysis>\n"
+            self.previous_runs.append((code_clean, run_score))
+
+        return code_with_logs, run_score
+
+    def _gather_sota_feedback(self, code_with_logs: str) -> any:
+        """Gather SOTA feedback through red flags analysis and SOTA suggestions.
+
+        Args:
+            code_with_logs: Code with execution logs and analysis
+
+        Returns:
+            SOTA response object or None if gathering failed
+        """
+        try:
+            # Format LATER recommendations for context
+            later_context = self._format_later_recommendations()
+
+            # STAGE 1: Identify red flags via direct analysis
+            self.logger.info("Stage 1: Identifying red flags via direct analysis...")
+            red_flags_response = search_red_flags(
+                description=self.description,
+                context=code_with_logs,
+            )
+            self.logger.info("Red flags response length: %d chars", len(red_flags_response))
+
+            # Extract Final Summary from red flags response
+            final_summary = self._extract_final_summary(red_flags_response)
+
+            # STAGE 2: Generate SOTA suggestions based on red flags
+            self.logger.info("Stage 2: Generating SOTA suggestions based on red flags...")
+
+            # Get shared suggestions from all parallel models
+            shared_suggestions = self._get_shared_suggestions()
+
+            self.logger.info("Using %d shared suggestions from all models (including this one)",
+                           len(shared_suggestions))
+
+            sota_response = self._call_sota_suggestions(
+                description=self.description,
+                context=code_with_logs,
+                red_flags=final_summary,
+                executed_suggestion=self.last_suggestion,
+                failed_ideas=self.blacklisted_ideas,  # Keep instance-level for context
+                shared_suggestions=shared_suggestions,  # New: shared across all models
+                later_recommendations=later_context,
+                external_data_listing=self.external_data_listing,
+                plan_content=self.plan_content,
+            )
+            return sota_response
+        except Exception as exc:
+            self.logger.exception("Failed to fetch red flags or SOTA suggestions")
+            return None
+
     @weave.op()
     def run(self, max_time_seconds: int = 6 * 3600) -> bool:
         self.logger.info(
@@ -856,180 +1073,16 @@ class DeveloperAgent:
                 # continue to next attempt without execution
                 continue
 
-            # Execute the code
-            timeout_seconds = self._get_code_timeout()
-            output = execute_code(
-                str(code_path),
-                timeout_seconds=timeout_seconds,
-                conda_env=self.conda_env
-            )
-            self.logger.info("Execution output captured for version v%s", version)
-            self.logger.debug("Execution output: %s", output)
+            # Execute the code and read log
+            output, log_content = self._execute_and_read_log(code_path, version)
 
-            log_path = self.outputs_dir / self._log_filename(version)
-            log_content = ""
-            try:
-                if log_path.exists():
-                    log_content = log_path.read_text().strip()
-                    self.logger.debug(
-                        "Loaded execution log from %s (length=%s)",
-                        log_path,
-                        len(log_content),
-                    )
-            except Exception:
-                self.logger.exception("Failed to read execution log at %s", log_path)
+            # Evaluate submission and build enriched context
+            code_with_logs, run_score = self._evaluate_submission(code_clean, log_content, version, attempt)
 
-            submission_path = self.outputs_dir / self._submission_filename(version)
-            code_with_logs = "<code>\n" + code_clean + "\n</code>\n"
-            if log_content:
-                code_with_logs += f"<validation_log>\n{log_content[-30000:]}\n</validation_log>\n"  # to avoid token limit issues
-
-            run_score = float("inf") if self.is_lower_better else float("-inf")
-
-            if submission_path.exists():
-                self.latest_submission_path = submission_path
-                # Mark this version as successful (generated submission)
-                self.successful_versions.add(version)
-                self.logger.info(
-                    "Submission detected at %s after attempt %s (marking v%s as successful)",
-                    submission_path, attempt, version
-                )
-                grade_feedback = ""
-                try:
-                    info, grade_feedback, returncode, stderr = run_grade(str(submission_path), self.slug)
-                    try:
-                        self.logger.info("Grade feedback: %s", grade_feedback)
-                    except Exception:
-                        self.logger.debug("Failed to log grade feedback for version %s", version)
-                    if returncode != 0:
-                        self.logger.warning(
-                            "Grading command returned non-zero exit (%s). stderr=\n%s",
-                            returncode,
-                            stderr,
-                        )
-                    else:
-                        self.logger.info("Grading command completed successfully for version %s", version)
-                        run_score = info.get('score') if info else None
-                        self._log_attempt_score(attempt, run_score)
-                        self.logger.info("Your result on the test set is %s", run_score)
-                        # Store score for this version and track for comparison
-                        previous_successful_version = self.last_successful_version  # Save before updating
-                        if run_score is not None:
-                            self.version_scores[version] = run_score
-                            self.last_successful_version = version
-                except Exception as exc:
-                    grade_feedback = f"Failed to run grading tool: {exc}"
-                    self.logger.exception("Grading command failed for version %s", version)
-                    previous_successful_version = self.last_successful_version
-
-                code_with_logs += f"<leaderboard_score>\n{run_score}\n</leaderboard_score>\n"
-
-                # Compare against most recent successful version (with a score)
-                if previous_successful_version is not None:
-                    base_version = previous_successful_version
-                    base_score = self.version_scores[base_version]
-                else:
-                    # This is the first version with a score, no comparison base
-                    base_version = None
-                    base_score = None
-
-                run_score_display = self._format_score_value(run_score)
-                improvement = self._is_improvement(run_score, base_score) if base_score is not None else False
-
-                # Always check and update global best, regardless of base comparison
-                if self._is_improvement(run_score, self.best_score):
-                    self.best_score = run_score
-                    self.best_version = version
-                    self.best_code = code_clean
-                    self.best_code_file = self._code_filename(version)
-                    self.logger.info("New global best achieved: %s (version %s)", run_score, version)
-
-                if improvement:
-                    self.logger.info(
-                        "Score improved from base v%s: %s -> %s (global best: %s)",
-                        base_version,
-                        base_score,
-                        run_score,
-                        self.best_score,
-                    )
-                else:
-                    self.logger.info(
-                        "No improvement from base v%s: %s (current score: %s, global best: %s)",
-                        base_version,
-                        base_score,
-                        run_score,
-                        self.best_score,
-                    )
-
-                # Build analysis message with context
-                analysis_msg = f"The current score is {run_score_display}."
-
-                # Add previous score context if available
-                if base_score is not None:
-                    base_score_display = self._format_score_value(base_score)
-                    analysis_msg += f" Your score before implementing this suggestion was {base_score_display}."
-
-                # Add target context
-                if self.gold_threshold is not None and run_score is not None:
-                    # Compare current score to target (accounting for metric direction)
-                    if self.is_lower_better:
-                        if run_score <= self.gold_threshold:
-                            analysis_msg += f" You have reached/exceeded the TARGET of {self.gold_threshold}! Focus on further incremental improvements."
-                        else:
-                            gap = run_score - self.gold_threshold
-                            analysis_msg += f" Current gap to TARGET ({self.gold_threshold}): {gap:.6f}. Let's close this gap."
-                    else:
-                        if run_score >= self.gold_threshold:
-                            analysis_msg += f" You have reached/exceeded the TARGET of {self.gold_threshold}! Focus on further incremental improvements."
-                        else:
-                            gap = self.gold_threshold - run_score
-                            analysis_msg += f" Current gap to TARGET ({self.gold_threshold}): {gap:.6f}. Let's close this gap."
-                elif run_score is None:
-                    analysis_msg += " The submission failed to produce a valid score. Please review the error logs and fix any issues."
-                else:
-                    analysis_msg += " Let's push further to reach an even stronger result."
-
-                code_with_logs += f"<analysis>\n{analysis_msg}\n</analysis>\n"
-                self.previous_runs.append((code_clean, run_score))
-
-                try:
-                    # Format LATER recommendations for context
-                    later_context = self._format_later_recommendations()
-
-                    # STAGE 1: Identify red flags via direct analysis
-                    self.logger.info("Stage 1: Identifying red flags via direct analysis...")
-                    red_flags_response = search_red_flags(
-                        description=self.description,
-                        context=code_with_logs,
-                    )
-                    self.logger.info("Red flags response length: %d chars", len(red_flags_response))
-
-                    # Extract Final Summary from red flags response
-                    final_summary = self._extract_final_summary(red_flags_response)
-
-                    # STAGE 2: Generate SOTA suggestions based on red flags
-                    self.logger.info("Stage 2: Generating SOTA suggestions based on red flags...")
-
-                    # Get shared suggestions from all parallel models
-                    shared_suggestions = self._get_shared_suggestions()
-
-                    self.logger.info("Using %d shared suggestions from all models (including this one)",
-                                   len(shared_suggestions))
-
-                    sota_response = self._call_sota_suggestions(
-                        description=self.description,
-                        context=code_with_logs,
-                        red_flags=final_summary,
-                        executed_suggestion=self.last_suggestion,
-                        failed_ideas=self.blacklisted_ideas,  # Keep instance-level for context
-                        shared_suggestions=shared_suggestions,  # New: shared across all models
-                        later_recommendations=later_context,
-                        external_data_listing=self.external_data_listing,
-                        plan_content=self.plan_content,
-                    )
-                except Exception:
-                    self.logger.exception("Failed to fetch red flags or SOTA suggestions for attempt %s", attempt)
-                    sota_response = None
+            # Only continue gathering feedback if submission exists
+            if self.latest_submission_path:
+                # Gather SOTA feedback (red flags + suggestions)
+                sota_response = self._gather_sota_feedback(code_with_logs)
 
                 suggestion_text, blacklist_flag, blacklist_reason = self._parse_sota_response(sota_response)
                 self.logger.info("SOTA suggestion: %s (blacklist=%s)", suggestion_text, blacklist_flag)

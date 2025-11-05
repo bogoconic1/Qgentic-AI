@@ -247,5 +247,333 @@ def test_read_starter_suggestions(test_task_dir, monkeypatch):
     print(f"   - Contains task_summary: {'task_summary' in starter_text}")
 
 
+# NOTE: Complex build_plan() integration tests with tool calls are too difficult to mock.
+# These will be tested after refactoring when methods are smaller.
+
+
+def test_researcher_build_plan_invalid_tool_arguments(test_task_dir, monkeypatch):
+    """Integration test: build_plan() handles invalid tool arguments gracefully."""
+    monkeypatch.setattr("agents.researcher._TASK_ROOT", test_task_dir['task_root'])
+
+    call_count = [0]
+
+    def fake_call_llm(*args, **kwargs):
+        call_count[0] += 1
+        mock_response = MagicMock()
+
+        if call_count[0] == 1:
+            # First call: Return tool call with invalid JSON arguments
+            tool_call = SimpleNamespace(
+                type="function_call",
+                name="ask_eda",
+                call_id="call_1",
+                arguments="{ invalid json }"  # Malformed JSON
+            )
+            mock_response.output = [tool_call]
+            mock_response.output_text = None
+        elif call_count[0] == 2:
+            # Second call: Return tool call with missing required field
+            tool_call = SimpleNamespace(
+                type="function_call",
+                name="ask_eda",
+                call_id="call_2",
+                arguments=json.dumps({"wrong_field": "value"})  # Missing 'question' field
+            )
+            mock_response.output = [tool_call]
+            mock_response.output_text = None
+        else:
+            # Final call: Return plan after errors
+            mock_response.output = []
+            mock_response.output_text = (
+                "# Research Plan\n\n"
+                "Despite tool failures, here's a plan based on the description.\n"
+            )
+
+        return mock_response
+
+    def fake_ask_eda(*args, **kwargs):
+        # This should not be called due to invalid arguments
+        raise Exception("Should not reach here - tool should fail before execution")
+
+    def fake_get_tools():
+        return [{"type": "function", "name": "ask_eda"}]
+
+    monkeypatch.setattr("agents.researcher.call_llm_with_retry", fake_call_llm)
+    monkeypatch.setattr("agents.researcher.ask_eda", fake_ask_eda)
+    monkeypatch.setattr("agents.researcher.get_tools", fake_get_tools)
+
+    agent = ResearcherAgent(
+        test_task_dir['slug'],
+        test_task_dir['iteration'],
+        test_task_dir['run_id']
+    )
+
+    # Should handle invalid arguments gracefully
+    plan = agent.build_plan(max_steps=10)
+
+    # Should still return a plan despite tool argument errors
+    assert plan is not None
+    assert len(plan) > 0
+    assert "plan" in plan.lower() or "research" in plan.lower()
+
+    print("✅ ResearcherAgent.build_plan() handles invalid tool arguments:")
+    print(f"   - Recovered from malformed JSON")
+    print(f"   - Returned plan: {len(plan)} chars")
+
+
+def test_researcher_build_plan_empty_tool_results(test_task_dir, monkeypatch):
+    """Integration test: build_plan() handles empty/None tool results."""
+    monkeypatch.setattr("agents.researcher._TASK_ROOT", test_task_dir['task_root'])
+
+    call_count = [0]
+
+    def fake_call_llm(*args, **kwargs):
+        call_count[0] += 1
+        mock_response = MagicMock()
+
+        if call_count[0] == 1:
+            # First call: Request tool that returns empty
+            tool_call = SimpleNamespace(
+                type="function_call",
+                name="ask_eda",
+                call_id="call_1",
+                arguments=json.dumps({"question": "What's the data?"})
+            )
+            mock_response.output = [tool_call]
+            mock_response.output_text = None
+        else:
+            # After empty result, return plan
+            mock_response.output = []
+            mock_response.output_text = (
+                "# Research Plan\n\n"
+                "Based on limited information, proceed with baseline approach.\n"
+            )
+
+        return mock_response
+
+    def fake_ask_eda(*args, **kwargs):
+        # Return empty string
+        return ""
+
+    def fake_get_tools():
+        return [{"type": "function", "name": "ask_eda"}]
+
+    monkeypatch.setattr("agents.researcher.call_llm_with_retry", fake_call_llm)
+    monkeypatch.setattr("agents.researcher.ask_eda", fake_ask_eda)
+    monkeypatch.setattr("agents.researcher.get_tools", fake_get_tools)
+
+    agent = ResearcherAgent(
+        test_task_dir['slug'],
+        test_task_dir['iteration'],
+        test_task_dir['run_id']
+    )
+
+    # Should handle empty tool results gracefully
+    plan = agent.build_plan(max_steps=5)
+
+    # Should still return a plan
+    assert plan is not None
+    assert len(plan) > 0
+
+    print("✅ ResearcherAgent.build_plan() handles empty tool results:")
+    print(f"   - Continued after empty result")
+    print(f"   - Plan length: {len(plan)} chars")
+
+
+# Tests for extracted methods after refactoring
+
+def test_execute_tool_call_ask_eda(test_task_dir, monkeypatch):
+    """Test _execute_tool_call with ask_eda tool."""
+    monkeypatch.setattr("agents.researcher._TASK_ROOT", test_task_dir['task_root'])
+
+    # Mock ask_eda
+    def fake_ask_eda(question, description, data_path, previous_ab_tests=None):
+        return f"Analysis for: {question}\nData shape: (1000, 10)"
+
+    monkeypatch.setattr("agents.researcher.ask_eda", fake_ask_eda)
+
+    agent = ResearcherAgent(
+        test_task_dir['slug'],
+        test_task_dir['iteration'],
+        test_task_dir['run_id']
+    )
+
+    # Create mock tool call item
+    tool_call = SimpleNamespace(
+        type="function_call",
+        name="ask_eda",
+        call_id="call_123",
+        arguments=json.dumps({"question": "What is the data shape?"})
+    )
+
+    input_list = []
+    agent._execute_tool_call(tool_call, input_list)
+
+    # Verify tool result was appended
+    assert len(input_list) == 1
+    assert input_list[0]["type"] == "function_call_output"
+    assert input_list[0]["call_id"] == "call_123"
+    output = json.loads(input_list[0]["output"])
+    assert "insights" in output
+    assert "Data shape" in output["insights"]
+
+    print("✅ _execute_tool_call() with ask_eda works correctly:")
+    print(f"   - Tool result appended to input_list")
+    print(f"   - Insights length: {len(output['insights'])} chars")
+
+
+def test_execute_tool_call_run_ab_test(test_task_dir, monkeypatch):
+    """Test _execute_tool_call with run_ab_test tool stores AB test history."""
+    monkeypatch.setattr("agents.researcher._TASK_ROOT", test_task_dir['task_root'])
+
+    # Mock ask_eda
+    def fake_ask_eda(question, description, data_path, previous_ab_tests=None):
+        return "AB test result: Model A outperforms Model B"
+
+    monkeypatch.setattr("agents.researcher.ask_eda", fake_ask_eda)
+
+    agent = ResearcherAgent(
+        test_task_dir['slug'],
+        test_task_dir['iteration'],
+        test_task_dir['run_id']
+    )
+
+    # Create eda_temp.py file to simulate executed code
+    eda_temp_path = agent.base_dir / "eda_temp.py"
+    eda_temp_path.write_text("import pandas as pd\nprint('AB test code')")
+
+    # Create mock tool call item
+    tool_call = SimpleNamespace(
+        type="function_call",
+        name="run_ab_test",
+        call_id="call_456",
+        arguments=json.dumps({"question": "Compare Model A vs Model B"})
+    )
+
+    input_list = []
+    initial_ab_test_count = len(agent.ab_test_history)
+
+    agent._execute_tool_call(tool_call, input_list)
+
+    # Verify AB test was stored in history
+    assert len(agent.ab_test_history) == initial_ab_test_count + 1
+    assert agent.ab_test_history[-1]['question'] == "Compare Model A vs Model B"
+    assert "import pandas" in agent.ab_test_history[-1]['code']
+
+    print("✅ _execute_tool_call() with run_ab_test works correctly:")
+    print(f"   - AB test stored in history")
+    print(f"   - History size: {len(agent.ab_test_history)}")
+
+
+def test_execute_tool_call_download_external_datasets(test_task_dir, monkeypatch):
+    """Test _execute_tool_call with download_external_datasets tool."""
+    monkeypatch.setattr("agents.researcher._TASK_ROOT", test_task_dir['task_root'])
+
+    # Mock download_external_datasets
+    def fake_download_external_datasets(q1, q2, q3, slug):
+        return "Downloaded 3 external datasets:\n- Dataset A\n- Dataset B\n- Dataset C"
+
+    monkeypatch.setattr("agents.researcher.download_external_datasets", fake_download_external_datasets)
+
+    agent = ResearcherAgent(
+        test_task_dir['slug'],
+        test_task_dir['iteration'],
+        test_task_dir['run_id']
+    )
+
+    # Create mock tool call item
+    tool_call = SimpleNamespace(
+        type="function_call",
+        name="download_external_datasets",
+        call_id="call_789",
+        arguments=json.dumps({
+            "question_1": "external data about topic",
+            "question_2": "datasets related to topic",
+            "question_3": "topic external sources"
+        })
+    )
+
+    input_list = []
+    agent._execute_tool_call(tool_call, input_list)
+
+    # Verify tool result was appended
+    assert len(input_list) == 1
+    assert input_list[0]["type"] == "function_call_output"
+    assert input_list[0]["call_id"] == "call_789"
+    output = json.loads(input_list[0]["output"])
+    assert "results" in output
+    assert "Downloaded 3 external datasets" in output["results"]
+
+    print("✅ _execute_tool_call() with download_external_datasets works correctly:")
+    print(f"   - Tool result appended to input_list")
+    print(f"   - Results: {output['results'][:50]}...")
+
+
+def test_execute_tool_call_invalid_arguments(test_task_dir, monkeypatch):
+    """Test _execute_tool_call handles invalid JSON arguments gracefully."""
+    monkeypatch.setattr("agents.researcher._TASK_ROOT", test_task_dir['task_root'])
+
+    agent = ResearcherAgent(
+        test_task_dir['slug'],
+        test_task_dir['iteration'],
+        test_task_dir['run_id']
+    )
+
+    # Create mock tool call with invalid JSON
+    tool_call = SimpleNamespace(
+        type="function_call",
+        name="ask_eda",
+        call_id="call_error",
+        arguments="{ invalid json }"
+    )
+
+    input_list = []
+    agent._execute_tool_call(tool_call, input_list)
+
+    # Should append error message
+    assert len(input_list) == 1
+    output = json.loads(input_list[0]["output"])
+    assert "error occurred" in output["insights"].lower()
+
+    print("✅ _execute_tool_call() with invalid arguments works correctly:")
+    print(f"   - Error handled gracefully")
+    print(f"   - Error message: {output['insights']}")
+
+
+def test_execute_tool_call_missing_required_fields(test_task_dir, monkeypatch):
+    """Test _execute_tool_call handles missing required fields for download_external_datasets."""
+    monkeypatch.setattr("agents.researcher._TASK_ROOT", test_task_dir['task_root'])
+
+    agent = ResearcherAgent(
+        test_task_dir['slug'],
+        test_task_dir['iteration'],
+        test_task_dir['run_id']
+    )
+
+    # Create mock tool call with missing fields
+    tool_call = SimpleNamespace(
+        type="function_call",
+        name="download_external_datasets",
+        call_id="call_missing",
+        arguments=json.dumps({
+            "question_1": "only one question"
+            # question_2 and question_3 missing
+        })
+    )
+
+    input_list = []
+    agent._execute_tool_call(tool_call, input_list)
+
+    # Should return error message
+    assert len(input_list) == 1
+    output = json.loads(input_list[0]["output"])
+    assert "results" in output
+    assert "All 3 question phrasings are required" in output["results"]
+
+    print("✅ _execute_tool_call() with missing fields works correctly:")
+    print(f"   - Missing field error handled")
+    print(f"   - Error message: {output['results'][:80]}...")
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

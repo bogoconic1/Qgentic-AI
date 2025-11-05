@@ -197,6 +197,100 @@ class ResearcherAgent:
             res += f"<{key}>\n{starter_suggestions[key]}\n</{key}>\n"
         return res
 
+    def _execute_tool_call(self, item, input_list: list) -> None:
+        """Execute a single tool call and append results to input_list.
+
+        Args:
+            item: Tool call item from LLM response
+            input_list: Message list to append tool results to (modified in-place)
+        """
+        if item.name == "ask_eda" or item.name == "run_ab_test":
+            try:
+                question = json.loads(item.arguments)["question"]
+            except Exception as e:
+                logger.error("Failed to parse %s arguments: %s", item.name, e)
+                question = ""
+            logger.info(f"{question}")
+            if len(question) == 0:
+                tool_output = "An error occurred. Please retry."
+                input_list.append({
+                    "type": "function_call_output",
+                    "call_id": item.call_id,
+                    "output": json.dumps({
+                        "insights": tool_output,
+                    })
+                })
+            else:
+                before_media = self._list_media_files()
+
+                # Determine if this is an AB test or EDA question
+                is_ab_test = (item.name == "run_ab_test")
+
+                # Get last 6 AB tests for AB test questions, empty list for EDA
+                previous_ab_tests = self.ab_test_history[-6:] if is_ab_test else []
+
+                tool_output = ask_eda(
+                    question,
+                    self.description,
+                    data_path=str(self.base_dir),
+                    previous_ab_tests=previous_ab_tests
+                )
+
+                # For AB tests, extract and store the code in history
+                if is_ab_test:
+                    # Extract code from eda_temp.py that was just executed
+                    code_file = self.base_dir / "eda_temp.py"
+                    if code_file.exists():
+                        with open(code_file, "r") as f:
+                            executed_code = f.read()
+
+                        # Strip OpenBLAS prefix if present (first 3 lines)
+                        if executed_code.startswith('import os\nos.environ["OPENBLAS_NUM_THREADS"]'):
+                            lines = executed_code.split('\n')
+                            executed_code = '\n'.join(lines[3:])
+
+                        self.ab_test_history.append({
+                            'question': question,
+                            'code': executed_code
+                        })
+                        logger.info("Stored AB test #%d in history", len(self.ab_test_history))
+
+                input_list.append({
+                    "type": "function_call_output",
+                    "call_id": item.call_id,
+                    "output": json.dumps({
+                        "insights": tool_output,
+                    })
+                })
+                try:
+                    # I don't care if this silently fails - its not that critical
+                    media_prompt = self._ingest_new_media(before_media)
+                    if media_prompt: input_list += media_prompt
+                except Exception as e:
+                    logger.error("Failed to ingest new media: %s", e)
+                    logger.info("No media ingested for this step.")
+
+        elif item.name == "download_external_datasets":
+            args = json.loads(item.arguments)
+            question_1 = args.get("question_1", "")
+            question_2 = args.get("question_2", "")
+            question_3 = args.get("question_3", "")
+
+            if not question_1 or not question_2 or not question_3:
+                tool_output = "All 3 question phrasings are required. Please provide question_1, question_2, and question_3."
+            else:
+                tool_output = download_external_datasets(question_1, question_2, question_3, self.slug)
+
+            logger.info("External search response length=%s", len(tool_output or ""))
+
+            input_list.append({
+                "type": "function_call_output",
+                "call_id": item.call_id,
+                "output": json.dumps({
+                    "results": tool_output,
+                })
+            })
+
     @weave.op()
     def build_plan(self, max_steps: int | None = None) -> str:
         system_prompt = self._compose_system()
@@ -230,85 +324,7 @@ class ResearcherAgent:
             for item in response.output:
                 if item.type == "function_call":
                     tool_calls = True
-                    if item.name == "ask_eda" or item.name == "run_ab_test":
-                        try:
-                            question = json.loads(item.arguments)["question"]
-                        except Exception as e:
-                            logger.error("Failed to parse %s arguments: %s", item.name, e)
-                            question = ""
-                        logger.info(f"{question}")
-                        if len(question) == 0:
-                            tool_output = "An error occurred. Please retry."
-                        else:
-                            before_media = self._list_media_files()
-
-                            # Determine if this is an AB test or EDA question
-                            is_ab_test = (item.name == "run_ab_test")
-
-                            # Get last 6 AB tests for AB test questions, empty list for EDA
-                            previous_ab_tests = self.ab_test_history[-6:] if is_ab_test else []
-
-                            tool_output = ask_eda(
-                                question,
-                                self.description,
-                                data_path=str(self.base_dir),
-                                previous_ab_tests=previous_ab_tests
-                            )
-
-                            # For AB tests, extract and store the code in history
-                            if is_ab_test:
-                                # Extract code from eda_temp.py that was just executed
-                                code_file = self.base_dir / "eda_temp.py"
-                                if code_file.exists():
-                                    with open(code_file, "r") as f:
-                                        executed_code = f.read()
-
-                                    # Strip OpenBLAS prefix if present (first 3 lines)
-                                    if executed_code.startswith('import os\nos.environ["OPENBLAS_NUM_THREADS"]'):
-                                        lines = executed_code.split('\n')
-                                        executed_code = '\n'.join(lines[3:])
-
-                                    self.ab_test_history.append({
-                                        'question': question,
-                                        'code': executed_code
-                                    })
-                                    logger.info("Stored AB test #%d in history", len(self.ab_test_history))
-
-                            input_list.append({
-                                "type": "function_call_output",
-                                "call_id": item.call_id,
-                                "output": json.dumps({
-                                    "insights": tool_output,
-                                })
-                            })
-                            try:
-                                # I don't care if this silently fails - its not that critical
-                                media_prompt = self._ingest_new_media(before_media)
-                                if media_prompt: input_list += media_prompt
-                            except Exception as e:
-                                logger.error("Failed to ingest new media: %s", e)
-                                logger.info("No media ingested for this step.")
-                            
-                    elif item.name == "download_external_datasets":
-                        args = json.loads(item.arguments)
-                        question_1 = args.get("question_1", "")
-                        question_2 = args.get("question_2", "")
-                        question_3 = args.get("question_3", "")
-
-                        if not question_1 or not question_2 or not question_3:
-                            tool_output = "All 3 question phrasings are required. Please provide question_1, question_2, and question_3."
-                        else:
-                            tool_output = download_external_datasets(question_1, question_2, question_3, self.slug)
-
-                        logger.info("External search response length=%s", len(tool_output or ""))
-
-                        input_list.append({
-                            "type": "function_call_output",
-                            "call_id": item.call_id,
-                            "output": json.dumps({
-                                "results": tool_output,
-                            })
-                        })
+                    self._execute_tool_call(item, input_list)
 
             if tool_calls: continue
 
