@@ -3,7 +3,9 @@ import logging
 import os
 import base64
 import mimetypes
+import threading
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from dotenv import load_dotenv
 from project_config import get_config
@@ -43,11 +45,16 @@ class ResearcherAgent:
     (no further tool calls), or the tool-call budget is exhausted.
     """
 
-    def __init__(self, slug: str, iteration: int, run_id: int = 1):
+    def __init__(self, slug: str, iteration: int, run_id: int = 1, max_parallel_workers: int = 1, cpu_core_pool: list[list[int]] | None = None, gpu_pool: list[str] | None = None):
         load_dotenv()
         self.slug = slug
         self.iteration = iteration
         self.run_id = run_id
+        self.max_parallel_workers = max_parallel_workers
+
+        # Resource pools for parallel AB test execution (CPU affinity and GPU isolation)
+        self.cpu_core_pool = cpu_core_pool or []  # List of CPU core ranges
+        self.gpu_pool = gpu_pool or []  # List of GPU identifiers (MIG UUIDs or GPU IDs)
 
         self.base_dir = _TASK_ROOT / self.slug
         self.outputs_dir = self.base_dir / _OUTPUTS_DIRNAME / str(self.iteration)
@@ -72,6 +79,7 @@ class ResearcherAgent:
 
         # Track AB test history: list of dicts with 'question' and 'code'
         self.ab_test_history: list[dict] = []
+        self.ab_test_lock = threading.Lock()  # Thread-safe access to ab_test_history
 
         self._configure_logger()
 
@@ -197,6 +205,63 @@ class ResearcherAgent:
             res += f"<{key}>\n{starter_suggestions[key]}\n</{key}>\n"
         return res
 
+    def _execute_single_ab_test(self, question: str, index: int) -> tuple[str, str]:
+        """Execute a single AB test question with resource isolation.
+
+        Args:
+            question: AB test question to execute
+            index: Index for unique file naming and resource assignment (0-based)
+
+        Returns:
+            Tuple of (question, result)
+        """
+        logger.info(f"Executing AB test #{index+1}: {question}")
+
+        file_suffix = f"_{index+1}"
+
+        # Assign CPU and GPU resources based on index
+        cpu_core_range = self.cpu_core_pool[index] if index < len(self.cpu_core_pool) else None
+        gpu_identifier = self.gpu_pool[index] if index < len(self.gpu_pool) else None
+
+        if cpu_core_range:
+            logger.info(f"AB test #{index+1} assigned CPU cores: {len(cpu_core_range)} cores")
+        if gpu_identifier:
+            logger.info(f"AB test #{index+1} assigned GPU: {gpu_identifier}")
+
+        # Get last 8 AB tests for context (thread-safe)
+        with self.ab_test_lock:
+            previous_ab_tests = self.ab_test_history[-8:].copy()
+
+        tool_output = ask_eda(
+            question,
+            self.description,
+            data_path=str(self.base_dir),
+            previous_ab_tests=previous_ab_tests,
+            file_suffix=file_suffix,
+            cpu_core_range=cpu_core_range,
+            gpu_identifier=gpu_identifier
+        )
+
+        # Extract and store the code in history
+        code_file = self.base_dir / f"eda_temp{file_suffix}.py"
+        if code_file.exists():
+            with open(code_file, "r") as f:
+                executed_code = f.read()
+
+            # Strip OpenBLAS prefix if present (first 3 lines)
+            if executed_code.startswith('import os\nos.environ["OPENBLAS_NUM_THREADS"]'):
+                lines = executed_code.split('\n')
+                executed_code = '\n'.join(lines[3:])
+
+            with self.ab_test_lock:
+                self.ab_test_history.append({
+                    'question': question,
+                    'code': executed_code
+                })
+                logger.info("Stored AB test #%d in history", len(self.ab_test_history))
+
+        return question, tool_output
+
     def _execute_tool_call(self, item, input_list: list) -> None:
         """Execute a single tool call and append results to input_list.
 
@@ -204,13 +269,13 @@ class ResearcherAgent:
             item: Tool call item from LLM response
             input_list: Message list to append tool results to (modified in-place)
         """
-        if item.name == "ask_eda" or item.name == "run_ab_test":
+        if item.name == "ask_eda":
             try:
                 question = json.loads(item.arguments)["question"]
             except Exception as e:
-                logger.error("Failed to parse %s arguments: %s", item.name, e)
+                logger.error("Failed to parse ask_eda arguments: %s", e)
                 question = ""
-            logger.info(f"{question}")
+            logger.info(f"EDA: {question}")
             if len(question) == 0:
                 tool_output = "An error occurred. Please retry."
                 input_list.append({
@@ -223,37 +288,12 @@ class ResearcherAgent:
             else:
                 before_media = self._list_media_files()
 
-                # Determine if this is an AB test or EDA question
-                is_ab_test = (item.name == "run_ab_test")
-
-                # Get last 6 AB tests for AB test questions, empty list for EDA
-                previous_ab_tests = self.ab_test_history[-6:] if is_ab_test else []
-
                 tool_output = ask_eda(
                     question,
                     self.description,
                     data_path=str(self.base_dir),
-                    previous_ab_tests=previous_ab_tests
+                    previous_ab_tests=[]  # EDA questions don't use AB test history
                 )
-
-                # For AB tests, extract and store the code in history
-                if is_ab_test:
-                    # Extract code from eda_temp.py that was just executed
-                    code_file = self.base_dir / "eda_temp.py"
-                    if code_file.exists():
-                        with open(code_file, "r") as f:
-                            executed_code = f.read()
-
-                        # Strip OpenBLAS prefix if present (first 3 lines)
-                        if executed_code.startswith('import os\nos.environ["OPENBLAS_NUM_THREADS"]'):
-                            lines = executed_code.split('\n')
-                            executed_code = '\n'.join(lines[3:])
-
-                        self.ab_test_history.append({
-                            'question': question,
-                            'code': executed_code
-                        })
-                        logger.info("Stored AB test #%d in history", len(self.ab_test_history))
 
                 input_list.append({
                     "type": "function_call_output",
@@ -263,7 +303,63 @@ class ResearcherAgent:
                     })
                 })
                 try:
-                    # I don't care if this silently fails - its not that critical
+                    media_prompt = self._ingest_new_media(before_media)
+                    if media_prompt: input_list += media_prompt
+                except Exception as e:
+                    logger.error("Failed to ingest new media: %s", e)
+                    logger.info("No media ingested for this step.")
+
+        elif item.name == "run_ab_test":
+            try:
+                questions = json.loads(item.arguments)["questions"]
+                if not isinstance(questions, list):
+                    questions = [questions]
+            except Exception as e:
+                logger.error("Failed to parse run_ab_test arguments: %s", e)
+                questions = []
+
+            if len(questions) == 0:
+                tool_output = "An error occurred. Please retry with valid questions."
+                input_list.append({
+                    "type": "function_call_output",
+                    "call_id": item.call_id,
+                    "output": json.dumps({
+                        "insights": tool_output,
+                    })
+                })
+            else:
+                logger.info(f"Running {len(questions)} AB tests in parallel")
+                before_media = self._list_media_files()
+
+                # Execute AB tests in parallel with resource isolation
+                results = []
+                with ThreadPoolExecutor(max_workers=self.max_parallel_workers) as executor:
+                    future_to_question = {
+                        executor.submit(self._execute_single_ab_test, q, i): q
+                        for i, q in enumerate(questions)
+                    }
+
+                    for future in as_completed(future_to_question):
+                        question = future_to_question[future]
+                        try:
+                            q, output = future.result()
+                            results.append(f"Question: {q}\nResult: {output}")
+                        except Exception as e:
+                            logger.error(f"AB test failed for question '{question}': {e}")
+                            results.append(f"Question: {question}\nResult: Error - {str(e)}")
+
+                # Combine all results
+                combined_output = "\n\n---\n\n".join(results)
+
+                input_list.append({
+                    "type": "function_call_output",
+                    "call_id": item.call_id,
+                    "output": json.dumps({
+                        "insights": combined_output,
+                    })
+                })
+
+                try:
                     media_prompt = self._ingest_new_media(before_media)
                     if media_prompt: input_list += media_prompt
                 except Exception as e:
@@ -300,8 +396,8 @@ class ResearcherAgent:
         ]
 
         max_steps = max_steps or _DEFAULT_MAX_STEPS
-        logger.info("Researcher run started with max_steps=%s", max_steps)
-        tools = get_tools()
+        logger.info("Researcher run started with max_steps=%s, max_parallel_workers=%s", max_steps, self.max_parallel_workers)
+        tools = get_tools(max_parallel_workers=self.max_parallel_workers)
 
         for step in range(max_steps):
             # logger.debug("Current conversation tail: %s", self.messages[-2:])

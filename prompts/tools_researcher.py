@@ -32,6 +32,7 @@ data_path = "{data_path}"
 - For OneHotEncoder, use sparse_output=False instead of sparse=False to avoid errors.
 - For XGBoost, if early stopping is used, don't do .fit(early_stopping_rounds=...). Instead, use it as a constructor argument.
 - For LightGBM, if early stopping is used, do early_stopping and log_evaluation callbacks instead of early_stopping_rounds and verbose parameters in .fit().
+- You should use GPU for training if available.
 
 # Competition Description
 {description}

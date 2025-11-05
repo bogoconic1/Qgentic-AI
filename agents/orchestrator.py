@@ -162,7 +162,38 @@ def _ensure_conda_environments(num_workers: int) -> None:
 
 @weave.op()
 def _run_researcher_once(slug: str, iteration: int, run_id: int) -> tuple[int, str, int]:
-    agent = ResearcherAgent(slug, iteration, run_id=run_id)
+    # Calculate max_parallel_workers and resource pools for AB test parallelization
+    enable_cpu_affinity = _RUNTIME_CFG.get("enable_cpu_affinity", False)
+    enable_mig = _RUNTIME_CFG.get("enable_mig", False)
+    enable_multi_gpu = _RUNTIME_CFG.get("enable_multi_gpu", False)
+
+    # Determine max_parallel_workers based on GPU configuration
+    if enable_mig:
+        detected_mig_uuids = _get_mig_uuids()
+        max_parallel_workers = len(detected_mig_uuids) if len(detected_mig_uuids) > 0 else int(_RUNTIME_CFG.get("baseline_max_parallel_workers", 1))
+        gpu_pool = detected_mig_uuids if len(detected_mig_uuids) > 0 else []
+    elif enable_multi_gpu:
+        available_gpus = _get_available_gpus()
+        max_parallel_workers = len(available_gpus) if len(available_gpus) > 0 else int(_RUNTIME_CFG.get("baseline_max_parallel_workers", 1))
+        gpu_pool = [str(gpu_id) for gpu_id in available_gpus] if len(available_gpus) > 0 else []
+    else:
+        max_parallel_workers = int(_RUNTIME_CFG.get("baseline_max_parallel_workers", 1))
+        gpu_pool = []
+
+    # Create CPU core pool for AB test parallelization
+    cpu_core_pool = []
+    if enable_cpu_affinity and max_parallel_workers > 1:
+        total_cores = os.cpu_count() or 1
+        cores_per_worker = total_cores // max_parallel_workers
+        for i in range(max_parallel_workers):
+            start_core = i * cores_per_worker
+            # Last worker gets remaining cores
+            end_core = total_cores if i == max_parallel_workers - 1 else (i + 1) * cores_per_worker
+            cpu_core_pool.append(list(range(start_core, end_core)))
+
+    print(f"Researcher Agent: max_parallel_workers={max_parallel_workers}, CPU pools={len(cpu_core_pool)}, GPU pools={len(gpu_pool)}")
+
+    agent = ResearcherAgent(slug, iteration, run_id=run_id, max_parallel_workers=max_parallel_workers, cpu_core_pool=cpu_core_pool, gpu_pool=gpu_pool)
     plan = agent.build_plan()
     outputs_dir = _TASK_ROOT / slug / _OUTPUTS_DIRNAME / str(iteration)
     outputs_dir.mkdir(parents=True, exist_ok=True)
@@ -513,6 +544,8 @@ class Orchestrator:
             if not plan_path.exists():
                 raise RuntimeError("No plan found")
 
+        return
+
         # Phase 3: Model Recommender Agent - Get model-specific recommendations
         # First dynamically selects suitable models, then generates recommendations for each
         model_rec_path = self.outputs_dir / "model_recommendations.json"
@@ -735,6 +768,8 @@ class Orchestrator:
                     json.dump(baseline_results, f, indent=2)
             else:
                 raise RuntimeError("All developer baseline runs failed")
+        
+        return
 
         # Phase 5: Ensemble Phase - Combine baseline models using ensemble strategies
         print("\n" + "="*80)

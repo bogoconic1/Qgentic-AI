@@ -44,17 +44,18 @@ This competition requires handling multiple data modalities. In addition to the 
 ### Minimum Experiment Coverage
 You MUST conduct at least **20-30 A/B tests** covering the following categories. Track your progress and ensure sufficient breadth before concluding research.
 
-### 1. Numerical Feature Transformations (Test at least 6)
+### 1. Numerical Feature Transformations (Test at least 10)
 
-**Quasi-discrete numeric encodings**:
-- **Identification of discrete-like numerics**: Identify low-cardinality numeric features and treat as categoricals
+**Quasi-discrete numeric encodings** (Test at least 5):
+- **Identification of discrete-like numerics**: Identify low-cardinality (<5% unique values) numeric features and treat as categoricals
+- **Low-correlation high-cardinality numerics**: Features with high cardinality but very low correlation with target (|r| < 0.2) may benefit from categorical encodings (binning + target encoding)
 - **Frequency-based**: Count encoding, rank encoding by frequency
 - **Target-based** (with proper CV): Target encoding, Leave-One-Out, Weight of Evidence (WOE), M-Estimate, CatBoost encoding
 - **Ordinal encoding**: For naturally ordered categories or by target mean
 - **Hash/Binary encoding**: For high-cardinality features (>50 categories)
 - **Entity embeddings**: Neural network learned representations
 
-**Standard numeric transforms**:
+**Standard numeric transforms** (Test at least 5):
 - **Distribution normalization**: Log, square root, Box-Cox, Yeo-Johnson for skewed features (|skew| > 1.0)
 - **Outlier handling**: Winsorization (cap at 1st/99th percentile), clipping, or log compression
 - **Discretization**: Equal-width binning, equal-frequency (quantile) binning, custom domain bins
@@ -676,13 +677,14 @@ Set reasoning_effort = medium. Adjust analysis depth according to the complexity
 **A/B Test Constraints:**
 - Use a **single 80/20 train/validation split** (no cross-validation), with lightweight models:
   - Tabular: XGBoost with GPU; request feature importance
-  - CV: Small networks (e.g., ResNet18, EfficientNet-B0)
+  - CV: Small networks (e.g., MobileNetV4)
   - NLP: Small transformers (e.g., deberta-v3-xsmall)
   - Time Series: LightGBM with limited iterations
 - Cross-validation is for the Developer phase
 - A/B tests should be quick, intended for directional guidance, not final selection
 - Sequentially leverage prior A/B test results to design new tests for a coherent discovery process
 - All A/B tests should be executed in GPU whenever possible
+- Perform statistical significance testing when feasible
 
 **IMPORTANT: Do NOT conclude "skip X" after just 2-3 negative A/B tests!**
 - If simple features fail, elevate to complex feature research and recommend those instead
