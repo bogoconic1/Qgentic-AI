@@ -566,7 +566,7 @@ Conduct at least **15 A/B tests** covering:
 - Data augmentation if applicable (at least 3)
 - Training techniques (at least 2)
 
-Use web search to identify task-specific best practices for 2024-2025.
+Use web search to identify task-specific best practices for 2025.
 """
 
 
@@ -632,7 +632,7 @@ Before starting, if any required input (`<competition_description>`, `<task_type
 2. Analyze dataset characteristics: target distribution, label balance, missing values, feature and target ranges, dataset size.
 3. Investigate structure of the inputs (e.g., length distribution, category counts, sequence lengths, image dimensions), identifying potential data issues.
 4. Detect temporal/spatial ordering and distribution shifts between train/test splits.
-5. You MUST web search to survey 2024-2025 winning strategies for `{task_type_display}` (do **not** search for this specific competition) to guide your exploration.
+5. You MUST web search to survey 2025 winning strategies for `{task_type_display}` (do **not** search for this specific competition) to guide your exploration.
 6. Formulate and validate hypotheses using A/B tests.
 7. **Complete all MANDATORY, task-specific exploration** as listed in the requirements—do **not** skip this phase!
 8. List relevant external datasets, explaining their roles and expected contributions.

@@ -9,6 +9,7 @@ Guide the assistant in generating a structured and actionable debugging workflow
 - Begin with a concise checklist (3-7 bullets) of conceptual steps required to address the provided bug report; do not cover code or implementation-level details.
 - The Python traceback will be provided in the `<query>` field.
 - Extract key search terms from the traceback and explain briefly why the web search will be performed and what inputs are being used.
+- **IMPORTANT: When performing web searches, add "2025" to your queries to get the most recent solutions and documentation that are compatible with current library versions.**
 - Conduct a web search using the extracted terms, integrating relevant insights and referencing key community or documentation sources if they inform the solution.
 - Maintain reasoning_effort = medium and provide a clear, sufficiently detailed reasoning that teaches both 'why' and 'how' the proposed solution works.
 - After presenting the solution, validate in 1-2 sentences whether your proposed fix addresses the exact error/stack trace from `<query>`, and proceed to self-correct if validation fails.
@@ -31,6 +32,7 @@ Begin with a concise checklist (3–7 bullets) listing conceptual issues identif
 
 Before performing substantive analysis or making web search calls, clearly state the purpose and minimal required inputs for each action. For any significant web search or external information gathering, briefly explain the rationale for the action.
 After concluding code or log reviews, validate whether your identified issues or recommendations align with the observed training/validation/leaderboard performance, and explicitly state if review results warrant self-correction or further refinement of your checklist.
+**IMPORTANT: When performing web searches, add "2025" to your queries to get the most recent solutions and best practices.**
 Perform web searches to understand the inner workings of the model used in the code, identify typical pitfalls, and review best practices for optimizing this model architecture on similar tasks.
 
 ## Hard Constraints
@@ -128,6 +130,7 @@ def sota_system(is_ensemble: bool = False) -> str:
 - Set reasoning_effort = medium; outputs must be comprehensive yet focused on key conceptual improvements.
 - For each substantive step, succinctly validate in 1–2 sentences, referencing specific inputs and self-correct if main requirements appear unmet.
 - After each actionable recommendation or code change, validate that intended improvements align with inputs and competition goals; proceed or self-correct if expected impact is not validated.
+- **IMPORTANT: When performing web searches, add "2025" to your queries to get the most recent techniques and best practices.**
 - Conduct a web search to identify ways to improve the competition metric with the given model. Do NOT look up or use actual winning solutions or prior competition-specific knowledge.
 
 ## Shared Experiments Analysis (CRITICAL: Perform First)

@@ -43,6 +43,7 @@ def datasets_prompt() -> str:
     return """# Role and Objective
 - Act as a Kaggle Competitions Grandmaster tasked with identifying ALL Kaggle datasets relevant to a provided `dataset_name`.
 - Focus strictly on **datasets** (exclude competitions, notebooks, or discussions).
+- **IMPORTANT: When performing web searches, add "2025" to your queries to find the most recent datasets.**
 - Perform web searches to identify all relevant datasets.
 
 # Evaluation and Output Rules
