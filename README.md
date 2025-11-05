@@ -9,7 +9,7 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
 ---
 ## News
 
-**[2025/11/04]** 🏆 **Qgentic-AI achieves #1 single-model public notebook on https://www.kaggle.com/competitions/playground-series-s5e11** (Top 6%, 40/700) with fully
+**[2025/11/04]** 🏆 **Qgentic-AI achieves #1 single-model public notebook on [PS5E11](https://www.kaggle.com/competitions/playground-series-s5e11)** (Top 6%, 40/700) with fully
   autonomous A/B testing!
 
 **[2025/11/02]** Added Ensembling agent

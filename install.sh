@@ -3,7 +3,7 @@ set -euo pipefail
 
 # === CONFIG ===
 KAGGLE_JSON_PATH="${KAGGLE_JSON_PATH:-kaggle.json}"
-TASK_NAME="whale-categorization-playground"
+TASK_NAME="csiro-biomass"
 WORKDIR="${WORKDIR:-$(pwd)}"
 CACHE_DIR="/home/ubuntu/.cache/mle-bench/data/${TASK_NAME}/prepared"
 
