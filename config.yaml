@@ -2,7 +2,7 @@ llm:
   developer_model: "gpt-5"
   developer_tool_model: "gpt-5"
   researcher_model: "gpt-5"
-  researcher_tool_offline_model: "gpt-5"
+  researcher_tool_offline_model: "gemini-2.5-pro"  # Using Gemini 2.5 Pro for EDA code generation
   researcher_tool_online_model: "gpt-5"
   leakage_review_model: "gpt-5-mini"
   leakage_followup_model: "gpt-5-mini"

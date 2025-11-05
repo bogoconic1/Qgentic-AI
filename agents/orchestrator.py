@@ -512,6 +512,8 @@ class Orchestrator:
             _run_researcher_once(self.slug, self.iteration, 1)
             if not plan_path.exists():
                 raise RuntimeError("No plan found")
+        
+        return
 
         # Phase 3: Model Recommender Agent - Get model-specific recommendations
         # First dynamically selects suitable models, then generates recommendations for each
@@ -735,6 +737,8 @@ class Orchestrator:
                     json.dump(baseline_results, f, indent=2)
             else:
                 raise RuntimeError("All developer baseline runs failed")
+
+        return
 
         # Phase 5: Ensemble Phase - Combine baseline models using ensemble strategies
         print("\n" + "="*80)

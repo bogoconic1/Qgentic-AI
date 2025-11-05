@@ -69,23 +69,58 @@ def call_llm_with_retry_helper(
     max_retries: int | None = None,
     web_search_enabled: bool = False
 ):
-
-    client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
     cfg = get_config()
     runtime_cfg = cfg.get("runtime")
     retries = max_retries or runtime_cfg.get("llm_max_retries")
     if retries < 1: retries = 1
     if web_search_enabled: tools.append({"type": "web_search"})
 
+    # Detect model provider and API format
+    use_chat_completions = model.startswith("gemini-") # NOTE this only works for ask_eda() - if you set it for anything else it will break
+
+    if use_chat_completions:
+        # Gemini uses Chat Completions API via OpenAI compatibility layer
+        client = OpenAI(
+            api_key=os.environ.get('GOOGLE_API_KEY'),
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+        )
+        logging.debug(f"Using Gemini API (Chat Completions) for model: {model}")
+    else:
+        # OpenAI uses Responses API
+        client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
+        logging.debug(f"Using OpenAI API (Responses) for model: {model}")
+
     for attempt in range(retries):
         try:
-            response = client.responses.create(
-                model=model,
-                instructions=instructions,
-                tools=tools,
-                input=messages,
-            )
-            return response
+            if use_chat_completions:
+                # Chat Completions API (Gemini)
+                # Convert instructions to system message
+                chat_messages = [{"role": "system", "content": instructions}] + messages
+                response = client.chat.completions.create(
+                    model=model,
+                    messages=chat_messages,
+                    tools=tools if tools else None,
+                )
+
+                # Adapt Chat Completions response to Responses API format
+                class ResponseAdapter:
+                    def __init__(self, chat_response):
+                        self.output_text = chat_response.choices[0].message.content
+                        self.output = [{"role": "assistant", "content": self.output_text}]
+                        # Handle tool calls if present
+                        if hasattr(chat_response.choices[0].message, 'tool_calls') and chat_response.choices[0].message.tool_calls:
+                            self.tool_calls = chat_response.choices[0].message.tool_calls
+
+                return ResponseAdapter(response)
+            else:
+                # Responses API (OpenAI)
+                response = client.responses.create(
+                    model=model,
+                    instructions=instructions,
+                    tools=tools,
+                    input=messages,
+                )
+                return response
         except openai.InternalServerError as e:
             if "504" in str(e) and attempt < retries - 1:
                 wait_time = 2**attempt
