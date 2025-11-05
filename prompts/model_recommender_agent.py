@@ -35,7 +35,11 @@ Begin with a **concise checklist (3-7 conceptual bullets)** describing your reas
 5. **IMPORTANT**: The models should be diverse in architecture and approach, so that they can ensemble well later.
 6. **IMPORTANT**: You MUST ONLY list the model name in "name" - do not include any extra details such as version, hyperparameters, or modifications.
 7. Evaluate each candidate model under three criteria: metric impact, implementation simplicity, and compute feasibility within the 3-hour budget.
-8. Recommend up to **8 models** that balance these criteria effectively. There SHOULD NOT be any duplicates or near-duplicates in the suggestions. Please list the model name and size.
+8. Recommend up to **8 models** that balance these criteria effectively. There SHOULD NOT be any duplicates or near-duplicates in the suggestions.
+   - **CRITICAL**: "Near-duplicates" means models from the same architecture family (e.g., deberta-large and deberta-base are near-duplicates; roberta-base and roberta-large are near-duplicates).
+   - Only recommend ONE variant per architecture family (e.g., choose either deberta-large OR deberta-base, not both).
+   - Prioritize architectural diversity (e.g., different transformer families, gradient boosting, CNNs) over size variants of the same architecture.
+   - Please list the model name and size.
 
 ## Hard Constraints
 - ❌ Do **not** search for or use actual winning solutions from this specific competition.

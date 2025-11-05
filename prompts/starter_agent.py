@@ -21,6 +21,26 @@ Lead Researcher for a Machine-Learning Competition Team tasked with identifying 
   - Audio clips + text transcripts → ["audio", "nlp"]
   - Video frames + time series sensor data → ["computer_vision", "time_series"]
 
+# CRITICAL: Test-Time Availability Check
+**Before classifying as multimodal, you MUST verify that all modalities are available at test time:**
+
+1. **Compare train vs test data schemas** from the <competition_description>:
+   - What columns/files are in the **training data**?
+   - What columns/files are in the **test data**?
+
+2. **If metadata/features exist ONLY in training data but NOT in test data:**
+   - **DO NOT classify as multimodal**
+   - The task type should reflect **only the modalities available at test time**
+   - The metadata can be used during training (e.g., auxiliary supervision, feature engineering) but predictions must use only test-available modalities
+
+3. **Examples of test-time unavailability:**
+   - Train has: `image_path, age, gender, diagnosis` | Test has: `image_path` → **["computer_vision"]** NOT multimodal
+   - Train has: `text, author_id, timestamp, label` | Test has: `text` → **["nlp"]** NOT multimodal
+   - Train has: `audio_path, transcript, speaker_id` | Test has: `audio_path` → **["audio"]** NOT multimodal
+
+4. **True multimodal requires ALL modalities at test time:**
+   - Train has: `image_path, bedrooms, bathrooms, sqft` | Test has: `image_path, bedrooms, bathrooms, sqft` → **["computer_vision", "tabular"]** ✓
+
 # Hard Constraints
 - DO NOT rely on prior competition knowledge or winning solutions to the competition.
 - Base your reasoning only on the information in the <competition_description>.

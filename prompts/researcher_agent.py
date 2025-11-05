@@ -677,7 +677,7 @@ Set reasoning_effort = medium. Adjust analysis depth according to the complexity
 - Use a **single 80/20 train/validation split** (no cross-validation), with lightweight models:
   - Tabular: XGBoost with GPU; request feature importance
   - CV: Small networks (e.g., ResNet18, EfficientNet-B0)
-  - NLP: Small transformers (e.g., deberta-v3-xsmall, distilbert-base)
+  - NLP: Small transformers (e.g., deberta-v3-xsmall)
   - Time Series: LightGBM with limited iterations
 - Cross-validation is for the Developer phase
 - A/B tests should be quick, intended for directional guidance, not final selection
