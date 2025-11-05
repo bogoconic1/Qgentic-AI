@@ -4,8 +4,6 @@ llm:
   researcher_model: "gpt-5"
   researcher_tool_offline_model: "gpt-5"
   researcher_tool_online_model: "gpt-5"
-  leakage_review_model: "gpt-5-mini"
-  leakage_followup_model: "gpt-5-mini"
   model_recommender_model: "gpt-5"
   starter_model: "gpt-5"
   ensembler_model: "gpt-5"
@@ -34,8 +32,6 @@ paths:
   external_data_dirname: "external-data"
 guardrails:
   logging_basicconfig_order: true
-  nan_guard: false
-  leakage_review: false
 tracking:
   wandb:
     entity: 520f8592abc # replace with your W&B entity
