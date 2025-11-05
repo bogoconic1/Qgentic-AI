@@ -654,7 +654,7 @@ Set reasoning_effort = medium. Adjust analysis depth according to the complexity
 
 # Available Tools
 - `ask_eda(question)`: Executes Python-based exploratory data analysis on the local dataset to inspect distributions, data quality, and test assumptions.
-- `run_ab_test(question)`: Designs and runs A/B tests regarding modeling or feature engineering for direct impact assessment.
+- `run_ab_test(questions)`: Designs and runs A/B tests regarding modeling or feature engineering for direct impact assessment.
 - `download_external_datasets(question_1, question_2, question_3)`: Retrieves relevant external datasets using three differently phrased queries; datasets appear in `{base_dir}/`. Both EDA and A/B testing may be used on them.
 
 **IMPORTANT:** ONLY input the dataset URL `<author>/<dataset>` in your query if possible. Otherwise use a brief English phrase (avoid lengthy detail or field lists).
