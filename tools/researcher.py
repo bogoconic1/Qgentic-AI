@@ -43,7 +43,7 @@ _EXTERNAL_DIRNAME = _PATH_CFG.get("external_data_dirname")
 
 
 @weave.op()
-def ask_eda(question: str, description: str, data_path: str, max_attempts: int | None = None, timeout_seconds: int = 3600, previous_ab_tests: list[dict] | None = None) -> str:
+def ask_eda(question: str, description: str, data_path: str, max_attempts: int | None = None, timeout_seconds: int = 3600, previous_ab_tests: list[dict] | None = None, file_suffix: str = "", cpu_core_range: list[int] | None = None, gpu_identifier: str | None = None) -> str:
     """Asks a question about the data provided for exploratory data analysis (EDA)
 
     Args:
@@ -52,7 +52,10 @@ def ask_eda(question: str, description: str, data_path: str, max_attempts: int |
         data_path: Path to the data directory
         max_attempts: Maximum number of attempts (default from config)
         timeout_seconds: Timeout for code execution in seconds (default 3600 = 1 hour)
-        previous_ab_tests: List of previous AB test dicts with 'question' and 'code' keys (empty for EDA, last 6 for AB tests)
+        previous_ab_tests: List of previous AB test dicts with 'question' and 'code' keys (empty for EDA, last 8 for AB tests)
+        file_suffix: Optional suffix for the temp file (e.g., "_1", "_2" for parallel execution)
+        cpu_core_range: List of CPU cores to use (e.g., [0,1,2,...,41]) for CPU affinity
+        gpu_identifier: GPU identifier: MIG UUID or GPU ID (as string) for GPU isolation
     """
     # Prepare media directory for EDA charts and expose to executed code
     try:
@@ -104,11 +107,35 @@ def ask_eda(question: str, description: str, data_path: str, max_attempts: int |
             logger.warning("ask_eda found no python code block in response.")
             continue
         else:
-            # Write code to temporary file with OpenBLAS thread limiting prefix
-            code_file = Path(data_path) / "eda_temp.py"
-            openblas_prefix = 'import os\nos.environ["OPENBLAS_NUM_THREADS"] = "32"\n\n'
+            # Write code to temporary file with resource allocation and OpenBLAS thread limiting prefix
+            filename = f"eda_temp{file_suffix}.py" if file_suffix else "eda_temp.py"
+            code_file = Path(data_path) / filename
+
+            # Build resource allocation header (similar to DeveloperAgent._postprocess_code)
+            header_lines = []
+            header_lines.append('import os')
+
+            # CPU affinity
+            if cpu_core_range is not None:
+                header_lines.append('import psutil  # For CPU affinity')
+                header_lines.append('')
+                header_lines.append('# CPU affinity (pin to specific cores to prevent resource overlap)')
+                header_lines.append(f'psutil.Process(os.getpid()).cpu_affinity({cpu_core_range})')
+
+            # GPU assignment (works for both MIG and multi-GPU)
+            if gpu_identifier is not None:
+                gpu_device = gpu_identifier
+            else:
+                gpu_device = '0'  # Default to GPU 0
+
+            header_lines.append(f'os.environ["CUDA_VISIBLE_DEVICES"] = "{gpu_device}"')
+            header_lines.append('os.environ["OPENBLAS_NUM_THREADS"] = "32"')
+            header_lines.append('')
+
+            header = '\n'.join(header_lines)
+
             with open(code_file, "w") as f:
-                f.write(openblas_prefix + code)
+                f.write(header + '\n' + code)
 
             # Import execute_code here to avoid circular import at module level
             from tools.developer import execute_code
@@ -128,8 +155,10 @@ def ask_eda(question: str, description: str, data_path: str, max_attempts: int |
                 input_list.append({"role": "user", "content": result})
                 continue
 
-            # Success - return the output
+            # Success - truncate to last 30000 characters and return
             logger.info("ask_eda succeeded on attempt %s", attempt)
+            if len(result) > 30000:
+                result = "... (output truncated to last 30000 characters)\n\n" + result[-30000:]
             return result
 
     logger.error("ask_eda exhausted all attempts without success")
@@ -221,7 +250,7 @@ def download_external_datasets(question_1: str, question_2: str, question_3: str
 
 
 
-def get_tools():
+def get_tools(max_parallel_workers: int = 1):
     return [
         {
             "type": "function",
@@ -239,15 +268,19 @@ def get_tools():
         {
             "type": "function",
             "name": "run_ab_test",
-            "description": "Run A/B tests to validate modeling or feature engineering choices by comparing their impact on performance.",
+            "description": f"Run A/B tests to validate modeling or feature engineering choices by comparing their impact on performance. You can ask up to {max_parallel_workers} questions in parallel for efficiency.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "question": {"type": "string", "description": "The A/B testing question (e.g., 'Train XGBoost with 80/20 split comparing baseline features vs baseline + interaction features and report cross-validated AUC')"}
+                    "questions": {
+                        "type": "array",
+                        "description": f"List of A/B testing questions to run in parallel (max {max_parallel_workers}). Each question should be a comparison test",
+                        "items": {"type": "string"},
+                    }
                 },
             },
             "additionalProperties": False,
-            "required": ['question']
+            "required": ['questions']
         },
         {
             "type": "function",
