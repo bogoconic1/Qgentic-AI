@@ -61,7 +61,7 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
 - **Researcher Agent (`agents/researcher.py`)**
   - Uses tool-calling (EDA snippets, A/B testing, external dataset search) to understand the task.
   - **A/B Testing**: Runs controlled experiments comparing modeling approaches (e.g., different normalizations, augmentations, optimizers) with automatic code generation and execution.
-  - Tracks A/B test history (last 6 tests) to avoid redundant experiments and inform future tests.
+  - Tracks A/B test history (last 8 tests) to avoid redundant experiments and inform future tests.
   - Logs every step to `task/<slug>/outputs/<iteration>/researcher/`.
   - Persists the final plan in `plan.md` – consumed verbatim by downstream stages.
 

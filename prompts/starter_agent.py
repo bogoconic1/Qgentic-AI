@@ -49,56 +49,31 @@ Lead Researcher for a Machine-Learning Competition Team tasked with identifying 
 - task_types must be a list (even if only one task type)
 
 # Output Format
-Return the output strictly in this JSON format (within backticks):
-
-```json
-{
-  "task_types": ["<task_type_1>", "<task_type_2>", ...],
-  "task_summary": "<string: short summary describing the nature and requirements of the ML task as described in <competition_description>>"
-}
-```
+Return the output with the following fields:
+- task_types: A list of task types (e.g., ["computer_vision", "tabular"])
+- task_summary: A short summary describing the nature and requirements of the ML task
 
 # Examples
 
 **Example 1: NLP Competition**
-```json
-{
-  "task_type": "nlp",
-  "task_summary": "Binary text classification to predict sentiment (positive/negative) from movie reviews. Metric: F1-score. Dataset contains 50k reviews with balanced labels."
-}
-```
+- task_types: ["nlp"]
+- task_summary: "Binary text classification to predict sentiment (positive/negative) from movie reviews. Metric: F1-score. Dataset contains 50k reviews with balanced labels."
 
 **Example 2: Computer Vision Competition**
-```json
-{
-  "task_type": "computer_vision",
-  "task_summary": "Multi-class image classification to identify plant diseases from leaf images (38 classes). Metric: Accuracy. Dataset contains 87k images across various lighting and background conditions."
-}
-```
+- task_types: ["computer_vision"]
+- task_summary: "Multi-class image classification to identify plant diseases from leaf images (38 classes). Metric: Accuracy. Dataset contains 87k images across various lighting and background conditions."
 
 **Example 3: Tabular Competition**
-```json
-{
-  "task_type": "tabular",
-  "task_summary": "Binary classification to predict customer churn from structured customer data (demographics, usage patterns, billing). Metric: AUC-ROC. Dataset has 100k rows with 40 features including numerical and categorical variables."
-}
-```
+- task_types: ["tabular"]
+- task_summary: "Binary classification to predict customer churn from structured customer data (demographics, usage patterns, billing). Metric: AUC-ROC. Dataset has 100k rows with 40 features including numerical and categorical variables."
 
 **Example 4: Multimodal Competition (Computer Vision + Tabular)**
-```json
-{
-  "task_types": ["computer_vision", "tabular"],
-  "task_summary": "Regression to predict property prices from listing photos and structured features (bedrooms, bathrooms, square footage, location, year built). Metric: RMSE. Images capture property condition and aesthetics; tabular features provide specifications and geographic data."
-}
-```
+- task_types: ["computer_vision", "tabular"]
+- task_summary: "Regression to predict property prices from listing photos and structured features (bedrooms, bathrooms, square footage, location, year built). Metric: RMSE. Images capture property condition and aesthetics; tabular features provide specifications and geographic data."
 
 **Example 5: Time Series Competition (Single Modality)**
-```json
-{
-  "task_types": ["time_series"],
-  "task_summary": "Multi-step forecasting to predict store sales 28 days ahead using historical sales, price, and promotional data. Metric: RMSE. Dataset contains daily sales for 3,049 products across 10 stores over 5 years."
-}
-```
+- task_types: ["time_series"]
+- task_summary: "Multi-step forecasting to predict store sales 28 days ahead using historical sales, price, and promotional data. Metric: RMSE. Dataset contains daily sales for 3,049 products across 10 stores over 5 years."
 """
 
 def build_user(description: str) -> str:

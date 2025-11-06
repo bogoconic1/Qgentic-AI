@@ -17,8 +17,6 @@ _DEFAULT_CONFIG: dict[str, Any] = {
         "researcher_model": "gpt-5",
         "researcher_tool_offline_model": "gpt-5",
         "researcher_tool_online_model": "gpt-5",
-        "leakage_review_model": "gpt-4o",
-        "leakage_followup_model": "gpt-4o",
         "model_recommender_model": "gpt-5",
     },
     "runtime": {
@@ -37,8 +35,6 @@ _DEFAULT_CONFIG: dict[str, Any] = {
     },
     "guardrails": {
         "logging_basicconfig_order": True,
-        "nan_guard": True,
-        "leakage_review": True,
     },
     "tracking": {
         "wandb": {

@@ -19,7 +19,7 @@ from prompts.tools_developer import (
     sota_system as prompt_sota_system,
     sota_user as prompt_sota_user,
 )
-from utils.oom_detector import detect_oom, OOMError
+from schemas.developer import StackTraceSolution, SOTAResponse
 import weave
 
 load_dotenv()
@@ -60,32 +60,21 @@ def web_search_stack_trace(query: str) -> str:
         instructions=system_prompt,
         tools=[],
         messages=messages,
-        web_search_enabled=True
+        web_search_enabled=True,
+        text_format=StackTraceSolution,
     )
 
+    # Use structured output
+    solution_text = ""
+    if response and hasattr(response, 'output_parsed') and response.output_parsed:
+        solution_text = response.output_parsed.reasoning_and_solution.strip()
+        logger.debug("Returning solution from structured output.")
+        return query + "\n" + "This is how you can fix the error: \n" + solution_text
+
+    # Fallback to raw output if structured parsing fails
     content = response.output_text or ""
-
-    solution_text = content
-    parsed_payload = None
-    try:
-        parsed_payload = json.loads(content)
-    except json.JSONDecodeError:
-        logger.debug("Raw response is not bare JSON; attempting fenced-block extraction.")
-        try:
-            match = re.search(r"```json\s*(\{.*?\})\s*```", content, re.DOTALL | re.IGNORECASE)
-            if match:
-                parsed_payload = json.loads(match.group(1))
-        except json.JSONDecodeError:
-            logger.debug("Failed to parse JSON from fenced block in web search response.")
-
-    if isinstance(parsed_payload, dict):
-        solution_candidate = parsed_payload.get("solution")
-        if isinstance(solution_candidate, str) and solution_candidate.strip():
-            logger.debug("Returning solution field extracted from web search response.")
-            return query + "\n" + "This is how you can fix the error: \n" + solution_candidate.strip()
-        logger.debug("Solution field missing or empty in parsed payload.")
-    
-    return query + "\n" + "This is how you can fix the error: \n" + solution_text
+    logger.warning("Structured output parsing failed, falling back to raw content.")
+    return query + "\n" + "This is how you can fix the error: \n" + content
 
 @weave.op()
 def search_red_flags(
@@ -129,7 +118,6 @@ def search_sota_suggestions(
     red_flags: str,
     executed_suggestion: str | None,
     failed_ideas: list[str],
-    executed_code: str | None = None,
     later_recommendations: str | None = None,
     shared_suggestions: list[str] | None = None,
     is_ensemble: bool = False,
@@ -144,7 +132,6 @@ def search_sota_suggestions(
         red_flags: Red flags identified from Stage 1 (final summary text)
         executed_suggestion: Most recently executed suggestion
         failed_ideas: List of blacklisted ideas from this model
-        executed_code: Code snippet from last attempt
         later_recommendations: LATER recommendations for progressive improvement
         shared_suggestions: List of all suggestions from all parallel models with outcomes
                           Format: "Model <model> tried <suggestion> (score improved/worsened/remained by X: A -> B)"
@@ -156,9 +143,7 @@ def search_sota_suggestions(
         SOTA suggestions text with blacklist decision and new suggestion
     """
     logger.info("Dispatching SOTA suggestions (Stage 2) with web search")
-    failed_ideas_text = "No prior ideas are blacklisted."
     executed_suggestion_text = executed_suggestion or "No previous suggestion executed; this is the first attempt."
-    executed_code_text = executed_code or "No explicit code snippet was provided for the last attempt."
     failed_ideas_text = "\n".join(f"- {idea}" for idea in failed_ideas) if failed_ideas else "No prior ideas are blacklisted."
     shared_suggestions_text = "\n".join(f"- {suggestion}" for suggestion in (shared_suggestions or [])) if shared_suggestions else "No shared suggestions yet."
 
@@ -177,7 +162,6 @@ def search_sota_suggestions(
         red_flags=red_flags,
         failed_ideas_text=failed_ideas_text,
         executed_suggestion_text=executed_suggestion_text,
-        executed_code_text=executed_code_text,
         context=context,
         shared_suggestions_text=shared_suggestions_text,
         external_data_listing=external_data_listing or "No external data directories found.",
@@ -188,10 +172,11 @@ def search_sota_suggestions(
         instructions=system_prompt,
         tools=[],
         messages=[{"role": "user", "content": user_prompt}],
-        web_search_enabled=True
+        web_search_enabled=True,
+        text_format=SOTAResponse,
     )
 
-    return response.output_text or ""
+    return response
 
 @weave.op()
 def execute_code(filepath: str, timeout_seconds: int | None = None, conda_env: str | None = None) -> str:
@@ -234,12 +219,7 @@ def execute_code(filepath: str, timeout_seconds: int | None = None, conda_env: s
         )
         logger.debug("Execution stderr: %s", trace)
 
-        # Efficiency: If OOM, skip web search (retry logic will handle it)
-        if detect_oom(trace):
-            logger.info("OOM detected - skipping web search (will be handled by retry logic)")
-            return trace
-
-        # Non-OOM error: do web search for suggestions
+        # Do web search for suggestions
         search_result = web_search_stack_trace(trace)
         return search_result
 
@@ -257,88 +237,5 @@ def execute_code(filepath: str, timeout_seconds: int | None = None, conda_env: s
         trace = traceback.format_exc()
         logger.exception("Unexpected error while executing %s", filepath)
 
-        # Efficiency: If OOM in exception trace, skip web search
-        if detect_oom(trace):
-            logger.info("OOM detected in exception - skipping web search")
-            return trace
-
         search_result = web_search_stack_trace(trace)
         return search_result
-
-
-@weave.op()
-def execute_code_with_oom_retry(
-    filepath: str,
-    timeout_seconds: int | None = None,
-    max_oom_retries: int = 10,
-    oom_retry_delay: int = 300,
-    skip_oom_polling: bool = False,
-    conda_env: str | None = None
-) -> tuple[str, float]:
-    """
-    Execute code with automatic OOM retry logic.
-
-    If OOM is detected, waits and retries the SAME script up to max_oom_retries times.
-    If OOM persists after all retries, returns the output (which includes web search
-    suggestions for fixing the OOM), allowing the agent to generate corrected code.
-
-    Args:
-        filepath: Path to the Python file to execute
-        timeout_seconds: Timeout in seconds for each execution attempt (default: baseline_time_limit // 4 from config)
-        max_oom_retries: Maximum number of OOM retries (default 10)
-        oom_retry_delay: Seconds to wait between OOM retries (default 300 = 5 min)
-        skip_oom_polling: If True (e.g., when MIG is enabled), skip polling and treat OOM as a real bug
-        conda_env: Conda environment name to use for execution (None = use current env)
-
-    Returns:
-        Tuple of (output string, total_wait_time_seconds)
-        - output: Execution output or error message from execute_code()
-        - total_wait_time: Time spent waiting for OOM retries (to exclude from budget)
-    """
-    total_wait_time = 0.0
-
-    # Execute using the existing execute_code function
-    output = execute_code(filepath, timeout_seconds, conda_env=conda_env)
-
-    # Check if output indicates OOM
-    if detect_oom(output):
-        # If MIG is enabled (skip_oom_polling=True), treat OOM as a code bug, not resource contention
-        if skip_oom_polling:
-            logger.info(
-                f"OOM detected in {filepath} with MIG enabled. "
-                f"Treating as code issue (not polling for VRAM availability)."
-            )
-            return output, total_wait_time
-
-        # Otherwise, use traditional OOM retry logic with polling
-        for attempt in range(max_oom_retries):
-            logger.warning(
-                f"OOM detected in {filepath} (attempt {attempt + 1}/{max_oom_retries + 1}). "
-                f"Waiting {oom_retry_delay}s before retry..."
-            )
-
-            # Wait for GPU VRAM to free up
-            wait_start = time.time()
-            time.sleep(oom_retry_delay)
-            wait_duration = time.time() - wait_start
-            total_wait_time += wait_duration
-
-            logger.info(f"Retrying {filepath} after {wait_duration:.1f}s wait...")
-
-            # Retry execution
-            output = execute_code(filepath, timeout_seconds, conda_env=conda_env)
-
-            # Check if OOM is resolved
-            if not detect_oom(output):
-                logger.info(f"Execution succeeded for {filepath} after {attempt + 1} OOM retries")
-                return output, total_wait_time
-
-        # Max retries exhausted - return output with web search suggestions
-        logger.warning(
-            f"OOM persisted after {max_oom_retries} retries for {filepath}. "
-            f"Returning output with suggestions for agent to fix."
-        )
-        return output, total_wait_time
-
-    # No OOM detected - return successfully
-    return output, total_wait_time

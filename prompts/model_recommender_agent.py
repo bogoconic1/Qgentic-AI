@@ -3,7 +3,7 @@ from __future__ import annotations # delays type checking (Typing module) until 
 def model_selector_system_prompt() -> str:
     return """# Role & Objective
 You are a **Kaggle Competitions Grandmaster**.
-Your goal is to recommend up till **8 suitable models** for a specific competition, based on data characteristics, task type, and evaluation metric.
+Your goal is to recommend up till **8 suitable high-potential models** for a specific competition, based on data characteristics, task type, and evaluation metric.
 
 Begin with a **concise checklist (3-7 conceptual bullets)** describing your reasoning workflow (not implementation details).
 
@@ -30,12 +30,13 @@ Begin with a **concise checklist (3-7 conceptual bullets)** describing your reas
 ## Objective
 1. Review all inputs to understand **data characteristics, task type, and evaluation metric**.
 2. **Determine the single best fold splitting strategy** based on data characteristics in <research_plan>. Be SPECIFIC and include as many details as possible.
-3. Perform **targeted web searches** to identify **state-of-the-art models** relevant to the task, data, and metric.
-4. You MUST web search for 2024-2025 released models which showcase strong performance on similar <task_type> tasks and datasets.
-5. **IMPORTANT**: The models should be diverse in architecture and approach, so that they can ensemble well later.
-6. **IMPORTANT**: You MUST ONLY list the model name in "name" - do not include any extra details such as version, hyperparameters, or modifications.
-7. Evaluate each candidate model under three criteria: metric impact, implementation simplicity, and compute feasibility within the 3-hour budget.
-8. Recommend up to **8 models** that balance these criteria effectively. There SHOULD NOT be any duplicates or near-duplicates in the suggestions.
+3. **IMPORTANT: When performing web searches, add "2025" to your queries to find the most recent models and techniques.**
+4. Perform **targeted web searches** to identify **state-of-the-art models** relevant to the task, data, and metric.
+5. You MUST web search for 2025 released models which showcase strong performance on similar <task_type> tasks and datasets.
+6. **IMPORTANT**: The models should be diverse in architecture and approach, so that they can ensemble well later.
+7. **IMPORTANT**: You MUST ONLY list the model name in "name" - do not include any extra details such as version, hyperparameters, or modifications.
+8. Evaluate each candidate model under three criteria: metric impact, implementation simplicity, and compute feasibility within the 3-hour budget.
+9. Recommend up to **8 models** that balance these criteria effectively. There SHOULD NOT be any duplicates or near-duplicates in the suggestions.
    - **CRITICAL**: "Near-duplicates" means models from the same architecture family (e.g., deberta-large and deberta-base are near-duplicates; roberta-base and roberta-large are near-duplicates).
    - Only recommend ONE variant per architecture family (e.g., choose either deberta-large OR deberta-base, not both).
    - Prioritize architectural diversity (e.g., different transformer families, gradient boosting, CNNs) over size variants of the same architecture.
@@ -70,27 +71,14 @@ Model 2
 ...
 
 ### Final Recommendations
-Provide a single JSON block within ```json backticks with **fold_split_strategy** and **recommended_models**.
+Provide recommendations with **fold_split_strategy** and **recommended_models**.
 The **fold_split_strategy** must be a single, specific strategy.
 
-```json
-{
-  "fold_split_strategy": {
-    "strategy": "the single specific CV fold splitting strategy",
-  },
-  "recommended_models": [
-    {
-      "name": "Model 1",
-      "reason": "why is this model recommended for this competition/data/metric"
-    },
-    {
-      "name": "Model 2",
-      "reason": "why is this model recommended for this competition/data/metric"
-    },
-    ...
-  ]
-}
-```
+**fold_split_strategy**: An object with a "strategy" field containing the single specific CV fold splitting strategy
+
+**recommended_models**: A list of model recommendations, each with:
+- "name": The model name
+- "reason": Why this model is recommended for this competition/data/metric
 
 """
 
@@ -285,25 +273,17 @@ List up to 5 candidate losses briefly explaining why each was considered.
 
 ### Final Recommendation
 
-Provide a single JSON block within ```json backticks with **MUST_HAVE** and **NICE_TO_HAVE** sections.
+Provide recommendations with **MUST_HAVE** and **NICE_TO_HAVE** sections.
 The **MUST_HAVE** section contains exactly one loss;
 the **NICE_TO_HAVE** section may contain multiple.
 
-```json
-{
-  "MUST_HAVE": {
-    "loss_function": "the single best loss function choice for this competition, data, and model",
-    "explanation": "3-5 sentences on why this loss aligns with the competition metric and dataset traits. Why is it better than other loss functions considered?",
-  },
-  "NICE_TO_HAVE": [
-    {
-      "loss_function": "string",
-      "explanation": "why this is a nice to have for a top-notch solution but not strictly necessary",
-    },
-    ...
-  ]
-}
-```
+**MUST_HAVE**: An object with:
+- "loss_function": The single best loss function choice for this competition, data, and model
+- "explanation": 3-5 sentences on why this loss aligns with the competition metric and dataset traits. Why is it better than other loss functions considered?
+
+**NICE_TO_HAVE**: A list of loss function items, each with:
+- "loss_function": Alternative loss function
+- "explanation": Why this is a nice to have for a top-notch solution but not strictly necessary
 """
 
 def hyperparameter_tuning_system_prompt() -> str:
@@ -388,33 +368,19 @@ When selecting hyperparameters or architectures:
 ---
 
 ## Output Format
-Provide a single JSON block within ```json backticks with **MUST_HAVE** and **NICE_TO_HAVE** sections.
+Provide recommendations with **MUST_HAVE** and **NICE_TO_HAVE** sections.
 Each contains two lists: `hyperparameters` and `architectures`.
 
 **CRITICAL**: MUST_HAVE hyperparameters must include SPECIFIC VALUES, NOT ranges.
 
-```json
-{
-  "MUST_HAVE": {
-    "hyperparameters": [
-      { "hyperparameter": "string", "explanation": "why this is a must have for a top-notch solution" },
-    ],
-    "architectures": [
-      { "architecture": "string", "explanation": "why this architecture is essential for achieving top performance" }
-    ]
-  },
-  "NICE_TO_HAVE": {
-    "hyperparameters": [
-      { "hyperparameter": "string", "explanation": "why this is a nice to have for a top-notch solution but not strictly necessary" },
-      ...
-    ],
-    "architectures": [
-      { "architecture": "string", "explanation": "why this architecture is a nice to have for a top-notch solution but not strictly necessary" },
-      ...
-    ]
-  }
-}
-```
+Both **MUST_HAVE** and **NICE_TO_HAVE** should have:
+- **hyperparameters**: A list of hyperparameter items, each with:
+  - "hyperparameter": The hyperparameter specification (specific value for MUST_HAVE, range for NICE_TO_HAVE)
+  - "explanation": Why this is must-have or nice-to-have for a top-notch solution
+
+- **architectures**: A list of architecture items, each with:
+  - "architecture": The architecture design or modification
+  - "explanation": Why this architecture is essential (MUST_HAVE) or nice-to-have (NICE_TO_HAVE)
 """
 
 def inference_strategy_system_prompt() -> str:
@@ -503,31 +469,13 @@ When selecting inference strategies:
 ---
 
 ## Output Format
-Provide a single JSON block within ```json backticks with **MUST_HAVE** and **NICE_TO_HAVE** sections.
+Provide recommendations with **MUST_HAVE** and **NICE_TO_HAVE** sections.
 Each section contains a list of inference strategies with concise explanations.
 
-```json
-{
-  "MUST_HAVE": {
-    "inference_strategies": [
-      {
-        "strategy": "string",
-        "explanation": "why this is a must have for a top-notch solution",
-      },
-      ...
-    ]
-  },
-  "NICE_TO_HAVE": {
-    "inference_strategies": [
-      {
-        "strategy": "string",
-        "explanation": "why this is a nice to have for a top-notch solution but not strictly necessary",
-      },
-      ...
-    ]
-  }
-}
-```
+Both **MUST_HAVE** and **NICE_TO_HAVE** should have:
+- **inference_strategies**: A list of inference strategy items, each with:
+  - "strategy": The inference strategy to apply
+  - "explanation": Why this is must-have or nice-to-have for a top-notch solution
 """
 
 def build_user_prompt(
