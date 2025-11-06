@@ -47,34 +47,19 @@ You MUST conduct at least **20-30 A/B tests** covering the following categories.
 ### 1. Numerical Feature Transformations (Test at least 15)
 
 **Quasi-discrete numeric encodings** (Test at least 5):
-- **Identification of quasi-discrete numerics**:Identify numeric features with **low cardinality (<5% unique values)**, and treat these features' **raw values** as **categorical (no binning)**.
-- **Frequency-based**: Count encoding, rank encoding by frequency (on raw numeric values)
-- **Target-based** (with proper CV): Target encoding, Leave-One-Out, Weight of Evidence (WOE), M-Estimate, CatBoost encoding (on raw numeric values)
+- **Identification of quasi-discrete numerics**: Identify numeric features with **low cardinality (<5% unique values)**, and treat these features' **raw values** as **categorical (no binning)**.
+- **Target-based**: Target encoding, Weight of Evidence (WOE), M-Estimate, CatBoost encoding (on raw numeric values)
 - **Ordinal encoding**: For naturally ordered categories or by target mean
-- **Hash/Binary encoding**: For high-cardinality features (>1000 unique values)
-- **Entity embeddings**: Neural network learned representations
 
 **Low-Correlation numeric encoding** (Test at least 5):
-- **Identification of low-correlation numerics**:Identify numeric features with **low absolute correlation with target (|r| < 0.2)**, and treat these features' **raw values** as **categorical (no binning)**.
-- **Frequency-based**: Count encoding, rank encoding by frequency (on raw numeric values)
-- **Target-based** (with proper CV): Target encoding, Leave-One-Out, Weight of Evidence (WOE), M-Estimate, CatBoost encoding (on raw numeric values)
+- **Identification of low-correlation numerics**: Identify numeric features with **low absolute correlation with target (|r| < 0.2)**, and treat these features' **raw values** as **categorical (no binning)**.
+- **Target-based**: Target encoding, Weight of Evidence (WOE), M-Estimate, CatBoost encoding (on raw numeric values)
 - **Ordinal encoding**: For naturally ordered categories or by target mean
-- **Hash/Binary encoding**: For high-cardinality features (>1000 unique values)
-- **Entity embeddings**: Neural network learned representations
 
-**Standard numeric transforms** (Test at least 5):
-- **Distribution normalization**: Log, square root, Box-Cox, Yeo-Johnson for skewed features (|skew| > 1.0)
-- **Outlier handling**: Winsorization (cap at 1st/99th percentile), clipping, or log compression
-- **Discretization**: Equal-width binning, equal-frequency (quantile) binning, custom domain bins
-- **Polynomial features**: Squared terms (x²), cubic terms for non-linear relationships
-- **Scaling**: Test StandardScaler, RobustScaler, MinMaxScaler if models are sensitive
-
-### 2. Categorical Encodings (Test at least 5 beyond baseline OHE)
+### 2. Categorical Encodings (Test at least 5)
 - **Frequency-based**: Count encoding, rank encoding by frequency
-- **Target-based** (with proper CV): Target encoding, Leave-One-Out, Weight of Evidence (WOE), M-Estimate, CatBoost encoding
+- **Target-based**: Target encoding, Weight of Evidence (WOE), M-Estimate, CatBoost encoding
 - **Ordinal encoding**: For naturally ordered categories or by target mean
-- **Hash/Binary encoding**: For high-cardinality features (>50 categories)
-- **Entity embeddings**: Neural network learned representations
 
 ### 3. Interaction Features (Test at least 6)
 **Categorical × Categorical**:
@@ -90,41 +75,44 @@ You MUST conduct at least **20-30 A/B tests** covering the following categories.
 - For each categorical or pair, compute: mean, std, min, max, median, count
 - Deviation features: `(value - group_mean)` or `value / group_mean`
 - Rank within group, percentile within group
+- Convert quasi-discrete numerics to categorical and concatenate them (quasi-discrete + "_" + cat2) - 2-way or 3-way combinations
 
 ### 4. Aggregation Features (Test at least 4 groupby strategies)
 For meaningful categorical groupings, create:
 - **Basic stats**: mean, median, std, min, max, count, sum
 - **Spread metrics**: range (max-min), coefficient of variation (std/mean), IQR
 - **Distribution stats**: skewness, kurtosis within groups
-- **Target statistics**: If applicable, mean target per group (with CV to avoid leakage)
+- **Target statistics**: If applicable, mean target per group
 
 ### 5. Missing Value Engineering (If applicable)
 - **Indicator features**: Binary flags for missingness per feature
 - **Missing count per row**: Total number of null features
 - **Imputation strategy comparison**: Mean vs median vs KNN vs model-based
 
-### 6. Feature Selection (Test at least 3 approaches)
-- **Importance-based**: Remove features with importance < threshold from baseline model
-- **Correlation pruning**: Remove highly correlated features (>0.95)
-- **Recursive elimination**: Backward selection based on performance
-- **Univariate filtering**: Keep features with correlation to target > threshold
+### 6. Target Transformations (Test at least 3)
+For regression tasks, transform the target variable and predict transformed values:
+- **Log transformation**: `log(y + 1)` or `log(y)` for strictly positive targets (reduces skew, stabilizes variance)
+- **Square root / Power transforms**: `sqrt(y)`, `y^0.5`, `y^2` for compressing/expanding target range
+- **Box-Cox / Yeo-Johnson**: Automatic optimal power transformation (handles zero/negative values with Yeo-Johnson)
+- **Rank-based / Quantile**: Transform target to uniform distribution (robust to outliers)
+- **Residual prediction**: Train initial model → predict residuals → stack predictions (iterative refinement)
+- **Pseudo-Huber / Tweedie**: For targets with heavy tails or zero-inflation
+- **Clipping / Winsorization**: Cap extreme target values at percentiles (e.g., 1st/99th)
 
-### 7. Dimensionality Reduction (Test at least 2)
-- **PCA**: Test different numbers of components (50%, 75%, 90% variance explained)
-- **LDA**: Linear Discriminant Analysis for supervised reduction
-- **Truncated SVD**: Alternative to PCA for sparse data
+For classification tasks with class imbalance:
+- **Class weights**: Adjust loss function weights inversely proportional to class frequencies
+- **Focal loss**: Down-weight easy examples, focus on hard negatives (gamma=2.0 typical)
+- **Label smoothing**: Soften hard labels (0/1) to (ε, 1-ε) to prevent overconfidence
 
-### 8. Clustering-Based Features (Test at least 1)
-- **K-Means**: Generate cluster labels with k=3, 5, 10, 20
-- **Distance to centroids**: Add distance to each cluster center as features
-- **Cluster statistics**: Mean target value per cluster, cluster size features
+Universal
+- **Predict special target**: e.g. predict `target - certain feature value` instead of `raw target` if meaningful
 
 ### Iteration Policy for Tabular Tasks
 - **When simple features fail**: If basic ratios or arithmetic features show negative impact, you MUST test:
   - Complex interactions (categorical × numerical groupby aggregations)
   - Polynomial combinations
   - Domain-specific derived features based on web research
-- **When encodings fail**: If target encoding fails, test WOE, frequency, and hash encodings before concluding
+- **When encodings fail**: If target encoding fails, test WOE, frequency before concluding
 - **When transforms fail**: If log fails, test Box-Cox, Yeo-Johnson, or quantile transforms
 - **Never conclude after 2-3 failures**: Each category should have 4-5 attempts minimum
 - **Remember:** it is common practice on Kaggle Competitions to engineer 100+ features (even complex ones) and prune down later.
@@ -136,7 +124,7 @@ At each milestone, report:
 - Top 3 most promising directions for further exploration
 
 ### Web Search Guidance for Tabular
-Search for: "[task_domain] feature engineering kaggle 2024 2025" (e.g., "binary classification feature engineering kaggle 2024")
+Search for: "[task_domain] feature engineering kaggle 2025" (e.g., "binary classification feature engineering kaggle 2025")
 Look for: Winning solution write-ups, feature importance patterns, domain-specific transforms
 """
 
@@ -663,13 +651,17 @@ If any required input (`<competition_description>`, `<task_type>`, or `<task_sum
 Set reasoning_effort = medium based on the moderate complexity of the task. Keep tool output summaries brief; elaborate and present detailed rationale in the final technical plan as required by the complexity of findings.
 
 # Available Tools
-- `ask_eda(question)`: Performs Python EDA on the local dataset to check distributions, data quality, and test assumptions.
-- `run_ab_test(questions)`: Runs multiple A/B tests simultaneously (up to {max_parallel_workers} at a time). Accepts an **array** of questions, each comparing approaches and reporting performance metrics. **Each test description must be structured in the format: [Category][Test #Number] (A) ... vs (B)...**
+- `ask_eda(question)`: Performs Python EDA on the local dataset to check distributions, data quality, and test assumptions. **All analysis results (insights, feature categorizations, statistics) are automatically saved as JSON files in `{base_dir}/analysis/` for later reference in AB tests.**
+- `run_ab_test(questions)`: Runs multiple A/B tests simultaneously (up to {max_parallel_workers} at a time). Accepts an **array** of questions, each comparing approaches and reporting performance metrics. **Each test description must be structured in the format: [Category][Test #Number] (A) Baseline vs (B) <what change did you make to the baseline> **
+- `download_external_datasets(question_1, question_2, question_3)`: Retrieves relevant external datasets based on three differently phrased queries; datasets will be in `{base_dir}/`. Use EDA and A/B testing as appropriate.
 
 **CRITICAL: Parallel AB Test Requirements:**
 Since questions execute in parallel, each must be FULLY INDEPENDENT:
 For your initial `run_ab_test()` call, create just ONE A/B test for the baseline. Use subsequent calls (each with up to {max_parallel_workers} questions) within the *same category* (e.g., preprocessing) to compare variations to the baseline.
 Design A/B test groups by phase (preprocessing, augmentation, etc.) for maximum clarity.
+- When generating any A/B test question referring to columns discovered in previous steps (e.g., quasi-discrete numerics, low-correlation numerics, top importances, categorical groups), **do not list the actual column names** even if they were shown in prior EDA output.
+- Instead, always phrase it as:  
+  `(B) Load <absolute_json_path>, '<key>' key, then apply the relevant transformation.`  
 
 Detailed Requirements:
 1. First, call `run_ab_test()` with a single baseline question.
@@ -678,9 +670,6 @@ Detailed Requirements:
 4. Continue until all categories are complete.
 5. Do not mix questions from different categories in the same `run_ab_test()` call.
 6. It is acceptable to use fewer than {max_parallel_workers} questions per call if needed.
-7. **When testing multiple variations (e.g., different models and different techniques), ensure that all relevant combinations are tested to provide a complete picture.** For example, if considering "Gemma 2" and "Qwen 2.5" with "spell checker" and "back-translation", you must test each model with each technique. It is not sufficient to test just one model/technique pairing against baseline; ensure all pairwise model/technique combinations are evaluated for comprehensive analysis.
-
-- `download_external_datasets(question_1, question_2, question_3)`: Retrieves relevant external datasets based on three differently phrased queries; datasets will be in `{base_dir}/`. Use EDA and A/B testing as appropriate.
 
 **IMPORTANT:** In your query, use the dataset URL `<author>/<dataset>` if available; otherwise, use a short English phrase (avoid detailed field lists).
 
@@ -700,14 +689,14 @@ Detailed Requirements:
 - Test only strategies, features, or techniques—not model families or ensemble methods
 
 **A/B Test Constraints:**
-- Use a single 80/20 train-validation split (no cross-validation), with lightweight models:
+- Use lightweight models:
   - Tabular: XGBoost (with GPU); request feature importances
-  - CV: Small nets (e.g., MobileNetV4)
+  - CV: Small nets (e.g. EfficientNetB0)
   - NLP: Small transformers (e.g., deberta-v3-xsmall)
   - Time Series: LightGBM with limited iterations
-- Cross-validation is only for the Developer phase
+- Based on the dataset size, determine whether to use a full train/validation split or a smaller sample for A/B tests
 - A/B tests are for rapid, directional insights—not final selections
-- Design new tests in sequence, informed by earlier results, for a coherent discovery path
+- Design new tests in sequence, informed by earlierwh results, for a coherent discovery path
 - Run all A/B tests on GPU when possible
 - Perform statistical significance checks whenever feasible
 

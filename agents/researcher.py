@@ -78,7 +78,7 @@ class ResearcherAgent:
         per_run_log_dir.mkdir(parents=True, exist_ok=True)
         self.researcher_log_path = per_run_log_dir / f"researcher_{self.run_id}.txt"
 
-        # Track AB test history: list of dicts with 'question' and 'code'
+        # Track AB test history: only stores baseline (first) AB test with 'question' and 'code'
         self.ab_test_history: list[dict] = []
         self.ab_test_lock = threading.Lock()  # Thread-safe access to ab_test_history
 
@@ -233,9 +233,9 @@ class ResearcherAgent:
         if gpu_identifier:
             logger.info(f"AB test #{index+1} assigned GPU: {gpu_identifier}")
 
-        # Get last 8 AB tests for context (thread-safe)
+        # Get baseline (first) AB test for context (thread-safe)
         with self.ab_test_lock:
-            previous_ab_tests = self.ab_test_history[-8:].copy()
+            previous_ab_tests = self.ab_test_history[:1].copy()
 
         tool_output = ask_eda(
             question,
@@ -258,12 +258,16 @@ class ResearcherAgent:
                 lines = executed_code.split('\n')
                 executed_code = '\n'.join(lines[3:])
 
+            # Only store the baseline (first) AB test in memory
             with self.ab_test_lock:
-                self.ab_test_history.append({
-                    'question': question,
-                    'code': executed_code
-                })
-                logger.info("Stored AB test #%d in history", len(self.ab_test_history))
+                if len(self.ab_test_history) == 0:
+                    self.ab_test_history.append({
+                        'question': question,
+                        'code': executed_code
+                    })
+                    logger.info("Stored baseline AB test in history")
+                else:
+                    logger.info("Skipping storage of AB test #%d (only baseline stored)", index + 1)
 
         return question, tool_output
 

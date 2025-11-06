@@ -27,8 +27,7 @@ data_path = "{data_path}"
 - Save all visualizations to the MEDIA_DIR directory (provided by the MEDIA_DIR environment variable; default: Path(data_path)/"media").
 - Do NOT display figures interactively; only save them (e.g., for matplotlib: plt.savefig(os.path.join(os.environ.get("MEDIA_DIR"), "fig.png"), bbox_inches='tight'); for plotly: fig.write_image(...)).
 - After saving a figure, print its absolute file path to stdout.
-- Print all insights and results to the console using print() statements.
-- Default to plain text for outputs; if visual elements are required, ensure they are referenced by path but not rendered interactively.
+- At the end, convert all insights/results into a JSON object. Print the JSON object to the console first (for review), DO NOT TRUNCATE no matter the size, then save the exact same object to a JSON file in `{data_path}/analysis/` directory (create the directory if it doesn't exist) and state the file location clearly.
 - For OneHotEncoder, use sparse_output=False instead of sparse=False to avoid errors.
 - For XGBoost, if early stopping is used, don't do .fit(early_stopping_rounds=...). Instead, use it as a constructor argument.
 - For LightGBM, if early stopping is used, do early_stopping and log_evaluation callbacks instead of early_stopping_rounds and verbose parameters in .fit().

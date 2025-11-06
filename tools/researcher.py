@@ -274,7 +274,7 @@ def get_tools(max_parallel_workers: int = 1):
                 "properties": {
                     "questions": {
                         "type": "array",
-                        "description": f"List of A/B testing questions to run in parallel (max {max_parallel_workers}). Each question should be a comparison test (e.g., 'Train XGBoost with 80/20 split comparing baseline features vs baseline + interaction features and report cross-validated AUC')",
+                        "description": f"List of A/B testing questions to run in parallel (max {max_parallel_workers}). Each question should be a comparison test",
                         "items": {"type": "string"},
                     }
                 },
