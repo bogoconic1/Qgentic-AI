@@ -34,6 +34,13 @@ def _get_hard_constraints(model_name: str, allow_multi_fold: bool = False) -> st
 - Do not use any `while` loops in your code.
 - YOU SHOULD NOT CREATE A SUBMISSION FILE DURING DEBUG MODE.
 - At the end, log the distribution of the submission predictions (e.g., value counts for classification, summary statistics for regression).
+- If asked to download external datasets, use kagglehub.
+```
+import kagglehub
+
+# Download latest version
+path = kagglehub.dataset_download("<author>/<dataset_name>")
+```
 
 **DEBUG mode guidelines**
 - After splitting the data into train and valid, right before starting training, sample train to 1000 rows. For classification, ensure at least one sample per class, so if there are > 1000 classes there will be > 1000 samples. For time series tasks, take the last 1000 rows (most recent) instead of random sampling to preserve temporal order.
