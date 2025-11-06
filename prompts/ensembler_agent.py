@@ -10,10 +10,12 @@ def _get_hard_constraints() -> str:
     return """**Hard Constraints:**
 - Deliver a fully-contained, single-file script.
 - Use CUDA if available.
+- **DO NOT** explicitly set `os.environ['CUDA_VISIBLE_DEVICES']` in your code.
 - Place all `logging.info` statements for validation results (per fold and overall) as well as model loading, train/test set size; only log data loading/setup if directly relevant to validation.
 - Also emit concise `logging.info` statements for any computed quantities that can go really wrong (e.g. class weights, thresholds, ensemble weights).
 - Place `logging.basicConfig()` at the start of the script.
 - Deep learning: **no** gradient checkpointing. Do not code fallback methods.
+- **IMPORTANT: ONLY IN FULL MODE** If you're using XGBoost, LightGBM, or CatBoost, first train the model with the suggested parameters. Then, perform hyperparameter tuning using Optuna for up to 300 seconds. Finally, retrain the model using the best parameters from the tuning run and select the configuration with the best validation performance. DO NOT RUN tuning in DEBUG mode.
 - If you use `transformers.Trainer`, use eval_strategy instead of evaluation_strategy.
 - Do not use `try/except` to suppress errors.
 - Log final validation results, best epoch/iteration number and total training time after training.
@@ -25,6 +27,26 @@ def _get_hard_constraints() -> str:
 - Do not use any `while` loops in your code.
 - YOU SHOULD NOT CREATE A SUBMISSION FILE DURING DEBUG MODE.
 - At the end, log the distribution of the submission predictions (e.g., value counts for classification, summary statistics for regression).
+- If asked to download external datasets, use kagglehub.
+```
+import kagglehub
+
+# Download latest version
+path = kagglehub.dataset_download("<author>/<dataset_name>")
+```
+
+**CRITICAL: YOU MUST COPY EVERYTHING FROM BASELINE CODE**
+For each baseline model in your ensemble, you MUST copy ALL of the following from the provided baseline code:
+1. **Preprocessing**
+2. **Loss functions**
+3. **Hyperparameters & Architecture**
+4. **Inference logic**
+
+The baseline models achieved their top-notch scores BECAUSE of these exact configurations. Your job is to:
+- Extract OOF predictions from these strong baseline models
+- Implement the ensemble logic on top of them
+
+DO NOT simplify, remove, or "clean up" the baseline code. DO NOT start from scratch with basic features. The baseline code already handles data leakage correctly via OOF encodings.
 
 **DEBUG mode guidelines**
 - After splitting the data into train and valid, right before starting training, sample train to 1000 rows. For classification, ensure at least one sample per class, so if there are > 1000 classes there will be > 1000 samples. For time series tasks, take the last 1000 rows (most recent) instead of random sampling to preserve temporal order.

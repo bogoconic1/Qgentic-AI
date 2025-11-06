@@ -137,17 +137,8 @@ def call_llm_with_retry(
         if result is not None:
             break
 
-    while result is None:
-        result = call_llm_with_retry_helper(
-            model=model,
-            instructions=instructions,
-            tools=tools,
-            messages=messages,
-            max_retries=max_retries,
-            web_search_enabled=web_search_enabled,
-            text_format=text_format,
-        )
-        time.sleep(60)
+    if result is None:
+        raise ValueError("LLM call failed after 40 retries") # most likely severe issues like token limit exceeded, should not continue
 
     return result
 
