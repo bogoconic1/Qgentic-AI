@@ -67,7 +67,8 @@ def call_llm_with_retry_helper(
     tools: list,
     messages: list,
     max_retries: int | None = None,
-    web_search_enabled: bool = False
+    web_search_enabled: bool = False,
+    text_format = None,
 ):
 
     client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
@@ -79,12 +80,23 @@ def call_llm_with_retry_helper(
 
     for attempt in range(retries):
         try:
-            response = client.responses.create(
-                model=model,
-                instructions=instructions,
-                tools=tools,
-                input=messages,
-            )
+            if text_format is not None:
+                # Use structured outputs with Pydantic model
+                response = client.responses.parse(
+                    model=model,
+                    instructions=instructions,
+                    tools=tools,
+                    input=messages,
+                    text_format=text_format,
+                )
+            else:
+                # Use regular responses API
+                response = client.responses.create(
+                    model=model,
+                    instructions=instructions,
+                    tools=tools,
+                    input=messages,
+                )
             return response
         except openai.InternalServerError as e:
             if "504" in str(e) and attempt < retries - 1:
@@ -107,7 +119,8 @@ def call_llm_with_retry(
     tools: list,
     messages: list,
     max_retries: int | None = None,
-    web_search_enabled: bool = False
+    web_search_enabled: bool = False,
+    text_format = None,
 ):
     result = None
 
@@ -118,21 +131,14 @@ def call_llm_with_retry(
             tools=tools,
             messages=messages,
             max_retries=max_retries,
-            web_search_enabled=web_search_enabled
+            web_search_enabled=web_search_enabled,
+            text_format=text_format,
         )
         if result is not None:
             break
 
-    while result is None:
-        result = call_llm_with_retry_helper(
-            model=model,
-            instructions=instructions,
-            tools=tools,
-            messages=messages,
-            max_retries=max_retries,
-            web_search_enabled=web_search_enabled
-        )
-        time.sleep(60)
-    
+    if result is None:
+        raise ValueError("LLM call failed after 40 retries") # most likely severe issues like token limit exceeded, should not continue
+
     return result
 

@@ -19,6 +19,7 @@ from prompts.tools_researcher import (
     ask_eda_template as prompt_ask_eda,
     datasets_prompt as prompt_datasets,
 )
+from schemas.researcher import DatasetDiscovery
 load_dotenv()
 
 
@@ -42,7 +43,7 @@ _EXTERNAL_DIRNAME = _PATH_CFG.get("external_data_dirname")
 
 
 @weave.op()
-def ask_eda(question: str, description: str, data_path: str, max_attempts: int | None = None, timeout_seconds: int = 3600, previous_questions: list[str] | None = None) -> str:
+def ask_eda(question: str, description: str, data_path: str, max_attempts: int | None = None, timeout_seconds: int = 3600, previous_ab_tests: list[dict] | None = None, file_suffix: str = "", cpu_core_range: list[int] | None = None, gpu_identifier: str | None = None) -> str:
     """Asks a question about the data provided for exploratory data analysis (EDA)
 
     Args:
@@ -51,7 +52,10 @@ def ask_eda(question: str, description: str, data_path: str, max_attempts: int |
         data_path: Path to the data directory
         max_attempts: Maximum number of attempts (default from config)
         timeout_seconds: Timeout for code execution in seconds (default 3600 = 1 hour)
-        previous_questions: List of previously asked questions for memory context
+        previous_ab_tests: List of previous AB test dicts with 'question' and 'code' keys (empty for EDA, last 8 for AB tests)
+        file_suffix: Optional suffix for the temp file (e.g., "_1", "_2" for parallel execution)
+        cpu_core_range: List of CPU cores to use (e.g., [0,1,2,...,41]) for CPU affinity
+        gpu_identifier: GPU identifier: MIG UUID or GPU ID (as string) for GPU isolation
     """
     # Prepare media directory for EDA charts and expose to executed code
     try:
@@ -71,12 +75,12 @@ def ask_eda(question: str, description: str, data_path: str, max_attempts: int |
     attempts = max_attempts or _DEFAULT_ASK_ATTEMPTS
     PROMPT = prompt_ask_eda(data_path, directory_listing, description)
 
-    # Build input_list with memory: prepend previous questions with dummy "Solved" responses
+    # Build input_list with AB test history: prepend previous AB tests (question + code)
     input_list = []
-    if previous_questions:
-        for prev_q in previous_questions:
-            input_list.append({"role": "user", "content": "Question: " + prev_q})
-            input_list.append({"role": "assistant", "content": "Solved"})
+    if previous_ab_tests:
+        for ab_test in previous_ab_tests:
+            input_list.append({"role": "user", "content": "Question: " + ab_test['question']})
+            input_list.append({"role": "assistant", "content": f"```python\n{ab_test['code']}\n```"})
 
     # Add the current question
     input_list.append({"role": "user", "content": "Question: " + question})
@@ -103,10 +107,35 @@ def ask_eda(question: str, description: str, data_path: str, max_attempts: int |
             logger.warning("ask_eda found no python code block in response.")
             continue
         else:
-            # Write code to temporary file
-            code_file = Path(data_path) / "eda_temp.py"
+            # Write code to temporary file with resource allocation and OpenBLAS thread limiting prefix
+            filename = f"eda_temp{file_suffix}.py" if file_suffix else "eda_temp.py"
+            code_file = Path(data_path) / filename
+
+            # Build resource allocation header (similar to DeveloperAgent._postprocess_code)
+            header_lines = []
+            header_lines.append('import os')
+
+            # CPU affinity
+            if cpu_core_range is not None:
+                header_lines.append('import psutil  # For CPU affinity')
+                header_lines.append('')
+                header_lines.append('# CPU affinity (pin to specific cores to prevent resource overlap)')
+                header_lines.append(f'psutil.Process(os.getpid()).cpu_affinity({cpu_core_range})')
+
+            # GPU assignment (works for both MIG and multi-GPU)
+            if gpu_identifier is not None:
+                gpu_device = gpu_identifier
+            else:
+                gpu_device = '0'  # Default to GPU 0
+
+            header_lines.append(f'os.environ["CUDA_VISIBLE_DEVICES"] = "{gpu_device}"')
+            header_lines.append('os.environ["OPENBLAS_NUM_THREADS"] = "32"')
+            header_lines.append('')
+
+            header = '\n'.join(header_lines)
+
             with open(code_file, "w") as f:
-                f.write(code)
+                f.write(header + '\n' + code)
 
             # Import execute_code here to avoid circular import at module level
             from tools.developer import execute_code
@@ -126,8 +155,10 @@ def ask_eda(question: str, description: str, data_path: str, max_attempts: int |
                 input_list.append({"role": "user", "content": result})
                 continue
 
-            # Success - return the output
+            # Success - truncate to last 30000 characters and return
             logger.info("ask_eda succeeded on attempt %s", attempt)
+            if len(result) > 30000:
+                result = "... (output truncated to last 30000 characters)\n\n" + result[-30000:]
             return result
 
     logger.error("ask_eda exhausted all attempts without success")
@@ -145,8 +176,6 @@ def download_external_datasets(question_1: str, question_2: str, question_3: str
         COMP_METADATA = yaml.safe_load(f)
 
     PROMPT = prompt_datasets()
-    pattern = r'```json\s*(\{.*?\})\s*```'
-
     relevant_datasets = []
 
     # Loop through 3 different query phrasings
@@ -163,19 +192,18 @@ def download_external_datasets(question_1: str, question_2: str, question_3: str
                 tools=[],
                 messages=input_list,
                 web_search_enabled=True,
+                text_format=DatasetDiscovery,
             )
-            completion = response.output_text or ""
 
-            matches = re.findall(pattern, completion, re.DOTALL)
-            if not matches:
-                logger.warning("No JSON block found in web search response for query %s attempt %s.", q_idx, attempt)
-                continue
-            else:
-                data = json.loads(matches[0])
-                new_datasets = data.get("datasets", [])
+            # Use structured output parsing
+            if response and hasattr(response, 'output_parsed') and response.output_parsed:
+                new_datasets = response.output_parsed.datasets
                 logger.info("Query %s found %s datasets: %s", q_idx, len(new_datasets), new_datasets)
                 relevant_datasets.extend(new_datasets)
                 break  # Success, move to next query
+            else:
+                logger.warning("No valid structured output for query %s attempt %s.", q_idx, attempt)
+                continue
 
     # Deduplicate datasets
     relevant_datasets = list(set(relevant_datasets))
@@ -222,7 +250,7 @@ def download_external_datasets(question_1: str, question_2: str, question_3: str
 
 
 
-def get_tools():
+def get_tools(max_parallel_workers: int = 1):
     return [
         {
             "type": "function",
@@ -240,15 +268,19 @@ def get_tools():
         {
             "type": "function",
             "name": "run_ab_test",
-            "description": "Run A/B tests to validate modeling or feature engineering choices by comparing their impact on performance.",
+            "description": f"Run A/B tests to validate modeling or feature engineering choices by comparing their impact on performance. You can ask up to {max_parallel_workers} questions in parallel for efficiency.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "question": {"type": "string", "description": "The A/B testing question (e.g., 'Train XGBoost with 80/20 split comparing baseline features vs baseline + interaction features and report cross-validated AUC')"}
+                    "questions": {
+                        "type": "array",
+                        "description": f"List of A/B testing questions to run in parallel (max {max_parallel_workers}). Each question should be a comparison test",
+                        "items": {"type": "string"},
+                    }
                 },
             },
             "additionalProperties": False,
-            "required": ['question']
+            "required": ['questions']
         },
         {
             "type": "function",

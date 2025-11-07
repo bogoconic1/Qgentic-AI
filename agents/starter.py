@@ -12,6 +12,7 @@ from prompts.starter_agent import (
     build_user as prompt_build_user,
 )
 from constants import VALID_TASK_TYPES, normalize_task_type
+from schemas.starter import StarterSuggestions
 import weave
 
 
@@ -59,26 +60,6 @@ class StarterAgent:
                 pass
         logger.setLevel(logging.DEBUG)
 
-    @staticmethod
-    def _extract_json_block(text: str) -> Optional[str]:
-        if not text:
-            return None
-        # Prefer fenced JSON block
-        import re
-        try:
-            m = re.search(r"```json\s*(\{[\s\S]*?\})\s*```", text, re.IGNORECASE)
-            if m:
-                return m.group(1).strip()
-        except Exception:
-            pass
-        # Fallback: find outermost braces
-        try:
-            start = text.index("{")
-            end = text.rindex("}") + 1
-            return text[start:end]
-        except Exception:
-            return None
-
     @weave.op()
     def run(self):
         """Run the starter prompt and persist outputs; return parsed suggestions."""
@@ -95,28 +76,33 @@ class StarterAgent:
             instructions=system_prompt,
             tools=[],
             messages=messages,
-            web_search_enabled=True
+            web_search_enabled=True,
+            text_format=StarterSuggestions,
         )
-        content = response.output_text or ""
 
-        # Persist raw content
+        # Persist raw content (if output_text exists)
+        content = response.output_text or ""
         try:
-            self.text_path.write_text(content)
+            if content:
+                self.text_path.write_text(content)
         except Exception:
             logger.debug("Failed to persist starter_suggestions.txt")
 
-        # Extract JSON
+        # Use structured output parsing
         suggestions: Dict[str, Any] = {}
         try:
-            json_text = self._extract_json_block(content)
-            if json_text:
-                suggestions = json.loads(json_text)
+            if not response or not hasattr(response, 'output_parsed') or not response.output_parsed:
+                raise ValueError("No structured output received from model")
 
-                # Validate and normalize task_type
-                if "task_type" not in suggestions:
-                    raise ValueError("StarterAgent response missing required field 'task_type'")
+            parsed = response.output_parsed
 
-                raw_task_type = suggestions["task_type"]
+            # Validate and normalize task_types (list)
+            if not parsed.task_types:
+                raise ValueError("task_types list cannot be empty")
+
+            # Validate and normalize each task type
+            normalized_task_types = []
+            for raw_task_type in parsed.task_types:
                 normalized_task_type = normalize_task_type(raw_task_type)
 
                 if raw_task_type.lower() != normalized_task_type:
@@ -128,11 +114,13 @@ class StarterAgent:
                         f"Must be one of {VALID_TASK_TYPES}"
                     )
 
-                suggestions["task_type"] = normalized_task_type
+                normalized_task_types.append(normalized_task_type)
 
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse JSON from starter response: {e}")
-            raise
+            suggestions = {
+                "task_types": normalized_task_types,
+                "task_summary": parsed.task_summary
+            }
+
         except ValueError as e:
             logger.error(f"Validation error in starter response: {e}")
             raise

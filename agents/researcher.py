@@ -3,10 +3,13 @@ import logging
 import os
 import base64
 import mimetypes
+import threading
 from pathlib import Path
+from concurrent.futures import as_completed
 
 from dotenv import load_dotenv
 from project_config import get_config
+from weave.trace.util import ThreadPoolExecutor
 
 from tools.researcher import ask_eda, download_external_datasets, get_tools
 from prompts.researcher_agent import (
@@ -43,11 +46,16 @@ class ResearcherAgent:
     (no further tool calls), or the tool-call budget is exhausted.
     """
 
-    def __init__(self, slug: str, iteration: int, run_id: int = 1):
+    def __init__(self, slug: str, iteration: int, run_id: int = 1, max_parallel_workers: int = 1, cpu_core_pool: list[list[int]] | None = None, gpu_pool: list[str] | None = None):
         load_dotenv()
         self.slug = slug
         self.iteration = iteration
         self.run_id = run_id
+        self.max_parallel_workers = max_parallel_workers
+
+        # Resource pools for parallel AB test execution (CPU affinity and GPU isolation)
+        self.cpu_core_pool = cpu_core_pool or []  # List of CPU core ranges
+        self.gpu_pool = gpu_pool or []  # List of GPU identifiers (MIG UUIDs or GPU IDs)
 
         self.base_dir = _TASK_ROOT / self.slug
         self.outputs_dir = self.base_dir / _OUTPUTS_DIRNAME / str(self.iteration)
@@ -70,8 +78,9 @@ class ResearcherAgent:
         per_run_log_dir.mkdir(parents=True, exist_ok=True)
         self.researcher_log_path = per_run_log_dir / f"researcher_{self.run_id}.txt"
 
-        # Track previous questions for memory
-        self.previous_questions: list[str] = []
+        # Track AB test history: only stores baseline (first) AB test with 'question' and 'code'
+        self.ab_test_history: list[dict] = []
+        self.ab_test_lock = threading.Lock()  # Thread-safe access to ab_test_history
 
         self._configure_logger()
 
@@ -160,7 +169,32 @@ class ResearcherAgent:
         return [{"role": "user", "content": content}]
 
     def _compose_system(self) -> str:
-        return prompt_build_system(str(self.base_dir))
+        # Load task_types from starter_suggestions.json
+        json_path = self.outputs_dir / "starter_suggestions.json"
+
+        if not json_path.exists():
+            raise FileNotFoundError(
+                f"starter_suggestions.json not found at {json_path}. "
+                "Run starter agent first."
+            )
+
+        with open(json_path, "r") as f:
+            starter_data = json.load(f)
+
+        if "task_types" not in starter_data:
+            raise ValueError(
+                f"starter_suggestions.json missing required field 'task_types'. "
+                f"Found keys: {list(starter_data.keys())}"
+            )
+
+        task_types = starter_data["task_types"]
+
+        if not isinstance(task_types, list) or len(task_types) == 0:
+            raise ValueError(
+                f"task_types must be a non-empty list, got: {task_types}"
+            )
+
+        return prompt_build_system(str(self.base_dir), task_type=task_types, max_parallel_workers=self.max_parallel_workers)
 
     def _read_starter_suggestions(self) -> str:
         # Prefer raw starter_suggestions.txt; fallback to JSON; else 'None'
@@ -169,8 +203,207 @@ class ResearcherAgent:
             starter_suggestions = json.load(f)
         res = ""
         for key in starter_suggestions.keys():
-            res += f"<{key}>\n{starter_suggestions[key]}\n</{key}>\n"
+            value = starter_suggestions[key]
+            # Format lists as comma-separated strings instead of Python list representation
+            if isinstance(value, list):
+                value = ", ".join(str(item) for item in value)
+            res += f"<{key}>\n{value}\n</{key}>\n"
         return res
+
+    def _execute_single_ab_test(self, question: str, index: int) -> tuple[str, str]:
+        """Execute a single AB test question with resource isolation.
+
+        Args:
+            question: AB test question to execute
+            index: Index for unique file naming and resource assignment (0-based)
+
+        Returns:
+            Tuple of (question, result)
+        """
+        logger.info(f"Executing AB test #{index+1}: {question}")
+
+        file_suffix = f"_{index+1}"
+
+        # Assign CPU and GPU resources based on index
+        cpu_core_range = self.cpu_core_pool[index] if index < len(self.cpu_core_pool) else None
+        gpu_identifier = self.gpu_pool[index] if index < len(self.gpu_pool) else None
+
+        if cpu_core_range:
+            logger.info(f"AB test #{index+1} assigned CPU cores: {len(cpu_core_range)} cores")
+        if gpu_identifier:
+            logger.info(f"AB test #{index+1} assigned GPU: {gpu_identifier}")
+
+        # Get baseline (first) AB test for context (thread-safe)
+        with self.ab_test_lock:
+            previous_ab_tests = self.ab_test_history[:1].copy()
+
+        tool_output = ask_eda(
+            question,
+            self.description,
+            data_path=str(self.base_dir),
+            previous_ab_tests=previous_ab_tests,
+            file_suffix=file_suffix,
+            cpu_core_range=cpu_core_range,
+            gpu_identifier=gpu_identifier
+        )
+
+        # Extract and store the code in history
+        code_file = self.base_dir / f"eda_temp{file_suffix}.py"
+        if code_file.exists():
+            with open(code_file, "r") as f:
+                executed_code = f.read()
+
+            # Strip OpenBLAS prefix if present (first 3 lines)
+            if executed_code.startswith('import os\nos.environ["OPENBLAS_NUM_THREADS"]'):
+                lines = executed_code.split('\n')
+                executed_code = '\n'.join(lines[3:])
+
+            # Only store the baseline (first) AB test in memory
+            with self.ab_test_lock:
+                if len(self.ab_test_history) == 0:
+                    self.ab_test_history.append({
+                        'question': question,
+                        'code': executed_code
+                    })
+                    logger.info("Stored baseline AB test in history")
+                else:
+                    logger.info("Skipping storage of AB test #%d (only baseline stored)", index + 1)
+
+        return question, tool_output
+
+    def _execute_tool_call(self, item, input_list: list) -> None:
+        """Execute a single tool call and append results to input_list.
+
+        Args:
+            item: Tool call item from LLM response
+            input_list: Message list to append tool results to (modified in-place)
+        """
+        if item.name == "ask_eda":
+            try:
+                question = json.loads(item.arguments)["question"]
+            except Exception as e:
+                logger.error("Failed to parse ask_eda arguments: %s", e)
+                question = ""
+            logger.info(f"EDA: {question}")
+            if len(question) == 0:
+                tool_output = "An error occurred. Please retry."
+                input_list.append({
+                    "type": "function_call_output",
+                    "call_id": item.call_id,
+                    "output": json.dumps({
+                        "insights": tool_output,
+                    })
+                })
+            else:
+                before_media = self._list_media_files()
+
+                tool_output = ask_eda(
+                    question,
+                    self.description,
+                    data_path=str(self.base_dir),
+                    previous_ab_tests=[]  # EDA questions don't use AB test history
+                )
+
+                input_list.append({
+                    "type": "function_call_output",
+                    "call_id": item.call_id,
+                    "output": json.dumps({
+                        "insights": tool_output,
+                    })
+                })
+                try:
+                    media_prompt = self._ingest_new_media(before_media)
+                    if media_prompt: input_list += media_prompt
+                except Exception as e:
+                    logger.error("Failed to ingest new media: %s", e)
+                    logger.info("No media ingested for this step.")
+
+        elif item.name == "run_ab_test":
+            try:
+                questions = json.loads(item.arguments)["questions"]
+                if not isinstance(questions, list):
+                    questions = [questions]
+            except Exception as e:
+                logger.error("Failed to parse run_ab_test arguments: %s", e)
+                questions = []
+
+            if len(questions) == 0:
+                tool_output = "An error occurred. Please retry with valid questions."
+                input_list.append({
+                    "type": "function_call_output",
+                    "call_id": item.call_id,
+                    "output": json.dumps({
+                        "insights": tool_output,
+                    })
+                })
+            else:
+                # Truncate to max_parallel_workers if too many questions provided
+                truncation_warning = ""
+                if len(questions) > self.max_parallel_workers:
+                    logger.warning(f"Received {len(questions)} questions but max_parallel_workers is {self.max_parallel_workers}. Truncating to first {self.max_parallel_workers} questions.")
+                    skipped_questions = questions[self.max_parallel_workers:]
+                    logger.info(f"Skipped questions: {skipped_questions}")
+                    truncation_warning = f"\n\nWARNING: You provided {len(questions)} questions but the maximum allowed is {self.max_parallel_workers}. Only the first {self.max_parallel_workers} were executed. The following questions were skipped:\n" + "\n".join([f"- {q}" for q in skipped_questions])
+                    questions = questions[:self.max_parallel_workers]
+
+                logger.info(f"Running {len(questions)} AB tests in parallel")
+                before_media = self._list_media_files()
+
+                # Execute AB tests in parallel with resource isolation
+                results = []
+                with ThreadPoolExecutor(max_workers=self.max_parallel_workers) as executor:
+                    future_to_question = {
+                        executor.submit(self._execute_single_ab_test, q, i): q
+                        for i, q in enumerate(questions)
+                    }
+
+                    for future in as_completed(future_to_question):
+                        question = future_to_question[future]
+                        try:
+                            q, output = future.result()
+                            results.append(f"Question: {q}\nResult: {output}")
+                        except Exception as e:
+                            logger.error(f"AB test failed for question '{question}': {e}")
+                            results.append(f"Question: {question}\nResult: Error - {str(e)}")
+
+                # Combine all results
+                combined_output = "\n\n---\n\n".join(results) + truncation_warning
+
+                input_list.append({
+                    "type": "function_call_output",
+                    "call_id": item.call_id,
+                    "output": json.dumps({
+                        "insights": combined_output,
+                    })
+                })
+
+                try:
+                    media_prompt = self._ingest_new_media(before_media)
+                    if media_prompt: input_list += media_prompt
+                except Exception as e:
+                    logger.error("Failed to ingest new media: %s", e)
+                    logger.info("No media ingested for this step.")
+
+        elif item.name == "download_external_datasets":
+            args = json.loads(item.arguments)
+            question_1 = args.get("question_1", "")
+            question_2 = args.get("question_2", "")
+            question_3 = args.get("question_3", "")
+
+            if not question_1 or not question_2 or not question_3:
+                tool_output = "All 3 question phrasings are required. Please provide question_1, question_2, and question_3."
+            else:
+                tool_output = download_external_datasets(question_1, question_2, question_3, self.slug)
+
+            logger.info("External search response length=%s", len(tool_output or ""))
+
+            input_list.append({
+                "type": "function_call_output",
+                "call_id": item.call_id,
+                "output": json.dumps({
+                    "results": tool_output,
+                })
+            })
 
     @weave.op()
     def build_plan(self, max_steps: int | None = None) -> str:
@@ -181,8 +414,8 @@ class ResearcherAgent:
         ]
 
         max_steps = max_steps or _DEFAULT_MAX_STEPS
-        logger.info("Researcher run started with max_steps=%s", max_steps)
-        tools = get_tools()
+        logger.info("Researcher run started with max_steps=%s, max_parallel_workers=%s", max_steps, self.max_parallel_workers)
+        tools = get_tools(max_parallel_workers=self.max_parallel_workers)
 
         for step in range(max_steps):
             # logger.debug("Current conversation tail: %s", self.messages[-2:])
@@ -205,55 +438,7 @@ class ResearcherAgent:
             for item in response.output:
                 if item.type == "function_call":
                     tool_calls = True
-                    if item.name == "ask_eda" or item.name == "run_ab_test":
-                        try:
-                            question = json.loads(item.arguments)["question"]
-                        except Exception as e:
-                            logger.error("Failed to parse ask_eda arguments: %s", e)
-                            question = ""
-                        logger.info(f"{question}")
-                        if len(question) == 0:
-                            tool_output = "An error occurred. Please retry."
-                        else:
-                            before_media = self._list_media_files()
-                            tool_output = ask_eda(question, self.description, data_path=str(self.base_dir), previous_questions=self.previous_questions)
-                            # Track this question for future memory
-                            self.previous_questions.append(question)
-                            input_list.append({
-                                "type": "function_call_output",
-                                "call_id": item.call_id,
-                                "output": json.dumps({
-                                    "insights": tool_output,
-                                })
-                            })
-                            try:
-                                # I don't care if this silently fails - its not that critical
-                                media_prompt = self._ingest_new_media(before_media)
-                                if media_prompt: input_list += media_prompt
-                            except Exception as e:
-                                logger.error("Failed to ingest new media: %s", e)
-                                logger.info("No media ingested for this step.")
-                            
-                    elif item.name == "download_external_datasets":
-                        args = json.loads(item.arguments)
-                        question_1 = args.get("question_1", "")
-                        question_2 = args.get("question_2", "")
-                        question_3 = args.get("question_3", "")
-
-                        if not question_1 or not question_2 or not question_3:
-                            tool_output = "All 3 question phrasings are required. Please provide question_1, question_2, and question_3."
-                        else:
-                            tool_output = download_external_datasets(question_1, question_2, question_3, self.slug)
-
-                        logger.info("External search response length=%s", len(tool_output or ""))
-
-                        input_list.append({
-                            "type": "function_call_output",
-                            "call_id": item.call_id,
-                            "output": json.dumps({
-                                "results": tool_output,
-                            })
-                        })
+                    self._execute_tool_call(item, input_list)
 
             if tool_calls: continue
 

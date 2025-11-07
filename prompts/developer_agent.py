@@ -15,6 +15,7 @@ def _get_hard_constraints(model_name: str, allow_multi_fold: bool = False) -> st
 - Use ONLY `{model_name}` (no substitutions or fallback models).
 - Deliver a fully-contained, single-file script.
 - Use CUDA if available.
+- **DO NOT** explicitly set `os.environ['CUDA_VISIBLE_DEVICES']` in your code.
 - Place all `logging.info` statements for validation results (per fold and overall) as well as model loading, train/test set size; only log data loading/setup if directly relevant to validation.
 - Also emit concise `logging.info` statements for any computed quantities that can go really wrong (e.g. class weights, thresholds).
 - Place `logging.basicConfig()` at the start of the script.
@@ -24,7 +25,7 @@ def _get_hard_constraints(model_name: str, allow_multi_fold: bool = False) -> st
 - Do not use `try/except` to suppress errors.
 - Log final validation results, best epoch number and total training time after training.
 - Modular pipeline: update preprocessing/postprocessing or hyperparameters, but do not swap out `{model_name}`.
-- Prefer pretrained models if available.
+- Prefer pretrained models if available. Set pretrained=True if applicable.
 - If an online implementation of the model is available (e.g. GitHub), use it. Do not code from scratch.
 - External datasets: may be appended **only** to training set.
 - **DEBUG flag**: At the script top, define. Pipeline runs twice: once with `DEBUG=True`, then with `DEBUG=False` (full config). Log which mode is running.
@@ -33,6 +34,13 @@ def _get_hard_constraints(model_name: str, allow_multi_fold: bool = False) -> st
 - Do not use any `while` loops in your code.
 - YOU SHOULD NOT CREATE A SUBMISSION FILE DURING DEBUG MODE.
 - At the end, log the distribution of the submission predictions (e.g., value counts for classification, summary statistics for regression).
+- If asked to download external datasets, use kagglehub.
+```
+import kagglehub
+
+# Download latest version
+path = kagglehub.dataset_download("<author>/<dataset_name>")
+```
 
 **DEBUG mode guidelines**
 - After splitting the data into train and valid, right before starting training, sample train to 1000 rows. For classification, ensure at least one sample per class, so if there are > 1000 classes there will be > 1000 samples. For time series tasks, take the last 1000 rows (most recent) instead of random sampling to preserve temporal order.

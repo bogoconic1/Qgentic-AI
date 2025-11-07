@@ -12,6 +12,7 @@ import pandas as pd
 from utils.grade import run_grade
 from tools.helpers import call_llm_with_retry
 from project_config import get_config
+from schemas.ensembler import EnsembleStrategies
 
 logger = logging.getLogger(__name__)
 
@@ -333,7 +334,7 @@ Develop and recommend 8 diverse, independent, and actionable ensemble strategies
   - Are specific and actionable (no vague or generic suggestions)
   - Are feasible to implement
   - Span multiple ensemble categories above
-  - Can be executed within 3 hours on a single GPU (24GB VRAM)
+
 - Present strategies as a numbered list (1-8), following the format guidelines below.
 - Before any web search or recommendation of contemporary techniques (2024-2025), explicitly state your intention and the minimal necessary inputs for the action.
 - Do not search for or reference winning solutions for this particular competition.
@@ -356,95 +357,45 @@ Develop and recommend 8 diverse, independent, and actionable ensemble strategies
 
 # Output Format
 - List exactly 8 strategies as a numbered list, detailed and content-rich.
-- After the list, provide a JSON object (enclosed in triple backticks) with the strategies array formatted per the schema below.
 - Remember to make tool calls only as allowed, and state the intent before any significant tool invocation, describing both the rationale and minimal inputs.
 - Models listed under models_needed must correspond to actual model names already defined in the <baseline_models> section.
 - If you want to propose new models that are not yet defined, explicitly mark them as new (e.g., NEW: <model_name>).
+- Provide a `strategies` field containing an array of exactly 8 strategy objects, where each object has:
+  - `strategy`: A richly detailed string describing the ensemble strategy
+  - `models_needed`: A list of model names (strings) required for this strategy
 
-## Example Output
+## Example Strategies
 1. Use a LightGBM, CatBoost, and XGBoost three-way weighted average (models: 'LightGBM', 'CatBoost', 'XGBoost') after tuning each individually by Optuna; weights determined by holdout set RMSE.
 2. Implement two-stage stacking: first-level learners are fine-tuned CNN and transformer models ('ResNet50', 'EfficientNet', 'ConvNext'); then train a CatBoost with the outputs of the first stage as features.
 ...
 8. [Eighth strategy]
-
-```json
-{{
-  "strategies": [
-    {{"strategy": "Use a LightGBM, CatBoost, and XGBoost three-way weighted average (models: 'LightGBM', 'CatBoost', 'XGBoost') after tuning each individually by Optuna; weights determined by holdout set RMSE.", "models_needed": ["LightGBM", "CatBoost", "XGBoost"]}},
-    {{"strategy": "Implement two-stage stacking: first-level learners are fine-tuned CNN and transformer models ('ResNet50', 'EfficientNet', 'ConvNext'); then train a CatBoost with the outputs of the first stage as features.", "models_needed": ["ResNet50", "EfficientNet", "ConvNext", "CatBoost"]}},
-    ...
-    {{"strategy": str, "models_needed": list[str]}},  (8 total)
-  ]
-}}
-```
-
-## Output Schema
-- strategies: array of 8 richly detailed strings, each matching a numbered strategy above.
-- For items that can't be completed, use: "No suitable strategy could be found for this item."
 """
 
     user_prompt = "Generate 8 diverse ensemble strategies for this competition."
 
-    # Call LLM with web search enabled
+    # Call LLM with web search enabled and structured outputs
     response = call_llm_with_retry(
         model=_ENSEMBLER_MODEL,
         instructions=system_prompt,
         tools=[],
-        
         messages=[{"role": "user", "content": user_prompt}],
-        web_search_enabled=True
+        web_search_enabled=True,
+        text_format=EnsembleStrategies,
     )
 
-    response_text = response.output_text or ""
-    logger.debug("Strategy recommendation response: %s", response_text[:500])
-
-    # Parse strategies from JSON block
+    # Use structured output
     strategies = []
-
-    # Try to extract JSON block from response
-    json_match = re.search(r'```json\s*\n(.*?)\n```', response_text, re.DOTALL)
-    if json_match:
-        try:
-            json_str = json_match.group(1)
-            parsed_data = json.loads(json_str)
-            strategies_raw = parsed_data.get("strategies", [])
-
-            # Handle both old format (strings) and new format (objects with strategy + models_needed)
-            number_pattern = r'^\s*\d+\.\s*'
-            for strategy_item in strategies_raw:
-                if isinstance(strategy_item, dict):
-                    # New format: {"strategy": "...", "models_needed": [...]}
-                    strategy_text = strategy_item.get("strategy", "")
-                    models_needed = strategy_item.get("models_needed", [])
-
-                    if strategy_text and strategy_text != "...":
-                        # Remove numbering if present
-                        cleaned_text = re.sub(number_pattern, '', strategy_text).strip()
-                        if cleaned_text:
-                            # Preserve the full object structure
-                            strategies.append({
-                                "strategy": cleaned_text,
-                                "models_needed": models_needed
-                            })
-                elif isinstance(strategy_item, str):
-                    # Old format: just strings (for backward compatibility)
-                    cleaned = re.sub(number_pattern, '', strategy_item).strip()
-                    if cleaned and cleaned != "...":
-                        strategies.append({"strategy": cleaned, "models_needed": []})
-
-            logger.info("Parsed %d strategies from JSON block", len(strategies))
-        except json.JSONDecodeError as e:
-            logger.warning("Failed to parse JSON block: %s", str(e))
-
-    # Fallback: parse numbered list from entire response if JSON parsing failed
-    if not strategies:
-        logger.info("Falling back to numbered list parsing")
-        pattern = r'^\s*(\d+)\.\s*(.+)$'
-        for line in response_text.split('\n'):
-            match = re.match(pattern, line.strip())
-            if match:
-                strategy_text = match.group(2).strip()
-                strategies.append({"strategy": strategy_text, "models_needed": []})
+    if response and hasattr(response, 'output_parsed') and response.output_parsed:
+        parsed = response.output_parsed
+        # Convert Pydantic models to dicts
+        for strategy_model in parsed.strategies:
+            strategies.append({
+                "strategy": strategy_model.strategy,
+                "models_needed": strategy_model.models_needed
+            })
+        logger.info("Parsed %d strategies from structured output", len(strategies))
+    else:
+        logger.warning("No structured output received from ensembler")
 
     if len(strategies) < 8:
         logger.warning("Only found %d strategies, expected 8", len(strategies))

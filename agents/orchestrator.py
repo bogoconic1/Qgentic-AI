@@ -76,6 +76,77 @@ def _get_available_gpus() -> list[int]:
     except Exception:
         return []
 
+def _calculate_max_parallel_workers_and_pools() -> tuple[int, list[str], str]:
+    """Calculate max parallel workers and create GPU pool based on configuration.
+
+    Returns:
+        Tuple of (max_parallel_workers, gpu_pool, gpu_isolation_mode)
+        - max_parallel_workers: Number of parallel workers
+        - gpu_pool: List of GPU identifiers (MIG UUIDs or GPU IDs as strings)
+        - gpu_isolation_mode: "mig", "multi-gpu", or "none"
+    """
+    enable_mig = _RUNTIME_CFG.get("enable_mig", False)
+    enable_multi_gpu = _RUNTIME_CFG.get("enable_multi_gpu", False)
+
+    # Sanity check: both MIG and multi-GPU cannot be enabled simultaneously
+    if enable_mig and enable_multi_gpu:
+        raise ValueError(
+            "Conflicting GPU isolation modes: Cannot enable both MIG and multi-GPU simultaneously. "
+            "Please set only one of: enable_mig or enable_multi_gpu to true in config.yaml"
+        )
+
+    if enable_mig:
+        # MIG mode: Auto-detect MIG instances from all GPUs
+        detected_mig_uuids = _get_mig_uuids()
+        if len(detected_mig_uuids) > 0:
+            return len(detected_mig_uuids), detected_mig_uuids, "mig"
+        else:
+            fallback = int(_RUNTIME_CFG.get("baseline_max_parallel_workers", 1))
+            return fallback, [], "mig"
+
+    elif enable_multi_gpu:
+        # Multi-GPU mode: Auto-detect available GPUs
+        available_gpus = _get_available_gpus()
+        if len(available_gpus) > 0:
+            gpu_pool = [str(gpu_id) for gpu_id in available_gpus]
+            return len(available_gpus), gpu_pool, "multi-gpu"
+        else:
+            fallback = int(_RUNTIME_CFG.get("baseline_max_parallel_workers", 1))
+            return fallback, [], "multi-gpu"
+
+    else:
+        # No GPU isolation: Use configured value
+        max_workers = int(_RUNTIME_CFG.get("baseline_max_parallel_workers", 1))
+        return max_workers, [], "none"
+
+
+def _create_cpu_core_pool(max_parallel_workers: int) -> list[list[int]]:
+    """Create CPU core pool for parallel execution with affinity.
+
+    Args:
+        max_parallel_workers: Number of parallel workers
+
+    Returns:
+        List of CPU core ranges, one per worker
+    """
+    enable_cpu_affinity = _RUNTIME_CFG.get("enable_cpu_affinity", False)
+
+    if not enable_cpu_affinity or max_parallel_workers <= 1:
+        return []
+
+    total_cores = os.cpu_count() or 1
+    cores_per_worker = total_cores // max_parallel_workers
+    cpu_core_pool = []
+
+    for i in range(max_parallel_workers):
+        start_core = i * cores_per_worker
+        # Last worker gets remaining cores
+        end_core = total_cores if i == max_parallel_workers - 1 else (i + 1) * cores_per_worker
+        cpu_core_pool.append(list(range(start_core, end_core)))
+
+    return cpu_core_pool
+
+
 def _ensure_conda_environments(num_workers: int) -> None:
     """Create isolated conda environments for parallel baseline execution.
 
@@ -162,7 +233,13 @@ def _ensure_conda_environments(num_workers: int) -> None:
 
 @weave.op()
 def _run_researcher_once(slug: str, iteration: int, run_id: int) -> tuple[int, str, int]:
-    agent = ResearcherAgent(slug, iteration, run_id=run_id)
+    # Calculate max_parallel_workers and resource pools for AB test parallelization
+    max_parallel_workers, gpu_pool, _ = _calculate_max_parallel_workers_and_pools()
+    cpu_core_pool = _create_cpu_core_pool(max_parallel_workers)
+
+    print(f"Researcher Agent: max_parallel_workers={max_parallel_workers}, CPU pools={len(cpu_core_pool)}, GPU pools={len(gpu_pool)}")
+
+    agent = ResearcherAgent(slug, iteration, run_id=run_id, max_parallel_workers=max_parallel_workers, cpu_core_pool=cpu_core_pool, gpu_pool=gpu_pool)
     plan = agent.build_plan()
     outputs_dir = _TASK_ROOT / slug / _OUTPUTS_DIRNAME / str(iteration)
     outputs_dir.mkdir(parents=True, exist_ok=True)
@@ -564,81 +641,47 @@ class Orchestrator:
         # Phase 4: Baseline Developer Stage - Evaluate models in parallel with NOW recommendations
         baseline_results = {}
 
-        # Get parallel execution configuration
-        enable_cpu_affinity = _RUNTIME_CFG.get("enable_cpu_affinity", False)
-        enable_mig = _RUNTIME_CFG.get("enable_mig", False)
-        enable_multi_gpu = _RUNTIME_CFG.get("enable_multi_gpu", False)
+        # Get parallel execution configuration using shared helper functions
+        max_parallel_workers, gpu_pool_list, gpu_isolation_mode = _calculate_max_parallel_workers_and_pools()
+        cpu_core_pool_list = _create_cpu_core_pool(max_parallel_workers)
 
-        # Sanity check: both MIG and multi-GPU cannot be enabled simultaneously
-        if enable_mig and enable_multi_gpu:
-            raise ValueError(
-                "Conflicting GPU isolation modes: Cannot enable both MIG and multi-GPU simultaneously. "
-                "Please set only one of: enable_mig or enable_multi_gpu to true in config.yaml"
-            )
-
-        # Determine max_parallel_workers and GPU pool based on isolation mode
-        gpu_pool = None
-        gpu_isolation_mode = "none"
-        detected_mig_uuids = []
-        available_gpus = []
-
-        if enable_mig:
-            # MIG mode: Auto-detect MIG instances from all GPUs
-            gpu_isolation_mode = "mig"
-            detected_mig_uuids = _get_mig_uuids()
-            if len(detected_mig_uuids) > 0:
-                max_parallel_workers = len(detected_mig_uuids)
+        # Print configuration summary
+        if gpu_isolation_mode == "mig":
+            if len(gpu_pool_list) > 0:
                 print(f"MIG enabled: Auto-detected {max_parallel_workers} MIG instances")
             else:
                 print("WARNING: enable_mig=true but no MIG instances detected")
                 print("Falling back to baseline_max_parallel_workers from config")
-                max_parallel_workers = int(_RUNTIME_CFG.get("baseline_max_parallel_workers", 1))
-
-        elif enable_multi_gpu:
-            # Multi-GPU mode: Auto-detect available GPUs
-            gpu_isolation_mode = "multi-gpu"
-            available_gpus = _get_available_gpus()
-            if len(available_gpus) > 0:
-                max_parallel_workers = len(available_gpus)
-                print(f"Multi-GPU enabled: Auto-detected {max_parallel_workers} GPUs: {available_gpus}")
+        elif gpu_isolation_mode == "multi-gpu":
+            if len(gpu_pool_list) > 0:
+                print(f"Multi-GPU enabled: Auto-detected {max_parallel_workers} GPUs: {gpu_pool_list}")
             else:
                 print("WARNING: enable_multi_gpu=true but no GPUs detected")
                 print("Falling back to baseline_max_parallel_workers from config")
-                max_parallel_workers = int(_RUNTIME_CFG.get("baseline_max_parallel_workers", 1))
-
         else:
-            # No GPU isolation: Use configured value
-            max_parallel_workers = int(_RUNTIME_CFG.get("baseline_max_parallel_workers", 1))
             print(f"GPU isolation disabled: Using baseline_max_parallel_workers={max_parallel_workers}")
 
-        # Create resource pools for dynamic allocation
-        total_cores = os.cpu_count() or 1
+        # Create resource queues for dynamic allocation (baseline developer uses Queues for flexibility)
         num_models = len(now_recommendations_all)
 
-        # CPU core pool
+        # CPU core pool (convert list to Queue for dynamic acquisition/release)
         cpu_core_pool = None
-        if enable_cpu_affinity and num_models > 1:
+        if len(cpu_core_pool_list) > 0 and num_models > 1:
             cpu_core_pool = Queue()
-            cores_per_worker = total_cores // max_parallel_workers
-            for i in range(max_parallel_workers):
-                start_core = i * cores_per_worker
-                # Last worker gets remaining cores
-                end_core = total_cores if i == max_parallel_workers - 1 else (i + 1) * cores_per_worker
-                cpu_core_pool.put(list(range(start_core, end_core)))
+            for core_range in cpu_core_pool_list:
+                cpu_core_pool.put(core_range)
             print(f"CPU core pool created with {max_parallel_workers} core ranges")
 
-        # GPU pool (unified for both MIG and multi-GPU)
-        if num_models > 1:
-            if enable_mig and len(detected_mig_uuids) > 0:
-                gpu_pool = Queue()
-                for mig_uuid in detected_mig_uuids:
-                    gpu_pool.put(mig_uuid)
-                print(f"MIG pool created with {len(detected_mig_uuids)} instances")
-            elif enable_multi_gpu and len(available_gpus) > 0:
-                gpu_pool = Queue()
-                for gpu_id in available_gpus:
-                    gpu_pool.put(str(gpu_id))  # Store as string for consistency
-                print(f"GPU pool created with {len(available_gpus)} GPUs")
+        # GPU pool (convert list to Queue for dynamic acquisition/release)
+        gpu_pool = None
+        if num_models > 1 and len(gpu_pool_list) > 0:
+            gpu_pool = Queue()
+            for gpu_id in gpu_pool_list:
+                gpu_pool.put(gpu_id)
+            if gpu_isolation_mode == "mig":
+                print(f"MIG pool created with {len(gpu_pool_list)} instances")
+            elif gpu_isolation_mode == "multi-gpu":
+                print(f"GPU pool created with {len(gpu_pool_list)} GPUs")
 
         # Prepare tasks for parallel execution (no pre-assignment of resources)
         # Load existing baseline results if available for selective reruns

@@ -27,11 +27,12 @@ data_path = "{data_path}"
 - Save all visualizations to the MEDIA_DIR directory (provided by the MEDIA_DIR environment variable; default: Path(data_path)/"media").
 - Do NOT display figures interactively; only save them (e.g., for matplotlib: plt.savefig(os.path.join(os.environ.get("MEDIA_DIR"), "fig.png"), bbox_inches='tight'); for plotly: fig.write_image(...)).
 - After saving a figure, print its absolute file path to stdout.
-- Print all insights and results to the console using print() statements.
-- Default to plain text for outputs; if visual elements are required, ensure they are referenced by path but not rendered interactively.
+- At the end, convert all insights/results into a JSON object. Print the JSON object to the console first (for review), DO NOT TRUNCATE no matter the size, then save the exact same object to a JSON file in `{data_path}/analysis/` directory (create the directory if it doesn't exist) and state the file location clearly.
 - For OneHotEncoder, use sparse_output=False instead of sparse=False to avoid errors.
 - For XGBoost, if early stopping is used, don't do .fit(early_stopping_rounds=...). Instead, use it as a constructor argument.
 - For LightGBM, if early stopping is used, do early_stopping and log_evaluation callbacks instead of early_stopping_rounds and verbose parameters in .fit().
+- **IMPORTANT**: make sure no verbose logging output clutters the console. Suppress or redirect logs as needed.
+- You should use GPU for training if possible.
 
 # Competition Description
 {description}
@@ -42,15 +43,15 @@ def datasets_prompt() -> str:
     return """# Role and Objective
 - Act as a Kaggle Competitions Grandmaster tasked with identifying ALL Kaggle datasets relevant to a provided `dataset_name`.
 - Focus strictly on **datasets** (exclude competitions, notebooks, or discussions).
+- **IMPORTANT: When performing web searches, add "2025" to your queries to find the most recent datasets.**
 - Perform web searches to identify all relevant datasets.
 
 # Evaluation and Output Rules
 - For each proposed dataset, ensure its URL begins with **https://www.kaggle.com/datasets/**.
 
 # Output Format
-- Respond **only** using the following JSON structure, enclosed in triple backticks with `json` (no additional explanations or text):
-```json
-{"datasets": ["https://www.kaggle.com/datasets/exampleuser/first-dataset", "https://www.kaggle.com/datasets/exampleuser/second-dataset"]}
-```
+- Return a list of dataset URLs in the `datasets` field.
+- Each URL should be a complete Kaggle dataset URL (e.g., "https://www.kaggle.com/datasets/username/dataset-name").
+- If no relevant datasets are found, return an empty list.
 """
 

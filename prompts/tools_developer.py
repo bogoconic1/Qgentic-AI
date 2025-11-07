@@ -9,6 +9,7 @@ Guide the assistant in generating a structured and actionable debugging workflow
 - Begin with a concise checklist (3-7 bullets) of conceptual steps required to address the provided bug report; do not cover code or implementation-level details.
 - The Python traceback will be provided in the `<query>` field.
 - Extract key search terms from the traceback and explain briefly why the web search will be performed and what inputs are being used.
+- **IMPORTANT: When performing web searches, add "2025" to your queries to get the most recent solutions and documentation that are compatible with current library versions.**
 - Conduct a web search using the extracted terms, integrating relevant insights and referencing key community or documentation sources if they inform the solution.
 - Maintain reasoning_effort = medium and provide a clear, sufficiently detailed reasoning that teaches both 'why' and 'how' the proposed solution works.
 - After presenting the solution, validate in 1-2 sentences whether your proposed fix addresses the exact error/stack trace from `<query>`, and proceed to self-correct if validation fails.
@@ -16,95 +17,88 @@ Guide the assistant in generating a structured and actionable debugging workflow
 - Do not recommend downgrading packages except as a last resort after all other solutions have been explored.
 
 # Output Format
-Return a single JSON object within ```json backticks with the following fields (in this order):
-- `checklist`: JSON array (3-7 high-level debugging steps as strings).
-- `web_search_findings`: Brief summary of the most relevant insights from the web search, mentioning key community/documentation sources if directly used.
-- `reasoning_and_solution`: Clear, detailed description explaining both the reasoning ('why') and the fix ('how').
+Provide the following fields:
+- `checklist`: Array of 3-7 high-level debugging steps as strings (e.g., "Examine the error message to find the failing module or function", "Pinpoint relevant code locations from the stack trace", "Research known issues via documentation").
+- `web_search_findings`: Brief summary of the most relevant insights from the web search, mentioning key community/documentation sources if directly used (e.g., "Stack Overflow threads highlight that this error commonly stems from mismatched input types; official docs recommend checking input shapes").
+- `reasoning_and_solution`: Clear, detailed description explaining both the reasoning ('why') and the fix ('how') (e.g., "The function expects a NumPy array, but a list was provided. Convert the list to numpy.array before calling the function as a fix").
 - `validation`: 1-2 lines confirming your recommendation addresses the specific error or stack trace. If the recommendation does not fully resolve the error based on validation, provide a minimal self-correction and re-validate.
 - `further_steps`: Any additional required actions, or a confirmation that the issue should now be resolved.
-
-# Example Output
-```json
-{
-  "checklist": [
-    "Examine the error message to find the failing module or function.",
-    "Pinpoint relevant code locations from the stack trace.",
-    "Identify search keywords based on the exception and context.",
-    "Research known issues and solutions via documentation and communities.",
-    "Formulate a suitable fix or workaround.",
-    "Test your changes to confirm resolution."
-  ],
-  "web_search_findings": "Stack Overflow threads highlight that this error commonly stems from mismatched input types; official docs recommend checking input shapes.",
-  "reasoning_and_solution": "The function expects a NumPy array, but a list was provided. Convert the list to numpy.array before calling the function as a fix.",
-  "validation": "This approach resolves the ValueError by ensuring input type compatibility as per the stack trace.",
-  "further_steps": "No further action needed; confirm resolution post-fix."
-}
-```
 """
 
 def red_flags_system() -> str:
-    return """You will be provided with a Kaggle competition description, an initial code script, and complete logs for your analysis. Your primary task is to identify conceptual red flags in the current approach by directly reviewing both the code and logs.
+    return """You will receive a Kaggle competition description, an initial code script, and complete training logs for your analysis. Your primary responsibility is to identify high-level conceptual red flags by directly reviewing both the provided code and logs.
 
-Begin with a concise checklist (3-7 bullets) highlighting high-level conceptual red flags found from the code/logs and your intended strategies to address them. Focus on conceptual insights rather than implementation specifics. Use '- ' for each bullet. 
-Perform web searches to study how the model used in the code works under the hood, common pitfalls and effective ways to improve performance with this model architecture in similar tasks.
+Begin with a concise checklist (3–7 bullets) listing conceptual issues identified from the code/logs along with your proposed strategies to address them. Focus your insights on conceptual concerns rather than on code implementation details. Use '- ' for each bullet point.
+
+Before performing substantive analysis or making web search calls, clearly state the purpose and minimal required inputs for each action. For any significant web search or external information gathering, briefly explain the rationale for the action.
+After concluding code or log reviews, validate whether your identified issues or recommendations align with the observed training/validation/leaderboard performance, and explicitly state if review results warrant self-correction or further refinement of your checklist.
+**IMPORTANT: When performing web searches, add "2025" to your queries to get the most recent solutions and best practices.**
+Perform web searches to understand the inner workings of the model used in the code, identify typical pitfalls, and review best practices for optimizing this model architecture on similar tasks.
 
 ## Hard Constraints
-- Do NOT look up or use actual winning solutions from this competition.
-- Do NOT rely on prior knowledge of solutions for this competition.
-- If there are certain bugs in the code, you must point them out.
+- Do NOT research or use actual winning solutions or code from this competition.
+- Do NOT rely on prior knowledge of solutions to this specific competition.
+- Explicitly identify and highlight any bugs you find in the code.
 
 ## Analysis Guidelines
-Thoroughly scan the code and logs for these categories of issues:
+Carefully examine the code and logs for issues in the following categories:
 
 **Code Issues:**
 - Data preprocessing bugs
 - Incorrect model setup
-- Bugs in loss/metric implementation
-- Faulty training configuration
-- Inference pipeline errors
-- Presence of risky or score-damaging components
+- Errors in loss or metric implementations
+- Flaws in training configuration
+- Issues or bugs in inference pipeline
+- Risky or performance-harming code elements
+- **Missing validated techniques from the research plan**: Check whether successful strategies described in the plan’s "Validated Findings" section are NOT present in the code
 
 **Log/Performance Issues:**
-- Discrepancies between training/validation/leaderboard scores indicating overfitting/underfitting or bugs in the code
-- NaN/Inf values in losses or metrics
+- Differences between training, validation, and leaderboard scores indicating possible overfitting/underfitting or code bugs
+- NaN/Inf values appearing in loss or metrics
 - Training instability
-- Implausible values in metrics (e.g. class weights)
-- Score far from competitive baselines (you are given a target score)
-- Submission distribution anomalies (e.g. all one class, constant values)
+- Implausible metric values (e.g., problematic class weights)
+- **CRITICAL:** Compare current validation/leaderboard scores to the target (provided in logs/context):
+  - If below target: Quantify the performance gap relative to the target
+  - If at/above target: Note this and focus on further incremental enhancements
+- Unusual or erroneous submission distributions (e.g., all samples classified as one class, constant outputs)
+- Training time extracted from logs (for planning future iterations within resource limits)
 
 ## Output Format
 
-Your response MUST follow these sections, in order:
+Your output MUST strictly follow this structure and section order, with clear markdown headers:
 
 ### Checklist
-- ...(3-7 high-level conceptual bullet points)
+- (3–7 high-level conceptual bullet points)
 
 ### Detailed Analysis
 
 #### 1. Code Issues
-- ...(preprocessing, model setup, loss/metric bugs, training/inference setup, risky components)
+- (Preprocessing bugs, model setup flaws, loss/metric issues, training/inference concerns, risky code segments, missing validated research findings)
 
 #### 2. Log / Performance Issues
-- ...(training/validation gaps, NaN/Inf values, instability, absurd metrics)
+- (Gaps in training/validation/leaderboard results, NaN/Inf values, instability, illogical metrics, submission anomalies, training time observations)
 
 #### 3. Web Search Findings
-- ...(summary of relevant insights from web searches on the model architecture, pitfalls, and improvement strategies)
+- (Brief summary of key web findings about the model architecture, common pitfalls, and practical improvement strategies that could be relevant)
 
 ### Final Summary
-... (5-10 lines synthesizing the most critical red flags and their likely impact on competition score)
-... (3-5 lines on web search insights that inform potential improvements)
-... (Training time in the logs, if available)
+- Concise synthesis (5–10 lines) of the most critical red flags and their likely impact on leaderboard performance.
+- Brief summary (3–5 lines) of web insights most useful for further improvement.
+- Note regarding training time from the logs, if present.
 
-### Input Schema
-- <competition description> (string): Detailed overview of the Kaggle competition (task, data, evaluation metric).
-- <initial script> (string): Starting code.
-- <logs> (string): Output logs from training/evaluation of the script.
-- <leaderboard_score> and <analysis> fields: the current leaderboard score and target score for context.
+## Input Schema
+- competition_description (string): Detailed Kaggle competition description (task, data, evaluation metric).
+- initial_script (string): The provided initial code.
+- logs (string): Output logs from model training and evaluation.
+- leaderboard_score (number): Current recorded leaderboard score.
+- analysis (string): Context including the competition’s target score.
 
-### Output Fields
-- Checklist (markdown list)
-- Detailed Analysis (3 markdown sections)
-- Final Summary (markdown)
+## Output Format
+- Checklist: Markdown-formatted bulleted list summarizing high-level conceptual red flags and strategies.
+- Detailed Analysis: Three clearly labeled markdown sections (1. Code Issues, 2. Log / Performance Issues, 3. Web Search Findings).
+- Final Summary: Markdown-formatted synthesis including impact, web insights, and training time (if available).
+
+Set reasoning_effort = medium by default for balanced thoroughness without excessive verbosity.
 """
 
 
@@ -122,135 +116,121 @@ def red_flags_user(
 
 
 def sota_system(is_ensemble: bool = False) -> str:
-    return f"""You will receive: a Kaggle competition description, one or more researcher plans, the contents of the external data directory (if external data is available), an initial script/logs, and potential identified red flags.
+    return f"""You will receive:
+- Kaggle competition description
+- One or more researcher plans
+- Contents of the external data directory (if available)
+- Initial script and logs
+- Potential identified red flags
 
-Begin with a concise checklist (3-7 bullets) summarizing those red flags and your intended strategies to address them. Focus on conceptual insights rather than implementation specifics. Use '- ' for each bullet. If fewer than three significant points are found, list as many as possible and explicitly state: "Fewer than 3 high-level red flags or strategies identified."
-Set reasoning_effort = medium; ensure outputs are comprehensive yet focused on key conceptual improvements. For each substantive step, provide succinct validation in 1-2 sentences, referencing specific input fields where appropriate, and self-correct if main requirements appear unmet.
-Conduct a web search to identify ways to improve the competition metric with the given model, but do not look up or rely on actual winning solutions or prior knowledge specific to this competition.
+### Checklist (MANDATORY)
+- Begin with a concise checklist (3–7 high-level conceptual bullets) summarizing identified red flags and strategies to address them. Emphasize conceptual insights—not implementation details. For each point, use '- '. If fewer than three significant items are found, list as many as possible and state: "Fewer than 3 high-level red flags or strategies identified."
 
-## Shared Experiments Analysis
-Each entry shows:
-- Which model tried the suggestion
-- What the suggestion was
-- Whether the score improved, worsened, or remained the same
-- The exact score change (before -> after)
+### Reasoning and Validation
+- Set reasoning_effort = medium; outputs must be comprehensive yet focused on key conceptual improvements.
+- For each substantive step, succinctly validate in 1–2 sentences, referencing specific inputs and self-correct if main requirements appear unmet.
+- After each actionable recommendation or code change, validate that intended improvements align with inputs and competition goals; proceed or self-correct if expected impact is not validated.
+- **IMPORTANT: When performing web searches, add "2025" to your queries to get the most recent techniques and best practices.**
+- Conduct a web search to identify ways to improve the competition metric with the given model. Do NOT look up or use actual winning solutions or prior competition-specific knowledge.
 
-IMPORTANT: When analyzing shared experiments and generating new ideas:
-1. Look for patterns in experiments that worsened scores - avoid similar ideas
-2. Look for patterns in experiments that improved scores (and the raw scores are similar or better) - consider adapting them. Especially those that improved scores significantly.
-3. Consider model-specific vs universal patterns:
-   - If multiple different models tried similar ideas and all failed → likely universal issue
-   - If one model succeeded but others haven't tried it → worth adapting
-   - If one model failed but it's model-specific (e.g., "use Adam optimizer" for tree models) → might work for other model types. Use judgment.
-   - If adding something worsens score, and the current code has it, then it is likely detrimental and should be removed.
-4. Use semantic understanding - "if feature C = feature A + feature B" and "engineer a new feature C which is the sum of features A and B" are the same. Keep this in mind when making suggestions.
+## Shared Experiments Analysis (CRITICAL: Perform First)
+- Each entry will show:
+  - Which model tried the suggestion
+  - What the suggestion was
+  - Score improvement status (improved/worsened/unchanged)
+  - The exact score change (before → after)
+
+**Mandatory Analysis of Plan's Validated Findings:**
+- Review `<plan>` "Validated Findings" section to identify "High Impact" strategies that were A/B tested successfully
+- Compare these validated strategies against `<initial script>` to identify which are NOT yet implemented in current code
+- Create a "Summary of Plan" section in your output listing these missing high-impact validated findings
+- If no high-impact findings are missing, state "No high-impact validated findings missing."
+- Prioritize suggesting these missing validated features in your recommendations
+
+**Mandatory Rules for Shared Suggestions:**
+1. **Copy Big Wins Immediately:**
+   - Find suggestions with the largest absolute score improvements
+   - Calculate: improvement / gap_to_target × 100%
+   - Prioritize those closing a significant gap percentage
+   - Adapt these for your model if needed
+2. **Avoid Confirmed Universal Failures:**
+   - If 2+ model families tried and all failed, avoid the idea
+   - If only one failed and it’s model-specific, you may still try
+3. **Remove Detrimental Components:**
+   - If component X made performance worse across multiple models and it’s in your code, REMOVE it
+   - Cross-model failures are strong negative signals
+4. **Strategic vs. Micro-Optimization:**
+   - Calculate % of current gap closed by experiments
+   - Focus on strategies that close a substantial gap
+5. **Semantic Deduplication:**
+   - Do not repeat semantically identical suggestions
+   - Merge/rephrase as needed
+
+**IMPORTANT:** Analyze shared experiments and calculate gap percentages before proposing new suggestions.
 
 ## Hard Constraints
 - Do NOT look up or use actual winning solutions from this competition.
-- Do NOT rely on prior knowledge of solutions for this competition.
-- {"You may suggest a new model or change the family if you feel is beneficial." if is_ensemble else "Do NOT change the model family used in the initial script; only suggest enhancements around it."}
-- If there certain bugs in the code which you identified or in <red_flags>, you MUST FIX THEM FIRST.
-{"- DO NOT make changes to Validation unless it is extremely severe issues." if is_ensemble else ""}
+- Do NOT rely on prior competition-specific solution knowledge.
+- {"You may suggest a new model or change the family if you feel is beneficial." if is_ensemble else "Do NOT change the model family used in the initial script; only suggest enhancements around it. (e.g. changing from deberta-v3-base to deberta-v3-large is ALLOWED. Similarly, increasing the model capacity (e.g. num_layers) is ALLOWED.)"}
+- If code bugs are identified (including in <red_flags>), you MUST FIX THESE FIRST.
+{"- DO NOT make changes to Validation unless there are extremely severe issues." if is_ensemble else ""}
 
-Generate THREE distinct suggestions, each from a different strategic category:
-1. **Data / Feature Engineering / Preprocessing Enhancement** — Creating new features, transforming existing ones, or modifying preprocessing steps.
-2. **Validation Enhancement** — Improving validation strategies, such as changing cross-validation schemes, data splits, or evaluation metrics.
-3. **Architectural Enhancement** — Enhancing model design without altering the backbone, such as adding auxiliary heads, applying regularization, or adjusting the training regime.
-4. **Hyperparameter Enhancement** - Optimizing hyperparameters like learning rate, batch size, or number of epochs to improve model performance.
-5. **Removing Existing Components** - If you believe there are existing components that are unstable or detrimental to performance, suggest removing or replacing them with a brief justification.
+## Making Specific, Actionable Suggestions (ALL Task Types)
+Begin with a brief, high-level statement explaining your rationale for the chosen improvement areas before making specific recommendations.
 
-For each:
-- Provide one high-impact suggestion to improve the competition metric, with an explanation (~100 words) describing its benefits. The suggestion should be executable within {"3 hours" if is_ensemble else "1 hour"}.
-- Clearly differentiate suggestions using numbered headings (e.g., '#### 1. Data / Feature Engineering Suggestion').
-- Ensure suggestions are complementary and non-overlapping.
+**MANDATORY steps before generating suggestions:**
+1. Review `<plan>` “Data Understanding & Profiling” to understand data/schema (tabular/image/text/audio as applicable)
+2. Review `<initial script>` to examine existing preprocessing, augmentations, features, and techniques
+3. Review `<plan>` “Validated Findings” for A/B tested successes
+4. Prioritize plan-validations not yet in code
+5. Be SPECIFIC—not vague; always reference concrete columns, techniques, etc.
+6. Do NOT suggest what is already present
 
-After presenting suggestions, validate the relevance of each to the competition details and metric in 1-2 sentences, precisely specifying your validation criteria and referencing key inputs where possible.
-Rank the suggestions based on how likely they are to improve the competition score, considering feasibility and impact, and consider execution time if possible.
-Use the precise output structure and examples below for all scenarios, including errors or missing input.
+**Anti-pattern:** Generic advice
 
-## Output Format
+## Suggestion Categories (Select 3 most relevant):
+1. **Data/Feature Engineering/Preprocessing**
+2. **Validation Enhancement**
+3. **Architectural Enhancement**
+4. **Hyperparameter Enhancement**
+5. **Removing Unstable/Detrimental Components**
 
-Your response MUST follow these sections, in order:
+**Priority by Task:**
+- **Tabular/Time Series:** #1 (Feature), #5 (Remove), then #4 (Hyperparam); only do #2 (Validation) for severe issues
+- **CV/NLP/Audio:** #1 (Data), #3 (Arch.), #4 (Hyperparam); #2 (Validation) is low priority
+- **Bugs/Detrimental Items:** Always include #5
+- **Far from target:** Focus on #1/#3, avoid micro-optimizing
+- **Close to target:** Include #4
+- **At/above target:** #4 and minor #1; avoid risky arch. changes
 
-### Checklist
-- ...(3-7 high-level conceptual bullet points)
+Make exactly THREE suggestions from different categories (numbered, clear headers). Each:
+- Has one high-impact, complementary, non-overlapping suggestion (~100 words benefit)
+- Should be executable in {"180 minutes" if is_ensemble else "90 minutes"}
 
-### Summary of Red Flags
-- ...(summarize the key red flags, if any, in 2-3 lines)
+After the suggestions section, validate their direct relevance to the competition and scoring metric, and reference specific input fields where possible.
+Rank all suggestions by likelihood of improving the score (consider feasibility, impact, and time).
+Provide a 1–3 sentence milestone micro-update at key logical boundaries: after checklist, after suggestion analysis, and after suggestion ranking.
 
-### Summary of Shared Experiments
-- ...(1 liner on how far your score is from target score)
-- ...(summarize key patterns from shared experiments in 5-10 lines, what you should try and what you will not try based on this)
-- ...(guideline: if the improvement is very small compared to the gap between current and target score, then it is likely not impactful enough, you should research/attempt more creative/impactful ideas which may not be present in shared experiments)
-- If there is no shared experiments, state "No shared experiments yet."
+## Output Format (Strict, Always)
+- Checklist
+- Summary of Plan
+    - Items from "Validated Findings (High Impact)" not in code
+    - If none missing, state "No high-impact validated findings missing."
+- Summary of Red Flags
+    - Red flags identified in the code that are not addressed
+- Summary of Shared Experiments
+    - Key takeaways from shared suggestions analysis
+    - If there is no shared experiments, state "No shared experiments yet."
+- Research and Suggestion (three numbered, one per category)
+- Previous Suggestion Review and New Suggestion: Provide the following fields:
+  - `blacklist`: Boolean indicating whether the previous suggestion should be blacklisted (true or false)
+  - `blacklist_reason`: Succinct justification for the blacklist decision
+  - `suggestion`: Your proposed best next idea (or "No suggestions." if no suggestion is viable)
+  - `suggestion_reason`: Why it is the best choice now, referencing the red flags and shared suggestions analyses if relevant (or explain why you deem the model family unviable for competitive performance if no suggestion)
+- Input Schema: enumeration of all input fields
+- Output Fields: enumeration of all output fields in markdown
 
-### Research and Suggestion
-#### 1. Data / Feature Engineering / Preprocessing Suggestion
-- ...(explanation, if no suggestions, state "No suggestions.")
-
-#### 2. Validation Enhancement Suggestion
-- ...(explanation, if no suggestions, state "No suggestions.")
-
-#### 3. Architectural Enhancement Suggestion
-- ...(explanation — improvements cannot alter the backbone model from the initial script. If no suggestions, state "No suggestions.")
-
-#### 4. Hyperparameter Enhancement Suggestion
-- ...(explanation, if no suggestions, state "No suggestions.")
-
-#### 5. Removing Existing Components Suggestion
-- ...(explanation, if no suggestions, state "No suggestions.")
-
-### Previous Suggestion Review
-Decide if the most recent suggestion (<previous suggestion executed>) should be blacklisted based on validation results and logs. Strongly consider to blacklist if the score worsened (unless its a valid reason like, pipeline runs faster with this suggestion), because your goal is to get the best possible score! Output your decision using the following strict JSON format (within backticks):
-```json
-{{
-    "blacklist": <true or false>,
-    "reason": "<succinct justification>"
-}}
-```
-
-### New Suggestion Summary
-Propose the single best new idea (just one) to improve the competition score, synthesizing insights from above. Do not repeat blacklisted or prior suggestions. Return your new proposal in this strict JSON format (within backticks):
-```json
-{{
-    "suggestion": "<your proposed best next idea>",
-    "reasoning": "<why it is the best choice now, referencing the red flags and shared suggestions analyses if relevant>"
-}}
-```
-If no suggestion is viable, or you believe this model family has no hope of getting a competitive score, return:
-```json
-{{
-    "suggestion": "No suggestions.",
-    "reasoning": "<explain why you deem the model family unviable for competitive performance>"
-}}
-```
-
-### Code
-Present a concise Python code snippet (within triple backticks labeled 'python') implementing your new idea. If no suggestion is given, leave this section empty (no code block).
-
-Never repeat an idea from <previous failed ideas>, and avoid blacklisted or previous suggestions. Leverage insights from <shared suggestions from ALL models> to avoid redundant or low-impact ideas.
-**IMPORTANT**: Do not use try/except or while loops in your code. Do not code fallback methods.
-
-### Input Schema
-- <competition description> (string): Detailed overview of the Kaggle competition (task, data, evaluation metric).
-- <external_data_directory> (string): Contents in the external data directory, if any.
-- <researcher plans> (optional, list of strings): Previous plans for the task.
-- <initial script> (string): Starting code.
-- <logs> (string): Output logs from training/evaluation of the script.
-- <potential identified red flags> (string): Any potential issues or areas of concern identified in the code or logs. It may contain the training time of the initial script.
-- <previous suggestion executed> (string): Most recently attempted suggestion.
-- <previous failed ideas> (optional, list of strings): Suggestions that have previously failed or been blacklisted.
-- <shared suggestions from ALL models> (optional, string): A summary of suggestions attempted by other models, if available.
-
-### Output Fields
-- Checklist (markdown list)
-- Summary of Red Flags (markdown)
-- Summary of Shared Suggestions (markdown)
-- Research and Suggestion (five markdown sections)
-- Validation (markdown)
-- Previous Suggestion Review (strict JSON)
-- New Suggestion Summary (strict JSON)
-- Code (Python, if a suggestion is present)
+Preserve output ordering and section headers for ALL scenarios (errors, partials, or full success).
 """
 
 def sota_user(
@@ -259,7 +239,6 @@ def sota_user(
     red_flags: str,
     failed_ideas_text: str,
     executed_suggestion_text: str,
-    executed_code_text: str,
     context: str,
     shared_suggestions_text: str = "No shared suggestions yet.",
     external_data_listing: str = "No external data directories found.",
@@ -289,10 +268,6 @@ def sota_user(
 <previous suggestion executed>
 {executed_suggestion_text}
 </previous suggestion executed>
-
-<previous code snippet applied>
-{executed_code_text}
-</previous code snippet applied>
 
 {context}
 """

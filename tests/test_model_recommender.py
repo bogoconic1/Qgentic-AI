@@ -1,109 +1,218 @@
 """Unit tests for ModelRecommenderAgent."""
 
-import json
-import pytest
+import sys
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+import pytest
+import json
+import tempfile
+from unittest.mock import MagicMock
+from pydantic import BaseModel
 
 from agents.model_recommender import ModelRecommenderAgent
 
 
-def test_extract_json_block():
-    """Test JSON extraction from LLM responses."""
+@pytest.fixture(autouse=True)
+def patch_llm_calls(monkeypatch):
+    """Mock all LLM API calls to avoid actual network requests."""
 
-    # Test with fenced JSON block
-    text1 = """Here is the output:
-```json
-{
-    "loss_function": "CrossEntropyLoss",
-    "explanation": "Good for classification"
-}
-```
-"""
-    result1 = ModelRecommenderAgent._extract_json_block(text1)
-    assert result1 is not None
-    parsed1 = json.loads(result1)
-    assert parsed1["loss_function"] == "CrossEntropyLoss"
+    def fake_call_llm_with_retry(*args, **kwargs):
+        """Return a mock response based on the text_format (Pydantic schema)."""
+        from schemas.model_recommender import (
+            PreprocessingRecommendations,
+            LossFunctionRecommendations,
+            LossFunctionMustHave,
+            LossFunctionNiceToHave,
+            HyperparameterRecommendations,
+            HyperparameterSection,
+            HyperparameterItem,
+            ArchitectureItem,
+            InferenceStrategyRecommendations,
+            InferenceStrategySection,
+            InferenceStrategyItem,
+            CategoryRecommendations,
+            StrategyItem,
+            ModelSelection,
+        )
 
-    # Test with just braces
-    text2 = """Some text before
-{"preprocessing": [{"strategy": "normalize", "explanation": "scale features"}]}
-Some text after"""
-    result2 = ModelRecommenderAgent._extract_json_block(text2)
-    assert result2 is not None
-    parsed2 = json.loads(result2)
-    assert "preprocessing" in parsed2
+        mock_response = MagicMock()
 
-    # Test with no JSON
-    text3 = "No JSON here"
-    result3 = ModelRecommenderAgent._extract_json_block(text3)
-    assert result3 is None
+        # Get the expected schema from text_format parameter
+        text_format = kwargs.get('text_format')
+
+        if text_format and issubclass(text_format, BaseModel):
+            # Create a mock instance of the Pydantic model with dummy data
+            if text_format.__name__ == 'PreprocessingRecommendations':
+                mock_parsed = text_format(
+                    preprocessing=CategoryRecommendations(
+                        MUST_HAVE=[StrategyItem(strategy="Tokenize using BERT", explanation="Required for transformer models")],
+                        NICE_TO_HAVE=[StrategyItem(strategy="Lowercase text", explanation="Helps with generalization")]
+                    )
+                )
+            elif text_format.__name__ == 'LossFunctionRecommendations':
+                mock_parsed = text_format(
+                    MUST_HAVE=LossFunctionMustHave(
+                        loss_function="CrossEntropyLoss",
+                        explanation="Suitable for multi-class classification"
+                    ),
+                    NICE_TO_HAVE=[
+                        LossFunctionNiceToHave(
+                            loss_function="FocalLoss",
+                            explanation="Helps with class imbalance"
+                        )
+                    ]
+                )
+            elif text_format.__name__ == 'HyperparameterRecommendations':
+                mock_parsed = text_format(
+                    MUST_HAVE=HyperparameterSection(
+                        hyperparameters=[
+                            HyperparameterItem(hyperparameter="learning_rate=2e-5", explanation="Standard for BERT fine-tuning")
+                        ],
+                        architectures=[
+                            ArchitectureItem(architecture="3 layer encoder", explanation="Balanced complexity")
+                        ]
+                    ),
+                    NICE_TO_HAVE=HyperparameterSection(
+                        hyperparameters=[
+                            HyperparameterItem(hyperparameter="warmup_steps=1000", explanation="Helps with training stability")
+                        ],
+                        architectures=[]
+                    )
+                )
+            elif text_format.__name__ == 'InferenceStrategyRecommendations':
+                mock_parsed = text_format(
+                    MUST_HAVE=InferenceStrategySection(
+                        inference_strategies=[
+                            InferenceStrategyItem(strategy="Test-time augmentation", explanation="Improves robustness")
+                        ]
+                    ),
+                    NICE_TO_HAVE=InferenceStrategySection(
+                        inference_strategies=[
+                            InferenceStrategyItem(strategy="Ensemble voting", explanation="Better predictions")
+                        ]
+                    )
+                )
+            elif text_format.__name__ == 'ModelSelection':
+                # For model selection, return empty to trigger default behavior
+                mock_parsed = text_format(
+                    recommended_models=[],
+                    fold_split_strategy=None
+                )
+            else:
+                # Generic fallback
+                mock_parsed = text_format()
+
+            mock_response.output_parsed = mock_parsed
+            mock_response.output_text = "Mock LLM response"
+        else:
+            mock_response.output_parsed = None
+            mock_response.output_text = "Mock LLM response"
+
+        return mock_response
+
+    monkeypatch.setattr("agents.model_recommender.call_llm_with_retry", fake_call_llm_with_retry)
 
 
-def test_load_inputs():
-    """Test input loading from existing task."""
-    # Use existing task directory
-    slug = "us-patent-phrase-to-phrase-matching"
-    iteration = 1
+@pytest.fixture(scope='module')
+def test_task_dir():
+    """Create a temporary task directory with dummy data."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        task_root = Path(tmpdir)
+        slug = "test-competition"
+        iteration = 1
 
-    agent = ModelRecommenderAgent(slug, iteration)
+        # Create directory structure
+        task_dir = task_root / slug
+        outputs_dir = task_dir / "outputs" / str(iteration)
+        outputs_dir.mkdir(parents=True, exist_ok=True)
 
-    # Check that inputs were loaded
+        # Create dummy description.md
+        (task_dir / "description.md").write_text("# Test Competition\nThis is a test competition.")
+
+        # Create dummy starter_suggestions.json
+        starter_data = {
+            "task_types": ["nlp"],
+            "task_summary": "Text classification task"
+        }
+        (outputs_dir / "starter_suggestions.json").write_text(json.dumps(starter_data))
+
+        # Create dummy plan.md
+        (outputs_dir / "plan.md").write_text("# Research Plan\nTest plan content.")
+
+        yield {
+            'task_root': task_root,
+            'slug': slug,
+            'iteration': iteration
+        }
+
+
+def test_agent_initialization(test_task_dir, monkeypatch):
+    """Test agent initialization with dummy data."""
+    # Patch the module-level _TASK_ROOT constant
+    monkeypatch.setattr("agents.model_recommender._TASK_ROOT", test_task_dir['task_root'])
+
+    agent = ModelRecommenderAgent(test_task_dir['slug'], test_task_dir['iteration'])
+
+    # Check paths are set correctly
+    assert agent.slug == test_task_dir['slug']
+    assert agent.iteration == test_task_dir['iteration']
+    assert agent.outputs_dir.exists()
+    assert agent.json_path.name == "model_recommendations.json"
+
+    # Check inputs were loaded
     assert "description" in agent.inputs
     assert "task_type" in agent.inputs
     assert "task_summary" in agent.inputs
     assert "plan" in agent.inputs
 
-    # Check task_type is loaded correctly
-    assert agent.inputs["task_type"] == "Natural Language Processing"
+    # Check task_type is a list
+    assert isinstance(agent.inputs["task_type"], list)
+    assert "nlp" in agent.inputs["task_type"]
 
     # Check description is not empty
     assert len(agent.inputs["description"]) > 0
 
-    print(f"✅ Loaded inputs successfully:")
-    print(f"   - Task type: {agent.inputs['task_type']}")
+    print(f"✅ Agent initialized successfully:")
+    print(f"   - Task types: {agent.inputs['task_type']}")
     print(f"   - Description length: {len(agent.inputs['description'])} chars")
     print(f"   - Plan loaded: {agent.inputs.get('plan') is not None}")
 
 
-def test_agent_initialization():
-    """Test agent initialization."""
-    slug = "us-patent-phrase-to-phrase-matching"
-    iteration = 1
+def test_recommend_for_model(test_task_dir, monkeypatch):
+    """Test generating recommendations for a single model."""
+    # Patch the module-level _TASK_ROOT constant
+    monkeypatch.setattr("agents.model_recommender._TASK_ROOT", test_task_dir['task_root'])
 
-    agent = ModelRecommenderAgent(slug, iteration)
+    agent = ModelRecommenderAgent(test_task_dir['slug'], test_task_dir['iteration'])
 
-    # Check paths are set correctly
-    assert agent.slug == slug
-    assert agent.iteration == iteration
-    assert agent.outputs_dir.exists()
-    assert agent.json_path.name == "model_recommendations.json"
+    # Test recommendation generation (should use mocked LLM calls)
+    recommendations = agent._recommend_for_model("deberta-v3-large")
 
-    print(f"✅ Agent initialized successfully:")
-    print(f"   - Output dir: {agent.outputs_dir}")
-    print(f"   - JSON path: {agent.json_path}")
+    # Check structure
+    assert "preprocessing" in recommendations
+    assert "loss_function" in recommendations
+    assert "hyperparameters" in recommendations
+    assert "inference_strategies" in recommendations
+
+    # Check that model_dump() was called and returned dicts
+    assert isinstance(recommendations["preprocessing"], dict)
+    assert isinstance(recommendations["loss_function"], dict)
+    assert isinstance(recommendations["hyperparameters"], dict)
+    assert isinstance(recommendations["inference_strategies"], dict)
+
+    # Verify nested structure exists
+    assert "preprocessing" in recommendations["preprocessing"]
+    assert "MUST_HAVE" in recommendations["loss_function"]
+    assert "MUST_HAVE" in recommendations["hyperparameters"]
+    assert "MUST_HAVE" in recommendations["inference_strategies"]
+
+    print("✅ Model recommendations generated successfully:")
+    print(f"   - Preprocessing categories: {list(recommendations['preprocessing'].keys())}")
+    print(f"   - Loss function MUST_HAVE: {recommendations['loss_function']['MUST_HAVE'].get('loss_function', 'N/A')}")
+    print(f"   - Hyperparameters sections: {list(recommendations['hyperparameters'].keys())}")
+    print(f"   - Inference strategies sections: {list(recommendations['inference_strategies'].keys())}")
 
 
 if __name__ == "__main__":
-    print("Running unit tests for ModelRecommenderAgent...")
-    print()
-
-    try:
-        test_extract_json_block()
-        print("✅ test_extract_json_block passed\n")
-    except AssertionError as e:
-        print(f"❌ test_extract_json_block failed: {e}\n")
-
-    try:
-        test_load_inputs()
-        print("✅ test_load_inputs passed\n")
-    except AssertionError as e:
-        print(f"❌ test_load_inputs failed: {e}\n")
-
-    try:
-        test_agent_initialization()
-        print("✅ test_agent_initialization passed\n")
-    except AssertionError as e:
-        print(f"❌ test_agent_initialization failed: {e}\n")
-
-    print("=" * 60)
-    print("All unit tests completed!")
+    pytest.main([__file__, "-v"])
