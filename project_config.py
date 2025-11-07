@@ -17,6 +17,7 @@ _DEFAULT_CONFIG: dict[str, Any] = {
         "researcher_model": "gpt-5",
         "researcher_tool_offline_model": "gpt-5",
         "researcher_tool_online_model": "gpt-5",
+        "model_selector_model": "gpt-5",
         "model_recommender_model": "gpt-5",
     },
     "runtime": {

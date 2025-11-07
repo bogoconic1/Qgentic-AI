@@ -4,7 +4,8 @@ llm:
   researcher_model: "gpt-5"
   researcher_tool_offline_model: "gpt-5"
   researcher_tool_online_model: "gpt-5"
-  model_recommender_model: "gpt-5"
+  model_selector_model: "gpt-5"
+  model_recommender_model: "gemini-2.5-pro"
   starter_model: "gpt-5"
   ensembler_model: "gpt-5"
 runtime:
