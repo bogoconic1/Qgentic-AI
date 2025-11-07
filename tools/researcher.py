@@ -44,7 +44,7 @@ _EXTERNAL_DIRNAME = _PATH_CFG.get("external_data_dirname")
 
 
 @weave.op()
-def ask_eda(question: str, description: str, data_path: str, max_attempts: int | None = None, timeout_seconds: int = 3600, previous_ab_tests: list[dict] | None = None, file_suffix: str = "", cpu_core_range: list[int] | None = None, gpu_identifier: str | None = None) -> str:
+def ask_eda(question: str, description: str, data_path: str, max_attempts: int | None = None, timeout_seconds: int = 1800, previous_ab_tests: list[dict] | None = None, file_suffix: str = "", cpu_core_range: list[int] | None = None, gpu_identifier: str | None = None) -> str:
     """Asks a question about the data provided for exploratory data analysis (EDA)
 
     Args:
@@ -52,7 +52,7 @@ def ask_eda(question: str, description: str, data_path: str, max_attempts: int |
         description: Competition description
         data_path: Path to the data directory
         max_attempts: Maximum number of attempts (default from config)
-        timeout_seconds: Timeout for code execution in seconds (default 3600 = 1 hour)
+        timeout_seconds: Timeout for code execution in seconds (default 1800 = 30 minutes)
         previous_ab_tests: List of previous AB test dicts with 'question' and 'code' keys (empty for EDA, last 8 for AB tests)
         file_suffix: Optional suffix for the temp file (e.g., "_1", "_2" for parallel execution)
         cpu_core_range: List of CPU cores to use (e.g., [0,1,2,...,41]) for CPU affinity
@@ -93,6 +93,7 @@ def ask_eda(question: str, description: str, data_path: str, max_attempts: int |
             instructions=PROMPT,
             tools=[],
             messages=input_list,
+            web_search_enabled=True,
         )
         response_text = response.output_text or ""
         input_list += response.output

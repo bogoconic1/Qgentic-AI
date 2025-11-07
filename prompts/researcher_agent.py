@@ -649,7 +649,7 @@ Detailed Requirements:
 - Use lightweight models:
   - Tabular: XGBoost (with GPU); request feature importances
   - CV: Small nets (e.g. EfficientNetB0)
-  - NLP: Small encoder-only models (e.g., deberta-v3-xsmall), Small decoder-only LLMs (Qwen/Qwen2.5-0.5B (base) or Qwen/Qwen2.5-0.5B-Instruct (instruct) depending on task). You must test both encoder and decoder variants.
+  - NLP: Small transformers (e.g., deberta-v3-xsmall)
   - Time Series: LightGBM with limited iterations
 - A/B tests are for rapid, directional insights—not final selections
 - Design new tests in sequence, informed by earlierwh results, for a coherent discovery path
