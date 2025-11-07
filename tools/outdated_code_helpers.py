@@ -256,6 +256,19 @@ def _is_part_of_correct_api(node: ast.Attribute) -> bool:
             return True
     
     return False
+
+def _is_lr_scheduler_constructor(self, node: ast.Attribute) -> bool:
+    """Check if this is calling an LR scheduler constructor."""
+    # Common patterns: optim.lr_scheduler.StepLR, torch.optim.lr_scheduler.StepLR
+    if node.attr in {'StepLR', 'ExponentialLR', 'CosineAnnealingLR', 'ReduceLROnPlateau', 
+                      'MultiStepLR', 'CyclicLR', 'OneCycleLR', 'CosineAnnealingWarmRestarts'}:
+        return True
+    return False
+
+def _is_lr_scheduler_class(self, name: str) -> bool:
+    """Check if this is a direct LR scheduler class name."""
+    return name in {'StepLR', 'ExponentialLR', 'CosineAnnealingLR', 'ReduceLROnPlateau', 
+                    'MultiStepLR', 'CyclicLR', 'OneCycleLR', 'CosineAnnealingWarmRestarts'}
  
 class _Checker(ast.NodeVisitor):
     def __init__(self, filename: str, source: str):
@@ -333,8 +346,22 @@ class _Checker(ast.NodeVisitor):
             # Check for general function calls with deprecated parameters
             for kw in node.keywords:
                 if kw.arg in PYTORCH_DEPRECATED_PARAMS:
-                    msg = _get_pytorch_deprecation_message(kw.arg, "parameter", "in function call")
-                    self.issues.append(Issue(self.filename, node.lineno, getattr(node, "col_offset", 0), "TORCH013", msg))
+                    if kw.arg == "verbose":
+                        # Only flag if this is a scheduler constructor
+                        if isinstance(node.func, ast.Attribute):
+                            # Check for patterns like optim.lr_scheduler.StepLR(...)
+                            if _is_lr_scheduler_constructor(node.func):
+                                msg = _get_pytorch_deprecation_message(kw.arg, "parameter", "in LRScheduler constructor")
+                                self.issues.append(Issue(self.filename, node.lineno, getattr(node, "col_offset", 0), "TORCH013", msg))
+                        elif isinstance(node.func, ast.Name):
+                            # Check for direct scheduler class names like StepLR(...)
+                            if _is_lr_scheduler_class(node.func.id):
+                                msg = _get_pytorch_deprecation_message(kw.arg, "parameter", "in LRScheduler constructor")
+                                self.issues.append(Issue(self.filename, node.lineno, getattr(node, "col_offset", 0), "TORCH013", msg))
+                    else:
+                        # For other deprecated params, flag everywhere
+                        msg = _get_pytorch_deprecation_message(kw.arg, "parameter", "in function call")
+                        self.issues.append(Issue(self.filename, node.lineno, getattr(node, "col_offset", 0), "TORCH013", msg))
             
             # Existing checks
             if isinstance(node.func, ast.Attribute) and getattr(node.func, "attr", None) == "to_csv":
