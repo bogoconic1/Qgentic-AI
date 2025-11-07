@@ -26,8 +26,11 @@ data_path = "{data_path}"
 - Generate charts or images within your Python code as needed.
 - Save all visualizations to the MEDIA_DIR directory (provided by the MEDIA_DIR environment variable; default: Path(data_path)/"media").
 - Do NOT display figures interactively; only save them (e.g., for matplotlib: plt.savefig(os.path.join(os.environ.get("MEDIA_DIR"), "fig.png"), bbox_inches='tight'); for plotly: fig.write_image(...)).
-- After saving a figure, print its absolute file path to stdout.
-- At the end, convert all insights/results into a JSON object. Print the JSON object to the console first (for review), DO NOT TRUNCATE no matter the size, then save the exact same object to a JSON file in `{data_path}/analysis/` directory (create the directory if it doesn't exist) and state the file location clearly.
+- # At the end, convert all insights/results into a JSON object.
+    - Print the JSON object to the console first (for review):
+        - DO NOT TRUNCATE nested objects or dictionaries.
+        - For lists, only show the first 50 items to avoid excessive output.
+    - Then, save the exact same full object (not the truncated preview) to a JSON file in `{data_path}/analysis/` (create the directory if it doesn't exist) and clearly state the file location after saving.
 - For OneHotEncoder, use sparse_output=False instead of sparse=False to avoid errors.
 - For XGBoost, if early stopping is used, don't do .fit(early_stopping_rounds=...). Instead, use it as a constructor argument.
 - For LightGBM, if early stopping is used, do early_stopping and log_evaluation callbacks instead of early_stopping_rounds and verbose parameters in .fit().
@@ -54,4 +57,3 @@ def datasets_prompt() -> str:
 - Each URL should be a complete Kaggle dataset URL (e.g., "https://www.kaggle.com/datasets/username/dataset-name").
 - If no relevant datasets are found, return an empty list.
 """
-

@@ -46,12 +46,12 @@ You MUST conduct at least **20-30 A/B tests** covering the following categories.
 
 ### 1. Numerical Feature Transformations (Test at least 15)
 
-**Quasi-discrete numeric encodings** (Test at least 5):
+**Quasi-discrete numeric encodings** (Test at least 5) - you MUST NOT drop the original numeric feature:
 - **Identification of quasi-discrete numerics**: Identify numeric features with **low cardinality (<5% unique values)**, and treat these features' **raw values** as **categorical (no binning)**.
 - **Target-based**: Target encoding, Weight of Evidence (WOE), M-Estimate, CatBoost encoding (on raw numeric values)
 - **Ordinal encoding**: For naturally ordered categories or by target mean
 
-**Low-Correlation numeric encoding** (Test at least 5):
+**Low-Correlation numeric encoding** (Test at least 5) - you MUST NOT drop the original numeric feature:
 - **Identification of low-correlation numerics**: Identify numeric features with **low absolute correlation with target (|r| < 0.2)**, and treat these features' **raw values** as **categorical (no binning)**.
 - **Target-based**: Target encoding, Weight of Evidence (WOE), M-Estimate, CatBoost encoding (on raw numeric values)
 - **Ordinal encoding**: For naturally ordered categories or by target mean
@@ -133,197 +133,165 @@ Look for: Winning solution write-ups, feature importance patterns, domain-specif
 ## MANDATORY Task-Specific Requirements: NLP/LLM
 
 ### Minimum Experiment Coverage
-Conduct at least **25-30 A/B tests**. Modern competitions use decoder LLMs (Gemma, Qwen, Llama) + encoder models (DeBERTa v3) depending on task.
+Conduct at least **20-25 A/B tests**. Use decoder LLMs (Gemma, Qwen, Llama) for generative/instruction tasks and encoder models (DeBERTa v3) for classification/token tasks.
 
-### 1. Text Preprocessing (Test at least 5)
-- **Case handling**: Lowercase vs preserve case (preserve for NER, instruction tasks)
-- **Tokenization**: Subword (BPE, WordPiece, SentencePiece) vs character-level
-- **Punctuation**: Remove vs keep (keep for sentiment, instruction following)
-- **Spelling correction**: TextBlob, SymSpell, contextual BERT-based
-- **Special tokens**: URLs, mentions, emojis (remove, replace with tokens, extract as features)
-- **Stopword removal**: Standard vs custom vs none
+### 1. Model Architecture Research (Document at least 6-8 - DO NOT A/B TEST)
+**NOTE**: Model architecture comparisons are reserved for the Developer phase. Research and document these models through web search, but do NOT run A/B tests comparing them.
 
-### 2. Traditional Text Features (Test at least 4)
-**Statistical Features** (combine with transformer embeddings):
-- **Length metrics**: Character, word, sentence counts; avg word length
-- **Lexical diversity**: Type-token ratio, vocabulary richness
-- **Readability**: Flesch-Kincaid, Gunning Fog scores
-- **Capitalization patterns**: All caps ratio, title case ratio
-
-**Classical NLP**:
-- **TF-IDF**: max_features (1k, 5k, 10k, 50k), n-grams (1-2, 1-3, 2-3)
-- **N-grams**: Character (3-5), word (2-3)
-- **POS tagging**: Part-of-speech distributions
-- **Named Entities**: Count PERSON, ORG, LOC entities
-- **Sentiment**: VADER, TextBlob scores
-
-### 3. Model Selection (Test at least 8)
-**Encoder Models** (for classification, token tasks):
-- **DeBERTa v3**: SOTA accuracy (base, large, xsmall for A/B)
-- **ModernBERT**: Faster inference than DeBERTa, better than BERT/RoBERTa
+**Encoder Models** (for classification, token-level tasks):
+- **DeBERTa v3**: SOTA accuracy (base, large, xsmall)
+- **ModernBERT**: Faster inference than DeBERTa
 - **RoBERTa**: Solid baseline
 - **Domain-specific**: BioBERT, SciBERT, LegalBERT, FinBERT
 
-**Small Language Models (SLMs)** (2-14B params, efficient for Kaggle constraints):
-- **Gemma 2**: 2B, 9B (Google, strong performance, used in winners)
-- **Qwen2.5**: 0.5B, 1.5B, 3B, 7B, 14B (Alibaba, SOTA on many benchmarks)
-- **Phi-3.5**: 3.8B mini, 14B medium (Microsoft, competitive with larger models)
+**Decoder LLMs - Small (2-14B params, efficient for Kaggle)**:
+- **Gemma 2**: 2B, 9B (Google, strong performance)
+- **Qwen2.5**: 0.5B, 1.5B, 3B, 7B, 14B (Alibaba, SOTA)
+- **Phi-3.5**: 3.8B mini, 14B medium (Microsoft)
 - **Llama 3.1**: 8B (Meta, strong baseline)
-- **Mistral**: 7B (strong reasoning, used in winners)
+- **Mistral**: 7B (strong reasoning)
 
-**Large Models** (for distillation or deep reasoning):
+**Decoder LLMs - Large (for distillation)**:
 - **Qwen2.5**: 32B, 72B
 - **Llama 3.1**: 70B
-- **DeepSeek-R1**: 14B distilled versions, 32B (reasoning tasks)
-- **QwQ-32B**: Reasoning model (AIMO winner)
+- **DeepSeek-R1**: 14B distilled, 32B (reasoning)
+- **QwQ-32B**: Reasoning model
+
+### 2. Simple Meta Features (Test at least 2)
+**Only if beneficial** - add as additional inputs to transformer:
+- **Data source identifier**: If train/test from different distributions
+- **Typo count**: Number of spelling errors
+- **Prompt/category identifier**: If multiple task types in data
+- **Text length bins**: Categorical encoding of length ranges
+
+### 3. Distribution Shift Handling (Test at least 3)
+**Critical for multi-source datasets**:
+- **Two-stage training**: Pretrain on source A → fine-tune on source B
+- **Pseudo-labeling**: Train on labeled data → predict unlabeled → retrain on high-confidence predictions
+- **wise-ft (Weight-Averaged Fine-Tuning)**: Average weights from different training stages
+- **Domain-specific fine-tuning**: Separate fine-tuning per data source, then combine
 
 ### 4. Fine-tuning Strategies (Test at least 6)
-**Parameter-Efficient (standard approach)**:
-- **LoRA**: Rank r=8, 16, 32, 64; alpha=16 or 2×r; test different values
-- **QLoRA**: 4-bit quantization + LoRA (33% memory savings)
-- **Target modules**: "all-linear" (all layers) vs selective (q_proj, v_proj, o_proj)
+
+**Parameter-Efficient Fine-Tuning (PEFT)**:
+- **LoRA rank**: r=8, 16, 32, 64
+- **LoRA alpha**: 16, 32, or 2xrank
+- **Target modules**: "all-linear" (all layers) vs selective (q_proj, v_proj, o_proj, down_proj, up_proj)
 - **LoRA dropout**: 0.05, 0.1
+- **QLoRA**: 4-bit quantization + LoRA (memory savings)
 
-**Full Fine-tuning**:
-- All parameters trainable (for smaller models <3B)
-- Layer-wise LR: Decay 0.9-0.95 per layer from top to bottom
-- Gradual unfreezing: Freeze → unfreeze top layers → unfreeze all
+**Full Fine-tuning** (for models <3B):
+- All parameters trainable
+- Layer-wise LR decay: 0.9-0.95 per layer from top to bottom
+- Gradual unfreezing: Freeze backbone → unfreeze top layers → unfreeze all
 
-**For Encoder Models**:
-- **Pooling**: [CLS] vs mean vs max vs attention-weighted vs concat
-- **Long texts (>512)**: Head+tail (256+256), sliding window, Longformer
+**Encoder-Specific Strategies**:
+- **Pooling methods**: [CLS] token vs mean pooling vs max pooling vs attention-weighted pooling
+- **Long text handling (>512 tokens)**: Head+tail (256+256), sliding window with stride, hierarchical processing
 
-**For Decoder LLMs**:
-- **Chat templates**: Use model-specific format
-- **System prompts**: Test different task instructions ("You are a helpful assistant...")
-- **Max tokens**: Test truncation lengths (512, 1024, 2048, 4096)
-- **Generation config**: Temperature (0.5-0.7), top_p (0.9, 0.95), max_new_tokens
+**Decoder-Specific Strategies**:
+- **System prompt engineering**: Test different instruction formats and task descriptions
+- **Instruction tuning**: Format data as instruction-response pairs
+- **Max sequence length**: Test truncation at 512, 1024, 2048 tokens
 
-### 5. Data Augmentation (Test at least 6)
-**Text-Level** (proven techniques):
-- **Back-translation**: English→German→English, English→French→English
+### 5. Data Augmentation (Test at least 5)
+**Text-Level Augmentation**:
+- **Back-translation**: English→German→English, English→French→English (preserves meaning)
 - **EDA (Easy Data Augmentation)**: Synonym replacement, random insert/swap/delete (p=0.1, 0.2)
-- **Paraphrasing**: T5-based, GPT-based, LLM-generated variations
-- **Contextual substitution**: BERT/RoBERTa masked predictions
-- **AEDA**: Random punctuation insertion
+- **Paraphrasing**: T5-based or small LLM-based paraphrasing
+- **Contextual word substitution**: BERT/RoBERTa masked language model predictions
+- **AEDA**: Random punctuation insertion (simple, effective)
 
-**Advanced**:
-- **Pseudo-labeling**: High-confidence test predictions → retrain (especially with ensemble)
-- **LLM generation**: Use GPT-3.5/GPT-4 to generate training samples (winning approach)
-- **External data**: SQuAD, SNLI, MNLI, Quora, domain-specific datasets
+**Advanced Techniques**:
+- **Pseudo-labeling**: High-confidence test predictions → add to training (iterate 2-3 times)
+- **External datasets**: SQuAD, SNLI, MNLI, Quora, domain-specific corpora (if relevant)
 
 **Class Imbalance**:
-- Oversampling minority with augmentation
-- Focal loss (gamma=2.0)
+- Oversampling minority class with augmentation techniques
+- Focal loss (gamma=2.0) to focus on hard examples
 
 ### 6. Training & Optimization (Test at least 6)
-**Learning Rate**:
-- **Warmup**: Linear 5-10% steps, then decay
-- **Schedules**: Cosine annealing, cosine with restarts, one-cycle
-- **LR values**: 1e-5, 2e-5, 3e-5, 5e-5 (transformers)
-- **Single-epoch**: Multi-epoch often degrades; use early stopping
+**Learning Rate Strategies**:
+- **Warmup**: Linear warmup for 5-10% of total steps, then decay
+- **Schedules**: Cosine annealing, cosine with restarts, one-cycle policy
+- **LR values**: 1e-5, 2e-5, 3e-5, 5e-5 for transformers
 
 **Optimizers**:
-- **AdamW**: Standard (weight decay 0.01, 0.001)
-- **Adam** with gradient clipping (clip_norm=1.0)
-- **8-bit AdamW**: Memory-efficient for large models
+- **AdamW**: Standard choice with weight decay (0.01, 0.001)
+- **Adam with gradient clipping**: max_norm=1.0
+- **8-bit AdamW**: Memory-efficient for large models (bitsandbytes)
 
 **Loss Functions**:
-- **CrossEntropy** vs **Focal Loss** (imbalance)
-- **Label smoothing**: epsilon=0.1
-- **Bi-Tempered Loss**: Noisy labels
+- **CrossEntropy** (standard)
+- **Focal Loss**: For class imbalance (gamma=2.0)
+- **Label smoothing**: epsilon=0.1 to prevent overconfidence
+- **Bi-Tempered Loss**: For noisy labels
 
 **Regularization**:
-- Dropout: 0.1 (transformer), 0.3 (dense)
-- Gradient clipping: max_norm=1.0
-- **Adversarial training**: FGM/PGD on embeddings
-- **Multi-sample dropout**: Dropout at inference, average
+- **Dropout**: 0.1 for transformer layers, 0.3 for dense layers
+- **Gradient clipping**: max_norm=1.0 for training stability
+- **Adversarial training**: FGM/PGD perturbations on embeddings
+- **Multi-sample dropout**: Apply dropout at inference and average predictions
 
-**Batch & Precision**:
-- Batch: 8, 16, 32, 64
-- Gradient accumulation: 4-8 steps if memory limited
-- Mixed precision: FP16, BF16
+**Batch Size & Precision**:
+- **Batch sizes**: 8, 16, 32, 64 (larger for more stable training)
+- **Gradient accumulation**: 4-8 steps if GPU memory limited
+- **Mixed precision**: FP16 or BF16 for faster training
 
-### 7. Advanced Techniques (Test at least 4)
-**Distillation** (winning strategy):
-- Train large model (Llama 70B, Qwen 72B) → distill to small (Gemma 2B, 9B)
-- Use soft labels from ensemble of large models
-- 8-bit quantization of distilled model for inference
+### 7. Advanced Techniques (Test at least 3)
+**Distillation** (winning strategy for Kaggle inference constraints):
+- Train large model (Llama 70B, Qwen 72B) → distill knowledge to small model (Gemma 2B/9B)
+- Use soft labels (logits) from large teacher model
+- Distilled model can be quantized to 8-bit for faster inference
 
-**Quantization** (for Kaggle inference limits):
-- **8-bit**: bitsandbytes library
-- **4-bit**: AWQ, GPTQ quantization
-- Test inference time vs accuracy tradeoff
+**Quantization** (for Kaggle inference time/memory limits):
+- **8-bit quantization**: bitsandbytes library, balanced speed/accuracy
+- **4-bit quantization**: AWQ or GPTQ, more aggressive compression
+- Test inference speed vs accuracy tradeoff
 
-**RAG (Retrieval-Augmented Generation)** (for knowledge tasks):
-- External knowledge: Wikipedia dumps, domain corpora
-- Vector DB: FAISS, ChromaDB
+**RAG (Retrieval-Augmented Generation)** (for knowledge-intensive tasks):
+- External knowledge sources: Wikipedia, domain-specific corpora
+- Vector databases: FAISS, ChromaDB
 - Retrieval strategies: Dense (sentence-transformers), sparse (BM25), hybrid
 
-**Prompt Engineering**:
-- Zero-shot vs few-shot
-- Chain-of-Thought (CoT): "Let's think step by step"
-- System prompt variations
-
-### 8. Cross-Validation (Test at least 3)
-- **Stratified K-Fold**: 5-fold, preserve class distribution
-- **Group K-Fold**: Same author/topic grouped
-- **Adversarial validation**: Detect train-test shift
-- Out-of-fold predictions for stacking
-
-### 9. Ensemble Strategies (Test at least 3)
-**Model Diversity** (winning approach):
-- Different model families: DeBERTa v3 + Gemma 2 + Qwen2.5 + classical TF-IDF
-- Different sizes: Small (2B) + medium (7B-14B) + large (32B-72B)
-- Encoder + decoder: DeBERTa + Llama
-
-**Aggregation**:
-- **Weighted average**: Optimize weights by validation
-- **Stacking**: LightGBM/XGBoost on OOF predictions
-- **Power average**: predictions^p, then root
-- **Rank averaging**: Convert to ranks, average
-
-**Diversity Techniques**:
-- Different preprocessing
-- Different random seeds (5-10 per model)
-- Different K-fold splits
-
 ### Iteration Policy for NLP
-- **When encoder underperforms**: Try decoder LLMs (Gemma, Qwen) with LoRA
-- **When decoder underperforms**: Try encoder (DeBERTa v3) or domain-specific models
-- **When augmentation fails**: Try LLM-based generation (GPT-3.5), back-translation with multiple languages
-- **When hitting memory limits**: Use QLoRA, 8-bit quantization, smaller models (2B-7B)
-- **When inference too slow**: Distill to smaller model, quantize, or use ModernBERT
-- **Never conclude after 3-4 models**: Test at least 6-8 different architectures
+- **When distribution shift detected**: Test two-stage training, wise-ft, pseudo-labeling strategies
+- **When augmentation fails**: Try back-translation with multiple language pairs, different augmentation probabilities
+- **When fine-tuning strategy fails**: Test different LoRA configurations (rank, alpha, target modules)
+- **When training fails**: Try different learning rate schedules, warmup strategies, batch sizes
+- **When hitting memory limits**: Use QLoRA, gradient accumulation, reduce batch size, use 8-bit optimizer
+- **Never conclude after 2-3 failures**: Each strategy category should have 4-5 attempts minimum
+- **Model architecture selection**: Research and document at least 6-8 architectures through web search, but defer A/B testing to Developer phase
 
 ### Progress Tracking
 At each milestone, report:
-- Total A/B tests: X/25 minimum
-- Coverage: Preprocessing (X/5), Features (X/4), Models (X/8), Fine-tuning (X/6), Augmentation (X/6), Training (X/6), Advanced (X/4), Ensemble (X/3)
-- Best single model vs ensemble
+- Total A/B tests: X/20 minimum
+- Coverage: Meta Features (X/2), Distribution Shift (X/3), Fine-tuning (X/6), Augmentation (X/5), Training (X/6), Advanced (X/3)
+- Model architectures researched: X/6-8 (web search only, no A/B tests)
+- Best configuration found
 - Inference time per sample
 
 ### Web Search Guidance for NLP
-Search for: "NLP [task_type] kaggle 2025" (e.g., "text classification kaggle 2025 llama qwen")
+Search for: "NLP [task_type] kaggle" (e.g., "text classification kaggle deberta")
 Look for:
-- LoRA/QLoRA fine-tuning strategies for Gemma, Qwen, Llama
+- LoRA/QLoRA fine-tuning strategies for Gemma, Qwen, Llama, DeBERTa
+- Two-stage training and distribution shift handling
 - Distillation pipelines (large→small models)
-- Quantization techniques (AWQ, 4-bit, 8-bit)
-- RAG implementations for knowledge tasks
-- Chat templates and instruction tuning
-- Inference optimization (Kaggle time/memory constraints)
+- Quantization techniques (8-bit, 4-bit)
+- System prompt engineering for decoder LLMs
+- Instruction tuning strategies
+- Inference optimization for Kaggle constraints
 
 ### Key Techniques to Prioritize
-- **Gemma 2 (2B, 9B)**: Google SLMs, used in winners, efficient for Kaggle
-- **Qwen2.5**: Strong SOTA performance, 0.5B-72B range
-- **DeepSeek-R1 distilled**: Reasoning tasks (AIMO winner used QwQ-32B)
-- **DeBERTa v3**: Still SOTA for encoder tasks
-- **Distillation**: Train large, distill to small (winner strategy)
-- **LoRA "all-linear"**: Apply to all layers, not just q/v
-- **8-bit quantization**: For final submission (balances speed/accuracy)
-- **RAG**: LLM Science Exam winner used RAG with Wikipedia
-- **Single-epoch + early stopping**: Multi-epoch hurts
-- **Chat templates**: Critical for instruction-tuned models
+- **Two-stage training**: Critical for multi-source datasets with distribution shift
+- **DeBERTa v3**: SOTA for encoder tasks (classification, NER, token-level)
+- **Gemma 2 (2B, 9B)**: Google SLMs, efficient for Kaggle decoder tasks
+- **Qwen2.5**: Strong performance across sizes (0.5B-72B)
+- **LoRA "all-linear"**: Apply LoRA to all linear layers for better adaptation
+- **Distillation**: Train large teacher, distill to small student (winning strategy)
+- **4 or 8-bit quantization**: Balance speed and accuracy for final submission
+- **Pseudo-labeling**: Iterative self-training for semi-supervised learning
+- **wise-ft**: Weight averaging for handling distribution shift
 """
 
     elif task_type == "computer_vision":
@@ -365,7 +333,8 @@ Conduct at least **20-25 A/B tests**. Modern competitions use Vision Transformer
 - **RandAugment**: Random augmentation with magnitude control
 - **TrivialAugment**: Simplified single augmentation per image
 
-### 3. Model Selection (Test at least 8)
+### 3. Model Architecture Research (Document at least 8 - DO NOT A/B TEST)
+**NOTE**: Research and document these models through web search, but do NOT run A/B tests comparing them.
 **Vision Transformers** (SOTA for large datasets):
 - **ViT (Vision Transformer)**: ViT-B/16, ViT-L/16 (best with large datasets)
 - **Swin Transformer**: Hierarchical architecture, shifted windows (Swin-T, Swin-S, Swin-B)
@@ -470,25 +439,6 @@ Conduct at least **20-25 A/B tests**. Modern competitions use Vision Transformer
 - Geometric mean of probabilities
 - Rank averaging
 
-### 8. Ensemble Strategies (Test at least 4)
-**Model Diversity** (winning approach):
-- **Architecture mixing**: ViT + ConvNeXt + EfficientNet
-- **Scale diversity**: Small (B0, Tiny) + medium (B3, Small) + large (B5, Base)
-- **Different pretraining**: ImageNet-1k + ImageNet-21k + CLIP
-- **Different augmentation**: Standard aug + AutoAugment + RandAugment
-
-**Training Diversity**:
-- Different random seeds (5-10 models)
-- Different K-fold splits (5-fold models)
-- Different input resolutions (224, 384, 512)
-- Snapshot ensembling (save checkpoints at different epochs)
-
-**Aggregation Methods**:
-- **Weighted average**: Optimize weights on validation set
-- **Stacking**: LightGBM/XGBoost on model predictions + metadata features
-- **Rank averaging**: Convert predictions to ranks, average ranks
-- **Power mean**: Predictions^p, mean, then ^(1/p)
-
 ### 9. Advanced Techniques (Test at least 3)
 **Foundation Model Features**:
 - **CLIP embeddings**: Extract features, train classifier on top
@@ -506,25 +456,22 @@ Conduct at least **20-25 A/B tests**. Modern competitions use Vision Transformer
 - Iterative pseudo-labeling (multiple rounds)
 - Use ensemble for pseudo-labels (more reliable)
 
-### 10. Cross-Validation (Test at least 3)
-- **Stratified K-Fold**: 5-fold, preserve class distribution
-- **Group K-Fold**: If images from same source/patient/location grouped
-- **Time-based split**: For temporal datasets (satellite, medical longitudinal)
-- **Adversarial validation**: Detect train-test distribution shift
-
 ### Iteration Policy for CV
-- **When ViT underperforms**: Try modern CNNs (ConvNeXt), smaller datasets favor CNNs
-- **When CNN plateaus**: Try ViT with stronger augmentation (RandAugment, CutMix)
-- **When augmentation hurts**: Reduce magnitude, try simpler transforms
-- **When training unstable (ViT)**: Increase warmup epochs, reduce LR, use LayerNorm
-- **When inference too slow**: Distill to smaller model, use EfficientNet, quantize
-- **Never conclude after 3-4 models**: Test at least 6-8 architectures (mix ViT + CNN)
+- **When preprocessing fails**: Try different normalization strategies, resize methods, color spaces
+- **When augmentation fails**: Try MixUp/CutMix with different alpha values, reduce augmentation magnitude
+- **When training strategy fails**: Try different learning rate schedules, progressive resizing, warmup durations
+- **When fine-tuning fails**: Try different freeze/unfreeze strategies, layer-wise learning rates
+- **When TTA doesn't help**: Try different aggregation methods, multi-scale testing strategies
+- **Never conclude after 2-3 failures**: Each strategy category should have 4-5 attempts minimum
+- **Model architecture selection**: Research and document at least 6-8 architectures through web search, but defer A/B testing to Developer phase
+
 
 ### Progress Tracking
 At each milestone, report:
 - Total A/B tests: X/20 minimum
-- Coverage: Preprocessing (X/5), Augmentation (X/8), Models (X/8), Training (X/6), Self-supervised (X/3), Fine-tuning (X/4), TTA (X/3), Ensemble (X/4), Advanced (X/3)
-- Best single model vs ensemble
+- Coverage: Preprocessing (X/5), Augmentation (X/8), Training (X/6), Self-supervised (X/3), Fine-tuning (X/4), TTA (X/3), Advanced (X/3)
+- Model architectures researched: X/8 minimum (web search only, no A/B tests)
+- Best configuration found
 - Inference time per image
 
 ### Web Search Guidance for CV
@@ -620,9 +567,6 @@ Provide guidance by systematically uncovering the key behaviors of the dataset a
 
 Begin with a succinct checklist (5–10 bullets) of analytical sub-tasks at the conceptual (not implementation) level outlining your plan before proceeding with substantive work.
 
-If any required input (`<competition_description>`, `<task_type>`, or `<task_summary>`) is missing or malformed, halt and return this inline error only:
-`ERROR: Required input [input_name] missing or malformed. Please provide a valid value.`
-
 # Methodology Checklist (Conceptual)
 1. Parse the competition description to identify core objectives, target variables, feature set(s), and evaluation metrics.
 2. Profile the dataset: examine the target distribution, class balance, missing values, feature/target ranges, and dataset size.
@@ -651,8 +595,20 @@ If any required input (`<competition_description>`, `<task_type>`, or `<task_sum
 Set reasoning_effort = medium based on the moderate complexity of the task. Keep tool output summaries brief; elaborate and present detailed rationale in the final technical plan as required by the complexity of findings.
 
 # Available Tools
-- `ask_eda(question)`: Performs Python EDA on the local dataset to check distributions, data quality, and test assumptions. **All analysis results (insights, feature categorizations, statistics) are automatically saved as JSON files in `{base_dir}/analysis/` for later reference in AB tests.**
-- `run_ab_test(questions)`: Runs multiple A/B tests simultaneously (up to {max_parallel_workers} at a time). Accepts an **array** of questions, each comparing approaches and reporting performance metrics. **Each test description must be structured in the format: [Category][Test #Number] (A) Baseline vs (B) <what change did you make to the baseline> **
+- `ask_eda(question)`: Performs Python EDA on the local dataset to check distributions, data quality, and test assumptions.  
+  **All analysis results (insights, feature categorizations, statistics) are automatically saved as JSON files in `{base_dir}/analysis/` for later reference in A/B tests.**
+
+- `run_ab_test(questions)`: Runs multiple A/B tests simultaneously (up to `{max_parallel_workers}` at a time).  
+  Accepts a **list (array)** of strings, where each string describes one A/B test comparing two approaches and reporting performance metrics.
+
+    - **First test (baseline)** must follow the format:  
+      `[Baseline][Test #1] <baseline description>`  
+      e.g., `[Baseline][Test #1] Train baseline XGBoost model (no feature changes)`
+
+    - **All subsequent tests** must follow the format:  
+      `[Category][Test #Number] (A) Baseline vs (B) <change description>`  
+      e.g., `[Feature Engineering][Test #2] (A) Baseline vs (B) + interaction features`
+      
 - `download_external_datasets(question_1, question_2, question_3)`: Retrieves relevant external datasets based on three differently phrased queries; datasets will be in `{base_dir}/`. Use EDA and A/B testing as appropriate.
 
 **CRITICAL: Parallel AB Test Requirements:**
@@ -689,12 +645,12 @@ Detailed Requirements:
 - Test only strategies, features, or techniques—not model families or ensemble methods
 
 **A/B Test Constraints:**
+- Just a single 80/20 train/validation split will do; do not use K-Fold or other complex CV schemes
 - Use lightweight models:
   - Tabular: XGBoost (with GPU); request feature importances
   - CV: Small nets (e.g. EfficientNetB0)
-  - NLP: Small transformers (e.g., deberta-v3-xsmall)
+  - NLP: Small encoder-only models (e.g., deberta-v3-xsmall), Small decoder-only LLMs (Qwen/Qwen2.5-0.5B (base) or Qwen/Qwen2.5-0.5B-Instruct (instruct) depending on task). You must test both encoder and decoder variants.
   - Time Series: LightGBM with limited iterations
-- Based on the dataset size, determine whether to use a full train/validation split or a smaller sample for A/B tests
 - A/B tests are for rapid, directional insights—not final selections
 - Design new tests in sequence, informed by earlierwh results, for a coherent discovery path
 - Run all A/B tests on GPU when possible
@@ -709,6 +665,7 @@ Respond in Markdown following this structure:
 
 - Section 1: Data Understanding & Profiling
 - Section 2: Validated Findings (A/B Tested), with three tables by impact: High Impact, Neutral, Negative Impact. Each table must appear, with at least a header and a row stating `| (none found) | - | - | - | - |` if empty.
+- Section 3: Risks & Mitigations (e.g. small dataset size, class imbalance, distribution shift)
 - After these, include an "External Datasets" section: list paths and intended use, or say "No external datasets were used or recommended for this solution."
 - If any required input is missing or malformed, output only the relevant error message:
 `ERROR: Required input [input_name] missing or malformed. Please provide a valid value.`
@@ -733,6 +690,9 @@ Respond in Markdown following this structure:
 | Technique     | Rationale                                   | n   | Effect (Metric) | Confidence |
 |---------------|---------------------------------------------|-----|-----------------|------------|
 | Feature X     | Degraded results with overfitting           | 2000| -0.04 (f1)      | 90%        |
+
+# Risks & Mitigations
+- ...
 
 ---
 
