@@ -14,13 +14,13 @@ class GeminiGoogleSearchClient:
         "please provide the research paper summary for the model."
     )
 
-    def __init__(self, api_key: str | None = None, model_name: str = "gemini-flash-latest") -> None:
+    def __init__(self, api_key: str | None = None, model_name: str = "gemini-2.5-pro") -> None:
         api_key = api_key or os.environ.get("GOOGLE_API_KEY")
         if not api_key:
             raise ValueError(
                 "GOOGLE_API_KEY is required to initialize GeminiGoogleSearchClient")
 
-        self.client = genai.Client(api_key=api_key)
+        self.client = genai.Client()
         self.model_name = model_name
         self._tools = [
             types.Tool(url_context=types.UrlContext()),
