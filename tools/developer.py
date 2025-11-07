@@ -35,6 +35,7 @@ logger = logging.getLogger(__name__)
 _CONFIG = get_config()
 _LLM_CFG = _CONFIG.get("llm")
 _DEVELOPER_TOOL_MODEL = _LLM_CFG.get("developer_tool_model")
+_FINETUNED_CODE_API_MODEL = _LLM_CFG.get("finetuned_code_api_model")
 _RUNTIME_CFG = _CONFIG.get("runtime")
 _BASELINE_TIME_LIMIT = _RUNTIME_CFG.get("baseline_time_limit")
 _ENSEMBLE_TIME_LIMIT = _RUNTIME_CFG.get("ensemble_time_limit")
@@ -50,6 +51,36 @@ def web_search_stack_trace(query: str) -> str:
     if trace_index != -1: query = query[trace_index:]
     logger.debug("Stack trace query: %s", query)
 
+    # Step 1: Try fine-tuned model first (no web search capability)
+    logger.info("Attempting fine-tuned model endpoint first...")
+    from tools.helpers import call_llm_with_retry_google
+
+    ft_response = call_llm_with_retry_google(
+        model=_FINETUNED_CODE_API_MODEL,
+        system_instruction="Dummy",
+        user_prompt="Dummy",
+        text_format=StackTraceSolution,
+        temperature=1.0,
+        max_retries=3,
+        enable_google_search=False,
+        top_p=1.0,
+        thinking_budget=None,
+    )
+
+    # Check if fine-tuned model can answer (consider failure if < 35 chars or contains failure message)
+    solution_text = ft_response.reasoning_and_solution.strip() if ft_response else ""
+    is_valid_response = (
+        ft_response
+        and len(solution_text) >= 35
+        and "I cannot solve this error." not in solution_text
+    )
+
+    if is_valid_response:
+        logger.info("Fine-tuned model provided a solution, using it.")
+        return query + "\n" + "This is how you can fix the error: \n" + solution_text
+
+    # Step 2: Fallback to current workflow with web search
+    logger.info("Fine-tuned model cannot answer (response too short or failure message), falling back to web search workflow.")
     system_prompt = prompt_stack_trace()
 
     messages = [{"role": "user", "content": "<query>\n" + query + "\n</query>"}]
