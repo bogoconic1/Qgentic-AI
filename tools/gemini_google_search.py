@@ -2,11 +2,14 @@ import os
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
+import weave
+
+from project_config import get_config
 
 load_dotenv()
 
 
-class GeminiGoogleSearchClient:
+class GeminiPaperSummaryClient:
     """Wrapper around Gemini for Google-enabled paper summarization."""
 
     _DEFAULT_PROMPT = (
@@ -14,14 +17,15 @@ class GeminiGoogleSearchClient:
         "please provide the research paper summary for the model."
     )
 
-    def __init__(self, api_key: str | None = None, model_name: str = "gemini-2.5-pro") -> None:
+    def __init__(self, api_key: str | None = None) -> None:
         api_key = api_key or os.environ.get("GOOGLE_API_KEY")
         if not api_key:
             raise ValueError(
-                "GOOGLE_API_KEY is required to initialize GeminiGoogleSearchClient")
+                "GOOGLE_API_KEY is required to initialize GeminiPaperSummaryClient")
 
+        cfg = get_config()
+        self.model_name = cfg["llm"]["model_recommender_model"]
         self.client = genai.Client()
-        self.model_name = model_name
         self._tools = [
             types.Tool(url_context=types.UrlContext()),
             types.Tool(googleSearch=types.GoogleSearch()),
@@ -50,6 +54,7 @@ class GeminiGoogleSearchClient:
             ),
         ]
 
+    @weave.op()
     def generate_summary(self, model_name: str, user_prompt: str | None = None) -> str:
         prompt = (user_prompt or self._DEFAULT_PROMPT).format(
             model_name=model_name)

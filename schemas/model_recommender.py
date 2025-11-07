@@ -22,6 +22,17 @@ class ModelSelection(BaseModel):
     recommended_models: list[RecommendedModel]
 
 
+class RefinedModel(BaseModel):
+    """Individual refined model selection with detailed reasoning."""
+    name: str
+    selected_from_family: str
+    reason: str
+
+
+class RefinedModelSelection(BaseModel):
+    """Schema for refined model selection (Stage 3) - 8 models selected from 16 candidates."""
+    final_models: list[RefinedModel]
+
 # Preprocessing Schemas
 
 class StrategyItem(BaseModel):
