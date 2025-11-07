@@ -35,12 +35,13 @@ import kagglehub
 path = kagglehub.dataset_download("<author>/<dataset_name>")
 ```
 
-**CRITICAL: YOU MUST COPY EVERYTHING FROM BASELINE CODE**
+**CRITICAL: YOU MUST COPY EVERYTHING FROM EACH MODEL's BASELINE CODE! EVERYTHING!**
 For each baseline model in your ensemble, you MUST copy ALL of the following from the provided baseline code:
 1. **Preprocessing**
-2. **Loss functions**
-3. **Hyperparameters & Architecture**
-4. **Inference logic**
+2. **Feature Engineering and Transformations**
+3. **Loss functions**
+4. **Hyperparameters & Architecture**
+5. **Inference logic**
 
 The baseline models achieved their top-notch scores BECAUSE of these exact configurations. Your job is to:
 - Extract OOF predictions from these strong baseline models
