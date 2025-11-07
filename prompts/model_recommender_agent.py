@@ -3,7 +3,7 @@ from __future__ import annotations # delays type checking (Typing module) until 
 def model_selector_system_prompt() -> str:
     return """# Role & Objective
 You are a **Kaggle Competitions Grandmaster**.
-Your goal is to recommend up till **8 suitable high-potential models** for a specific competition, based on data characteristics, task type, and evaluation metric.
+Your goal is to recommend up till **16 suitable high-potential models** for a specific competition, based on data characteristics, task type, and evaluation metric.
 
 Begin with a **concise checklist (3-7 conceptual bullets)** describing your reasoning workflow (not implementation details).
 
@@ -15,7 +15,7 @@ Begin with a **concise checklist (3-7 conceptual bullets)** describing your reas
 ## Multimodal Competition Guidelines
 - If `<task_type>` contains **multiple modalities** (e.g., "nlp + tabular"), recommend **multi-stage pipelines** where models from different modalities work together.
 - **Format the model name as a one-liner pipeline**: `"NLP model (stage 1) + Tabular model (stage 2)"`
-- You may recommend up to 8 different pipeline combinations.
+- You may recommend up to **16 different pipeline combinations**.
 
 ## Hard Computational Constraints
 - **Total wall-clock budget:** **≤ 3 hours** end-to-end (data loading + training + validation)
@@ -36,7 +36,7 @@ Begin with a **concise checklist (3-7 conceptual bullets)** describing your reas
 6. **IMPORTANT**: The models should be diverse in architecture and approach, so that they can ensemble well later.
 7. **IMPORTANT**: You MUST ONLY list the model name in "name" - do not include any extra details such as version, hyperparameters, or modifications.
 8. Evaluate each candidate model under three criteria: metric impact, implementation simplicity, and compute feasibility within the 3-hour budget.
-9. Recommend up to **8 models** that balance these criteria effectively. There SHOULD NOT be any duplicates or near-duplicates in the suggestions.
+9. Recommend up to **16 models** that balance these criteria effectively. There SHOULD NOT be any duplicates or near-duplicates in the suggestions.
    - **CRITICAL**: "Near-duplicates" means models from the same architecture family (e.g., deberta-large and deberta-base are near-duplicates; roberta-base and roberta-large are near-duplicates).
    - Only recommend ONE variant per architecture family (e.g., choose either deberta-large OR deberta-base, not both).
    - Prioritize architectural diversity (e.g., different transformer families, gradient boosting, CNNs) over size variants of the same architecture.
@@ -58,7 +58,7 @@ High-level steps you will follow (conceptual only). MUST include determining the
 Analyze data characteristics and <research_plan> and explain why your chosen fold split is the best fit.
 
 ### Considered Models
-List up to 8 candidate models briefly explaining why each was considered.
+List up to **16 candidate models** briefly explaining why each was considered.
 
 Model 1
 - Name:
@@ -79,7 +79,6 @@ The **fold_split_strategy** must be a single, specific strategy.
 **recommended_models**: A list of model recommendations, each with:
 - "name": The model name
 - "reason": Why this model is recommended for this competition/data/metric
-
 """
 
 def preprocessing_system_prompt() -> str:
@@ -508,5 +507,84 @@ def build_user_prompt(
 <research_plan>
 {research_plan}
 </research_plan>"""
+
+    return prompt
+
+def model_refiner_system_prompt() -> str:
+    return """You are a Kaggle Competitions Grandmaster and machine learning research expert.
+
+Your task is to analyze 16 candidate models with their research paper summaries and select the best 8 models for a competition.
+
+Key principles:
+1. Prioritize architectural diversity - select only ONE model per architecture family
+2. Use paper summaries (especially Method/Architecture and Experiments/Results sections) as primary evidence
+3. Ensure all 8 models can train within 3-hour budget on 24GB GPU
+4. Select models with complementary strengths for ensemble potential
+5. Cite specific evidence from paper summaries in your reasoning
+
+You may select up to 8 models. Select fewer if candidates are limited or unsuitable.
+
+For each of the selected models, provide:
+- name: exact model name from the candidate list
+- selected_from_family: which architecture family this represents (e.g., "DeBERTa family", "Vision Transformer family")
+- reason: detailed explanation (3-5 sentences) citing specific evidence from the paper summary"""
+
+def build_refiner_user_prompt(
+    description: str,
+    task_type: str | list[str],
+    task_summary: str,
+    research_plan: str | None,
+    candidate_models: list[str],
+    summaries: dict[str, str],
+) -> str:
+    """Build user prompt for model refinement stage.
+
+    Args:
+        description: Competition description
+        task_type: Task type(s)
+        task_summary: Task summary
+        research_plan: Research plan content
+        candidate_models: List of candidate model names
+        summaries: Dict mapping model names to paper summaries
+
+    Returns:
+        Formatted user prompt for refinement
+    """
+    # Format task_type(s) properly
+    if isinstance(task_type, list):
+        task_type_display = " + ".join(task_type) if len(task_type) > 1 else task_type[0]
+    else:
+        task_type_display = task_type
+
+    # Build candidates text with summaries
+    candidates_text = ""
+    for i, model_name in enumerate(candidate_models, 1):
+        summary = summaries.get(model_name, "Summary unavailable")
+        candidates_text += f"\n\n---\n\n**Candidate {i}: {model_name}**\n\nPaper Summary:\n{summary}\n"
+
+    prompt = f"""<competition_description>
+{description}
+</competition_description>
+
+<task_type>{task_type_display}</task_type>
+
+<task_summary>{task_summary}</task_summary>
+
+<research_plan>
+{research_plan or "No research plan available"}
+</research_plan>
+
+<candidate_models>
+{candidates_text}
+</candidate_models>
+
+Based on the above 16 candidate models and their paper summaries, select the best 8 models for this competition.
+
+Consider:
+1. **Architectural diversity** - avoid near-duplicates from the same model family
+2. **Task suitability** - proven performance on similar tasks (from Experiments/Results sections)
+3. **Computational feasibility** - can train within 3-hour budget on 24GB GPU
+4. **Ensemble potential** - diverse approaches that complement each other
+"""
 
     return prompt

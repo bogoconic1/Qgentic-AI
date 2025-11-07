@@ -334,7 +334,7 @@ Develop and recommend 8 diverse, independent, and actionable ensemble strategies
   - Are specific and actionable (no vague or generic suggestions)
   - Are feasible to implement
   - Span multiple ensemble categories above
-  - Can be executed within 3 hours on a single GPU (24GB VRAM)
+
 - Present strategies as a numbered list (1-8), following the format guidelines below.
 - Before any web search or recommendation of contemporary techniques (2024-2025), explicitly state your intention and the minimal necessary inputs for the action.
 - Do not search for or reference winning solutions for this particular competition.

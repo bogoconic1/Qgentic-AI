@@ -62,3 +62,5 @@ matplotlib
 seaborn
 torchgeo
 scikit-image
+
+google-genai
