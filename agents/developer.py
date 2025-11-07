@@ -26,7 +26,7 @@ from utils.diffs import (
     apply_patch as util_apply_patch,
 )
 from utils.grade import run_grade
-from utils.code_utils import strip_header_from_code
+from utils.code_utils import strip_header_from_code, extract_python_code
 from prompts.developer_agent import (
     build_system as prompt_build_system,
     build_user as prompt_build_user,
@@ -341,13 +341,7 @@ class DeveloperAgent:
 
     def _extract_code(self, content: str) -> str:
         self.logger.debug("Extracting code from completion content. Content length: %s", len(content))
-        pattern = r"```python\s*(.*?)\s*```"
-        m = re.search(pattern, content, re.DOTALL | re.IGNORECASE)
-        if m:
-            self.logger.debug("Python fenced block located in completion output.")
-            return m.group(1).strip()
-        self.logger.debug("No fenced block detected; returning raw content.")
-        return content.strip()
+        return extract_python_code(content)
 
     @staticmethod
     def _format_with_line_numbers(code: str) -> str:

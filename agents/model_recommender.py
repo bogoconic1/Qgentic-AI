@@ -11,9 +11,12 @@ import weave
 from weave.trace.util import ThreadPoolExecutor
 
 from project_config import get_config
-from tools.helpers import call_llm_with_retry
+from tools.helpers import call_llm_with_retry, call_llm_with_retry_google
+from tools.gemini_google_search import GeminiPaperSummaryClient
 from prompts.model_recommender_agent import (
     model_selector_system_prompt,
+    model_refiner_system_prompt,
+    build_refiner_user_prompt,
     preprocessing_system_prompt,
     loss_function_system_prompt,
     hyperparameter_tuning_system_prompt,
@@ -22,6 +25,7 @@ from prompts.model_recommender_agent import (
 )
 from schemas.model_recommender import (
     ModelSelection,
+    RefinedModelSelection,
     PreprocessingRecommendations,
     LossFunctionRecommendations,
     HyperparameterRecommendations,
@@ -37,6 +41,7 @@ _LLM_CFG = _CONFIG.get("llm")
 _PATH_CFG = _CONFIG.get("paths")
 _MODEL_REC_CFG = _CONFIG.get("model_recommender")
 
+_MODEL_SELECTOR_MODEL = _LLM_CFG.get("model_selector_model")
 _MODEL_RECOMMENDER_MODEL = _LLM_CFG.get("model_recommender_model")
 _DEFAULT_MODELS = _MODEL_REC_CFG.get("default_models", ["deberta-v3-large"])
 _ENABLE_WEB_SEARCH = _MODEL_REC_CFG.get("enable_web_search", True)
@@ -150,9 +155,12 @@ class ModelRecommenderAgent:
 
         return inputs
 
+    @weave.op()
     def _recommend_preprocessing(self, model_name: str) -> Dict[str, Any]:
-        """Get preprocessing recommendations for a model."""
-        # Build user prompt with categories
+        """Get preprocessing recommendations for a model using Gemini 2.5 Pro with Google Search.
+
+        Note: Preprocessing uses unstructured output (no schema validation) due to flexible categories.
+        """
         user_prompt = build_user_prompt(
             description=self.inputs["description"],
             task_type=self.inputs["task_type"],
@@ -161,28 +169,24 @@ class ModelRecommenderAgent:
             research_plan=self.inputs.get("plan"),
         )
 
-        # Call LLM
-        system_prompt = preprocessing_system_prompt()
-        messages = [{"role": "user", "content": user_prompt}]
+        system_instruction = preprocessing_system_prompt()
 
         try:
-            response = call_llm_with_retry(
+            # Use Gemini without structured output (text_format=None)
+            response_text = call_llm_with_retry_google(
                 model=_MODEL_RECOMMENDER_MODEL,
-                instructions=system_prompt,
-                tools=[],
-                messages=messages,
-                web_search_enabled=_ENABLE_WEB_SEARCH,
+                system_instruction=system_instruction,
+                user_prompt=user_prompt,
+                text_format=None,  # Unstructured output
+                temperature=0.3,
+                enable_google_search=_ENABLE_WEB_SEARCH,
             )
 
-            # Parse JSON from response text
-            if not response or not response.output_text:
+            if not response_text:
                 logger.warning("[%s] No response for preprocessing", model_name)
                 return {}
 
             # Extract JSON from code blocks
-            import re
-            import json
-            response_text = response.output_text
             json_pattern = r'```json\s*(.*?)\s*```'
             matches = re.findall(json_pattern, response_text, re.DOTALL)
 
@@ -199,8 +203,9 @@ class ModelRecommenderAgent:
             logger.error("[%s] Error getting preprocessing recommendations: %s", model_name, e)
             return {}
 
+    @weave.op()
     def _recommend_loss_function(self, model_name: str) -> Dict[str, Any]:
-        """Get loss function recommendation for a model."""
+        """Get loss function recommendation for a model using Gemini 2.5 Pro with Google Search."""
         user_prompt = build_user_prompt(
             description=self.inputs["description"],
             task_type=self.inputs["task_type"],
@@ -209,33 +214,29 @@ class ModelRecommenderAgent:
             research_plan=self.inputs.get("plan"),
         )
 
-        system_prompt = loss_function_system_prompt()
-        messages = [{"role": "user", "content": user_prompt}]
+        system_instruction = loss_function_system_prompt()
 
         try:
-            response = call_llm_with_retry(
+            response = call_llm_with_retry_google(
                 model=_MODEL_RECOMMENDER_MODEL,
-                instructions=system_prompt,
-                tools=[],
-                messages=messages,
-                web_search_enabled=_ENABLE_WEB_SEARCH,
+                system_instruction=system_instruction,
+                user_prompt=user_prompt,
                 text_format=LossFunctionRecommendations,
+                temperature=0.3,
+                enable_google_search=_ENABLE_WEB_SEARCH,
             )
 
-            if not response or not hasattr(response, 'output_parsed') or not response.output_parsed:
-                logger.warning("[%s] No structured output for loss function", model_name)
-                return {}
-
-            result = response.output_parsed.model_dump()
-            logger.info("[%s] Successfully parsed loss function recommendations", model_name)
+            result = response.model_dump()
+            logger.info("[%s] Successfully got loss function recommendations", model_name)
             return result
 
         except Exception as e:
             logger.error("[%s] Error getting loss function recommendations: %s", model_name, e)
             return {}
 
+    @weave.op()
     def _recommend_hyperparameters(self, model_name: str) -> Dict[str, Any]:
-        """Get hyperparameter and architecture recommendations for a model."""
+        """Get hyperparameter and architecture recommendations for a model using Gemini 2.5 Pro with Google Search."""
         user_prompt = build_user_prompt(
             description=self.inputs["description"],
             task_type=self.inputs["task_type"],
@@ -244,33 +245,29 @@ class ModelRecommenderAgent:
             research_plan=self.inputs.get("plan"),
         )
 
-        system_prompt = hyperparameter_tuning_system_prompt()
-        messages = [{"role": "user", "content": user_prompt}]
+        system_instruction = hyperparameter_tuning_system_prompt()
 
         try:
-            response = call_llm_with_retry(
+            response = call_llm_with_retry_google(
                 model=_MODEL_RECOMMENDER_MODEL,
-                instructions=system_prompt,
-                tools=[],
-                messages=messages,
-                web_search_enabled=_ENABLE_WEB_SEARCH,
+                system_instruction=system_instruction,
+                user_prompt=user_prompt,
                 text_format=HyperparameterRecommendations,
+                temperature=0.3,
+                enable_google_search=_ENABLE_WEB_SEARCH,
             )
 
-            if not response or not hasattr(response, 'output_parsed') or not response.output_parsed:
-                logger.warning("[%s] No structured output for hyperparameters", model_name)
-                return {}
-
-            result = response.output_parsed.model_dump()
-            logger.info("[%s] Successfully parsed hyperparameter recommendations", model_name)
+            result = response.model_dump()
+            logger.info("[%s] Successfully got hyperparameter recommendations", model_name)
             return result
 
         except Exception as e:
             logger.error("[%s] Error getting hyperparameter recommendations: %s", model_name, e)
             return {}
 
+    @weave.op()
     def _recommend_inference(self, model_name: str) -> Dict[str, Any]:
-        """Get inference strategy recommendations for a model."""
+        """Get inference strategy recommendations for a model using Gemini 2.5 Pro with Google Search."""
         user_prompt = build_user_prompt(
             description=self.inputs["description"],
             task_type=self.inputs["task_type"],
@@ -279,25 +276,20 @@ class ModelRecommenderAgent:
             research_plan=self.inputs.get("plan"),
         )
 
-        system_prompt = inference_strategy_system_prompt()
-        messages = [{"role": "user", "content": user_prompt}]
+        system_instruction = inference_strategy_system_prompt()
 
         try:
-            response = call_llm_with_retry(
+            response = call_llm_with_retry_google(
                 model=_MODEL_RECOMMENDER_MODEL,
-                instructions=system_prompt,
-                tools=[],
-                messages=messages,
-                web_search_enabled=_ENABLE_WEB_SEARCH,
+                system_instruction=system_instruction,
+                user_prompt=user_prompt,
                 text_format=InferenceStrategyRecommendations,
+                temperature=0.3,
+                enable_google_search=_ENABLE_WEB_SEARCH,
             )
 
-            if not response or not hasattr(response, 'output_parsed') or not response.output_parsed:
-                logger.warning("[%s] No structured output for inference strategies", model_name)
-                return {}
-
-            result = response.output_parsed.model_dump()
-            logger.info("[%s] Successfully parsed inference strategy recommendations", model_name)
+            result = response.model_dump()
+            logger.info("[%s] Successfully got inference strategy recommendations", model_name)
             return result
 
         except Exception as e:
@@ -328,13 +320,15 @@ class ModelRecommenderAgent:
 
     @weave.op()
     def select_models(self) -> list[str]:
-        """Use LLM to dynamically select suitable models for the competition.
+        """Three-stage model selection process:
+        Stage 1: Select 16 candidate models using LLM with web search
+        Stage 2: Fetch paper summaries for all 16 candidates
+        Stage 3: Refine to 8 final models using Gemini 2.5 Pro with paper summaries
 
         Returns:
-            List of up to 5 selected model names
+            List of 8 final selected model names
         """
-        logger.info("Starting dynamic model selection")
-
+        # STAGE 1: Select 16 candidate models
         system_prompt = model_selector_system_prompt()
 
         user_prompt = build_user_prompt(
@@ -347,10 +341,8 @@ class ModelRecommenderAgent:
 
         messages = [{"role": "user", "content": user_prompt}]
 
-        logger.info("Requesting model selection from LLM")
-
         response = call_llm_with_retry(
-            model=_MODEL_RECOMMENDER_MODEL,
+            model=_MODEL_SELECTOR_MODEL,
             instructions=system_prompt,
             tools=[],
             messages=messages,
@@ -358,7 +350,7 @@ class ModelRecommenderAgent:
             text_format=ModelSelection,
         )
 
-        # Use structured output
+        # Parse Stage 1 response
         try:
             if not response or not hasattr(response, 'output_parsed') or not response.output_parsed:
                 logger.warning("No structured output received, using default models")
@@ -370,39 +362,164 @@ class ModelRecommenderAgent:
                 logger.warning("No models in recommended_models array, using default models")
                 return _DEFAULT_MODELS
 
-            # Extract model names
-            model_names = [model.name.strip() for model in parsed.recommended_models if model.name.strip()]
+            # Extract candidate model names (should be 16)
+            candidate_models = [model.name.strip() for model in parsed.recommended_models if model.name.strip()]
 
-            if not model_names:
+            if not candidate_models:
                 logger.warning("No valid model names extracted, using default models")
                 return _DEFAULT_MODELS
 
-            logger.info("Selected %d models: %s", len(model_names), model_names)
+            logger.info("Stage 1: Selected %d candidate models", len(candidate_models))
 
-            # Save fold split strategy to file for reference
+            # Save fold split strategy
             if parsed.fold_split_strategy:
                 fold_split_path = self.outputs_dir / "fold_split_strategy.json"
                 try:
                     with open(fold_split_path, "w") as f:
                         json.dump({"strategy": parsed.fold_split_strategy.strategy}, f, indent=2)
-                    logger.info("Saved fold split strategy: %s", parsed.fold_split_strategy.strategy)
                 except Exception:
-                    logger.debug("Failed to save fold split strategy")
+                    pass
 
-            # Save selected models to file for reference
+            # Save candidate models
+            candidate_models_path = self.outputs_dir / "candidate_models.json"
+            try:
+                with open(candidate_models_path, "w") as f:
+                    json.dump({"candidate_models": candidate_models}, f, indent=2)
+            except Exception:
+                pass
+
+            # STAGE 2: Fetch paper summaries
+            logger.info("Stage 2: Fetching paper summaries for %d candidates", len(candidate_models))
+            summaries = self._fetch_paper_summaries(candidate_models)
+
+            # STAGE 3: Refine to 8 final models
+            logger.info("Stage 3: Refining to 8 final models")
+            final_models = self._refine_model_selection(candidate_models, summaries)
+
+            # Save final selected models
             selected_models_path = self.outputs_dir / "selected_models.json"
             try:
                 with open(selected_models_path, "w") as f:
-                    json.dump({"selected_models": model_names}, f, indent=2)
-                logger.info("Selected models saved to %s", selected_models_path)
-            except Exception as e:
-                logger.warning("Failed to save selected models: %s", e)
+                    json.dump({"selected_models": final_models}, f, indent=2)
+            except Exception:
+                pass
 
-            return model_names
+            logger.info("Three-stage selection complete: %d final models", len(final_models))
+            return final_models
 
         except Exception as e:
-            logger.warning("Error in model selection: %s, using default models", e)
+            logger.error("Error in model selection: %s, using default models", e)
             return _DEFAULT_MODELS
+
+    @weave.op()
+    def _fetch_paper_summaries(self, model_names: list[str]) -> Dict[str, str]:
+        """Fetch paper summaries for all models in parallel using Gemini.
+
+        Args:
+            model_names: List of model names to fetch summaries for
+
+        Returns:
+            Dict mapping model names to their paper summaries
+        """
+        logger.info("Starting paper summary retrieval for %d models", len(model_names))
+
+        client = GeminiPaperSummaryClient()
+        summaries = {}
+
+        # Fetch summaries in parallel
+        with ThreadPoolExecutor(max_workers=len(model_names)) as executor:
+            # Submit all tasks
+            future_to_model = {
+                executor.submit(client.generate_summary, model_name): model_name
+                for model_name in model_names
+            }
+
+            # Collect results as they complete
+            for future in future_to_model:
+                model_name = future_to_model[future]
+                try:
+                    summary = future.result(timeout=60)  # 60 second timeout per model
+                    summaries[model_name] = summary
+                    logger.info("[%s] Successfully retrieved paper summary", model_name)
+                except Exception as e:
+                    logger.warning("[%s] Failed to retrieve paper summary: %s", model_name, e)
+                    summaries[model_name] = "Summary unavailable - no paper found or retrieval failed"
+
+        # Save summaries to file for reference
+        summaries_path = self.outputs_dir / "candidate_model_summaries.json"
+        try:
+            with open(summaries_path, "w") as f:
+                json.dump(summaries, f, indent=2)
+            logger.info("Paper summaries saved to %s", summaries_path)
+        except Exception as e:
+            logger.warning("Failed to save paper summaries: %s", e)
+
+        logger.info(
+            "Paper summary retrieval completed: %d successful, %d failed",
+            sum(1 for s in summaries.values() if not s.startswith("Summary unavailable")),
+            sum(1 for s in summaries.values() if s.startswith("Summary unavailable")),
+        )
+
+        return summaries
+
+    @weave.op()
+    def _refine_model_selection(
+        self,
+        candidate_models: list[str],
+        summaries: Dict[str, str]
+    ) -> list[str]:
+        """Refine 16 candidate models down to 8 using Gemini 2.5 Pro with paper summaries.
+
+        Args:
+            candidate_models: List of 16 candidate model names
+            summaries: Dict mapping model names to their paper summaries
+
+        Returns:
+            List of 8 refined model names
+        """
+        logger.info("Starting model refinement: %d candidates -> 8 final models", len(candidate_models))
+
+        # Build prompts from prompts module
+        user_prompt = build_refiner_user_prompt(
+            description=self.inputs["description"],
+            task_type=self.inputs["task_type"],
+            task_summary=self.inputs["task_summary"],
+            research_plan=self.inputs.get("plan"),
+            candidate_models=candidate_models,
+            summaries=summaries,
+        )
+
+        system_instruction = model_refiner_system_prompt()
+
+        # Call Gemini 2.5 Pro with structured output
+        try:
+            refined_selection = call_llm_with_retry_google(
+                model=_MODEL_RECOMMENDER_MODEL,
+                system_instruction=system_instruction,
+                user_prompt=user_prompt,
+                text_format=RefinedModelSelection,
+                temperature=0.3,
+            )
+
+            final_models = [model.name for model in refined_selection.final_models]
+
+            logger.info("Model refinement completed: selected %d models", len(final_models))
+
+            # Save refined selection with reasoning to file
+            refined_path = self.outputs_dir / "refined_model_selection.json"
+            try:
+                with open(refined_path, "w") as f:
+                    json.dump(refined_selection.model_dump(), f, indent=2)
+                logger.info("Refined model selection saved to %s", refined_path)
+            except Exception as e:
+                logger.warning("Failed to save refined selection: %s", e)
+
+            return final_models
+
+        except Exception as e:
+            logger.error("Model refinement failed: %s", e)
+            logger.warning("Falling back to first 8 candidates")
+            return candidate_models[:8]
 
     @weave.op()
     def run(self, model_list: Optional[list[str]] = None, use_dynamic_selection: bool = False) -> Dict[str, Dict[str, Any]]:
