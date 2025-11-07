@@ -20,6 +20,7 @@ from prompts.tools_researcher import (
     datasets_prompt as prompt_datasets,
 )
 from schemas.researcher import DatasetDiscovery
+from utils.code_utils import extract_python_code
 load_dotenv()
 
 
@@ -85,8 +86,6 @@ def ask_eda(question: str, description: str, data_path: str, max_attempts: int |
     # Add the current question
     input_list.append({"role": "user", "content": "Question: " + question})
 
-    pattern = r'```python\s*(.*?)\s*```'
-
     for attempt in range(1, attempts + 1):
         logger.info("ask_eda attempt %s/%s", attempt, attempts)
         response = call_llm_with_retry(
@@ -98,9 +97,8 @@ def ask_eda(question: str, description: str, data_path: str, max_attempts: int |
         response_text = response.output_text or ""
         input_list += response.output
 
-        matches = re.findall(pattern, response_text, re.DOTALL)
-        code = "\n\n".join(matches).strip()
-        logger.debug("ask_eda generated code (truncated): %s", code)
+        code = extract_python_code(response_text)
+        logger.debug("ask_eda generated code (truncated): %s", code[:200] if code else "")
 
         if not code:
             input_list.append({"role": "user", "content": "No python code block found. Please try again."})
@@ -152,7 +150,7 @@ def ask_eda(question: str, description: str, data_path: str, max_attempts: int |
             # If there's an error, it will contain stack trace with web search guidance
             if "Traceback" in result or "Error" in result:
                 logger.warning("ask_eda execution failed, retrying with error feedback")
-                input_list.append({"role": "user", "content": result})
+                input_list.append({"role": "user", "content": result + "\n\nPlease regenerate the code to fix the errors above."})
                 continue
 
             # Success - truncate to last 30000 characters and return
