@@ -14,6 +14,7 @@ from project_config import get_config
 from tools.helpers import call_llm_with_retry
 from prompts.tools_developer import (
     build_stack_trace_prompt as prompt_stack_trace,
+    build_stack_trace_pseudo_prompt as prompt_stack_trace_pseudo,
     red_flags_system as prompt_red_flags_system,
     red_flags_user as prompt_red_flags_user,
     sota_system as prompt_sota_system,
@@ -55,10 +56,13 @@ def web_search_stack_trace(query: str) -> str:
     logger.info("Attempting fine-tuned model endpoint first...")
     from tools.helpers import call_llm_with_retry_google
 
+    ft_system_prompt = prompt_stack_trace_pseudo()
+    ft_user_prompt = "<query>\n" + query + "\n</query>"
+
     ft_response = call_llm_with_retry_google(
         model=_FINETUNED_CODE_API_MODEL,
-        system_instruction="Dummy",
-        user_prompt="Dummy",
+        system_instruction=ft_system_prompt,
+        user_prompt=ft_user_prompt,
         text_format=StackTraceSolution,
         temperature=1.0,
         max_retries=3,
