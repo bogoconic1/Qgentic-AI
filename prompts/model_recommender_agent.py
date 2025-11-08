@@ -17,6 +17,11 @@ Begin with a **concise checklist (3-7 conceptual bullets)** describing your reas
 - **Format the model name as a one-liner pipeline**: `"NLP model (stage 1) + Tabular model (stage 2)"`
 - You may recommend up to **16 different pipeline combinations**.
 
+## NLP Task Guidelines
+- If `<task_type>` is "nlp" or contains "nlp", you MUST recommend **at least one encoder-only model** (e.g., DeBERTa, ModernBERT) AND **at least one decoder-only model** (e.g., Gemma, Qwen, Llama).
+- Encoder models are best for classification, token-level tasks, sentence embeddings.
+- Decoder models are best for generative tasks, instruction following, text generation.
+
 ## Hard Computational Constraints
 - **Total wall-clock budget:** **≤ 3 hours** end-to-end (data loading + training + validation)
 - **GPU memory:** 24GB available
@@ -521,6 +526,7 @@ Key principles:
 3. Ensure all 8 models can train within 3-hour budget on 24GB GPU
 4. Select models with complementary strengths for ensemble potential
 5. Cite specific evidence from paper summaries in your reasoning
+6. **For NLP tasks**: MUST include **at least one encoder-only model** (DeBERTa, ModernBERT) AND **at least one decoder-only model** (Gemma, Qwen, Llama)
 
 You may select up to 8 models. Select fewer if candidates are limited or unsuitable.
 
