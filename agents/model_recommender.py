@@ -157,10 +157,8 @@ class ModelRecommenderAgent:
 
     @weave.op()
     def _recommend_preprocessing(self, model_name: str) -> Dict[str, Any]:
-        """Get preprocessing recommendations for a model using Gemini 2.5 Pro with Google Search.
-
-        Note: Preprocessing uses unstructured output (no schema validation) due to flexible categories.
-        """
+        """Get preprocessing recommendations for a model."""
+        # Build user prompt with categories
         user_prompt = build_user_prompt(
             description=self.inputs["description"],
             task_type=self.inputs["task_type"],
@@ -169,24 +167,28 @@ class ModelRecommenderAgent:
             research_plan=self.inputs.get("plan"),
         )
 
-        system_instruction = preprocessing_system_prompt()
+        # Call LLM
+        system_prompt = preprocessing_system_prompt()
+        messages = [{"role": "user", "content": user_prompt}]
 
         try:
-            # Use Gemini without structured output (text_format=None)
-            response_text = call_llm_with_retry_google(
-                model=_MODEL_RECOMMENDER_MODEL,
-                system_instruction=system_instruction,
-                user_prompt=user_prompt,
-                text_format=None,  # Unstructured output
-                temperature=0.3,
-                enable_google_search=_ENABLE_WEB_SEARCH,
+            response = call_llm_with_retry(
+                model=_MODEL_SELECTOR_MODEL,
+                instructions=system_prompt,
+                tools=[],
+                messages=messages,
+                web_search_enabled=_ENABLE_WEB_SEARCH,
             )
 
-            if not response_text:
+            # Parse JSON from response text
+            if not response or not response.output_text:
                 logger.warning("[%s] No response for preprocessing", model_name)
                 return {}
 
             # Extract JSON from code blocks
+            import re
+            import json
+            response_text = response.output_text
             json_pattern = r'```json\s*(.*?)\s*```'
             matches = re.findall(json_pattern, response_text, re.DOTALL)
 
@@ -205,7 +207,7 @@ class ModelRecommenderAgent:
 
     @weave.op()
     def _recommend_loss_function(self, model_name: str) -> Dict[str, Any]:
-        """Get loss function recommendation for a model using Gemini 2.5 Pro with Google Search."""
+        """Get loss function recommendation for a model."""
         user_prompt = build_user_prompt(
             description=self.inputs["description"],
             task_type=self.inputs["task_type"],
@@ -214,20 +216,25 @@ class ModelRecommenderAgent:
             research_plan=self.inputs.get("plan"),
         )
 
-        system_instruction = loss_function_system_prompt()
+        system_prompt = loss_function_system_prompt()
+        messages = [{"role": "user", "content": user_prompt}]
 
         try:
-            response = call_llm_with_retry_google(
-                model=_MODEL_RECOMMENDER_MODEL,
-                system_instruction=system_instruction,
-                user_prompt=user_prompt,
+            response = call_llm_with_retry(
+                model=_MODEL_SELECTOR_MODEL,
+                instructions=system_prompt,
+                tools=[],
+                messages=messages,
+                web_search_enabled=_ENABLE_WEB_SEARCH,
                 text_format=LossFunctionRecommendations,
-                temperature=0.3,
-                enable_google_search=_ENABLE_WEB_SEARCH,
             )
 
-            result = response.model_dump()
-            logger.info("[%s] Successfully got loss function recommendations", model_name)
+            if not response or not hasattr(response, 'output_parsed') or not response.output_parsed:
+                logger.warning("[%s] No structured output for loss function", model_name)
+                return {}
+
+            result = response.output_parsed.model_dump()
+            logger.info("[%s] Successfully parsed loss function recommendations", model_name)
             return result
 
         except Exception as e:
@@ -236,7 +243,7 @@ class ModelRecommenderAgent:
 
     @weave.op()
     def _recommend_hyperparameters(self, model_name: str) -> Dict[str, Any]:
-        """Get hyperparameter and architecture recommendations for a model using Gemini 2.5 Pro with Google Search."""
+        """Get hyperparameter and architecture recommendations for a model."""
         user_prompt = build_user_prompt(
             description=self.inputs["description"],
             task_type=self.inputs["task_type"],
@@ -245,20 +252,25 @@ class ModelRecommenderAgent:
             research_plan=self.inputs.get("plan"),
         )
 
-        system_instruction = hyperparameter_tuning_system_prompt()
+        system_prompt = hyperparameter_tuning_system_prompt()
+        messages = [{"role": "user", "content": user_prompt}]
 
         try:
-            response = call_llm_with_retry_google(
-                model=_MODEL_RECOMMENDER_MODEL,
-                system_instruction=system_instruction,
-                user_prompt=user_prompt,
+            response = call_llm_with_retry(
+                model=_MODEL_SELECTOR_MODEL,
+                instructions=system_prompt,
+                tools=[],
+                messages=messages,
+                web_search_enabled=_ENABLE_WEB_SEARCH,
                 text_format=HyperparameterRecommendations,
-                temperature=0.3,
-                enable_google_search=_ENABLE_WEB_SEARCH,
             )
 
-            result = response.model_dump()
-            logger.info("[%s] Successfully got hyperparameter recommendations", model_name)
+            if not response or not hasattr(response, 'output_parsed') or not response.output_parsed:
+                logger.warning("[%s] No structured output for hyperparameters", model_name)
+                return {}
+
+            result = response.output_parsed.model_dump()
+            logger.info("[%s] Successfully parsed hyperparameter recommendations", model_name)
             return result
 
         except Exception as e:
@@ -267,7 +279,7 @@ class ModelRecommenderAgent:
 
     @weave.op()
     def _recommend_inference(self, model_name: str) -> Dict[str, Any]:
-        """Get inference strategy recommendations for a model using Gemini 2.5 Pro with Google Search."""
+        """Get inference strategy recommendations for a model."""
         user_prompt = build_user_prompt(
             description=self.inputs["description"],
             task_type=self.inputs["task_type"],
@@ -276,20 +288,25 @@ class ModelRecommenderAgent:
             research_plan=self.inputs.get("plan"),
         )
 
-        system_instruction = inference_strategy_system_prompt()
+        system_prompt = inference_strategy_system_prompt()
+        messages = [{"role": "user", "content": user_prompt}]
 
         try:
-            response = call_llm_with_retry_google(
-                model=_MODEL_RECOMMENDER_MODEL,
-                system_instruction=system_instruction,
-                user_prompt=user_prompt,
+            response = call_llm_with_retry(
+                model=_MODEL_SELECTOR_MODEL,
+                instructions=system_prompt,
+                tools=[],
+                messages=messages,
+                web_search_enabled=_ENABLE_WEB_SEARCH,
                 text_format=InferenceStrategyRecommendations,
-                temperature=0.3,
-                enable_google_search=_ENABLE_WEB_SEARCH,
             )
 
-            result = response.model_dump()
-            logger.info("[%s] Successfully got inference strategy recommendations", model_name)
+            if not response or not hasattr(response, 'output_parsed') or not response.output_parsed:
+                logger.warning("[%s] No structured output for inference strategies", model_name)
+                return {}
+
+            result = response.output_parsed.model_dump()
+            logger.info("[%s] Successfully parsed inference strategy recommendations", model_name)
             return result
 
         except Exception as e:
