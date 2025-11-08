@@ -148,9 +148,11 @@ def call_llm_with_retry_google_helper(
     system_instruction: str,
     user_prompt: str,
     text_format = None,
-    temperature: float = 0.3,
+    temperature: float = 1.0,
     max_retries: int | None = None,
     enable_google_search: bool = False,
+    top_p: float = 1.0,
+    thinking_budget: int | None = None,
 ):
     """Helper function to call Gemini API with optional structured outputs and retry logic.
 
@@ -162,6 +164,8 @@ def call_llm_with_retry_google_helper(
         temperature: Temperature for generation
         max_retries: Maximum number of retries
         enable_google_search: Enable Google Search tool
+        top_p: Nucleus sampling parameter (default: None)
+        thinking_budget: Thinking budget for reasoning models (default: None)
 
     Returns:
         Parsed Pydantic model instance (if text_format provided) or raw text response, or None on failure
@@ -191,9 +195,13 @@ def call_llm_with_retry_google_helper(
             # Build config
             config_params = {
                 "temperature": temperature,
+                "top_p": top_p,
                 "system_instruction": [types.Part.from_text(text=system_instruction)],
                 "tools": tools if tools else None,
             }
+
+            if thinking_budget is not None:
+                config_params["thinking_config"] = types.ThinkingConfig(thinking_budget=thinking_budget)
 
             # Add structured output params if text_format provided
             if text_format is not None:
@@ -238,9 +246,11 @@ def call_llm_with_retry_google(
     system_instruction: str,
     user_prompt: str,
     text_format = None,
-    temperature: float = 0.3,
+    temperature: float = 1.0,
     max_retries: int | None = None,
     enable_google_search: bool = False,
+    top_p: float = 1.0,
+    thinking_budget: int | None = None,
 ):
     """Call Gemini API with optional structured outputs and comprehensive retry logic.
 
@@ -252,6 +262,8 @@ def call_llm_with_retry_google(
         temperature: Temperature for generation
         max_retries: Maximum number of retries per attempt
         enable_google_search: Enable Google Search tool
+        top_p: Nucleus sampling parameter
+        thinking_budget: Thinking budget for reasoning models
 
     Returns:
         Parsed Pydantic model instance (if text_format provided) or raw text response
@@ -270,6 +282,8 @@ def call_llm_with_retry_google(
             temperature=temperature,
             max_retries=max_retries,
             enable_google_search=enable_google_search,
+            top_p=top_p,
+            thinking_budget=thinking_budget,
         )
         if result is not None:
             break
