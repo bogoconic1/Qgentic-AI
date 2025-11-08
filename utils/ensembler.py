@@ -9,10 +9,16 @@ from datetime import datetime
 import re
 import numpy as np
 import pandas as pd
+from concurrent.futures import ThreadPoolExecutor
 from utils.grade import run_grade
+from utils.code_utils import strip_header_from_code
 from tools.helpers import call_llm_with_retry
 from project_config import get_config
 from schemas.ensembler import EnsembleStrategies
+from prompts.ensembler_agent import (
+    ensembler_code_summarize_system_prompt,
+    ensembler_code_summarize_user_prompt,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -287,21 +293,27 @@ def recommend_ensemble_strategies(slug: str, iteration: int) -> list[dict]:
     # Build prompt for strategy recommendation
     metadata_summary = []
     all_blacklisted_ideas = []
+    model_summaries = []
 
     for model_name, model_data in ensemble_metadata.items():
         # Skip the "strategies" field if it exists
-        if model_name == "strategies" or not isinstance(model_data, dict):
+        if model_name in ["strategies", "ensemble_checklist", "validation_summary"] or not isinstance(model_data, dict):
             continue
 
         score = model_data.get("best_score", "N/A")
         training_time = model_data.get("training_time", "N/A")
         blacklisted = model_data.get("blacklisted_ideas", [])
+        technical_summary = model_data.get("technical_summary", "")
 
         metadata_summary.append(f"- {model_name}: score={score}, training_time={training_time}")
 
         # Collect all blacklisted ideas
         for idea in blacklisted:
             all_blacklisted_ideas.append(f"  [{model_name}] {idea}")
+
+        # Collect technical summaries if available
+        if technical_summary:
+            model_summaries.append(f"### {model_name}\n{technical_summary}")
 
     metadata_summary_str = "\n".join(metadata_summary)
 
@@ -311,64 +323,80 @@ def recommend_ensemble_strategies(slug: str, iteration: int) -> list[dict]:
     else:
         blacklisted_ideas_str = "None"
 
+    # Format model summaries
+    if model_summaries:
+        model_summaries_str = "\n\n".join(model_summaries)
+    else:
+        model_summaries_str = "No technical summaries available"
+
     system_prompt = f"""You are an expert Kaggle competitor specializing in ensemble methods and model optimization.
 
 # Role and Objective
-Develop and recommend 8 diverse, independent, and actionable ensemble strategies to outperform current baseline models in a Kaggle competition setting.
+Develop and recommend 8 diverse, independent, and actionable ensemble strategies designed to outperform the current baseline models in a Kaggle competition.
 
 # Instructions
-- Begin with a concise conceptual checklist (3-7 bullets) outlining your overall approach (not implementation specifics).
+- Begin with a concise conceptual checklist (3-7 bullet points) summarizing your overall approach (exclude implementation details).
 - For each strategy, provide:
-  - A detailed description
-  - Specific models used (as strings)
-  - The ensemble methodology (as a named string)
-  - Implementation guidance
-- Draw inspiration from these ensemble topics:
-  1. **Hyperparameter tuning**
-  2. **Stacking**
-  3. **Blending**
-  4. **Multi-Stage training**
-  5. **Pseudo Labeling**
-  6. **Advanced ensembling techniques**
-- Ensure recommendations:
-  - Are specific and actionable (no vague or generic suggestions)
-  - Are feasible to implement
-  - Span multiple ensemble categories above
+  - A comprehensive description
+  - Exact model names required (as strings)
+  - The ensemble technique employed (named method, e.g., 'weighted blending', 'stacking')
+  - Key actionable steps or tips for implementation
 
-- Present strategies as a numbered list (1-8), following the format guidelines below.
-- Before any web search or recommendation of contemporary techniques (2024-2025), explicitly state your intention and the minimal necessary inputs for the action.
-- Do not search for or reference winning solutions for this particular competition.
-- Avoid suggesting strategies similar to those in the provided blacklist; if an item is unfillable, state: "No suitable strategy could be found for this item."
-- After listing, validate that all strategies are distinct, actionable, independent, and do not overlap the blacklist. If duplicates or overlaps are found, substitute accordingly to maximize diversity.
-- After completing the strategies, provide a brief validation summary indicating success or the need for substitutions.
-- Set reasoning_effort = medium and keep outputs neither terse nor overly verbose.
+# Ensembling Categories
+1. **Model Upgrade** (minimum two strategies)
+   - E.g., swap baseline architectures for more powerful alternatives (e.g., 'deberta-v3-base' to 'deberta-v3-large').
+   - **IMPORTANT**: When upgrading a model, you MUST reference the CODE implementation from the baseline model being upgraded. Copy the exact preprocessing, augmentation, loss function, and training pipeline from the original baseline model's technical summary.
+   - You must list the original baseline model in `models_needed`.
+   - If unsuitable, state: "No suitable strategy could be found for this item."
+
+2. **Traditional Ensembling** (minimum two strategies)
+   - E.g., blend or average outputs from different models using conventional ensemble techniques.
+   - You can ensemble at most 3 models per strategy.
+   - If inappropriate, state: "No suitable strategy could be found for this item."
+
+3. **Advanced Techniques** (remaining strategies)
+   - E.g., multi-stage training, pseudo-labeling, knowledge distillation, etc.
+   - You can ensemble at most 3 models per strategy.
+
+- Ensure that:
+  - Recommendations are specific and actionable—not general or vague.
+  - You can ensemble at most 3 models per strategy.
+  - Recommendations span multiple ensemble categories as listed.
+
+- Present strategies as a numbered list (1–8) following the provided structure.
+- Before performing any web search or recommending a contemporary (2024-2025) methodology, state your intent clearly and specify the minimal required inputs.
+- Use only the tools explicitly allowed for this task. Do not reference or search for past winning solutions for this competition.
+- Do not suggest blacklisted or substantially similar strategies; if unfillable, use: "No suitable strategy could be found for this item."
+- After enumerating the strategies, validate that all are distinct, actionable, independent, and do not overlap blacklisted ideas. Substitute as needed to maximize diversity, and proceed or self-correct if the validation fails.
+- Conclude with a brief validation summary stating whether requirements were met or substitutions were made.
+- Set reasoning_effort = medium. Adjust the detail of your reasoning and output to match this complexity for balance.
 
 # Context
 - <competition_description>
   {description}
   </competition_description>
-- <baseline_models> (model names [string] and training times [string, e.g., '2h'])
+- <baseline_models> (model names [string] and training times [e.g., '2h'])
   {metadata_summary_str}
   </baseline_models>
 - <blacklisted_ideas>
-  The following did NOT improve performance. Avoid similar approaches:
+  The following approaches did NOT improve performance—avoid similar methods:
   {blacklisted_ideas_str}
   </blacklisted_ideas>
+- <model_technical_summaries>
+  Technical implementation details for each baseline model:
+  {model_summaries_str}
+  </model_technical_summaries>
 
-# Output Format
-- List exactly 8 strategies as a numbered list, detailed and content-rich.
-- Remember to make tool calls only as allowed, and state the intent before any significant tool invocation, describing both the rationale and minimal inputs.
-- Models listed under models_needed must correspond to actual model names already defined in the <baseline_models> section.
-- If you want to propose new models that are not yet defined, explicitly mark them as new (e.g., NEW: <model_name>).
-- Provide a `strategies` field containing an array of exactly 8 strategy objects, where each object has:
-  - `strategy`: A richly detailed string describing the ensemble strategy
-  - `models_needed`: A list of model names (strings) required for this strategy
-
-## Example Strategies
-1. Use a LightGBM, CatBoost, and XGBoost three-way weighted average (models: 'LightGBM', 'CatBoost', 'XGBoost') after tuning each individually by Optuna; weights determined by holdout set RMSE.
-2. Implement two-stage stacking: first-level learners are fine-tuned CNN and transformer models ('ResNet50', 'EfficientNet', 'ConvNext'); then train a CatBoost with the outputs of the first stage as features.
-...
-8. [Eighth strategy]
+## Output Format
+Return a JSON object structured as follows:
+- `checklist`: Array of 3–7 short bullet points capturing conceptual ensemble strategy development steps (exclude implementation detail).
+- `strategies`: Array of exactly 8 strategy objects, each including:
+  - `strategy` (string): Detailed, high-level description and actionable guidance. Add any instructions of model changes/upgrades here.
+  - `models_needed` (array of strings): Required model names. The models must be present in <baseline_models>.
+  - `ensemble_method` (string): Name of ensemble technique (e.g., 'weighted blending', 'stacking', 'bagging', etc.).
+  - `implementation_guidance` (string): Actionable steps or practical tips.
+- `validation_summary`: Summarize whether all strategies are distinct, actionable, independent, avoid the blacklist, and meet requirements. If substitutions were needed, note specifics.
+- If any strategy category cannot be filled, include an object with `strategy`: 'No suitable strategy could be found for this item.' and leave arrays/strings for other fields empty.
 """
 
     user_prompt = "Generate 8 diverse ensemble strategies for this competition."
@@ -385,13 +413,23 @@ Develop and recommend 8 diverse, independent, and actionable ensemble strategies
 
     # Use structured output
     strategies = []
+    checklist = []
+    validation_summary = ""
+
     if response and hasattr(response, 'output_parsed') and response.output_parsed:
         parsed = response.output_parsed
+
+        # Extract checklist and validation summary
+        checklist = parsed.checklist if hasattr(parsed, 'checklist') else []
+        validation_summary = parsed.validation_summary if hasattr(parsed, 'validation_summary') else ""
+
         # Convert Pydantic models to dicts
         for strategy_model in parsed.strategies:
             strategies.append({
                 "strategy": strategy_model.strategy,
-                "models_needed": strategy_model.models_needed
+                "models_needed": strategy_model.models_needed,
+                "ensemble_method": strategy_model.ensemble_method,
+                "implementation_guidance": strategy_model.implementation_guidance
             })
         logger.info("Parsed %d strategies from structured output", len(strategies))
     else:
@@ -407,8 +445,10 @@ Develop and recommend 8 diverse, independent, and actionable ensemble strategies
         strategy_text = strategy_obj.get("strategy", "") if isinstance(strategy_obj, dict) else str(strategy_obj)
         logger.info("  %d. %s", i, strategy_text[:100] + "..." if len(strategy_text) > 100 else strategy_text)
 
-    # Add strategies to ensemble_metadata.json
+    # Add strategies, checklist, and validation summary to ensemble_metadata.json
+    ensemble_metadata["ensemble_checklist"] = checklist
     ensemble_metadata["strategies"] = strategies
+    ensemble_metadata["validation_summary"] = validation_summary
 
     # Save updated metadata
     with open(metadata_path, "w") as f:
@@ -417,3 +457,164 @@ Develop and recommend 8 diverse, independent, and actionable ensemble strategies
     logger.info("Saved strategies to %s", metadata_path)
 
     return strategies
+
+
+def generate_model_summary(
+    description: str,
+    model_name: str,
+    code: str,
+    logs: str,
+) -> str:
+    """
+    Generate a technical summary of a model's implementation.
+
+    Args:
+        description: Competition description
+        model_name: Model name (e.g., "microsoft/deberta-v3-base")
+        code: Model implementation code
+        logs: Execution logs
+
+    Returns:
+        Technical summary markdown string
+    """
+    system_prompt = ensembler_code_summarize_system_prompt()
+    user_prompt = ensembler_code_summarize_user_prompt(description, model_name, code, logs)
+
+    response = call_llm_with_retry(
+        model=_ENSEMBLER_MODEL,
+        instructions=system_prompt,
+        tools=[],
+        messages=[{"role": "user", "content": user_prompt}]
+    )
+
+    return response.output_text
+
+
+def _generate_summary_task(
+    idx: int,
+    model_name: str,
+    baseline_info: dict,
+    description: str,
+    ensemble_dir: Path,
+    summaries_dir: Path,
+):
+    """Helper function to generate a single model summary (for parallel execution)."""
+    print(f"Generating summary for Model {idx}: {model_name}")
+
+    # Read code file
+    best_code_file = baseline_info.get("best_code_file")
+    if not best_code_file:
+        print(f"  WARNING: No code file for {model_name}, skipping")
+        return idx, model_name, None
+
+    # Code is in ensemble/ folder
+    code_path = ensemble_dir / best_code_file
+    if not code_path.exists():
+        print(f"  WARNING: Code file not found: {code_path}, skipping")
+        return idx, model_name, None
+
+    # Read code and strip headers
+    code = strip_header_from_code(code_path)
+
+    # Read logs file
+    log_file = best_code_file.replace('.py', '.txt')
+    log_path = ensemble_dir / log_file
+    if not log_path.exists():
+        print(f"  WARNING: Log file not found: {log_path}, using empty logs")
+        logs = ""
+    else:
+        with open(log_path, 'r') as f:
+            logs = f.read()
+
+    # Generate summary
+    summary = generate_model_summary(
+        description=description,
+        model_name=model_name,
+        code=code,
+        logs=logs
+    )
+
+    # Save summary
+    summary_path = summaries_dir / f"summary_model_{idx}.md"
+    with open(summary_path, 'w') as f:
+        f.write(summary)
+
+    print(f"  Saved summary to {summary_path}")
+    return idx, model_name, summary
+
+
+def generate_ensemble_summaries(
+    slug: str,
+    iteration: int,
+) -> dict:
+    """
+    Generate technical summaries for all baseline models in ensemble folder.
+
+    Args:
+        slug: Competition slug
+        iteration: Iteration number
+
+    Returns:
+        Dict mapping model_name to summary markdown
+    """
+    # Define paths
+    base_path = _TASK_ROOT / slug
+    outputs_dir = base_path / _OUTPUTS_DIRNAME / str(iteration)
+    ensemble_dir = outputs_dir / "ensemble"
+    metadata_path = ensemble_dir / "ensemble_metadata.json"
+    description_path = base_path / "description.md"
+
+    # Load description
+    with open(description_path, 'r') as f:
+        description = f.read()
+
+    # Load ensemble metadata
+    with open(metadata_path, 'r') as f:
+        ensemble_metadata = json.load(f)
+
+    summaries = {}
+    summaries_dir = ensemble_dir / "summaries"
+    summaries_dir.mkdir(parents=True, exist_ok=True)
+
+    # Filter out non-model entries
+    baseline_results = {
+        k: v for k, v in ensemble_metadata.items()
+        if k not in ["strategies", "ensemble_checklist", "validation_summary"]
+        and isinstance(v, dict)
+    }
+
+    print(f"Generating summaries for {len(baseline_results)} models in parallel")
+
+    # Run summary generation in parallel using ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=len(baseline_results)) as executor:
+        futures = []
+        for idx, (model_name, baseline_info) in enumerate(baseline_results.items(), start=1):
+            future = executor.submit(
+                _generate_summary_task,
+                idx, model_name, baseline_info, description,
+                ensemble_dir, summaries_dir
+            )
+            futures.append(future)
+
+        # Collect results
+        for future in futures:
+            try:
+                idx, model_name, summary = future.result()
+                if summary:
+                    summaries[model_name] = summary
+            except Exception as e:
+                print(f"  ERROR: Summary generation failed: {e}")
+                continue
+
+    # Update ensemble_metadata.json with summaries
+    for model_name, summary in summaries.items():
+        if model_name in ensemble_metadata:
+            ensemble_metadata[model_name]["technical_summary"] = summary
+
+    # Save updated metadata
+    with open(metadata_path, "w") as f:
+        json.dump(ensemble_metadata, f, indent=2)
+
+    logger.info(f"Generated {len(summaries)} summaries and updated ensemble_metadata.json")
+
+    return summaries
