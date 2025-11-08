@@ -329,74 +329,88 @@ def recommend_ensemble_strategies(slug: str, iteration: int) -> list[dict]:
     else:
         model_summaries_str = "No technical summaries available"
 
-    system_prompt = f"""You are an expert Kaggle competitor specializing in ensemble methods and model optimization.
+    system_prompt = f"""You are a Kaggle ensemble expert focused on competitive model optimization.
 
 # Role and Objective
-Develop and recommend 8 diverse, independent, and actionable ensemble strategies designed to outperform the current baseline models in a Kaggle competition.
+Devise 8 unique, actionable, and independent ensemble strategies to surpass current baseline models in a specified Kaggle competition.
 
 # Instructions
-- Begin with a concise conceptual checklist (3-7 bullet points) summarizing your overall approach (exclude implementation details).
-- For each strategy, provide:
-  - A comprehensive description
-  - Exact model names required (as strings)
-  - The ensemble technique employed (named method, e.g., 'weighted blending', 'stacking')
-  - Key actionable steps or tips for implementation
+- Begin with a concise conceptual checklist (3–7 points, as a string array) summarizing your overall ensemble approach—exclude implementation details.
+- For each strategy, create an object with these fields in order:
+  1. `strategy` (string): Thorough, actionable description.
+  2. `models_needed` (string array): See requirements below.
+  3. `ensemble_method` (string): The ensemble technique utilized (e.g., 'weighted blending', 'stacking').
+  4. `implementation_guidance` (string): Actionable stepwise or operational guidance.
 
-# Ensembling Categories
-1. **Model Upgrade** (minimum two strategies)
-   - E.g., swap baseline architectures for more powerful alternatives (e.g., 'deberta-v3-base' to 'deberta-v3-large').
-   - **IMPORTANT**: When upgrading a model, you MUST reference the CODE implementation from the baseline model being upgraded. Copy the exact preprocessing, augmentation, loss function, and training pipeline from the original baseline model's technical summary.
-   - You must list the original baseline model in `models_needed`.
-   - If unsuitable, state: "No suitable strategy could be found for this item."
+# Ensemble Categories
+1. **Model Upgrade** (at least two strategies required)
+   - Upgrade a baseline to a larger or stronger model within the SAME family only (no cross-family swaps).
+   - **CRITICAL**: Only suggest upgrades where the larger model ACTUALLY EXISTS on Hugging Face. Do NOT hallucinate models.
+   - Known valid upgrade paths (verified to exist on HuggingFace):
+     * microsoft/deberta-v3-base → microsoft/deberta-v3-large ✅
+     * answerdotai/ModernBERT-base → answerdotai/ModernBERT-large ✅
+     * google/bert-base-uncased → google/bert-large-uncased ✅
+   - Models that DO NOT have large variants (do not suggest these):
+     * microsoft/mpnet-base (only base exists) ❌
+     * intfloat/e5-large-v2 (already large, no xl) ❌
+   - Use web search to verify a model exists on HuggingFace before suggesting it.
+   - Strictly reuse the code, preprocessing, augmentation, loss, and training pipeline from the upgraded model's technical summary.
+   - `models_needed` should be: [original_baseline_model, NEW: upgraded_model_name]
+     Example: ["answerdotai/ModernBERT-base-8k", "NEW: answerdotai/ModernBERT-large"]
+   - If no valid upgrade exists for ANY baseline, insert the error object below.
+     * `strategy`: "No suitable strategy could be found for this item."
+     * `models_needed`: []
+     * `ensemble_method`: ""
+     * `implementation_guidance`: ""
 
-2. **Traditional Ensembling** (minimum two strategies)
-   - E.g., blend or average outputs from different models using conventional ensemble techniques.
-   - You can ensemble at most 3 models per strategy.
-   - If inappropriate, state: "No suitable strategy could be found for this item."
+2. **Traditional Ensembling** (at least two strategies required)
+   - Blend or aggregate up to three models (baselines, upgrades, or NEW—prefix new models with "NEW:" in all respective fields).
+   - Example: blend google/efficientnet-b0 (baseline) with NEW:google/efficientnet-b1.
+   - If not feasible, use the error object as above.
 
 3. **Advanced Techniques** (remaining strategies)
-   - E.g., multi-stage training, pseudo-labeling, knowledge distillation, etc.
-   - You can ensemble at most 3 models per strategy.
+   - Includes multi-stage training, pseudo-labeling, knowledge distillation, etc.
+   - May use up to three models. When NEW models are proposed, prefix with "NEW:" consistently.
+   - If a strategy cannot be generated, use the error object as above.
 
-- Ensure that:
-  - Recommendations are specific and actionable—not general or vague.
-  - You can ensemble at most 3 models per strategy.
-  - Recommendations span multiple ensemble categories as listed.
-
-- Present strategies as a numbered list (1–8) following the provided structure.
-- Before performing any web search or recommending a contemporary (2024-2025) methodology, state your intent clearly and specify the minimal required inputs.
-- Use only the tools explicitly allowed for this task. Do not reference or search for past winning solutions for this competition.
-- Do not suggest blacklisted or substantially similar strategies; if unfillable, use: "No suitable strategy could be found for this item."
-- After enumerating the strategies, validate that all are distinct, actionable, independent, and do not overlap blacklisted ideas. Substitute as needed to maximize diversity, and proceed or self-correct if the validation fails.
-- Conclude with a brief validation summary stating whether requirements were met or substitutions were made.
-- Set reasoning_effort = medium. Adjust the detail of your reasoning and output to match this complexity for balance.
+- Output 8 strategies as a numbered array of objects, keeping the strict field order per item.
+- Conclude with a `validation_summary` string stating if requirements were satisfied, or if substitutions were made and why (e.g., model constraints).
+- Ensure recommendations are actionable, clearly independent, satisfy minimums for each ensemble type, and avoid blacklisted/near-duplicate/overlapping ideas.
+- Announce your intent prior to any web search or contemporary (2024–2025) methodology suggestion, and specify any concise required inputs.
+- Use only permitted tools. Do not reference or consult past winning solutions for this competition.
+- Any required but unachievable strategy must appear in the output array as the appropriate error object.
+- The `validation_summary` must confirm distinctiveness, actionability, blacklist avoidance, and note substitutions if used.
+- Set reasoning_effort = medium to balance detail and conciseness appropriately.
+- After producing strategies, validate that minimums for model upgrades and traditional ensembling are met, and that blacklisted ideas are excluded. If validation fails, make a minimal correction before final output.
+- **IMPORTANT**: the `NEW:` models MUST exist on the internet. Do not hallucinate models that do not exist. You can validate via web searching.
 
 # Context
 - <competition_description>
   {description}
   </competition_description>
-- <baseline_models> (model names [string] and training times [e.g., '2h'])
+- <baseline_models> ([model name strings], training times)
   {metadata_summary_str}
   </baseline_models>
-- <blacklisted_ideas>
-  The following approaches did NOT improve performance—avoid similar methods:
+- <blacklisted_ideas> (to strictly avoid)
   {blacklisted_ideas_str}
   </blacklisted_ideas>
-- <model_technical_summaries>
-  Technical implementation details for each baseline model:
+- <model_technical_summaries> (details of each baseline model)
   {model_summaries_str}
   </model_technical_summaries>
 
 ## Output Format
-Return a JSON object structured as follows:
-- `checklist`: Array of 3–7 short bullet points capturing conceptual ensemble strategy development steps (exclude implementation detail).
-- `strategies`: Array of exactly 8 strategy objects, each including:
-  - `strategy` (string): Detailed, high-level description and actionable guidance. Add any instructions of model changes/upgrades here.
-  - `models_needed` (array of strings): Required model names. The models must be present in <baseline_models>.
-  - `ensemble_method` (string): Name of ensemble technique (e.g., 'weighted blending', 'stacking', 'bagging', etc.).
-  - `implementation_guidance` (string): Actionable steps or practical tips.
-- `validation_summary`: Summarize whether all strategies are distinct, actionable, independent, avoid the blacklist, and meet requirements. If substitutions were needed, note specifics.
-- If any strategy category cannot be filled, include an object with `strategy`: 'No suitable strategy could be found for this item.' and leave arrays/strings for other fields empty.
+Produce a JSON object:
+- `checklist`: Array of 3–7 conceptual ensemble design steps.
+- `strategies`: Array of 8 objects, each with 1. `strategy` (string), 2. `models_needed` (string array), 3. `ensemble_method` (string), 4. `implementation_guidance` (string), in that exact order. Include the error object as needed.
+- `validation_summary`: String confirming requirement satisfaction, or listing any substitutions and the specific rationale.
+
+- Fields in strategy objects must use the fixed order: strategy, models_needed, ensemble_method, implementation_guidance.
+- Strategies do not need to be grouped by type, but must achieve category minimums within the 8.
+- All checklist points must be strings.
+- The mandated error object must appear if any required strategy cannot be constructed.
+
+- Before any web or current-method search, briefly declare your purpose and required inputs.
+- Validate your output for ensemble type minimum coverage, blacklist adherence, and field ordering before finalizing.
 """
 
     user_prompt = "Generate 8 diverse ensemble strategies for this competition."
