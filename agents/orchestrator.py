@@ -107,6 +107,12 @@ def _calculate_max_parallel_workers_and_pools() -> tuple[int, list[str], str]:
     elif enable_multi_gpu:
         # Multi-GPU mode: Auto-detect available GPUs
         available_gpus = _get_available_gpus()
+
+        # Filter by allowed_gpu_ids if specified in config
+        allowed_gpu_ids = _RUNTIME_CFG.get("allowed_gpu_ids", None)
+        if allowed_gpu_ids is not None and len(allowed_gpu_ids) > 0:
+            available_gpus = [gpu_id for gpu_id in available_gpus if gpu_id in allowed_gpu_ids]
+
         if len(available_gpus) > 0:
             gpu_pool = [str(gpu_id) for gpu_id in available_gpus]
             return len(available_gpus), gpu_pool, "multi-gpu"
