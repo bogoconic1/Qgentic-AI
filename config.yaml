@@ -22,11 +22,12 @@ runtime:
   # GPU isolation strategy (choose ONE or neither):
   enable_mig: false  # Use NVIDIA MIG for single-GPU partitioning (auto-detects number of workers from MIG instances)
   enable_multi_gpu: true  # Use multi-GPU setup (auto-detects number of workers from available GPUs)
+  allowed_gpu_ids: []  # Optional: Restrict to specific GPU IDs. If empty or null, uses all detected GPUs.
   enable_cpu_affinity: true  # Pin processes to specific CPU cores
   # Conda environment isolation
   reset_conda_envs_per_run: true # If true, delete and recreate conda environments on each run for clean slate (slower startup). If false, reuse existing environments (faster but accumulates packages over time)
   # Time limits (in seconds)
-  baseline_time_limit: 7200  # 4 hours for baseline development
+  baseline_time_limit: 10800  # 4 hours for baseline development
   ensemble_time_limit: 14400  # 4 hours for ensemble phase
 paths:
   task_root: "task"
