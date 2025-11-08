@@ -56,32 +56,36 @@ def web_search_stack_trace(query: str) -> str:
     logger.info("Attempting fine-tuned model endpoint first...")
     from tools.helpers import call_llm_with_retry_google
 
-    ft_system_prompt = prompt_stack_trace_pseudo()
-    ft_user_prompt = "<query>\n" + query + "\n</query>"
+    try:
+        ft_system_prompt = prompt_stack_trace_pseudo()
+        ft_user_prompt = "<query>\n" + query + "\n</query>"
 
-    ft_response = call_llm_with_retry_google(
-        model=_FINETUNED_CODE_API_MODEL,
-        system_instruction=ft_system_prompt,
-        user_prompt=ft_user_prompt,
-        text_format=StackTraceSolution,
-        temperature=1.0,
-        max_retries=3,
-        enable_google_search=False,
-        top_p=1.0,
-        thinking_budget=None,
-    )
+        ft_response = call_llm_with_retry_google(
+            model=_FINETUNED_CODE_API_MODEL,
+            system_instruction=ft_system_prompt,
+            user_prompt=ft_user_prompt,
+            text_format=StackTraceSolution,
+            temperature=1.0,
+            max_retries=3,
+            enable_google_search=False,
+            top_p=1.0,
+            thinking_budget=None,
+        )
 
-    # Check if fine-tuned model can answer (consider failure if < 35 chars or contains failure message)
-    solution_text = ft_response.reasoning_and_solution.strip() if ft_response else ""
-    is_valid_response = (
-        ft_response
-        and len(solution_text) >= 35
-        and "I cannot solve this error." not in solution_text
-    )
+        # Check if fine-tuned model can answer (consider failure if < 35 chars or contains failure message)
+        solution_text = ft_response.reasoning_and_solution.strip() if ft_response else ""
+        is_valid_response = (
+            ft_response
+            and len(solution_text) >= 35
+            and "I cannot solve this error." not in solution_text
+        )
 
-    if is_valid_response:
-        logger.info("Fine-tuned model provided a solution, using it.")
-        return query + "\n" + "This is how you can fix the error: \n" + solution_text
+        if is_valid_response:
+            logger.info("Fine-tuned model provided a solution, using it.")
+            return query + "\n" + "This is how you can fix the error: \n" + solution_text
+
+    except Exception as e:
+        logger.warning(f"Fine-tuned model call failed with error: {e}. Falling back to web search workflow.")
 
     # Step 2: Fallback to current workflow with web search
     logger.info("Fine-tuned model cannot answer (response too short or failure message), falling back to web search workflow.")
