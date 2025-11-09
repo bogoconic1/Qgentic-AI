@@ -53,7 +53,6 @@ DO NOT simplify, remove, or "clean up" the baseline code. DO NOT start from scra
 - After splitting the data into train and valid, right before starting training, sample train to 1000 rows. For classification, ensure at least one sample per class, so if there are > 1000 classes there will be > 1000 samples. For time series tasks, take the last 1000 rows (most recent) instead of random sampling to preserve temporal order.
 - For deep learning: reduce epochs to 1. For gradient boosting (XGBoost/LightGBM/CatBoost): reduce n_estimators/num_iterations to 100-200.
 - Log the size of the DEBUG training set.
-- If DEBUG size > 0.5 of train size, do not run DEBUG mode; log a warning and proceed with full training.
 """
 
 

@@ -45,8 +45,7 @@ path = kagglehub.dataset_download("<author>/<dataset_name>")
 **DEBUG mode guidelines**
 - After splitting the data into train and valid, right before starting training, sample train to 1000 rows. For classification, ensure at least one sample per class, so if there are > 1000 classes there will be > 1000 samples. For time series tasks, take the last 1000 rows (most recent) instead of random sampling to preserve temporal order.
 - For deep learning: reduce epochs to 1. For gradient boosting (XGBoost/LightGBM/CatBoost): reduce n_estimators/num_iterations to 100-200.
-- Log the size of the DEBUG training set.
-- If DEBUG size > 0.5 of train size, do not run DEBUG mode; log a warning and proceed with full training."""
+- Log the size of the DEBUG training set."""
 
 
 def build_system(description: str, directory_listing: str, model_name: str, model_recommendations: str, slug: str, cpu_core_range: list[int] | None = None, gpu_identifier: str | None = None, gpu_isolation_mode: str = "none", allow_multi_fold: bool = False) -> str:
@@ -61,7 +60,7 @@ def build_system(description: str, directory_listing: str, model_name: str, mode
 Your objective is to deliver a single, self-contained Python script for a Kaggle Competition using **only** the specified model `{model_name}`.
 
 Begin with a concise checklist (3-7 bullets) of what you will do; keep items conceptual, not implementation-level.
-You should perform web searches to determine how to set up and configure `{model_name}` in Python. If the model name doesn't exist, find the closest alternative and explain your choice in comments.
+You should perform web searches to determine how to set up and configure `{model_name}` in Python. If the model name doesn't exist, find the closest alternative and explain your choice in comments. It's alright if the alternative is larger, but please still use a pretrained version rather than training from scratch.
 
 ---
 **Training and Inference Environment:**
