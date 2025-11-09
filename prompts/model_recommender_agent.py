@@ -371,6 +371,15 @@ When selecting hyperparameters or architectures:
 
 ---
 
+## EMA (Exponential Moving Average) Guidelines for Deep Learning Pipelines
+**Applicable to:** Computer Vision, NLP, and Audio models using neural networks.
+### Core Rule: Match EMA Decay to Training Duration
+
+If you feel EMA is beneficial, write this EXACT line as your recommendation in NICE_TO_HAVE: "ema_decay: no specific value; set it at around 5-10% of total steps = epochs * (num_samples / batch_size)"
+DO not suggest a fixed decay like 0.999 or 0.99 without context.
+
+---
+
 ## Output Format
 Provide recommendations with **MUST_HAVE** and **NICE_TO_HAVE** sections.
 Each contains two lists: `hyperparameters` and `architectures`.

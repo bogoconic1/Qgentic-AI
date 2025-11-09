@@ -225,6 +225,17 @@ def sota_system(is_ensemble: bool = False) -> str:
 - If code bugs are identified (including in <red_flags>), you MUST FIX THESE FIRST.
 {"- DO NOT make changes to Validation unless there are extremely severe issues." if is_ensemble else ""}
 
+## EMA (Exponential Moving Average) Guidelines
+**If suggesting EMA changes (Deep Learning models only):**
+
+1. **Check if EMA already exists** in `<initial script>` before suggesting to add it.
+2. If EMA is missing AND you believe it would help, write this EXACT line: "Add EMA with ema_decay: no specific value; set it at around 5-10% of total steps = epochs * (num_samples / batch_size)"
+3. If EMA exists but has wrong decay (e.g., decay=0.9999 on small datasets), suggest recalculating using the formula above.
+4. **DO NOT prioritize EMA if this is not the main problem.** Focus on bugs, data issues, or architectural problems first.
+5. **DO NOT suggest a fixed decay like 0.999 or 0.99 without context.**
+
+**Common mistake:** Using ImageNet defaults (decay=0.9999) on small datasets can cause EMA to be 90%+ initialization weights, completely breaking training.
+
 ## Making Specific, Actionable Suggestions (ALL Task Types)
 Begin with a brief, high-level statement explaining your rationale for the chosen improvement areas before making specific recommendations.
 
