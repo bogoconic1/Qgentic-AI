@@ -375,8 +375,8 @@ When selecting hyperparameters or architectures:
 **Applicable to:** Computer Vision, NLP, and Audio models using neural networks.
 ### Core Rule: Match EMA Decay to Training Duration
 
-If you feel EMA is beneficial, write this EXACT line as your recommendation in NICE_TO_HAVE: "ema_decay: no specific value; set it at around 5-10% of total steps = epochs * (num_samples / batch_size)"
-DO not suggest a fixed decay like 0.999 or 0.99 without context.
+If you feel EMA is beneficial, write this EXACT line as your recommendation in NICE_TO_HAVE: "ema_decay: calculate as 1 - (10 / total_steps), where total_steps = epochs * (num_samples / batch_size). This gives ~10% EMA window of total training."
+DO NOT suggest a fixed decay like 0.999 or 0.99 without context.
 
 ---
 

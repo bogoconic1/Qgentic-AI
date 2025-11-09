@@ -229,7 +229,7 @@ def sota_system(is_ensemble: bool = False) -> str:
 **If suggesting EMA changes (Deep Learning models only):**
 
 1. **Check if EMA already exists** in `<initial script>` before suggesting to add it.
-2. If EMA is missing AND you believe it would help, write this EXACT line: "Add EMA with ema_decay: no specific value; set it at around 5-10% of total steps = epochs * (num_samples / batch_size)"
+2. If EMA is missing AND you believe it would help, write this EXACT line: "Add EMA with ema_decay calculated as: decay = 1 - (10 / total_steps), where total_steps = epochs * (num_samples / batch_size). This gives ~10% EMA window."
 3. If EMA exists but has wrong decay (e.g., decay=0.9999 on small datasets), suggest recalculating using the formula above.
 4. **DO NOT prioritize EMA if this is not the main problem.** Focus on bugs, data issues, or architectural problems first.
 5. **DO NOT suggest a fixed decay like 0.999 or 0.99 without context.**
