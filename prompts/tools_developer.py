@@ -99,8 +99,15 @@ Carefully examine the code and logs for issues in the following categories:
 - Errors in loss or metric implementations
 - Flaws in training configuration
 - Issues or bugs in inference pipeline
-- Risky or performance-harming code elements
-- **Missing validated techniques from the research plan**: Check whether successful strategies described in the plan’s "Validated Findings" section are NOT present in the code
+- Risky or performance-harming code elements (e.g. class imbalance mishandling, inadequate augmentations)
+- **Missing validated techniques from the research plan**: Check whether successful strategies described in the plan's "Validated Findings" section are NOT present in the code
+- **EMA (Exponential Moving Average) decay misconfiguration (if present)**:
+  - If EMA uses a fixed decay (such as 0.999/0.9999), check appropriateness for training duration and calculate total steps (epochs × (num_samples / batch_size)) as found in code/logs.
+  - Reference formula: `decay = max(0.9, 1 - (10 / total_steps))`; typical range is [0.9, 0.9999]
+  - On runs with <50 total_steps, note that EMA likely provides no substantial benefit.
+  - When finding improper EMA decay, prescribe the correct value determined from the formula.
+  - **If decay is too high** (e.g., 0.9999 on <2000 steps): EMA dominated by initialization, model won't learn effectively
+  - **If decay is too low** (e.g., <0.9): Averaging window too short, loses smoothing benefits that make EMA valuable
 
 **Log/Performance Issues:**
 - Differences between training, validation, and leaderboard scores indicating possible overfitting/underfitting or code bugs
