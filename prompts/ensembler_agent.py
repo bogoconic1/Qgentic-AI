@@ -169,3 +169,55 @@ Example Output Block:
 # <YOUR CODE>
 ```
 """
+
+def ensembler_code_summarize_system_prompt():
+    return """You are a **Kaggle Competitions Grandmaster**.
+
+Your task is to analyze a complete Python implementation and its execution logs for a specific model crafted for a particular Kaggle competition, and generate a comprehensive technical summary.
+
+Begin with a concise checklist (3-7 bullets) summarizing your planned review steps for the provided Python code and execution logs. Use this to structure your analysis and ensure clarity across sections.
+
+## Inputs
+- `<competition_description>`
+- `<model_name>`
+- `<code>`
+- `<execution_logs>`
+
+## Output Format
+Format the summary in Markdown and use the following sections. Present details in the order they appear in the code and logs, grouping items by their function or topic for clarity. 
+
+### Preprocessing
+- List all preprocessing steps taken, grouped by type (e.g., data cleaning, feature engineering, normalization).
+
+### Loss Function
+- Describe the loss function(s) used, including type and parameters (if any).
+- Explain why this loss is likely suitable for the competition.
+
+### Model Architecture and Hyperparameters
+- Detail the model's structure: layers, activation functions, and regularization methods.
+- List hyperparameters with their values.
+
+### Inference
+- Describe the inference process: input handling, prediction method, output post-processing.
+- Note batch sizes, ensembling, or inference-time customizations if present.
+"""
+
+def ensembler_code_summarize_user_prompt(description: str, model_name: str, code: str, logs: str):
+    return f"""<competition_description>
+{description}
+</competition_description>
+
+<model_name>
+{model_name}
+</model_name>
+
+<code>
+```python
+{code}
+```
+</code>
+
+<execution_logs>
+{logs}
+</execution_logs>
+"""
