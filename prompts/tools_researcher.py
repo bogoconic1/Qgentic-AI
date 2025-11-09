@@ -28,11 +28,7 @@ data_path = "{data_path}"
 - Do NOT display figures interactively; only save them (e.g., for matplotlib: plt.savefig(os.path.join(os.environ.get("MEDIA_DIR"), "fig.png"), bbox_inches='tight'); for plotly: fig.write_image(...)).
 
 **IMPORTANT**: For EDA questions ONLY:
-- # At the end, convert all insights/results into a JSON object.
-    - Print the JSON object to the console first (for review):
-        - DO NOT TRUNCATE nested objects or dictionaries.
-        - For lists, only show the first 50 items to avoid excessive output.
-    - Then, save the exact same full object (not the truncated preview) to a JSON file in `{data_path}/analysis/` (create the directory if it doesn't exist) and clearly state the file location after saving.
+- Print ALL insights/findings to the console using print() statements.
 
 **IMPORTANT**: For A/B Test questions ONLY:
 - Print just 4 lines to the console

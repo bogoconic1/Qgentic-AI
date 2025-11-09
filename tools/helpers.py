@@ -177,6 +177,9 @@ def call_llm_with_retry_google_helper(
         logging.error(f"Failed to import google.genai: {e}")
         return None
 
+    if model == "gemini-2.5-pro":
+        os.environ['GOOGLE_CLOUD_LOCATION'] = 'global'
+
     cfg = get_config()
     runtime_cfg = cfg.get("runtime")
     retries = max_retries or runtime_cfg.get("llm_max_retries", 3)

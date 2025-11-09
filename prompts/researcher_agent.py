@@ -61,7 +61,7 @@ You MUST conduct at least **20-30 A/B tests** covering the following categories.
 - **Target-based**: Target encoding, Weight of Evidence (WOE), M-Estimate, CatBoost encoding
 - **Ordinal encoding**: For naturally ordered categories or by target mean
 
-### 3. Interaction Features (Test at least 6)
+### 3. Interaction Features (Test at least 10)
 **Categorical × Categorical**:
 - Systematic 2-way combinations: Concatenate pairs of categoricals (cat1 + "_" + cat2)
 - High-value 3-way combinations if 2-way shows promise
@@ -70,12 +70,15 @@ You MUST conduct at least **20-30 A/B tests** covering the following categories.
 **Numerical × Numerical**:
 - Arithmetic operations: addition, subtraction, multiplication, division (ratios)
 - Domain-specific ratios
+- Systematic 2-way combinations: Concatenate pairs of numerics (str(num1) + "_" + str(num2))
+- High-value 3-way combinations if 2-way shows promise
 
 **Categorical × Numerical** (GroupBy aggregations):
 - For each categorical or pair, compute: mean, std, min, max, median, count
 - Deviation features: `(value - group_mean)` or `value / group_mean`
 - Rank within group, percentile within group
-- Convert quasi-discrete numerics to categorical and concatenate them (quasi-discrete + "_" + cat2) - 2-way or 3-way combinations
+- Systematic 2-way combinations: Concatenate pairs of numerics (str(num1) + "_" + str(num2))
+- High-value 3-way combinations if 2-way shows promise
 
 ### 4. Aggregation Features (Test at least 4 groupby strategies)
 For meaningful categorical groupings, create:
@@ -91,9 +94,8 @@ For meaningful categorical groupings, create:
 
 ### 6. Target Transformations (Test at least 3)
 For regression tasks, transform the target variable and predict transformed values:
-- **Log transformation**: `log(y + 1)` or `log(y)` for strictly positive targets (reduces skew, stabilizes variance)
 - **Square root / Power transforms**: `sqrt(y)`, `y^0.5`, `y^2` for compressing/expanding target range
-- **Box-Cox / Yeo-Johnson**: Automatic optimal power transformation (handles zero/negative values with Yeo-Johnson)
+- **Yeo-Johnson**: Automatic optimal power transformation
 - **Rank-based / Quantile**: Transform target to uniform distribution (robust to outliers)
 - **Residual prediction**: Train initial model → predict residuals → stack predictions (iterative refinement)
 - **Pseudo-Huber / Tweedie**: For targets with heavy tails or zero-inflation
@@ -113,7 +115,7 @@ Universal
   - Polynomial combinations
   - Domain-specific derived features based on web research
 - **When encodings fail**: If target encoding fails, test WOE, frequency before concluding
-- **When transforms fail**: If log fails, test Box-Cox, Yeo-Johnson, or quantile transforms
+- **When transforms fail**: If Yeo-Johnson fails, test quantile transforms
 - **Never conclude after 2-3 failures**: Each category should have 4-5 attempts minimum
 - **Remember:** it is common practice on Kaggle Competitions to engineer 100+ features (even complex ones) and prune down later.
 
@@ -122,393 +124,640 @@ At each milestone, report:
 - Total A/B tests completed: X/20 minimum
 - Coverage by category: Transformations (X/5), Encodings (X/5), Interactions (X/6), etc.
 - Top 3 most promising directions for further exploration
-
-### Web Search Guidance for Tabular
-Search for: "[task_domain] feature engineering kaggle 2025" (e.g., "binary classification feature engineering kaggle 2025")
-Look for: Winning solution write-ups, feature importance patterns, domain-specific transforms
 """
 
     elif task_type == "nlp":
         return """
 ## MANDATORY Task-Specific Requirements: NLP/LLM
 
-### Minimum Experiment Coverage
-Conduct at least **20-25 A/B tests**. Use decoder LLMs (Gemma, Qwen, Llama) for generative/instruction tasks and encoder models (DeBERTa v3) for classification/token tasks.
+### Minimum EDA and Research Coverage
+You MUST complete the following EDA tasks and research documentation. Training technique optimization is deferred to Developer phase.
 
-### 1. Model Architecture Research (Document at least 6-8 - DO NOT A/B TEST)
-**NOTE**: Model architecture comparisons are reserved for the Developer phase. Research and document these models through web search, but do NOT run A/B tests comparing them.
+### 1. Basic Text Statistics (MANDATORY)
 
-**Encoder Models** (for classification, token-level tasks):
-- **DeBERTa v3**: SOTA accuracy (base, large, xsmall)
-- **ModernBERT**: Faster inference than DeBERTa
-- **RoBERTa**: Solid baseline
-- **Domain-specific**: BioBERT, SciBERT, LegalBERT, FinBERT
+**Length Analysis**:
+- Character count distribution (mean, median, std, min, max, quartiles)
+- Token count distribution
+- Sentence count distribution
+- Word count distribution
+- Visualize with histograms and box plots
+- Length by class/target: Check correlation between length and target
+- Identify outliers: Extremely short/long texts (top/bottom 1%)
 
-**Decoder LLMs - Small (2-14B params, efficient for Kaggle)**:
-- **Gemma 2**: 2B, 9B (Google, strong performance)
-- **Qwen2.5**: 0.5B, 1.5B, 3B, 7B, 14B (Alibaba, SOTA)
-- **Phi-3.5**: 3.8B mini, 14B medium (Microsoft)
-- **Llama 3.1**: 8B (Meta, strong baseline)
-- **Mistral**: 7B (strong reasoning)
+**Target Analysis**:
+- Class distribution and class imbalance
+- Samples per class
+- For ordinal targets: Check monotonic relationships with length and other features
+- Target correlations with length features
 
-**Decoder LLMs - Large (for distillation)**:
-- **Qwen2.5**: 32B, 72B
-- **Llama 3.1**: 70B
-- **DeepSeek-R1**: 14B distilled, 32B (reasoning)
-- **QwQ-32B**: Reasoning model
+---
 
-### 2. Simple Meta Features (Test at least 2)
-**Only if beneficial** - add as additional inputs to transformer:
-- **Data source identifier**: If train/test from different distributions
-- **Typo count**: Number of spelling errors
-- **Prompt/category identifier**: If multiple task types in data
-- **Text length bins**: Categorical encoding of length ranges
+### 2. Vocabulary Analysis (Analyze at least 5 aspects)
 
-### 3. Distribution Shift Handling (Test at least 3)
-**Critical for multi-source datasets**:
-- **Two-stage training**: Pretrain on source A → fine-tune on source B
-- **Pseudo-labeling**: Train on labeled data → predict unlabeled → retrain on high-confidence predictions
-- **wise-ft (Weight-Averaged Fine-Tuning)**: Average weights from different training stages
-- **Domain-specific fine-tuning**: Separate fine-tuning per data source, then combine
+**N-gram Frequency Analysis**:
+- Top 20-50 unigrams (single words) - use CountVectorizer
+- Top 20-50 bigrams (2-word phrases)
+- Top 20-50 trigrams (3-word phrases) if relevant
+- Visualize with bar charts (NOT word clouds - bar charts show exact frequencies)
 
-### 4. Fine-tuning Strategies (Test at least 6)
+**Vocabulary Metrics**:
+- Total vocabulary size (unique words)
+- Vocabulary richness: type-token ratio (unique words / total words)
+- Vocabulary overlap between train and test: Jaccard similarity on top-5k vocab
+- Unseen token rate in test set
 
-**Parameter-Efficient Fine-Tuning (PEFT)**:
-- **LoRA rank**: r=8, 16, 32, 64
-- **LoRA alpha**: 16, 32, or 2xrank
-- **Target modules**: "all-linear" (all layers) vs selective (q_proj, v_proj, o_proj, down_proj, up_proj)
-- **LoRA dropout**: 0.05, 0.1
-- **QLoRA**: 4-bit quantization + LoRA (memory savings)
+---
 
-**Full Fine-tuning** (for models <3B):
-- All parameters trainable
-- Layer-wise LR decay: 0.9-0.95 per layer from top to bottom
-- Gradual unfreezing: Freeze backbone → unfreeze top layers → unfreeze all
+### 3. Linguistic Features (Analyze at least 3)
 
-**Encoder-Specific Strategies**:
-- **Pooling methods**: [CLS] token vs mean pooling vs max pooling vs attention-weighted pooling
-- **Long text handling (>512 tokens)**: Head+tail (256+256), sliding window with stride, hierarchical processing
+**Part-of-Speech (POS) Tagging**:
+- Most frequent nouns (top 20-30)
+- Most frequent verbs (top 20-30)
+- Most frequent adjectives (top 20-30)
+- POS distribution patterns across classes/targets
 
-**Decoder-Specific Strategies**:
-- **System prompt engineering**: Test different instruction formats and task descriptions
-- **Instruction tuning**: Format data as instruction-response pairs
-- **Max sequence length**: Test truncation at 512, 1024, 2048 tokens
+**Named Entity Recognition (NER)** (if relevant to task):
+- Extract named entities: people, locations, organizations, dates
+- Entity frequency analysis
+- Visualize entity distributions
 
-### 5. Data Augmentation (Test at least 5)
-**Text-Level Augmentation**:
-- **Back-translation**: English→German→English, English→French→English (preserves meaning)
-- **EDA (Easy Data Augmentation)**: Synonym replacement, random insert/swap/delete (p=0.1, 0.2)
-- **Paraphrasing**: T5-based or small LLM-based paraphrasing
-- **Contextual word substitution**: BERT/RoBERTa masked language model predictions
-- **AEDA**: Random punctuation insertion (simple, effective)
+**Sentiment Analysis** (if relevant to task):
+- Polarity scores: positive/negative/neutral distributions
+- Sentiment distribution by class/target
+- Use TextBlob, VADER, or similar
 
-**Advanced Techniques**:
-- **Pseudo-labeling**: High-confidence test predictions → add to training (iterate 2-3 times)
-- **External datasets**: SQuAD, SNLI, MNLI, Quora, domain-specific corpora (if relevant)
+**Lexical Metrics**:
+- Type-token ratio by class/target
+- Punctuation density: punctuation count / character count
+- Digit density: digit count / character count
+- Readability scores (if relevant): Flesch-Kincaid, complexity metrics via textstat
 
-**Class Imbalance**:
-- Oversampling minority class with augmentation techniques
-- Focal loss (gamma=2.0) to focus on hard examples
+---
 
-### 6. Training & Optimization (Test at least 6)
-**Learning Rate Strategies**:
-- **Warmup**: Linear warmup for 5-10% of total steps, then decay
-- **Schedules**: Cosine annealing, cosine with restarts, one-cycle policy
-- **LR values**: 1e-5, 2e-5, 3e-5, 5e-5 for transformers
+### 4. Distribution Shift Detection (MANDATORY)
 
-**Optimizers**:
-- **AdamW**: Standard choice with weight decay (0.01, 0.001)
-- **Adam with gradient clipping**: max_norm=1.0
-- **8-bit AdamW**: Memory-efficient for large models (bitsandbytes)
+**Adversarial Validation**:
+- Extract features from train and test: TF-IDF (1000-5000 features) OR simple statistics (length, lexical)
+- Combine datasets and label: train=0, test=1
+- Train binary classifier: LightGBM or XGBoost with 5-fold CV
+- Evaluate AUC:
+  - AUC ≈ 0.5: No distribution shift (random guessing)
+  - AUC 0.5-0.6: Mild shift
+  - AUC > 0.6: Significant distribution shift
+- Analyze feature importance: Which features differ most between train and test?
+- **If AUC > 0.6**: Use prediction probabilities to create adversarial validation split (high-prob train samples = test-like validation)
 
-**Loss Functions**:
-- **CrossEntropy** (standard)
-- **Focal Loss**: For class imbalance (gamma=2.0)
-- **Label smoothing**: epsilon=0.1 to prevent overconfidence
-- **Bi-Tempered Loss**: For noisy labels
+**Statistical Distribution Comparison**:
+- Length distributions: KS test for token count, sentence count, character count
+- Lexical features: KS test for type-token ratio, punctuation density
+- Target distribution (if test labels accessible): Chi-square test
 
-**Regularization**:
-- **Dropout**: 0.1 for transformer layers, 0.3 for dense layers
-- **Gradient clipping**: max_norm=1.0 for training stability
-- **Adversarial training**: FGM/PGD perturbations on embeddings
-- **Multi-sample dropout**: Apply dropout at inference and average predictions
+**Data Source Identification**:
+- Identify if train data comes from multiple sources (check metadata, file paths, timestamps)
+- Compare distributions across sources if multiple exist
+- Document source-specific characteristics
 
-**Batch Size & Precision**:
-- **Batch sizes**: 8, 16, 32, 64 (larger for more stable training)
-- **Gradient accumulation**: 4-8 steps if GPU memory limited
-- **Mixed precision**: FP16 or BF16 for faster training
+**If shift detected (AUC > 0.6), recommend strategies**:
+- Two-stage training (pretrain on source A → fine-tune on source B)
+- Pseudo-labeling (train on labeled → predict unlabeled → retrain on high-confidence ≥0.9)
+- Data source classification head
+- Adversarial validation-based splitting
 
-### 7. Advanced Techniques (Test at least 3)
-**Distillation** (winning strategy for Kaggle inference constraints):
-- Train large model (Llama 70B, Qwen 72B) → distill knowledge to small model (Gemma 2B/9B)
-- Use soft labels (logits) from large teacher model
-- Distilled model can be quantized to 8-bit for faster inference
+---
 
-**Quantization** (for Kaggle inference time/memory limits):
-- **8-bit quantization**: bitsandbytes library, balanced speed/accuracy
-- **4-bit quantization**: AWQ or GPTQ, more aggressive compression
-- Test inference speed vs accuracy tradeoff
+### 5. Data Quality Checks (MANDATORY)
 
-**RAG (Retrieval-Augmented Generation)** (for knowledge-intensive tasks):
-- External knowledge sources: Wikipedia, domain-specific corpora
-- Vector databases: FAISS, ChromaDB
-- Retrieval strategies: Dense (sentence-transformers), sparse (BM25), hybrid
+**Missing Values**:
+- Check all text fields for null/empty values
+- Check all metadata fields
 
-### Iteration Policy for NLP
-- **When distribution shift detected**: Test two-stage training, wise-ft, pseudo-labeling strategies
-- **When augmentation fails**: Try back-translation with multiple language pairs, different augmentation probabilities
-- **When fine-tuning strategy fails**: Test different LoRA configurations (rank, alpha, target modules)
-- **When training fails**: Try different learning rate schedules, warmup strategies, batch sizes
-- **When hitting memory limits**: Use QLoRA, gradient accumulation, reduce batch size, use 8-bit optimizer
-- **Never conclude after 2-3 failures**: Each strategy category should have 4-5 attempts minimum
-- **Model architecture selection**: Research and document at least 6-8 architectures through web search, but defer A/B testing to Developer phase
+**Duplicates**:
+- Exact duplicate detection (identical text)
+- Near-duplicate detection (similarity threshold >0.95)
+
+**Leakage Detection**:
+- ID diagnostics: Check for leakage patterns (ID correlation with target via Spearman)
+- Cross-split overlap: Check for train/test ID overlap (should be zero)
+- Metadata leakage: Check for suspiciously predictive metadata
+
+**Language Detection** (if not specified):
+- Detect language for each sample (use langdetect or similar)
+- Calculate non-English rate
+- Flag mixed-language samples if present
+
+---
+
+### 6. Model Architecture Research (Document at least 6-8 models - DO NOT A/B TEST)
+
+**Purpose**: Research models via web search for Developer phase selection
+**Method**: Read papers, HuggingFace docs, blog posts
+**Deliverable**: Markdown documentation with citations
+
+**Encoder Models (document 3-4)**:
+- **DeBERTa v3** (base, large, xsmall)
+  - Document: Architecture, context length (512), pretraining approach, use cases
+  - Citation: arXiv paper, HuggingFace card
+
+- **ModernBERT** (base, large)
+  - Document: 8k context, rotary embeddings, unpadding, speed benchmarks
+  - Citation: HuggingFace docs, blog
+
+- **Domain-Specific** (if applicable): BioBERT, SciBERT, LegalBERT, FinBERT
+  - Document: When to use, domain advantages
+  - Citation: Model cards
+
+**Decoder LLMs - Small (document 2-3)**:
+- **Gemma 2** (2B, 9B): Lightweight, strong performance
+- **Qwen2.5** (0.5B-7B): 128k context, instruction following
+- **Phi-3.5** (mini 3.8B): Efficient, instruction following
+- **Llama 3.1** (8B): 128k context, teacher capabilities
+
+**For each model, document**:
+- Architecture highlights
+- Context length
+- Typical use cases (classification vs generation)
+- Strengths/weaknesses
+- When to prefer over alternatives
+- Citations (papers, blogs, model cards)
+
+**NO A/B TESTING** - Developer will select and optimize
+
+---
+
+### 7. Advanced Techniques Research (Document at least 3-5 - DO NOT A/B TEST)
+
+**Purpose**: Research SOTA techniques for Developer reference
+**Method**: Web search papers, Kaggle writeups, blog posts
+
+**Required Techniques**:
+
+**1. Two-Stage Training / Domain Adaptation**
+- Method: Pre-train on external data → fine-tune on competition data
+- When: Distribution shift detected
+- Implementation notes: Freeze/unfreeze strategies, LR scheduling
+- Citation: Research papers, writeups
+
+**2. Pseudo-Labeling**
+- Method: Train on labeled → predict unlabeled → retrain on high-confidence
+- When: Unlabeled test/external data available
+- Implementation notes: Confidence thresholds (≥0.9), iteration strategies
+- Citation: Papers, Kaggle discussions
+
+**3. Ordinal Regression** (for scoring/rating tasks):
+- Methods: CORAL, weighted kappa loss (dlordinal)
+- When: Target is ordinal (1-6 scores, ratings)
+- Implementation notes: Rank-consistent logits, monotonic thresholds
+- Citation: arXiv 1901.07884
+
+**4. Knowledge Distillation**:
+- Method: Large teacher (Llama 70B, Qwen 72B) → small student (Gemma 2B)
+- When: Inference constraints (CPU-only, latency)
+- Implementation notes: Soft labels, temperature scaling, quantization
+- Citation: Papers, writeups
+
+**5. Retrieval-Augmented Generation (RAG)**:
+- Method: Retrieve relevant context → augment input → generate
+- When: Knowledge-intensive tasks (Q&A, fact-checking)
+- Implementation notes: Dense (FAISS) + sparse (BM25) hybrid
+- Citation: Papers, tutorials
+
+**For each, document**: Explanation, when/why to use, implementation considerations, citations
+
+**NO A/B TESTING** - Developer implements if applicable
+
+---
+
+### 8. External Data Discovery (Use tool)
+
+Use `download_external_datasets(q1, q2, q3)` tool:
+- Find datasets for two-stage training
+- Validate label compatibility and text format
+- Distribution comparison with competition data
+- Document intended use
+
+---
+
+### 9. Quick Baseline (1 run only - DO NOT iterate)
+
+**Purpose**: Establish baseline performance signal
+
+Build **1 single baseline run**:
+- Model: deberta-v3-xsmall
+- **NO iteration, NO optimization** - just establish signal
+- If your results don't make sense, change the way you split data into 80/20 and run again
+
+**Output**: Baseline score (e.g., 0.85 accuracy)
+
+---
+
+### 10. Optional Data-Level A/B Tests (0-5 tests max)
+
+**ONLY test if EDA reveals specific data issues**:
+
+Example tests:
+- **External data integration validation** (if format/label issues):
+  - Test: (A) Competition data only vs (B) + external data (normalized labels)
+
+**DO NOT TEST** (Developer optimizes these):
+- ❌ Pooling methods ([CLS] vs mean vs attention-weighted)
+- ❌ Fine-tuning strategies (layer-wise LR, gradual unfreezing)
+- ❌ Augmentation techniques (back-translation, EDA, MLM)
+- ❌ Training schedules (warmup, cosine, one-cycle)
+- ❌ Loss functions (CrossEntropy vs Focal vs ordinal losses)
+- ❌ Batch sizes, precision (fp16 vs bf16)
+- ❌ Regularization (dropout, adversarial training)
+
+**Rationale**: Training techniques are model-specific. Developer phase will discover optimal configs through iterative SOTA-driven improvements with web search.
+
+---
+
+### Reference: Training Techniques (DOCUMENT ONLY - NO A/B TESTING)
+
+Keep the following as **REFERENCE** for Developer phase (DO NOT test in Researcher phase):
+
+**Fine-tuning Strategies**:
+- Layer-wise LR decay (0.9-0.95 per layer)
+- Gradual unfreezing (freeze → unfreeze top → unfreeze all)
+- Pooling methods ([CLS], mean, max, attention-weighted)
+- Long text handling (head+tail, sliding window, hierarchical)
+
+**Data Augmentation**:
+- Back-translation (En→De→En, En→Fr→En)
+- EDA (synonym replacement, insert/swap/delete, p=0.1-0.2)
+- Paraphrasing (T5-based, LLM-based)
+- Contextual word substitution (BERT MLM)
+- AEDA (random punctuation insertion)
+
+**Training & Optimization**:
+- Learning rates (1e-5, 2e-5, 3e-5, 5e-5)
+- Warmup (5-10% of steps)
+- Schedules (cosine, cosine with restarts, one-cycle)
+- Optimizers (AdamW, gradient clipping)
+- Loss functions (CrossEntropy, Focal, label smoothing, Bi-Tempered)
+- Regularization (dropout, adversarial training FGM/PGD, multi-sample dropout)
+- Batch sizes (8, 16, 32, 64), gradient accumulation
+- Mixed precision (fp16, bf16)
+
+**Mark all as**: "REFERENCE ONLY - Developer phase will test these via SOTA search and iterative improvement"
+
+---
 
 ### Progress Tracking
+
 At each milestone, report:
-- Total A/B tests: X/20 minimum
-- Coverage: Meta Features (X/2), Distribution Shift (X/3), Fine-tuning (X/6), Augmentation (X/5), Training (X/6), Advanced (X/3)
-- Model architectures researched: X/6-8 (web search only, no A/B tests)
-- Best configuration found
-- Inference time per sample
-
-### Web Search Guidance for NLP
-Search for: "NLP [task_type] kaggle" (e.g., "text classification kaggle deberta")
-Look for:
-- LoRA/QLoRA fine-tuning strategies for Gemma, Qwen, Llama, DeBERTa
-- Two-stage training and distribution shift handling
-- Distillation pipelines (large→small models)
-- Quantization techniques (8-bit, 4-bit)
-- System prompt engineering for decoder LLMs
-- Instruction tuning strategies
-- Inference optimization for Kaggle constraints
-
-### Key Techniques to Prioritize
-- **Two-stage training**: Critical for multi-source datasets with distribution shift
-- **DeBERTa v3**: SOTA for encoder tasks (classification, NER, token-level)
-- **Gemma 2 (2B, 9B)**: Google SLMs, efficient for Kaggle decoder tasks
-- **Qwen2.5**: Strong performance across sizes (0.5B-72B)
-- **LoRA "all-linear"**: Apply LoRA to all linear layers for better adaptation
-- **Distillation**: Train large teacher, distill to small student (winning strategy)
-- **4 or 8-bit quantization**: Balance speed and accuracy for final submission
-- **Pseudo-labeling**: Iterative self-training for semi-supervised learning
-- **wise-ft**: Weight averaging for handling distribution shift
+- **Basic Text Statistics**: ✓/✗
+- **Vocabulary Analysis**: X/5 aspects completed
+- **Linguistic Features**: X/3 aspects completed
+- **Distribution shift**: AUC = [value], Shift detected: Yes/No
+- **Data quality checks**: ✓/✗
+- **Model architectures DOCUMENTED**: X/6-8 (web search, written with citations)
+- **Advanced techniques DOCUMENTED**: X/3-5 (web search, written with citations)
+- **External datasets found**: X datasets
+- **Quick baseline score**: [score]
+- **Optional data-level A/B tests**: X/5 max (only if data issues found)
 """
 
     elif task_type == "computer_vision":
         return """
 ## MANDATORY Task-Specific Requirements: Computer Vision
 
-### Minimum Experiment Coverage
-Conduct at least **20-25 A/B tests**. Modern competitions use Vision Transformers + modern CNNs + foundation models.
+### Minimum EDA and Research Coverage
+You MUST complete the following EDA tasks and research documentation. Training technique optimization is deferred to Developer phase.
 
-### 1. Image Preprocessing (Test at least 5)
-- **Normalization**: ImageNet stats vs dataset-specific stats vs no normalization
-- **Resize strategies**: Aspect-preserving padding vs squash vs center crop
-- **Color space**: RGB vs HSV vs LAB
-- **Histogram equalization**: CLAHE vs standard vs adaptive
-- **Image quality**: JPEG compression quality, denoising
-- **Channel manipulation**: Grayscale conversion, channel dropping
+### 1. Image Statistics (MANDATORY)
 
-### 2. Data Augmentation (Test at least 8)
-**Geometric Transforms**:
-- **Basic**: Horizontal/vertical flips, random rotation (degrees: 15, 30, 45)
-- **Crops**: Random crop, center crop, five-crop, random resized crop
-- **Affine**: Scale, translate, shear, perspective transforms
-- **Advanced**: Elastic deformation, grid distortion
+**Size and Resolution Analysis**:
+- Image size distributions: height, width (mean, median, std, min, max, quartiles)
+- Aspect ratio distribution
+- Resolution adequacy for task (too low/high resolution detection)
+- Visualize with histograms and box plots
+- Identify outliers: Unusually small/large images
 
-**Color/Intensity Augmentations**:
-- **Adjustments**: Brightness, contrast, saturation, hue shifts
-- **Noise**: Gaussian noise, salt-and-pepper, speckle noise
-- **Filters**: Gaussian blur, motion blur, median blur
-- **Color jitter**: Random color perturbations
+**Color Statistics**:
+- Mean and std per channel (R, G, B)
+- RGB histogram distributions
+- Color space analysis (check if grayscale, RGB, or other)
+- Brightness distribution
 
-**Modern Augmentations** (standard approach):
-- **Cutout**: Random patch dropout (size: 16×16, 32×32, 64×64)
-- **Random erasing**: Similar to cutout with different probability
-- **MixUp**: Linear interpolation of images and labels (alpha=0.2, 0.4, 1.0)
-- **CutMix**: Cut and paste patches between images (alpha=1.0, beta=1.0)
-- **GridMask**: Structured region dropout
-- **Mosaic**: Combine 4 images into 1 (YOLOv4 technique)
-- **AutoAugment**: Learned augmentation policies
-- **RandAugment**: Random augmentation with magnitude control
-- **TrivialAugment**: Simplified single augmentation per image
+**File Metadata**:
+- File formats (JPEG, PNG, TIFF, etc.)
+- Compression quality (if JPEG)
+- File size distribution
+- Corrupted/truncated image detection
 
-### 3. Model Architecture Research (Document at least 8 - DO NOT A/B TEST)
-**NOTE**: Research and document these models through web search, but do NOT run A/B tests comparing them.
-**Vision Transformers** (SOTA for large datasets):
-- **ViT (Vision Transformer)**: ViT-B/16, ViT-L/16 (best with large datasets)
-- **Swin Transformer**: Hierarchical architecture, shifted windows (Swin-T, Swin-S, Swin-B)
-- **DeiT (Data-efficient ViT)**: Better for smaller datasets, distillation-based
-- **BEiT**: BERT-like pretraining for images
-- **MaxViT**: Multi-axis attention, hybrid CNN-ViT
+**Target Analysis**:
+- Class distribution and class imbalance
+- Samples per class
+- Multi-label distribution (if applicable)
 
-**Modern CNNs** (competitive, easier to train):
-- **ConvNeXt**: Modern CNN design, competitive with Swin (ConvNeXt-T, ConvNeXt-S, ConvNeXt-B)
-- **ConvNeXt V2**: Improved version with better training
-- **EfficientNet V2**: Best accuracy/parameter ratio (B0-B7), faster training
-- **EfficientNet**: Original, still strong (B0-B7)
-- **NFNet**: Normalizer-Free networks, no batch norm
+---
 
-**Classic Architectures** (baselines):
-- **ResNet**: ResNet50, ResNet101, ResNet152 (reliable baseline)
-- **ResNeXt**: Grouped convolutions variant
-- **DenseNet**: Dense connections (DenseNet121, DenseNet169)
-- **MobileNet V3/V4**: Lightweight for fast inference
+### 2. Embedding Visualization (MANDATORY - CRITICAL)
 
-**Foundation Models** (emerging):
-- **CLIP**: Vision-language model, zero-shot classification, feature extraction
-- **SAM (Segment Anything)**: Segmentation tasks, zero-shot
-- **DINOv2**: Self-supervised, strong features without labels
-- **MAE (Masked Autoencoders)**: Self-supervised pretraining
+**Purpose**: Detect patterns invisible to standard statistics - distribution shift, outliers, mislabeling, real vs synthetic images
 
-### 4. Training Strategies (Test at least 6)
-**Multi-Scale & Progressive Training**:
-- **Progressive resizing**: Start small (224×224) → increase to large (384×384, 512×512)
-- **Multi-scale training**: Randomly vary input size during training (224, 256, 288, 320)
-- **High-resolution fine-tuning**: Train at 224×224, fine-tune at 384×384 or 512×512
+**Embedding Extraction**:
+- Use **DINOv2** (recommended) or **CLIP** to extract image embeddings
+- Extract embeddings for ALL train images
+- Extract embeddings for test images (if available)
+- Embedding dimension: 768 (DINOv2-base) or 512 (CLIP)
 
-**Transfer Learning**:
-- **Pretrained sources**: ImageNet-1k, ImageNet-21k, JFT-300M, LAION-400M (CLIP)
-- **Freeze/unfreeze**: Freeze backbone → train head → unfreeze top layers → unfreeze all
-- **Layer-wise LR**: Lower LR for early layers, higher for head (decay 0.9-0.95 per layer)
+**Dimension Reduction with UMAP**:
+- Apply UMAP to reduce embeddings to 2D or 3D
+- UMAP parameters: n_neighbors=15, min_dist=0.1 (tune if needed)
+- UMAP is preferred over t-SNE (faster, preserves global structure)
+
+**Visualization and Analysis**:
+- Create 2D scatter plot colored by:
+  - Class labels (check class separability)
+  - Train vs test (check distribution shift)
+  - Data source (if multiple sources exist)
+- Look for:
+  - **Distinct clusters by class**: Are classes separable?
+  - **Train/test separation**: Distribution shift indicator
+  - **Outliers**: Isolated points far from clusters (potential mislabeling or corruption)
+  - **Real vs synthetic**: Distinct clusters indicating synthetic data
+  - **Sub-clusters within classes**: Indicates intra-class diversity
+
+**Tools**:
+- **DINO Explorer**: Interactive visualization tool for DINOv2 embeddings
+- **Matplotlib/Plotly**: For custom visualizations
+- Save plots to media/ directory
+
+---
+
+### 3. Distribution Shift Detection (MANDATORY)
+
+**Adversarial Validation on Embeddings**:
+- Extract DINOv2 or CLIP embeddings from train and test
+- Combine datasets and label: train=0, test=1
+- Train binary classifier: XGBoost or LightGBM on embeddings with 5-fold CV
+- Evaluate AUC:
+  - AUC ≈ 0.5: No distribution shift
+  - AUC 0.5-0.6: Mild shift
+  - AUC > 0.6: Significant distribution shift
+- Analyze feature importance: Which embedding dimensions differ most?
+- **If AUC > 0.6**: Use prediction probabilities to create adversarial validation split
+
+**Statistical Distribution Comparison**:
+- Image size: KS test for height, width distributions
+- Color statistics: KS test for mean RGB values
+- Aspect ratio: KS test
+- File format distribution: Chi-square test
+
+**Visual Inspection**:
+- Sample and visualize random train images
+- Sample and visualize random test images
+- Check for visual differences: lighting, quality, style, camera angles
+
+**If shift detected (AUC > 0.6), recommend strategies**:
+- Domain adaptation techniques
+- Adversarial validation-based splitting
+- Test-time augmentation strategies
+
+---
+
+### 4. Data Quality Checks (MANDATORY)
+
+**Corruption Detection**:
+- Check for unreadable files (try loading all images)
+- Identify truncated images
+- Detect extremely low quality images (resolution <64x64 or similar)
+
+**Duplicate Detection**:
+- Exact duplicates: Compare image hashes (MD5 or perceptual hashing)
+- Near-duplicates: Use perceptual hashing with similarity threshold >0.95
+- Visualize duplicate groups
+
+**Mislabeling Detection via Clustering**:
+- Use embedding visualization from section 2
+- Identify samples far from their class cluster (potential mislabels)
+- Flag top 1-5% of outliers for manual review
+
+**Leakage Detection**:
+- Check for train/test overlap via image hashing
+- Check for suspiciously similar images across train/test (near-duplicates)
+- Metadata leakage: Check for predictive metadata (timestamps, filenames, EXIF)
+
+---
+
+### 5. Metadata Analysis (if metadata available)
+
+**Feature Importance**:
+- If metadata exists (patient_id, location, camera_type, timestamps, etc.):
+  - Train Random Forest on metadata to predict target
+  - Analyze feature importance
+  - Identify highly predictive metadata features
+
+**Clustering Analysis**:
+- For categorical metadata: Apply TF-IDF vectorization + k-means clustering
+- Visualize cluster distributions
+- Check if clusters align with classes
+
+**Correlation Analysis**:
+- Compute correlations between numeric metadata and target
+- Identify strong correlations (|r| > 0.3)
+
+---
+
+### 6. Pre-trained CNN Baseline (1-2 runs - DO NOT iterate extensively)
+
+**Purpose**: Establish performance benchmark, understand signal strength
+
+Build **1-2 quick baseline runs**:
+- **Model**: ConvNeXt-Tiny or EfficientNet-B0 (pre-trained on ImageNet)
+- **NO iteration, NO optimization** - just establish baseline
+- If your results don't make sense, change the way you split data into 80/20 and run again
+
+**Output**: Baseline score (e.g., 0.85 accuracy)
+
+---
+
+### 7. Model Architecture Research (Document at least 8+ models - DO NOT A/B TEST)
+
+**Purpose**: Research architectures for Developer selection
+**Method**: Web search, papers, blog posts, benchmarks
+**Deliverable**: Markdown with citations
+
+**Modern CNNs (document 3-4)**:
+- **ConvNeXt** (Tiny, Small, Base)
+  - Document: Modern CNN design, competitive with transformers, when to use
+  - Citation: Paper, benchmarks
+
+- **EfficientNet V2** (B0-B3)
+  - Document: Accuracy/parameter ratio, training speed
+  - Citation: Paper, model cards
+
+- **U-Net** (variants)
+  - Document: Encoder-decoder, skip connections, use cases (segmentation)
+  - Citation: Paper, implementations
+
+**Vision Transformers (document 2-3)**:
+- **Swin Transformer** (Tiny, Small, Base)
+  - Document: Hierarchical, shifted windows, when to prefer over CNNs
+  - Citation: Paper, benchmarks
+
+- **ViT** (Base, Large)
+  - Document: Pure transformer, large dataset requirements
+  - Citation: Paper, model cards
+
+**Foundation Models (document 2-3)**:
+- **DINOv2**
+  - Document: Self-supervised features, embedding visualization, use cases
+  - Citation: Meta AI blog, paper
+
+- **CLIP**
+  - Document: Vision-language, zero-shot classification, embeddings
+  - Citation: OpenAI paper, model card
+
+- **SAM (Segment Anything)**
+  - Document: Zero-shot segmentation
+  - Citation: Meta AI blog
+
+**Classic Architectures (document 1-2 if needed)**:
+- ResNet, DenseNet (reliable baselines)
+- MobileNet (lightweight for inference)
+
+**For each model, document**:
+- Architecture type (CNN/Transformer/Hybrid)
+- Best use cases (small/large dataset, speed/accuracy tradeoff)
+- Input size requirements, pre-training datasets
+- When to prefer over alternatives
+- Citations
+
+**NO A/B TESTING** - Developer selects and optimizes
+
+---
+
+### 8. Advanced Techniques Research (Document at least 3-5 - DO NOT A/B TEST)
+
+**Purpose**: Research SOTA techniques for Developer reference
+**Method**: Web search papers, Kaggle writeups, blog posts
+
+**Required Techniques**:
+
+**1. Self-Supervised Pre-training (MAE, DINO)**:
+- Method: Mask patches → reconstruct, or self-distillation
+- When: Limited labeled data, domain shift
+- Implementation notes: ViT backbone, masking ratios (75%)
+- Citation: MAE paper, DINOv2 blog
+
+**2. Embedding Visualization for Data Quality**:
+- Method: Extract embeddings (DINOv2/CLIP) → UMAP/t-SNE → visualize
+- When: Detect mislabeling, distribution shift, outliers, real vs synthetic
+- Implementation notes: Clustering analysis, outlier detection
+- Citation: Blog posts, tutorials
+
+**3. Progressive Training Strategies**:
+- Method: Train small resolution (224) → gradually increase (384/512)
+- When: Limited compute, overfitting issues
+- Implementation notes: LR adjustment per resolution change
+- Citation: Papers, Kaggle discussions
+
+**4. Test-Time Augmentation (TTA)**:
+- Method: Apply augmentations at inference → average predictions
+- When: Final ensemble, maximize accuracy
+- Implementation notes: Flips, rotations, crops, multi-scale
+- Citation: Writeups
+
+**5. Foundation Model Fine-tuning**:
+- Method: Use CLIP/DINOv2 features → fine-tune classifier
+- When: Limited data, domain shift, transfer learning
+- Implementation notes: Freeze backbone vs full fine-tune
+- Citation: Papers, tutorials
+
+**For each, document**: Explanation, when/why, implementation notes, citations
+
+**NO A/B TESTING** - Developer implements if applicable
+
+---
+
+### 9. External Data Discovery (Use tool)
+
+Use `download_external_datasets(q1, q2, q3)` tool:
+- Find relevant datasets for pre-training
+- Validate image format, resolution, label compatibility
+- Document intended use
+
+---
+
+### 10. Optional Preprocessing A/B Tests (0-5 tests max)
+
+**ONLY test if EDA reveals specific data issues**:
+
+Allowed tests:
+- **Normalization strategy** (if unusual color distribution detected):
+  - Test: (A) ImageNet normalization vs (B) Dataset-specific mean/std
+- **Resize strategy** (if varied aspect ratios found):
+  - Test: (A) Squash vs (B) Aspect-preserving padding
+- **Data cleaning** (if corruption/quality issues found):
+  - Test: (A) All images vs (B) Remove corrupted/outliers
+
+**DO NOT TEST** (Developer optimizes):
+- ❌ Augmentation techniques (MixUp, CutMix, RandAugment, etc.)
+- ❌ Training strategies (progressive resizing, multi-scale)
+- ❌ Optimization configs (LR schedules, warmup, batch sizes)
+- ❌ Regularization (dropout, label smoothing, stochastic depth)
+- ❌ Fine-tuning strategies (freeze/unfreeze, layer-wise LR)
+- ❌ Test-time augmentation (TTA)
+
+**Rationale**: Training strategies are model-specific. Developer phase will discover optimal configs through SOTA search and iterative improvement.
+
+---
+
+### Reference: Training Techniques (DOCUMENT ONLY - NO A/B TESTING)
+
+Keep the following as **REFERENCE** for Developer phase (DO NOT test in Researcher phase):
+
+**Data Augmentation**:
+- Geometric: Flips, rotations, crops, affine transforms, elastic deformation
+- Color: Brightness, contrast, saturation, hue, jitter, noise, blur
+- Modern: Cutout, MixUp (alpha=0.2-1.0), CutMix, GridMask, Mosaic, AutoAugment, RandAugment
+
+**Training Strategies**:
+- Progressive resizing (224→384→512)
+- Multi-scale training (random sizes)
+- High-resolution fine-tuning
+- Transfer learning (freeze/unfreeze strategies)
+- Layer-wise learning rates
 
 **Optimization**:
-- **Learning rates**: 1e-4, 3e-4, 1e-3 (CNNs), 5e-5, 1e-4, 5e-4 (ViTs)
-- **Warmup**: Linear warmup 5-10 epochs, critical for ViTs
-- **Schedules**: Cosine annealing, cosine with restarts, step decay, exponential decay
-- **Optimizers**: AdamW (ViTs), SGD with momentum (CNNs), LAMB (large batch)
+- Learning rates: 1e-4 to 1e-3 (CNNs), 5e-5 to 5e-4 (ViTs)
+- Warmup (5-10 epochs, critical for ViTs)
+- Schedules (cosine, cosine with restarts, step decay)
+- Optimizers (AdamW for ViTs, SGD for CNNs)
+- Regularization (dropout, DropPath, label smoothing, weight decay)
+- Batch sizes (32-256), gradient accumulation
+- Mixed precision (fp16, bf16)
 
-**Regularization**:
-- **Dropout**: 0.1-0.3 in classifier head, spatial dropout in CNNs
-- **DropPath/Stochastic Depth**: For ViTs and deep CNNs (rate=0.1, 0.2)
-- **Label smoothing**: epsilon=0.1 to prevent overconfidence
-- **Weight decay**: 0.01 (ViTs), 1e-4 (CNNs)
-- **Gradient clipping**: max_norm=1.0 for ViTs
+**Fine-tuning**:
+- Full fine-tuning vs linear probing vs partial
+- LoRA for ViTs (emerging)
+- Input resolution strategies (224/384/512)
 
-**Batch & Precision**:
-- Batch size: 32, 64, 128, 256 (larger for ViTs)
-- Gradient accumulation if GPU limited (4-8 steps)
-- Mixed precision: FP16, BF16 (2-3× speedup)
+**Test-Time Augmentation**:
+- Flips (horizontal/vertical)
+- Multi-crop (five-crop, ten-crop)
+- Multi-scale inference
+- Aggregation (average, weighted, geometric mean)
 
-### 5. Self-Supervised Learning (Test at least 3)
-**Pretraining Methods** (when labeled data limited):
-- **MAE (Masked Autoencoders)**: Mask 75% of patches, reconstruct (ViT backbone)
-- **DINO/DINOv2**: Self-distillation, no labels needed (ViT backbone)
-- **SimCLR**: Contrastive learning with augmentations (requires large batches)
-- **MoCo**: Momentum contrast, memory bank (more efficient than SimCLR)
+**Mark all as**: "REFERENCE ONLY - Developer phase will test via SOTA search"
 
-**When to Use**:
-- Limited labeled data (<10k images)
-- Domain-specific datasets (medical, satellite, etc.)
-- Pretrain on unlabeled competition data, fine-tune on labeled
-
-### 6. Fine-tuning Strategies (Test at least 4)
-**For ViTs**:
-- **Full fine-tuning**: All parameters trainable
-- **Linear probing**: Freeze backbone, train only classifier head
-- **Partial fine-tuning**: Unfreeze last N transformer blocks (N=3, 6, 9)
-- **LoRA for ViT**: Low-rank adaptation of attention weights (emerging)
-
-**For CNNs**:
-- **Freeze early layers**: Freeze conv1-conv3, train conv4-conv5 + head
-- **Discriminative fine-tuning**: Layer-wise learning rates
-- **Feature pyramid networks**: Multi-scale feature fusion
-
-**Input Resolution**:
-- Low resolution (224×224) for fast experiments
-- Medium (384×384) for better accuracy
-- High (512×512, 768×768) for final models
-- Test speed vs accuracy tradeoff
-
-### 7. Test-Time Augmentation (TTA) (Test at least 3)
-**Basic TTA**:
-- **Horizontal flip**: Average predictions (original + flipped)
-- **Vertical flip**: Average predictions (less common, test if applicable)
-- **Multi-crop**: Five-crop (4 corners + center), ten-crop (with flips)
-- **Multi-scale**: Test at different resolutions (224, 256, 384), average predictions
-
-**Advanced TTA**:
-- **Rotation**: 0°, 90°, 180°, 270° rotations, average
-- **Color perturbations**: Slight brightness/contrast variations
-- **Cutout at test time**: Multiple masks, average predictions
-- **Soft voting**: Average class probabilities vs hard voting (argmax each prediction)
-
-**Aggregation**:
-- Simple average (most common)
-- Weighted average (optimize weights on validation)
-- Geometric mean of probabilities
-- Rank averaging
-
-### 9. Advanced Techniques (Test at least 3)
-**Foundation Model Features**:
-- **CLIP embeddings**: Extract features, train classifier on top
-- **CLIP zero-shot**: Text prompts for classification without training
-- **SAM features**: Segmentation masks as additional input
-- **DINOv2 features**: Self-supervised features for transfer learning
-
-**Knowledge Distillation**:
-- Train large teacher (Swin-L, ViT-L) → distill to small student (ConvNeXt-T, ViT-S)
-- Ensemble of teachers → single student
-- Feature distillation vs logit distillation
-
-**Pseudo-Labeling**:
-- High-confidence predictions on test set → add to training
-- Iterative pseudo-labeling (multiple rounds)
-- Use ensemble for pseudo-labels (more reliable)
-
-### Iteration Policy for CV
-- **When preprocessing fails**: Try different normalization strategies, resize methods, color spaces
-- **When augmentation fails**: Try MixUp/CutMix with different alpha values, reduce augmentation magnitude
-- **When training strategy fails**: Try different learning rate schedules, progressive resizing, warmup durations
-- **When fine-tuning fails**: Try different freeze/unfreeze strategies, layer-wise learning rates
-- **When TTA doesn't help**: Try different aggregation methods, multi-scale testing strategies
-- **Never conclude after 2-3 failures**: Each strategy category should have 4-5 attempts minimum
-- **Model architecture selection**: Research and document at least 6-8 architectures through web search, but defer A/B testing to Developer phase
-
+---
 
 ### Progress Tracking
+
 At each milestone, report:
-- Total A/B tests: X/20 minimum
-- Coverage: Preprocessing (X/5), Augmentation (X/8), Training (X/6), Self-supervised (X/3), Fine-tuning (X/4), TTA (X/3), Advanced (X/3)
-- Model architectures researched: X/8 minimum (web search only, no A/B tests)
-- Best configuration found
-- Inference time per image
-
-### Web Search Guidance for CV
-Search for: "computer vision [task_type] kaggle 2025" (e.g., "image classification kaggle 2025 vit swin")
-Look for:
-- ViT vs ConvNeXt comparisons for dataset size
-- MixUp, CutMix, RandAugment strategies
-- Progressive resizing schedules
-- Foundation model (CLIP, DINOv2, SAM) integration
-- TTA strategies for final submissions
-- Ensemble diversity techniques
-
-### Key Techniques to Prioritize
-- **ConvNeXt V2**: Modern CNN, easier than ViT, competitive accuracy
-- **ViT with strong aug**: RandAugment + CutMix + large datasets
-- **Swin Transformer**: Hierarchical ViT, better than vanilla ViT
-- **EfficientNet V2**: Best parameter efficiency, fast training
-- **DINOv2 features**: Self-supervised, strong transfer learning
-- **CLIP embeddings**: For zero-shot or low-data scenarios
-- **Progressive resizing**: 224→384→512 (faster convergence)
-- **MixUp + CutMix**: Standard for SOTA results (alpha=1.0)
-- **TTA with flips + crops**: Free performance boost (2-5% improvement)
-- **Architecture ensemble**: ViT + ConvNeXt + EfficientNet diversity
-"""
-
-    else:  # Fallback for unknown task types
-        return """
-## MANDATORY Task-Specific Requirements: General
-
-### Minimum Experiment Coverage
-Conduct at least **15 A/B tests** covering:
-- Preprocessing variations (at least 5)
-- Feature engineering (at least 5)
-- Data augmentation if applicable (at least 3)
-- Training techniques (at least 2)
-
-Use web search to identify task-specific best practices for 2025.
+- **Image Statistics**: ✓/✗
+- **Embedding Visualization**: ✓/✗ (UMAP plots saved, outliers identified)
+- **Distribution shift**: AUC = [value], Shift detected: Yes/No
+- **Data quality checks**: ✓/✗
+- **Metadata analysis**: ✓/✗ (if metadata available)
+- **CNN baseline score**: [score]
+- **Model architectures DOCUMENTED**: X/8+ (web search, written with citations)
+- **Advanced techniques DOCUMENTED**: X/3-5 (web search, written with citations)
+- **External datasets found**: X datasets
+- **Optional preprocessing A/B tests**: X/5 max (only if data issues found)
 """
 
 
@@ -548,6 +797,25 @@ def build_system(base_dir: str, task_type: str | list[str] = "tabular", max_para
 
     # Get task-specific requirements
     task_requirements = _get_task_specific_requirements(task_type_for_requirements)
+
+    '''
+    # Check if tabular is in task types (for conditional JSON-specific instructions)
+    is_tabular = False
+    if isinstance(task_type_for_requirements, list):
+        is_tabular = 'tabular' in task_type_for_requirements
+    else:
+        is_tabular = task_type_for_requirements == 'tabular'
+
+    # Build conditional strings for tabular-only instructions
+    json_saving_note = ""
+    column_loading_instruction = ""
+
+    if is_tabular:
+        json_saving_note = f"\n  **All analysis results (insights, feature categorizations, statistics) are automatically saved as JSON files in `{base_dir}/analysis/` for later reference in A/B tests.**"
+        column_loading_instruction = """- When generating any A/B test question referring to columns discovered in previous steps (e.g., quasi-discrete numerics, low-correlation numerics, top importances, categorical groups), **do not list the actual column names** even if they were shown in prior EDA output.
+- Instead, always phrase it as:
+  `(B) Load <absolute_json_path>, '<key>' key, then apply the relevant transformation.`
+"""'''
 
     return f"""# Role
 Lead Research Strategist for Kaggle Machine Learning Competition Team
@@ -595,8 +863,7 @@ Begin with a succinct checklist (5–10 bullets) of analytical sub-tasks at the 
 Set reasoning_effort = medium based on the moderate complexity of the task. Keep tool output summaries brief; elaborate and present detailed rationale in the final technical plan as required by the complexity of findings.
 
 # Available Tools
-- `ask_eda(question)`: Performs Python EDA on the local dataset to check distributions, data quality, and test assumptions.  
-  **All analysis results (insights, feature categorizations, statistics) are automatically saved as JSON files in `{base_dir}/analysis/` for later reference in A/B tests.**
+- `ask_eda(question)`: Performs Python EDA on the local dataset to check distributions, data quality, and test assumptions.
 
 - `run_ab_test(questions)`: Runs multiple A/B tests simultaneously (up to `{max_parallel_workers}` at a time).  
   Accepts a **list (array)** of strings, where each string describes one A/B test comparing two approaches and reporting performance metrics.
@@ -615,9 +882,7 @@ Set reasoning_effort = medium based on the moderate complexity of the task. Keep
 Since questions execute in parallel, each must be FULLY INDEPENDENT:
 For your initial `run_ab_test()` call, create just ONE A/B test for the baseline. Use subsequent calls (each with up to {max_parallel_workers} questions) within the *same category* (e.g., preprocessing) to compare variations to the baseline.
 Design A/B test groups by phase (preprocessing, augmentation, etc.) for maximum clarity.
-- When generating any A/B test question referring to columns discovered in previous steps (e.g., quasi-discrete numerics, low-correlation numerics, top importances, categorical groups), **do not list the actual column names** even if they were shown in prior EDA output.
-- Instead, always phrase it as:  
-  `(B) Load <absolute_json_path>, '<key>' key, then apply the relevant transformation.`  
+Use your judgment: AB tests sometimes can have mistakes, compare the (B) score against your very first baseline to ensure correctness. If you feel the AB test result is inconclusive (e.g. (A) has incredibly low score compared to baseline because of a bug - mark it as Neutral in the final report).
 
 Detailed Requirements:
 1. First, call `run_ab_test()` with a single baseline question.
@@ -673,7 +938,7 @@ Respond in Markdown following this structure:
 ### Example Markdown Output
 ```markdown
 # Data Understanding & Profiling
-- ...
+- (ALL key insights from EDA, data profiling, distribution analyses, data quality checks, etc.)
 
 # Validated Findings (A/B Tested)
 ## High Impact
