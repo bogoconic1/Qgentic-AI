@@ -837,14 +837,15 @@ Begin with a succinct checklist (5–10 bullets) of analytical sub-tasks at the 
 
 # Methodology Checklist (Conceptual)
 1. Parse the competition description to identify core objectives, target variables, feature set(s), and evaluation metrics.
-2. Profile the dataset: examine the target distribution, class balance, missing values, feature/target ranges, and dataset size.
-3. Analyze input structures such as length and category distributions, sequence lengths, image sizes, and identify any data quality concerns.
-4. Detect any temporal or spatial ordering and assess whether distribution shifts exist between train/test splits.
-5. Research recent (2025) winning strategies for `{task_type_display}` tasks in general (do **not** research this specific competition) to guide exploration.
-6. Formulate and validate hypotheses through A/B testing.
-7. **Complete all MANDATORY, task-specific explorations** as identified in the requirements—do **not** skip this stage.
-8. Identify relevant external datasets, explaining their intended use and anticipated contribution.
-9. Synthesize A/B test validated findings into a clear, structured technical plan.
+2. **Search for and read the dataset paper (if available)**: Use web search to find arxiv papers related to the dataset (search for competition name + "dataset" + "arxiv"). If found, use `read_research_paper()` to understand the dataset's original design intent, data collection methodology, known challenges, and intended use cases. This can reveal critical insights about multi-modal structures, domain-specific preprocessing, or architectural approaches aligned with the dataset's design.
+3. Profile the dataset: examine the target distribution, class balance, missing values, feature/target ranges, and dataset size.
+4. Analyze input structures such as length and category distributions, sequence lengths, image sizes, and identify any data quality concerns.
+5. Detect any temporal or spatial ordering and assess whether distribution shifts exist between train/test splits.
+6. Research recent (2025) winning strategies for `{task_type_display}` tasks in general (do **not** research this specific competition) to guide exploration.
+7. Formulate and validate hypotheses through A/B testing.
+8. **Complete all MANDATORY, task-specific explorations** as identified in the requirements—do **not** skip this stage.
+9. Identify relevant external datasets, explaining their intended use and anticipated contribution.
+10. Synthesize A/B test validated findings into a clear, structured technical plan.
 
 {task_requirements}
 
@@ -877,6 +878,8 @@ Set reasoning_effort = medium based on the moderate complexity of the task. Keep
       e.g., `[Feature Engineering][Test #2] (A) Baseline vs (B) + interaction features`
       
 - `download_external_datasets(question_1, question_2, question_3)`: Retrieves relevant external datasets based on three differently phrased queries; datasets will be in `{base_dir}/`. Use EDA and A/B testing as appropriate.
+
+- `read_research_paper(arxiv_link)`: Reads and summarizes a research paper from arxiv. Accepts arxiv links (e.g., "https://arxiv.org/pdf/2510.22916" or "2510.22916"). Returns structured markdown summary with Abstract, Introduction, Related Work, Method/Architecture, Experiments/Results, and Conclusion sections. **Use this to understand dataset papers, domain-specific techniques, or novel architectural approaches relevant to the competition.**
 
 **CRITICAL: Parallel AB Test Requirements:**
 Since questions execute in parallel, each must be FULLY INDEPENDENT:

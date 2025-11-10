@@ -15,6 +15,7 @@ import pandas as pd
 import weave
 from project_config import get_config
 from tools.helpers import call_llm_with_retry, _build_directory_listing
+from tools.gemini_google_search import GeminiPaperSummaryClient
 from prompts.tools_researcher import (
     ask_eda_template as prompt_ask_eda,
     datasets_prompt as prompt_datasets,
@@ -248,6 +249,36 @@ def download_external_datasets(question_1: str, question_2: str, question_3: str
     return f'Relevant Datasets are downloaded: now {dest_path} contains: \n{dest_files}'
 
 
+@weave.op()
+def read_research_paper(arxiv_link: str) -> str:
+    """Read and summarize a research paper from arxiv.
+
+    Args:
+        arxiv_link: ArXiv paper link (e.g., "https://arxiv.org/pdf/2510.22916" or just "2510.22916")
+
+    Returns:
+        Structured markdown summary with sections: Abstract, Introduction, Related Work,
+        Method/Architecture, Experiments/Results, and Conclusion.
+    """
+    # Extract arxiv ID from link (handles full URLs or just IDs)
+    arxiv_id_match = re.search(r'(\d{4}\.\d{4,5})', arxiv_link)
+    if arxiv_id_match:
+        arxiv_id = arxiv_id_match.group(1)
+    else:
+        # Assume it's already just an ID
+        arxiv_id = arxiv_link
+
+    logger.info("Reading research paper with arxiv ID: %s", arxiv_id)
+
+    try:
+        client = GeminiPaperSummaryClient()
+        summary = client.generate_summary(model_name=arxiv_id)
+        logger.info("Successfully generated paper summary (length: %d chars)", len(summary))
+        return summary
+    except Exception as e:
+        logger.exception("Failed to read research paper: %s", arxiv_id)
+        return f"Error reading paper: {str(e)}"
+
 
 def get_tools(max_parallel_workers: int = 1):
     return [
@@ -295,5 +326,18 @@ def get_tools(max_parallel_workers: int = 1):
             },
             "additionalProperties": False,
             "required": ["question_1", "question_2", "question_3"],
+        },
+        {
+            "type": "function",
+            "name": "read_research_paper",
+            "description": "Read and summarize a research paper from arxiv. Returns structured markdown summary with Abstract, Introduction, Related Work, Method/Architecture, Experiments/Results, and Conclusion sections.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "arxiv_link": {"type": "string", "description": "ArXiv paper link (e.g., 'https://arxiv.org/pdf/2510.22916' or just '2510.22916')"}
+                },
+            },
+            "additionalProperties": False,
+            "required": ["arxiv_link"],
         },
     ]
