@@ -16,3 +16,12 @@ class SOTAResponse(BaseModel):
     blacklist_reason: str
     suggestion: str
     suggestion_reason: str
+
+
+class CodeSafetyCheck(BaseModel):
+    """Schema for LLM-based code safety analysis."""
+    decision: str  # "allow" or "block"
+    confidence: float  # 0.0-1.0
+    reasoning: str
+    violations: list[str]  # List of specific security issues found
+    suggested_fix: str  # How to fix the issues
