@@ -9,7 +9,7 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
 ---
 ## News
 
-**[2025/11/10]** 🔬 **Enhanced Researcher with Domain-First Discovery** - example research plan for CSIRO competition []()
+**[2025/11/10]** 🔬 **Enhanced Researcher with Domain-First Discovery** - example research plan for CSIRO competition [here](https://www.kaggle.com/code/yeoyunsianggeremie/csiro-agentic-ai-solution-mobilenet-v4/comments#3315336)
 
 **[2025/11/04]** 🏆 **Qgentic-AI achieves #1 single-model public notebook on [PS5E11](https://www.kaggle.com/competitions/playground-series-s5e11)** (Top 6%, 40/700) with fully
   autonomous A/B testing!
