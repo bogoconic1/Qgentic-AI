@@ -755,19 +755,20 @@ class DeveloperAgent:
             self.logger.warning("Could not extract Final Summary section, using full response")
             return red_flags_response
 
-    def _call_sota_suggestions(self, **kwargs):
+    def _call_sota_suggestions(self, attempt_number: int = 1, **kwargs):
         """
         Call SOTA suggestions tool with appropriate parameters.
 
         Can be overridden by subclasses to modify behavior (e.g., is_ensemble).
 
         Args:
+            attempt_number: Which attempt this is (1, 2, 3, ...) for interleaving strategy
             **kwargs: Arguments to pass to search_sota_suggestions
 
         Returns:
             SOTA suggestions text
         """
-        return search_sota_suggestions(**kwargs)
+        return search_sota_suggestions(attempt_number=attempt_number, **kwargs)
 
     def _evaluate_submission(
         self,
@@ -913,11 +914,12 @@ class DeveloperAgent:
         # These are None if no submission was generated or if this is the first successful version
         return code_with_logs, run_score, previous_successful_version, base_score, submission_exists
 
-    def _gather_sota_feedback(self, code_with_logs: str) -> any:
+    def _gather_sota_feedback(self, code_with_logs: str, attempt_number: int = 1) -> any:
         """Gather SOTA feedback through red flags analysis and SOTA suggestions.
 
         Args:
             code_with_logs: Code with execution logs and analysis
+            attempt_number: Which attempt this is (1, 2, 3, ...) for interleaving strategy
 
         Returns:
             SOTA response object or None if gathering failed
@@ -956,6 +958,7 @@ class DeveloperAgent:
                 later_recommendations=later_context,
                 external_data_listing=self.external_data_listing,
                 plan_content=self.plan_content,
+                attempt_number=attempt_number,
             )
             return sota_response
         except Exception as exc:
@@ -986,6 +989,7 @@ class DeveloperAgent:
         self.logger.info("Plan content (%d chars): %s", len(self.plan_content), self.plan_content[:200] + "..." if len(self.plan_content) > 200 else self.plan_content)
 
         attempt = 0
+        sota_suggestions_call_id = 0
         for _ in range(24):
             now = time.time()
             if max_time_seconds is not None and now >= deadline:
@@ -1085,8 +1089,10 @@ class DeveloperAgent:
 
             # Only continue gathering feedback if THIS attempt produced a submission
             if submission_exists:
+                # Increment SOTA suggestions call counter (separate from attempt counter)
+                sota_suggestions_call_id += 1
                 # Gather SOTA feedback (red flags + suggestions)
-                sota_response = self._gather_sota_feedback(code_with_logs)
+                sota_response = self._gather_sota_feedback(code_with_logs, attempt_number=sota_suggestions_call_id)
 
                 suggestion_text, blacklist_flag, blacklist_reason = self._parse_sota_response(sota_response)
                 self.logger.info("SOTA suggestion: %s (blacklist=%s)", suggestion_text, blacklist_flag)

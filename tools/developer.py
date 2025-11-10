@@ -53,6 +53,7 @@ def web_search_stack_trace(query: str) -> str:
     logger.debug("Stack trace query: %s", query)
 
     # Step 1: Try fine-tuned model first (no web search capability)
+    '''
     logger.info("Attempting fine-tuned model endpoint first...")
     from tools.helpers import call_llm_with_retry_google
 
@@ -85,7 +86,7 @@ def web_search_stack_trace(query: str) -> str:
             return query + "\n" + "This is how you can fix the error: \n" + solution_text
 
     except Exception as e:
-        logger.warning(f"Fine-tuned model call failed with error: {e}. Falling back to web search workflow.")
+        logger.warning(f"Fine-tuned model call failed with error: {e}. Falling back to web search workflow.")'''
 
     # Step 2: Fallback to current workflow with web search
     logger.info("Fine-tuned model cannot answer (response too short or failure message), falling back to web search workflow.")
@@ -162,6 +163,7 @@ def search_sota_suggestions(
     is_ensemble: bool = False,
     external_data_listing: str | None = None,
     plan_content: str | None = None,
+    attempt_number: int = 1,
 ) -> str:
     """Stage 2: Use web search to generate SOTA suggestions based on red flags.
 
@@ -177,19 +179,41 @@ def search_sota_suggestions(
         is_ensemble: If True, uses ensemble-specific prompts and constraints
         external_data_listing: Directory listing of external_data_* folders
         plan_content: Content of plan.md file
+        attempt_number: Which attempt this is (1, 2, 3, ...) for interleaving strategy
 
     Returns:
         SOTA suggestions text with blacklist decision and new suggestion
     """
-    logger.info("Dispatching SOTA suggestions (Stage 2) with web search")
+    logger.info("Dispatching SOTA suggestions (Stage 2) with web search (attempt #%d)", attempt_number)
     executed_suggestion_text = executed_suggestion or "No previous suggestion executed; this is the first attempt."
     failed_ideas_text = "\n".join(f"- {idea}" for idea in failed_ideas) if failed_ideas else "No prior ideas are blacklisted."
-    shared_suggestions_text = "\n".join(f"- {suggestion}" for suggestion in (shared_suggestions or [])) if shared_suggestions else "No shared suggestions yet."
+
+    # On even attempts, disable shared suggestions to force independent exploration
+    if attempt_number % 2 == 0:
+        logger.info("Attempt #%d (even): Disabling shared suggestions to encourage novel exploration", attempt_number)
+        shared_suggestions_text = "No shared suggestions provided for this attempt (exploring independently)."
+    else:
+        shared_suggestions_text = "\n".join(f"- {suggestion}" for suggestion in (shared_suggestions or [])) if shared_suggestions else "No shared suggestions yet."
+
+    # On even attempts, strip "Validated Findings" section from plan to focus on other recommendations
+    modified_plan_content = plan_content
+    if attempt_number % 2 == 0 and plan_content:
+        validated_start = "# Validated Findings (A/B Tested)"
+        risks_start = "# Risks & Mitigations"
+
+        start_idx = plan_content.find(validated_start)
+        end_idx = plan_content.find(risks_start)
+
+        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+            logger.info("Attempt #%d (even): Stripping 'Validated Findings' section (%d chars)", attempt_number, end_idx - start_idx)
+            modified_plan_content = plan_content[:start_idx] + plan_content[end_idx:]
+        else:
+            logger.warning("Could not find both section headers to strip Validated Findings")
 
     # Build plans_section: combine plan.md and later_recommendations
     plans_section = ""
-    if plan_content:
-        plans_section += f"\n<plan>\n{plan_content}\n</plan>\n"
+    if modified_plan_content:
+        plans_section += f"\n<plan>\n{modified_plan_content}\n</plan>\n"
     if later_recommendations:
         plans_section += f"\n<suggestions>\n{later_recommendations}\n</suggestions>\n"
 
