@@ -9,6 +9,8 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
 ---
 ## News
 
+**[2025/11/10]** 🔬 **Enhanced Researcher with Domain-First Discovery** - example research plan for CSIRO competition []()
+
 **[2025/11/04]** 🏆 **Qgentic-AI achieves #1 single-model public notebook on [PS5E11](https://www.kaggle.com/competitions/playground-series-s5e11)** (Top 6%, 40/700) with fully
   autonomous A/B testing!
 
@@ -41,12 +43,12 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
 
 | Kaggle Competition | Difficulty | Type | Metric | Qgentic-AI (no ensembler) | FM Agent | InternAgent | Operand | R&D-Agent | MLE-STAR-PRO |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| us-patent-phrase-to-phrase-matching | Medium | Information Retrieval | PCC (higher) | 0.88072 | 0.86169 ± 0.01725 | 0.86793 ± 0.00294 | 0.69230 ± 0.20529 | 0.80092 ± 0.04586 | 0.75311 ± 0.14290 |
-| learning-agency-lab-automated-essay-scoring-2 | Medium | Text | QWK (higher) | 0.84303 ± 0.00719 | 0.84471 ± 0.00549 | 0.82996 ± 0.00908 | 0.83013 | 0.82450 ± 0.01155 | 0.83171 ± 0.00660 |
-| tabular-playground-series-dec-2021 | Easy | Tabular | Accuracy % (higher) | 0.96322 | 0.95988 ± 0.00158 | 0.96268 ± 0.00046 | 0.96266 ± 0.00071 | 0.96294 ± 0.00018 | 0.96267 ± 0.00059 |
-| statoil-iceberg-classifier-challenge | Medium | Image Classification | Logloss (lower) | 0.19081 | 1.25837 ± 0.95314 | 0.20303 ± 0.00651 | Failed | Failed | 0.24558 ± 0.02098 |
+| us-patent-phrase-to-phrase-matching | Medium | Information Retrieval | PCC (higher) | TBC | 0.86169 ± 0.01725 | 0.86793 ± 0.00294 | 0.69230 ± 0.20529 | 0.80092 ± 0.04586 | 0.75311 ± 0.14290 |
+| learning-agency-lab-automated-essay-scoring-2 | Medium | Text | QWK (higher) | TBC | 0.84471 ± 0.00549 | 0.82996 ± 0.00908 | 0.83013 | 0.82450 ± 0.01155 | 0.83171 ± 0.00660 |
+| tabular-playground-series-dec-2021 | Easy | Tabular | Accuracy % (higher) | TBC | 0.95988 ± 0.00158 | 0.96268 ± 0.00046 | 0.96266 ± 0.00071 | 0.96294 ± 0.00018 | 0.96267 ± 0.00059 |
+| statoil-iceberg-classifier-challenge | Medium | Image Classification | Logloss (lower) | TBC | 1.25837 ± 0.95314 | 0.20303 ± 0.00651 | Failed | Failed | 0.24558 ± 0.02098 |
 | denoising-dirty-documents | Medium | Computer Vision | RMSE (lower) | TBC | 0.01958 ± 0.00749 | 0.02283 ± 0.01652 | 0.02301 ± 0.01474 | 0.01122 ± 0.00107 | 0.01145 ± 0.00059 |
-| whale-categorization-playground | Medium | Computer Vision | MAP@5 (higher) | 0.42885 ± 0.04164 | 0.46635 ± 0.03608 | 0.18327 ± 0.14001 | 0.36061 ± 0.10255 | 0.26214 ± 0.01121 | 0.35985 ± 0.04825 |
+| whale-categorization-playground | Medium | Computer Vision | MAP@5 (higher) | TBC | 0.46635 ± 0.03608 | 0.18327 ± 0.14001 | 0.36061 ± 0.10255 | 0.26214 ± 0.01121 | 0.35985 ± 0.04825 |
 | google-quest-challenge | Medium | Text | Spearman Correlation (higher) | TBC | 0.39365 ± 0.01830 | 0.40873 ± 0.01466 | 0.39802 ± 0.01202 | 0.41488 ± 0.00678 | 0.39628 ± 0.00535 |
 --- 
 
@@ -59,11 +61,23 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
   - Persists `starter_suggestions.txt` and `starter_suggestions.json` in `task/<slug>/outputs/<iteration>/`.
 
 - **Researcher Agent (`agents/researcher.py`)**
-  - Uses tool-calling (EDA snippets, A/B testing, external dataset search) to understand the task.
-  - **A/B Testing**: Runs controlled experiments comparing modeling approaches (e.g., different normalizations, augmentations, optimizers) with automatic code generation and execution.
-  - Tracks A/B test history (last 8 tests) to avoid redundant experiments and inform future tests.
-  - Logs every step to `task/<slug>/outputs/<iteration>/researcher/`.
-  - Persists the final plan in `plan.md` – consumed verbatim by downstream stages.
+  - **Domain-First Discovery**: Implements mandatory Phase 0 (30-40 min budget) to deeply understand domain context before analysis:
+    - Identifies real-world domain and stakeholders
+    - Searches for dataset papers and domain literature using Gemini API with Google Search
+    - Reads and summarizes research papers with `read_research_paper()` tool (powered by `GeminiPaperSummaryClient`)
+    - Formulates 5-10 domain-specific hypotheses grounded in literature
+    - Outputs structured domain context summary
+  - **Hypothesis-Driven Exploration**: Tests domain-specific hypotheses with quantitative validation (correlations, distributions, A/B tests)
+  - **Task-Specific Guides**: Provides tailored exploration strategies for tabular, NLP, computer vision, and time series tasks
+  - **A/B Testing**: Runs controlled experiments comparing modeling approaches with automatic code generation and execution
+  - **Research Paper Reading**: Integrates `GeminiPaperSummaryClient` with Google Search + URL Context tools to:
+    - Find and read dataset papers via arXiv IDs
+    - Search for model papers and technical documentation
+    - Generate structured 6-section summaries (Abstract, Introduction, Related Work, Method/Architecture, Experiments/Results, Conclusion)
+  - Tracks A/B test history (last 8 tests) to avoid redundant experiments and inform future tests
+  - Self-critique loops ensure domain-specificity and reject generic approaches
+  - Logs every step to `task/<slug>/outputs/<iteration>/researcher/`
+  - Persists the final plan in `plan.md` – consumed verbatim by downstream stages
 
 - **Model Recommender Agent (`agents/model_recommender.py`)**
   - Recommends up to 8 suitable models with detailed strategies for preprocessing, architecture, loss functions, hyperparameters, and inference.
@@ -110,7 +124,15 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
     - `execute_code_with_oom_retry()`: Automatic OOM retry logic with configurable polling
     - `search_red_flags()`: Stage 1 red flag identification with web search
     - `search_sota_suggestions()`: Stage 2 SOTA improvements based on red flags and shared suggestions
-  - `tools.researcher` exposes the EDA runtime and dataset downloader.
+  - `tools.researcher` exposes the EDA runtime, dataset downloader, and research paper reading:
+    - `ask_eda()`: Execute exploratory data analysis code snippets
+    - `download_datasets()`: Search and download external datasets
+    - `read_research_paper()`: Read and summarize research papers via arXiv ID using Gemini API
+  - `tools.gemini_google_search` provides `GeminiPaperSummaryClient`:
+    - Supports both arXiv paper IDs and model names
+    - Uses Gemini API with Google Search + URL Context tools for paper discovery and reading
+    - Generates structured 6-section summaries with domain-specific insights
+    - Centralized retry logic via `call_llm_with_retry_google()` helper
   - `config.yaml` overrides project defaults (model endpoints, runtime limits, etc.).
 
 - **Task Bundles (`task/<slug>/`)**
@@ -200,8 +222,10 @@ task/
 ### 5. Launch an Iteration
 
 ```bash
-python launch_agent.py --slug "enter slug" --iteration 1 --time-seconds $((6*3600))
+python launch_agent.py --slug "enter slug" --iteration 1
 ```
+
+Time limits are controlled via `config.yaml` (`runtime.baseline_time_limit`).
 
 ### 6. Monitoring & Artefacts
 
