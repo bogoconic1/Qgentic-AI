@@ -26,18 +26,9 @@ data_path = "{data_path}"
 - Generate charts or images within your Python code as needed.
 - Save all visualizations to the MEDIA_DIR directory (provided by the MEDIA_DIR environment variable; default: Path(data_path)/"media").
 - Do NOT display figures interactively; only save them (e.g., for matplotlib: plt.savefig(os.path.join(os.environ.get("MEDIA_DIR"), "fig.png"), bbox_inches='tight'); for plotly: fig.write_image(...)).
-
-**IMPORTANT**: For EDA questions ONLY:
 - Print ALL insights/findings to the console using print() statements.
 
-**IMPORTANT**: For A/B Test questions ONLY:
-- Print just 4 lines to the console
-    - Line 1: print("Result (A): ", <Result of A>)
-    - Line 2: print("Result (B): ", <Result of B>)
-    - Line 3: print("Delta: ", <Result of B> - <Result of A>)
-    - Line 4: print("Which is better? ", <A or B or Tie>)
-- NO writing to files or JSON output is needed.
-
+# Notes
 - For OneHotEncoder, use sparse_output=False instead of sparse=False to avoid errors.
 - For XGBoost, if early stopping is used, don't do .fit(early_stopping_rounds=...). Instead, use it as a constructor argument.
 - For LightGBM, if early stopping is used, do early_stopping and log_evaluation callbacks instead of early_stopping_rounds and verbose parameters in .fit().
