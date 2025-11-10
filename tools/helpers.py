@@ -151,6 +151,7 @@ def call_llm_with_retry_google_helper(
     temperature: float = 1.0,
     max_retries: int | None = None,
     enable_google_search: bool = False,
+    enable_url_context: bool = False,
     top_p: float = 1.0,
     thinking_budget: int | None = None,
 ):
@@ -164,6 +165,7 @@ def call_llm_with_retry_google_helper(
         temperature: Temperature for generation
         max_retries: Maximum number of retries
         enable_google_search: Enable Google Search tool
+        enable_url_context: Enable URL context tool for reading web pages
         top_p: Nucleus sampling parameter (default: None)
         thinking_budget: Thinking budget for reasoning models (default: None)
 
@@ -194,6 +196,8 @@ def call_llm_with_retry_google_helper(
             tools = []
             if enable_google_search:
                 tools.append(types.Tool(googleSearch=types.GoogleSearch()))
+            if enable_url_context:
+                tools.append(types.Tool(url_context=types.UrlContext()))
 
             # Build config
             config_params = {
@@ -252,6 +256,7 @@ def call_llm_with_retry_google(
     temperature: float = 1.0,
     max_retries: int | None = None,
     enable_google_search: bool = False,
+    enable_url_context: bool = False,
     top_p: float = 1.0,
     thinking_budget: int | None = None,
 ):
@@ -265,6 +270,7 @@ def call_llm_with_retry_google(
         temperature: Temperature for generation
         max_retries: Maximum number of retries per attempt
         enable_google_search: Enable Google Search tool
+        enable_url_context: Enable URL context tool for reading web pages
         top_p: Nucleus sampling parameter
         thinking_budget: Thinking budget for reasoning models
 
@@ -285,6 +291,7 @@ def call_llm_with_retry_google(
             temperature=temperature,
             max_retries=max_retries,
             enable_google_search=enable_google_search,
+            enable_url_context=enable_url_context,
             top_p=top_p,
             thinking_budget=thinking_budget,
         )

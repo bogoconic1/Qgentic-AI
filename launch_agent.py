@@ -65,7 +65,6 @@ def main():
     parser = argparse.ArgumentParser(description="Run Researcher+Developer pipeline")
     parser.add_argument("--slug", type=str, help="Competition slug under task/<slug>")
     parser.add_argument("--iteration", type=int, help="Iteration number (e.g., 1)")
-    parser.add_argument("--time-seconds", type=int, default=6*3600, help="Max wall time for developer run in seconds (default 6h)")
     parser.add_argument("--wandb-entity", type=str, help="Weights & Biases entity name")
     parser.add_argument("--wandb-project", type=str, help="Weights & Biases project name")
     parser.add_argument(
@@ -79,7 +78,7 @@ def main():
     _init_tracking(args)
 
     orchestrator = Orchestrator(args.slug, args.iteration)
-    orchestrator.run(max_time_seconds=args.time_seconds)
+    orchestrator.run()
 
     # Gracefully close tracking backends to avoid hanging background threads
     try:

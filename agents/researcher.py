@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from project_config import get_config
 from weave.trace.util import ThreadPoolExecutor
 
-from tools.researcher import ask_eda, download_external_datasets, get_tools
+from tools.researcher import ask_eda, download_external_datasets, read_research_paper, get_tools
 from prompts.researcher_agent import (
     build_system as prompt_build_system,
     initial_user_for_build_plan as prompt_initial_user,
@@ -402,6 +402,30 @@ class ResearcherAgent:
                 "call_id": item.call_id,
                 "output": json.dumps({
                     "results": tool_output,
+                })
+            })
+
+        elif item.name == "read_research_paper":
+            try:
+                args = json.loads(item.arguments)
+                arxiv_link = args.get("arxiv_link", "")
+            except Exception as e:
+                logger.error("Failed to parse read_research_paper arguments: %s", e)
+                arxiv_link = ""
+
+            if not arxiv_link:
+                tool_output = "Error: arxiv_link is required."
+            else:
+                logger.info("Reading research paper: %s", arxiv_link)
+                tool_output = read_research_paper(arxiv_link)
+
+            logger.info("Paper summary response length=%s", len(tool_output or ""))
+
+            input_list.append({
+                "type": "function_call_output",
+                "call_id": item.call_id,
+                "output": json.dumps({
+                    "summary": tool_output,
                 })
             })
 
