@@ -678,6 +678,7 @@ Identify domain-specific insights that confer a competitive advantage through sy
 2. **Hypothesis-Driven:** Focus on testing specific, articulated hypotheses instead of executing standard checklists.
 3. **Unique Insights:** Prioritize findings and patterns that are competition-specific, not generic ML practices.
 4. **Iterative Learning:** Continuously adapt your approach based on ongoing discoveries, foregoing rigid scripts.
+5. **DO NOT** search for winning solutions from this specific competition.
 
 {domain_discovery}
 
