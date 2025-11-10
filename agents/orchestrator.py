@@ -572,7 +572,7 @@ class Orchestrator:
         return "No plan.md found."
 
     @weave.op()
-    def run(self, max_time_seconds: int | None = 6 * 3600) -> Tuple[bool, str]:
+    def run(self) -> Tuple[bool, str]:
 
         # Phase 1: Starter Agent - Get task type and summary
         starter_suggestion_path = self.outputs_dir / "starter_suggestions.json"
