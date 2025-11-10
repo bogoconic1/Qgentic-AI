@@ -271,7 +271,7 @@ def read_research_paper(arxiv_link: str) -> str:
     logger.info("Reading research paper with arxiv ID: %s", arxiv_id)
 
     try:
-        client = GeminiPaperSummaryClient()
+        client = GeminiPaperSummaryClient(is_model=False)
         summary = client.generate_summary(model_name=arxiv_id)
         logger.info("Successfully generated paper summary (length: %d chars)", len(summary))
         return summary

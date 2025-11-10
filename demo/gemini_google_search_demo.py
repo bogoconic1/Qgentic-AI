@@ -9,7 +9,7 @@ from tools.gemini_google_search import GeminiPaperSummaryClient
 
 
 def generate(model_name: str) -> str:
-    client = GeminiPaperSummaryClient()
+    client = GeminiPaperSummaryClient(is_model=True)
     return client.generate_summary(model_name=model_name)
 
 

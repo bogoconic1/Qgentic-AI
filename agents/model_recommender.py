@@ -440,7 +440,7 @@ class ModelRecommenderAgent:
         """
         logger.info("Starting paper summary retrieval for %d models", len(model_names))
 
-        client = GeminiPaperSummaryClient()
+        client = GeminiPaperSummaryClient(is_model=True)
         summaries = {}
 
         # Fetch summaries in parallel
