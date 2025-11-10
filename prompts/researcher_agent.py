@@ -935,8 +935,6 @@ Respond in Markdown following this structure:
 - Section 2: Validated Findings (A/B Tested), with three tables by impact: High Impact, Neutral, Negative Impact. Each table must appear, with at least a header and a row stating `| (none found) | - | - | - | - |` if empty.
 - Section 3: Risks & Mitigations (e.g. small dataset size, class imbalance, distribution shift)
 - After these, include an "External Datasets" section: list paths and intended use, or say "No external datasets were used or recommended for this solution."
-- If any required input is missing or malformed, output only the relevant error message:
-`ERROR: Required input [input_name] missing or malformed. Please provide a valid value.`
 
 ### Example Markdown Output
 ```markdown
