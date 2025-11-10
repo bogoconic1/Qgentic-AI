@@ -1,37 +1,331 @@
 from __future__ import annotations
 
 
-def _get_task_specific_requirements(task_type: str | list[str]) -> str:
-    """Return task-specific feature engineering and exploration requirements.
+def _get_domain_discovery_phase() -> str:
+    """Universal domain discovery phase that applies to all task types."""
+    return """
+# PHASE 0: DOMAIN CONTEXT DISCOVERY (MANDATORY - Budget: 30-40 minutes)
 
-    Args:
-        task_type: Single task type string or list of task types (for multimodal)
+Before making ANY plan, you MUST complete this domain discovery phase. This is NOT optional.
+
+## Step 1: Identify the Domain (5 minutes)
+
+Answer these questions:
+1. **What real-world domain is this?** (medical, agriculture, finance, remote sensing, manufacturing, retail, etc.)
+2. **What domain-specific terminology** appears in:
+   - Column names (e.g., technical terms, measurements, specialized fields)
+   - Target names (e.g., domain-specific outcomes or measurements)
+   - Metadata fields (e.g., timestamps, locations, categorical groupings)
+3. **What's the actual use case?** (What will this model be used for in the real world?)
+4. **Who are the stakeholders?** (Who cares about this problem? Farmers, doctors, traders, etc.)
+
+## Step 2: Search for Domain Knowledge (15-20 minutes)
+
+Use `read_research_paper()` and web search to gather domain context:
+
+**A. Dataset Paper (MANDATORY):**
+- Search: "[competition name] + arxiv + dataset"
+- If found, use `read_research_paper(arxiv_id)` to understand:
+  - Data collection methodology (how was data gathered?)
+  - Known limitations or challenges
+  - Domain-specific preprocessing considerations
+  - Intended use cases
+  - Multi-modal structures (if applicable)
+
+**B. Domain Literature:**
+- Search: "[domain] + [measurement_technique] + research"
+  - Example for medical: "CT scan lesion detection protocols", "MRI preprocessing standards"
+  - Example for retail: "customer churn prediction industry benchmarks", "RFM analysis e-commerce"
+- Search: "[domain] + [task_type] + kaggle winner solutions"
+  - Find similar past competitions
+  - What did winners emphasize?
+
+**C. Terminology Deep Dive:**
+- For each unfamiliar domain term, search: "[term] + definition + [domain]"
+- Understand: What does it measure? How is it collected? What are typical ranges?
+
+## Step 3: Identify Unique Domain Constraints (5 minutes)
+
+Answer:
+1. **Physics/Biology/Economic Relationships:**
+   - Are there known relationships between features? (e.g., ratios, sums, dependencies)
+   - Are there impossible value combinations? (e.g., physical limits, logical constraints)
+   - Are there domain-specific constraints? (e.g., medical ranges, business rules)
+
+2. **Measurement Context:**
+   - How were features collected? (manual, sensor, derived)
+   - Are there known measurement errors or biases?
+   - Do different collection methods exist? (e.g., multiple camera types)
+
+3. **Temporal/Spatial Considerations:**
+   - Does time matter? (seasons, trends, cycles)
+   - Does location matter? (geographic, climate, regional practices)
+
+## Step 4: Formulate Domain Hypotheses (10 minutes)
+
+List 5-10 hypotheses that are **SPECIFIC TO THIS DOMAIN** (not generic):
+
+**Format:**
+- **Hypothesis**: [Specific, testable claim]
+- **Rationale**: [Why this matters in this domain]
+- **Test approach**: [How to verify with EDA or A/B test]
+
+**Example for Medical Imaging:**
+- **Hypothesis**: Lesion visibility varies by patient age due to tissue density changes
+- **Rationale**: Medical imaging literature shows age-related tissue changes affect contrast
+- **Test approach**: Stratify lesion size distribution by age groups, check for systematic differences
+
+**Example for E-commerce:**
+- **Hypothesis**: Purchase frequency follows power law distribution (few heavy buyers, many occasional)
+- **Rationale**: E-commerce research shows 80/20 rule (Pareto principle) applies to customer behavior
+- **Test approach**: Plot purchase count distribution, fit power law, identify customer segments
+
+**REJECT GENERIC HYPOTHESES LIKE:**
+- ❌ "Images have different sizes" (not domain-specific)
+- ❌ "There might be class imbalance" (generic ML issue)
+- ❌ "We should check for duplicates" (standard data quality)
+
+## Step 5: Output Domain Context Summary
+
+Write a structured summary (this will guide all subsequent work):
+
+```markdown
+# Domain Context Summary
+
+## Domain: [name]
+Real-world use case: [description]
+Stakeholders: [who benefits]
+
+## Key Domain Insights from Literature
+1. [Insight from dataset paper]
+2. [Insight from domain literature]
+3. [Insight from terminology research]
+
+## Domain-Specific Constraints
+- Physics/Biology: [constraints]
+- Measurement: [collection methods, errors]
+- Temporal/Spatial: [considerations]
+
+## Domain-Specific Hypotheses (To Test)
+1. [Hypothesis 1]
+2. [Hypothesis 2]
+3. [Hypothesis 3]
+...
+```
+
+**CHECKPOINT:** Before proceeding, verify:
+- ✓ Read at least 1 domain paper (dataset or related)
+- ✓ Searched for domain-specific techniques (not generic ML)
+- ✓ Identified at least 5 domain-specific hypotheses
+- ✓ Can explain why this problem is unique (not just "it's CV/NLP/tabular")
+
+**If you cannot explain what makes this competition domain-unique, you MUST do more research before proceeding.**
+"""
+
+
+def _get_hypothesis_driven_exploration() -> str:
+    """Universal guidance for hypothesis-driven exploration."""
+    return """
+# HYPOTHESIS-DRIVEN EXPLORATION POLICY
+
+## Core Principle: Test Hypotheses, Not Checklists
+
+Traditional approach (BAD):
+```
+1. Check image sizes
+2. Check for duplicates
+3. Check target distribution
+4. Train baseline
+5. Done
+```
+
+Hypothesis-driven approach (GOOD):
+```
+1. Hypothesis: Camera type affects color calibration
+   → Test: Cluster images by color statistics, check for device groupings
+2. Finding: Three distinct clusters found
+   → New Hypothesis: Test set has different camera distribution
+   → Test: Adversarial validation on color features
+3. Finding: AUC=0.72 (strong shift)
+   → Recommendation: Train with camera-aware augmentation
+```
+
+## Execution Pattern
+
+**Stage 1: Initial Discovery (2-3 ask_eda calls)**
+- Quick exploration to understand data structure
+- Validate domain hypotheses from Phase 0
+- Identify surprising patterns
+
+**Stage 2: Deep Investigation (Based on Stage 1 findings)**
+- Focus on most promising hypotheses
+- Use domain knowledge to interpret findings
+- Formulate new hypotheses based on discoveries
+
+**Stage 3: Validation (A/B tests if needed)**
+- Test high-impact hypotheses quantitatively
+- Compare domain-informed approaches vs baselines
+
+## Self-Critique After Each Discovery
+
+After EVERY `ask_eda()` or `run_ab_test()` result, ask:
+
+1. **Uniqueness Check:**
+   - Did this reveal something UNIQUE to this domain?
+   - Or was it generic information (sizes, counts, distributions)?
+
+2. **Impact Assessment:**
+   - Could this finding change model design?
+   - Does it suggest a competitive advantage?
+   - Or is it just confirmation of expected patterns?
+
+3. **Next Question:**
+   - What new hypothesis does this suggest?
+   - What domain knowledge helps interpret this?
+   - What should I investigate next?
+
+**If you find yourself doing "standard EDA" without domain context, STOP and reconnect to Phase 0 insights.**
+"""
+
+
+def _get_few_shot_examples() -> str:
+    """Few-shot examples of good vs bad research approaches."""
+    return """
+# EXAMPLES: Good vs Bad Research Approaches
+
+## Example 1: Medical Imaging Competition
+
+### ❌ BAD APPROACH (Generic)
+```
+Plan:
+1. Check image sizes
+2. UMAP visualization
+3. Check for data leakage
+4. Train ResNet baseline
+```
+**Why Bad:** No medical domain awareness. Generic CV checklist.
+
+### ✅ GOOD APPROACH (Domain-Specific)
+```
+Domain Context:
+- CT scan lesion detection for early diagnosis
+- Challenge: Small lesions (<5mm) easily missed
+- Medical literature: Windowing critical for soft tissue visualization
+- DICOM metadata: Patient age, slice thickness, contrast protocol
+
+Hypothesis 1: Slice thickness affects lesion visibility (radiology standard)
+→ Test: Lesion detection rate by slice thickness (1mm vs 5mm)
+→ Finding: <5mm lesions: 40% visible in 5mm slices, 85% in 1mm slices
+→ Recommendation: Slice thickness as critical feature, upsample thick slices
+
+Hypothesis 2: Contrast protocol changes lesion appearance (medical knowledge)
+→ Test: Cluster images by pixel intensity distribution, check protocol labels
+→ Finding: Two distinct clusters align with "with contrast" vs "without contrast"
+→ Recommendation: Train separate models or add protocol as strong categorical
+
+Hypothesis 3: Patient age affects tissue density (medical literature)
+→ Test: Hounsfield unit (HU) distribution by age group
+→ Finding: Older patients have lower density (harder to detect lesions)
+→ Recommendation: Age-aware preprocessing or stratified training
+
+Plan:
+- Windowing preprocessing (medical standard for CT)
+- Slice thickness normalization (upsample or weight by thickness)
+- Protocol-aware models (separate paths for contrast vs non-contrast)
+- Age as feature (tissue density proxy)
+```
+**Why Good:** Deep medical domain knowledge. Hypotheses from radiology literature.
+
+---
+
+## Example 2: E-commerce Customer Behavior (Tabular)
+
+### ❌ BAD APPROACH (Generic)
+```
+Plan:
+1. Check for missing values
+2. Target encode all categoricals
+3. Create all pairwise numeric interactions
+4. Train XGBoost baseline
+```
+**Why Bad:** No business domain awareness. Brute-force feature engineering.
+
+### ✅ GOOD APPROACH (Domain-Specific)
+```
+Domain Context:
+- Customer churn prediction for subscription service
+- Business goal: Identify at-risk customers before cancellation
+- E-commerce literature: RFM (Recency, Frequency, Monetary) framework
+- Industry benchmark: 80/20 rule (20% of customers drive 80% revenue)
+
+Hypothesis 1: Recent activity strongly predicts retention (RFM principle)
+→ Test: Days since last purchase vs churn rate
+→ Finding: Exponential relationship - 30+ days inactive = 70% churn rate
+→ Recommendation: Recency as top feature, non-linear transform (log/exp)
+
+Hypothesis 2: Customer segments behave differently (business knowledge)
+→ Test: Cluster customers by purchase patterns (RFM-based k-means)
+→ Finding: 4 segments - VIP (5%), Regular (20%), Casual (50%), At-Risk (25%)
+→ Recommendation: Segment-specific models or segment as strong categorical
+
+Hypothesis 3: Seasonality affects churn (retail domain)
+→ Test: Churn rate by month/quarter
+→ Finding: +40% churn after holiday season (Jan-Feb)
+→ Recommendation: Seasonal features (cyclical encoding), time-aware validation
+
+Plan:
+- RFM feature engineering (Recency, Frequency, Monetary value)
+- Customer lifetime value (CLV) calculation (business metric)
+- Segment identification and encoding (business-driven clustering)
+- Seasonal feature engineering (retail calendar-aware)
+- Validation strategy: Time-based split (avoid lookahead bias)
+```
+**Why Good:** Business and e-commerce domain expertise. RFM framework from literature.
+
+---
+
+## Key Patterns in Good Research
+
+1. **Domain literature informs hypotheses** (not generic ML intuition)
+2. **Every finding connects to real-world context** (why it matters)
+3. **Recommendations are competition-specific** (not applicable everywhere)
+4. **Metadata is interpreted through domain lens** (not just "extra features")
+5. **Physics/biology/domain constraints guide model design** (not just accuracy)
+"""
+
+
+def _get_task_specific_requirements(task_type: str | list[str]) -> str:
+    """Return task-specific exploration guidelines (NOT prescriptive checklists).
+
+    These are GUIDELINES for what to explore, not mandatory step-by-step instructions.
+    The researcher should adapt based on domain discoveries.
     """
-    # Handle multimodal case: combine multiple task types
+
+    # Handle multimodal case
     if isinstance(task_type, list):
         if len(task_type) == 1:
             task_type = task_type[0]
         else:
-            # Multimodal: combine requirements from all task types
+            # Multimodal: combine requirements
             sections = []
             for t in task_type:
                 sections.append(_get_task_specific_requirements(t))
 
-            # Add multimodal-specific guidance
             multimodal_header = f"""
 ## MULTIMODAL Competition Detected: {' + '.join(task_type).upper()}
 
-This competition requires handling multiple data modalities. In addition to the task-specific requirements below, consider:
+This competition requires handling multiple data modalities. Consider:
 
-### Multimodal Fusion Strategies (Test at least 3)
-- **Early fusion**: Concatenate features from all modalities before model input (simple, effective baseline)
-- **Late fusion**: Train separate models per modality, ensemble predictions (reduces overfitting risk)
-- **Cross-attention**: Attention mechanisms between modalities (captures interactions)
-- **Stacking**: Use predictions from unimodal models as features for meta-model
+### Multimodal-Specific Hypotheses to Explore
+- **Early vs late fusion**: Which modality is more informative? Should they be combined early or late?
+- **Modality alignment**: Are all modalities correctly aligned per sample?
+- **Complementary information**: Do modalities provide unique or redundant information?
+- **Cross-modal interactions**: Do certain patterns in one modality predict patterns in another?
 
-### Data Alignment
-- Ensure all modalities are correctly aligned per sample (matching IDs, timestamps)
-- Handle missing modalities gracefully (imputation, separate pathways)
+### Domain Questions
+- Why are these modalities collected together? (Domain rationale)
+- Which modality is most reliable for this task? (Domain expertise)
+- Are there known modality-specific artifacts or biases?
 
 ---
 """
@@ -39,730 +333,295 @@ This competition requires handling multiple data modalities. In addition to the 
 
     if task_type == "tabular":
         return """
-## MANDATORY Task-Specific Requirements: Tabular Data
+Developer: ## Task-Specific Exploration Guide: TABULAR
 
-### Minimum Experiment Coverage
-You MUST conduct at least **20-30 A/B tests** covering the following categories. Track your progress and ensure sufficient breadth before concluding research.
+**Important:** These are suggested AREAS TO EXPLORE based on domain hypotheses, rather than a compulsory checklist.
 
-### 1. Numerical Feature Transformations (Test at least 15)
+Begin with a concise checklist (3-7 bullets) of what you will do; keep items conceptual, not implementation-level.
 
-**Quasi-discrete numeric encodings** (Test at least 5) - you MUST NOT drop the original numeric feature:
-- **Identification of quasi-discrete numerics**: Identify numeric features with **low cardinality (<5% unique values)**, and treat these features' **raw values** as **categorical (no binning)**.
-- **Target-based**: Target encoding, Weight of Evidence (WOE), M-Estimate, CatBoost encoding (on raw numeric values)
-- **Ordinal encoding**: For naturally ordered categories or by target mean
+### Domain-First Approach
 
-**Low-Correlation numeric encoding** (Test at least 5) - you MUST NOT drop the original numeric feature:
-- **Identification of low-correlation numerics**: Identify numeric features with **low absolute correlation with target (|r| < 0.2)**, and treat these features' **raw values** as **categorical (no binning)**.
-- **Target-based**: Target encoding, Weight of Evidence (WOE), M-Estimate, CatBoost encoding (on raw numeric values)
-- **Ordinal encoding**: For naturally ordered categories or by target mean
+Before diving into feature analysis, consider:
+1. **What does each feature represent in the real world?**
+   - Is it a sensor reading, financial metric, or an indicator of user behavior?
+2. **Which features are measured directly versus derived?**
+   - Can you reconstruct derivations? (e.g., Total = sum of components)
+3. **What feature combinations make sense in this domain?**
+   - What do domain experts typically combine? (e.g., BMI = weight/height²)
 
-### 2. Categorical Encodings (Test at least 5)
-- **Frequency-based**: Count encoding, rank encoding by frequency
-- **Target-based**: Target encoding, Weight of Evidence (WOE), M-Estimate, CatBoost encoding
-- **Ordinal encoding**: For naturally ordered categories or by target mean
+### Feature Understanding (Domain Context)
 
-### 3. Interaction Features (Test at least 10)
-**Categorical × Categorical**:
-- Systematic 2-way combinations: Concatenate pairs of categoricals (cat1 + "_" + cat2)
-- High-value 3-way combinations if 2-way shows promise
-- Volume approach: Generate 50-100 combinations, select top performers by univariate importance
+#### Numerical Features
+- What does each numerical feature measure? (Consider units, ranges, and real-world meaning)
+- Are there numerical attributes that are actually categorical? (e.g., "num_floors" = {1,2,3})
+- Do some low-correlation numerics actually represent categories? (e.g., "region_code")
+- Which domain-specific transformations are appropriate? (e.g., logarithm for price, square root for area)
 
-**Numerical × Numerical**:
-- Arithmetic operations: addition, subtraction, multiplication, division (ratios)
-- Domain-specific ratios
-- Systematic 2-way combinations: Concatenate pairs of numerics (str(num1) + "_" + str(num2))
-- High-value 3-way combinations if 2-way shows promise
+#### Categorical Features
+- What does each category signify in the domain?
+- Are ordinality or ordering present? (e.g., education levels, disease stages)
+- Are there hierarchies in the categories? (e.g., city → state → country)
+- Should rare categories be grouped based on domain understanding?
 
-**Categorical × Numerical** (GroupBy aggregations):
-- For each categorical or pair, compute: mean, std, min, max, median, count
-- Deviation features: `(value - group_mean)` or `value / group_mean`
-- Rank within group, percentile within group
-- Systematic 2-way combinations: Concatenate pairs of numerics (str(num1) + "_" + str(num2))
-- High-value 3-way combinations if 2-way shows promise
+#### Feature Interactions
+Rather than brute force, prioritize:
+- **Interactions used by domain experts** (from domain literature)
+- **Physics or logical constraints** (e.g., speed = distance/time)
+- **Meaningful ratios** (e.g., debt-to-income, price-per-square-foot)
 
-### 4. Aggregation Features (Test at least 4 groupby strategies)
-For meaningful categorical groupings, create:
-- **Basic stats**: mean, median, std, min, max, count, sum
-- **Spread metrics**: range (max-min), coefficient of variation (std/mean), IQR
-- **Distribution stats**: skewness, kurtosis within groups
-- **Target statistics**: If applicable, mean target per group
+**Example – Domain-Driven Feature Engineering:**
+- Poor approach: Generate all pairwise numeric interactions (brute force)
+- Better approach: For real estate, price-per-square-foot is a domain-standard metric → Compare sqft/price ratio against raw features
 
-### 5. Missing Value Engineering (If applicable)
-- **Indicator features**: Binary flags for missingness per feature
-- **Missing count per row**: Total number of null features
-- **Imputation strategy comparison**: Mean vs median vs KNN vs model-based
+### Target Analysis (Domain Context)
 
-### 6. Target Transformations (Test at least 3)
-For regression tasks, transform the target variable and predict transformed values:
-- **Square root / Power transforms**: `sqrt(y)`, `y^0.5`, `y^2` for compressing/expanding target range
-- **Yeo-Johnson**: Automatic optimal power transformation
-- **Rank-based / Quantile**: Transform target to uniform distribution (robust to outliers)
-- **Residual prediction**: Train initial model → predict residuals → stack predictions (iterative refinement)
-- **Pseudo-Huber / Tweedie**: For targets with heavy tails or zero-inflation
-- **Clipping / Winsorization**: Cap extreme target values at percentiles (e.g., 1st/99th)
+#### For Regression
+- What does the target represent in real-world terms?
+- Are there typical domain-specific transformations? (e.g., log-transform for income, sqrt-counts for populations)
+- Are there known relationships between features and target? (e.g., exponential growth, saturation patterns)
 
-For classification tasks with class imbalance:
-- **Class weights**: Adjust loss function weights inversely proportional to class frequencies
-- **Focal loss**: Down-weight easy examples, focus on hard negatives (gamma=2.0 typical)
-- **Label smoothing**: Soften hard labels (0/1) to (ε, 1-ε) to prevent overconfidence
+#### For Classification
+- How do the classes correspond to real-world categories?
+- Is the class imbalance expected within the domain? (e.g., rare occurrence of fraud)
+- Are classes ordinal? (e.g., disease stages: mild < moderate < severe)
 
-Universal
-- **Predict special target**: e.g. predict `target - certain feature value` instead of `raw target` if meaningful
+### A/B Testing Strategy (Hypothesis-Driven)
 
-### Iteration Policy for Tabular Tasks
-- **When simple features fail**: If basic ratios or arithmetic features show negative impact, you MUST test:
-  - Complex interactions (categorical × numerical groupby aggregations)
-  - Polynomial combinations
-  - Domain-specific derived features based on web research
-- **When encodings fail**: If target encoding fails, test WOE, frequency before concluding
-- **When transforms fail**: If Yeo-Johnson fails, test quantile transforms
-- **Never conclude after 2-3 failures**: Each category should have 4-5 attempts minimum
-- **Remember:** it is common practice on Kaggle Competitions to engineer 100+ features (even complex ones) and prune down later.
+**Do not test randomly—test domain-informed hypotheses:**
 
-### Progress Tracking
-At each milestone, report:
-- Total A/B tests completed: X/20 minimum
-- Coverage by category: Transformations (X/5), Encodings (X/5), Interactions (X/6), etc.
-- Top 3 most promising directions for further exploration
+**Good A/B test sequence:**
+1. **Baseline:** Use basic features to assess signal strength
+2. **Domain Feature Test:** Add features known from domain literature (e.g., BMI in health data)
+3. **Physics Constraint Test:** Add features derived from domain-relevant laws (e.g., speed = distance/time)
+4. **Domain Encoding Test:** Encode categorical features using knowledge of domain hierarchy
+
+**Bad A/B test sequence:**
+1. Baseline
+2. Try target encoding (unmotivated by hypothesis)
+3. Add all pairwise interactions (brute force, lacking domain reasoning)
+4. Change imputation without evidence for missingness
+
+### Progress Self-Check
+
+After your exploration, confirm:
+- ✓ Can every feature be explained in domain terms?
+- ✓ Are engineered features anchored in domain meaning, not arbitrary math?
+- ✓ Do A/B tests correspond to domain-specific hypotheses?
+- ✓ Would a domain expert recognize or agree with your feature engineering?
+
+If your feature engineering is driven by generic methods without domain context, pause and reconnect with domain knowledge.
+
+After your analysis, provide a brief validation (1-2 lines) confirming your approach is domain-relevant and highlighting the next logical step or any necessary self-corrections.
 """
 
     elif task_type == "nlp":
-        return """
-## MANDATORY Task-Specific Requirements: NLP/LLM
-
-### Minimum EDA and Research Coverage
-You MUST complete the following EDA tasks and research documentation. Training technique optimization is deferred to Developer phase.
-
-### 1. Basic Text Statistics (MANDATORY)
-
-**Length Analysis**:
-- Character count distribution (mean, median, std, min, max, quartiles)
-- Token count distribution
-- Sentence count distribution
-- Word count distribution
-- Visualize with histograms and box plots
-- Length by class/target: Check correlation between length and target
-- Identify outliers: Extremely short/long texts (top/bottom 1%)
-
-**Target Analysis**:
-- Class distribution and class imbalance
-- Samples per class
-- For ordinal targets: Check monotonic relationships with length and other features
-- Target correlations with length features
-
----
-
-### 2. Vocabulary Analysis (Analyze at least 5 aspects)
-
-**N-gram Frequency Analysis**:
-- Top 20-50 unigrams (single words) - use CountVectorizer
-- Top 20-50 bigrams (2-word phrases)
-- Top 20-50 trigrams (3-word phrases) if relevant
-- Visualize with bar charts (NOT word clouds - bar charts show exact frequencies)
-
-**Vocabulary Metrics**:
-- Total vocabulary size (unique words)
-- Vocabulary richness: type-token ratio (unique words / total words)
-- Vocabulary overlap between train and test: Jaccard similarity on top-5k vocab
-- Unseen token rate in test set
-
----
-
-### 3. Linguistic Features (Analyze at least 3)
-
-**Part-of-Speech (POS) Tagging**:
-- Most frequent nouns (top 20-30)
-- Most frequent verbs (top 20-30)
-- Most frequent adjectives (top 20-30)
-- POS distribution patterns across classes/targets
-
-**Named Entity Recognition (NER)** (if relevant to task):
-- Extract named entities: people, locations, organizations, dates
-- Entity frequency analysis
-- Visualize entity distributions
-
-**Sentiment Analysis** (if relevant to task):
-- Polarity scores: positive/negative/neutral distributions
-- Sentiment distribution by class/target
-- Use TextBlob, VADER, or similar
-
-**Lexical Metrics**:
-- Type-token ratio by class/target
-- Punctuation density: punctuation count / character count
-- Digit density: digit count / character count
-- Readability scores (if relevant): Flesch-Kincaid, complexity metrics via textstat
-
----
-
-### 4. Distribution Shift Detection (MANDATORY)
-
-**Adversarial Validation**:
-- Extract features from train and test: TF-IDF (1000-5000 features) OR simple statistics (length, lexical)
-- Combine datasets and label: train=0, test=1
-- Train binary classifier: LightGBM or XGBoost with 5-fold CV
-- Evaluate AUC:
-  - AUC ≈ 0.5: No distribution shift (random guessing)
-  - AUC 0.5-0.6: Mild shift
-  - AUC > 0.6: Significant distribution shift
-- Analyze feature importance: Which features differ most between train and test?
-- **If AUC > 0.6**: Use prediction probabilities to create adversarial validation split (high-prob train samples = test-like validation)
-
-**Statistical Distribution Comparison**:
-- Length distributions: KS test for token count, sentence count, character count
-- Lexical features: KS test for type-token ratio, punctuation density
-- Target distribution (if test labels accessible): Chi-square test
-
-**Data Source Identification**:
-- Identify if train data comes from multiple sources (check metadata, file paths, timestamps)
-- Compare distributions across sources if multiple exist
-- Document source-specific characteristics
-
-**If shift detected (AUC > 0.6), recommend strategies**:
-- Two-stage training (pretrain on source A → fine-tune on source B)
-- Pseudo-labeling (train on labeled → predict unlabeled → retrain on high-confidence ≥0.9)
-- Data source classification head
-- Adversarial validation-based splitting
-
----
-
-### 5. Data Quality Checks (MANDATORY)
-
-**Missing Values**:
-- Check all text fields for null/empty values
-- Check all metadata fields
+        return """## Task-Specific Exploration Guide: NLP
 
-**Duplicates**:
-- Exact duplicate detection (identical text)
-- Near-duplicate detection (similarity threshold >0.95)
-
-**Leakage Detection**:
-- ID diagnostics: Check for leakage patterns (ID correlation with target via Spearman)
-- Cross-split overlap: Check for train/test ID overlap (should be zero)
-- Metadata leakage: Check for suspiciously predictive metadata
+**Note:** These are areas to explore based on domain hypotheses—not a mandatory checklist. Begin with a concise checklist (3-7 bullets) summarizing your intended exploration steps, ensuring alignment with the domain context.
 
-**Language Detection** (if not specified):
-- Detect language for each sample (use langdetect or similar)
-- Calculate non-English rate
-- Flag mixed-language samples if present
+### Domain-First Approach
 
----
+Before analyzing text, consider:
+1. **Source of the text:**
+   - Is it from social media, academic papers, customer reviews, or medical notes?
+2. **Authorship and intent:**
+   - Who wrote the text, and for what purpose (e.g., professional writers, general public, domain experts)?
+3. **Relevant linguistic features:**
+   - Sentiment (reviews), medical terminology (clinical), formality (legal), etc.
 
-### 6. Model Architecture Research (Document at least 6-8 models - DO NOT A/B TEST)
+### Text Understanding (Domain Context)
 
-**Purpose**: Research models via web search for Developer phase selection
-**Method**: Read papers, HuggingFace docs, blog posts
-**Deliverable**: Markdown documentation with citations
+**Basic Statistics—With Domain Perspective:**
+- **Length:** Is brevity or detail valued (e.g., tweets vs. essays)?
+- **Vocabulary:** Is specialized terminology expected (e.g., medical, legal, scientific)?
+- **Writing conventions:** Are there domain-specific conventions (e.g., citation style, formatting)?
 
-**Encoder Models (document 3-4)**:
-- **DeBERTa v3** (base, large, xsmall)
-  - Document: Architecture, context length (512), pretraining approach, use cases
-  - Citation: arXiv paper, HuggingFace card
+**Domain-Specific Linguistic Analysis:**
+Instead of reporting generic "top words," consider:
+- **Domain terms indicating expertise:** (e.g., "myocardial infarction" vs. "heart attack")
+- **Key linguistic markers:** (e.g., hedge words in scientific text, urgency in support tickets)
+- **Recurring domain-specific patterns:** (e.g., legal clauses, medical abbreviations)
 
-- **ModernBERT** (base, large)
-  - Document: 8k context, rotary embeddings, unpadding, speed benchmarks
-  - Citation: HuggingFace docs, blog
+**Example of Domain-Driven Analysis:**
+- **Uninformative:** "Top 50 unigrams are: the, and, of, ..."
+- **Informative:** "In medical texts, 'chronic' appears three times more in severe cases (domain signal); abbreviations (HTN, DM) cluster by specialty (domain structure)."
 
-- **Domain-Specific** (if applicable): BioBERT, SciBERT, LegalBERT, FinBERT
-  - Document: When to use, domain advantages
-  - Citation: Model cards
+### Distribution Shift (Domain Context)
 
-**Decoder LLMs - Small (document 2-3)**:
-- **Gemma 2** (2B, 9B): Lightweight, strong performance
-- **Qwen2.5** (0.5B-7B): 128k context, instruction following
-- **Phi-3.5** (mini 3.8B): Efficient, instruction following
-- **Llama 3.1** (8B): 128k context, teacher capabilities
+**Adversarial Validation—Interpreted with Domain Understanding:**
+If AUC > 0.6 (shift detected), consider:
+- **Potential domain explanations:**
+  - Temporal shift (e.g., evolution in writing style)
+  - Source shift (e.g., different forums, authors, publications)
+  - Topic shift (e.g., training on general and testing on a specific subdomain)
+- **Impact of shift on task performance:**
+  - Is the shift correlated with the target? (serious problem)
+  - Or is it stylistic only? (less critical)
 
-**For each model, document**:
-- Architecture highlights
-- Context length
-- Typical use cases (classification vs generation)
-- Strengths/weaknesses
-- When to prefer over alternatives
-- Citations (papers, blogs, model cards)
+**Example:**
+- **Uninformative:** "AUC=0.73, there's distribution shift."
+- **Informative:** "AUC=0.73 driven by publication year (feature importance). Train = 2015–2020, test = 2021–2025. Medical terminology evolves (COVID-19, new drugs). Recommendation: Use two-stage training or domain adaptation."
 
-**NO A/B TESTING** - Developer will select and optimize
+### Model Selection (Domain-Informed)
 
----
+**Go beyond listing models—explain domain suitability:**
 
-### 7. Advanced Techniques Research (Document at least 3-5 - DO NOT A/B TEST)
+Example of informed model choices:
+- **DeBERTa:** General-purpose model, suitable for datasets with over 10k samples.
+- **BioBERT:** Pre-trained on PubMed data—use for medical text.
+- **SciBERT:** Pre-trained on scientific literature—appropriate for academic domains.
+- **LegalBERT:** Pre-trained on legal documents—suitable for legal domains.
 
-**Purpose**: Research SOTA techniques for Developer reference
-**Method**: Web search papers, Kaggle writeups, blog posts
+**Domain-relevant questions:**
+- Are specialized pre-trained models available for the domain? (search: "[domain] BERT model")
+- What is the typical context length in this domain? (e.g., tweets are short, documents are long)
+- Is text generation (decoder) or classification (encoder) needed?
 
-**Required Techniques**:
+### A/B Testing Strategy (Hypothesis-Driven)
 
-**1. Two-Stage Training / Domain Adaptation**
-- Method: Pre-train on external data → fine-tune on competition data
-- When: Distribution shift detected
-- Implementation notes: Freeze/unfreeze strategies, LR scheduling
-- Citation: Research papers, writeups
+**Test domain-specific hypotheses, not just generic techniques:**
 
-**2. Pseudo-Labeling**
-- Method: Train on labeled → predict unlabeled → retrain on high-confidence
-- When: Unlabeled test/external data available
-- Implementation notes: Confidence thresholds (≥0.9), iteration strategies
-- Citation: Papers, Kaggle discussions
+Example of a good A/B test:
+- **Hypothesis:** Expanding medical abbreviations improves accuracy (based on domain literature).
+- **Test:** (A) Raw text vs. (B) Expanded abbreviations (HTN → hypertension).
+- **Rationale:** Domain models may not have seen certain abbreviations during pre-training.
 
-**3. Ordinal Regression** (for scoring/rating tasks):
-- Methods: CORAL, weighted kappa loss (dlordinal)
-- When: Target is ordinal (1-6 scores, ratings)
-- Implementation notes: Rank-consistent logits, monotonic thresholds
-- Citation: arXiv 1901.07884
+Examples of less useful A/B tests:
+- (A) BERT vs. (B) RoBERTa (model comparison without hypothesis)
+- (A) No augmentation vs. (B) Back-translation (lacks domain rationale)
 
-**4. Knowledge Distillation**:
-- Method: Large teacher (Llama 70B, Qwen 72B) → small student (Gemma 2B)
-- When: Inference constraints (CPU-only, latency)
-- Implementation notes: Soft labels, temperature scaling, quantization
-- Citation: Papers, writeups
+### Progress Self-Check
 
-**5. Retrieval-Augmented Generation (RAG)**:
-- Method: Retrieve relevant context → augment input → generate
-- When: Knowledge-intensive tasks (Q&A, fact-checking)
-- Implementation notes: Dense (FAISS) + sparse (BM25) hybrid
-- Citation: Papers, tutorials
+After exploration, confirm:
+- ✓ Did I identify domain-specific linguistic patterns?
+- ✓ Can I explain distribution shift in domain terms?
+- ✓ Are my model choices informed by domain characteristics?
+- ✓ Do my A/B tests target domain-specific hypotheses?
 
-**For each, document**: Explanation, when/why to use, implementation considerations, citations
-
-**NO A/B TESTING** - Developer implements if applicable
-
----
-
-### 8. External Data Discovery (Use tool)
-
-Use `download_external_datasets(q1, q2, q3)` tool:
-- Find datasets for two-stage training
-- Validate label compatibility and text format
-- Distribution comparison with competition data
-- Document intended use
-
----
-
-### 9. Quick Baseline (1 run only - DO NOT iterate)
-
-**Purpose**: Establish baseline performance signal
-
-Build **1 single baseline run**:
-- Model: deberta-v3-xsmall
-- **NO iteration, NO optimization** - just establish signal
-- If your results don't make sense, change the way you split data into 80/20 and run again
-
-**Output**: Baseline score (e.g., 0.85 accuracy)
-
----
-
-### 10. Optional Data-Level A/B Tests (0-5 tests max)
-
-**ONLY test if EDA reveals specific data issues**:
-
-Example tests:
-- **External data integration validation** (if format/label issues):
-  - Test: (A) Competition data only vs (B) + external data (normalized labels)
-
-**DO NOT TEST** (Developer optimizes these):
-- ❌ Pooling methods ([CLS] vs mean vs attention-weighted)
-- ❌ Fine-tuning strategies (layer-wise LR, gradual unfreezing)
-- ❌ Augmentation techniques (back-translation, EDA, MLM)
-- ❌ Training schedules (warmup, cosine, one-cycle)
-- ❌ Loss functions (CrossEntropy vs Focal vs ordinal losses)
-- ❌ Batch sizes, precision (fp16 vs bf16)
-- ❌ Regularization (dropout, adversarial training)
-
-**Rationale**: Training techniques are model-specific. Developer phase will discover optimal configs through iterative SOTA-driven improvements with web search.
-
----
-
-### Reference: Training Techniques (DOCUMENT ONLY - NO A/B TESTING)
-
-Keep the following as **REFERENCE** for Developer phase (DO NOT test in Researcher phase):
-
-**Fine-tuning Strategies**:
-- Layer-wise LR decay (0.9-0.95 per layer)
-- Gradual unfreezing (freeze → unfreeze top → unfreeze all)
-- Pooling methods ([CLS], mean, max, attention-weighted)
-- Long text handling (head+tail, sliding window, hierarchical)
-
-**Data Augmentation**:
-- Back-translation (En→De→En, En→Fr→En)
-- EDA (synonym replacement, insert/swap/delete, p=0.1-0.2)
-- Paraphrasing (T5-based, LLM-based)
-- Contextual word substitution (BERT MLM)
-- AEDA (random punctuation insertion)
-
-**Training & Optimization**:
-- Learning rates (1e-5, 2e-5, 3e-5, 5e-5)
-- Warmup (5-10% of steps)
-- Schedules (cosine, cosine with restarts, one-cycle)
-- Optimizers (AdamW, gradient clipping)
-- Loss functions (CrossEntropy, Focal, label smoothing, Bi-Tempered)
-- Regularization (dropout, adversarial training FGM/PGD, multi-sample dropout)
-- Batch sizes (8, 16, 32, 64), gradient accumulation
-- Mixed precision (fp16, bf16)
-
-**Mark all as**: "REFERENCE ONLY - Developer phase will test these via SOTA search and iterative improvement"
-
----
-
-### Progress Tracking
-
-At each milestone, report:
-- **Basic Text Statistics**: ✓/✗
-- **Vocabulary Analysis**: X/5 aspects completed
-- **Linguistic Features**: X/3 aspects completed
-- **Distribution shift**: AUC = [value], Shift detected: Yes/No
-- **Data quality checks**: ✓/✗
-- **Model architectures DOCUMENTED**: X/6-8 (web search, written with citations)
-- **Advanced techniques DOCUMENTED**: X/3-5 (web search, written with citations)
-- **External datasets found**: X datasets
-- **Quick baseline score**: [score]
-- **Optional data-level A/B tests**: X/5 max (only if data issues found)
+If performing only standard NLP analysis without domain context, STOP and reconnect to domain knowledge. After each exploration step or key analysis, briefly validate whether insights gained are domain-relevant and adjust your approach if needed.
 """
 
     elif task_type == "computer_vision":
-        return """
-## MANDATORY Task-Specific Requirements: Computer Vision
-
-### Minimum EDA and Research Coverage
-You MUST complete the following EDA tasks and research documentation. Training technique optimization is deferred to Developer phase.
-
-### 1. Image Statistics (MANDATORY)
-
-**Size and Resolution Analysis**:
-- Image size distributions: height, width (mean, median, std, min, max, quartiles)
-- Aspect ratio distribution
-- Resolution adequacy for task (too low/high resolution detection)
-- Visualize with histograms and box plots
-- Identify outliers: Unusually small/large images
-
-**Color Statistics**:
-- Mean and std per channel (R, G, B)
-- RGB histogram distributions
-- Color space analysis (check if grayscale, RGB, or other)
-- Brightness distribution
-
-**File Metadata**:
-- File formats (JPEG, PNG, TIFF, etc.)
-- Compression quality (if JPEG)
-- File size distribution
-- Corrupted/truncated image detection
-
-**Target Analysis**:
-- Class distribution and class imbalance
-- Samples per class
-- Multi-label distribution (if applicable)
-
----
-
-### 2. Embedding Visualization (MANDATORY - CRITICAL)
-
-**Purpose**: Detect patterns invisible to standard statistics - distribution shift, outliers, mislabeling, real vs synthetic images
-
-**Embedding Extraction**:
-- Use **DINOv2** (recommended) or **CLIP** to extract image embeddings
-- Extract embeddings for ALL train images
-- Extract embeddings for test images (if available)
-- Embedding dimension: 768 (DINOv2-base) or 512 (CLIP)
-
-**Dimension Reduction with UMAP**:
-- Apply UMAP to reduce embeddings to 2D or 3D
-- UMAP parameters: n_neighbors=15, min_dist=0.1 (tune if needed)
-- UMAP is preferred over t-SNE (faster, preserves global structure)
-
-**Visualization and Analysis**:
-- Create 2D scatter plot colored by:
-  - Class labels (check class separability)
-  - Train vs test (check distribution shift)
-  - Data source (if multiple sources exist)
-- Look for:
-  - **Distinct clusters by class**: Are classes separable?
-  - **Train/test separation**: Distribution shift indicator
-  - **Outliers**: Isolated points far from clusters (potential mislabeling or corruption)
-  - **Real vs synthetic**: Distinct clusters indicating synthetic data
-  - **Sub-clusters within classes**: Indicates intra-class diversity
-
-**Tools**:
-- **DINO Explorer**: Interactive visualization tool for DINOv2 embeddings
-- **Matplotlib/Plotly**: For custom visualizations
-- Save plots to media/ directory
-
----
-
-### 3. Distribution Shift Detection (MANDATORY)
-
-**Adversarial Validation on Embeddings**:
-- Extract DINOv2 or CLIP embeddings from train and test
-- Combine datasets and label: train=0, test=1
-- Train binary classifier: XGBoost or LightGBM on embeddings with 5-fold CV
-- Evaluate AUC:
-  - AUC ≈ 0.5: No distribution shift
-  - AUC 0.5-0.6: Mild shift
-  - AUC > 0.6: Significant distribution shift
-- Analyze feature importance: Which embedding dimensions differ most?
-- **If AUC > 0.6**: Use prediction probabilities to create adversarial validation split
-
-**Statistical Distribution Comparison**:
-- Image size: KS test for height, width distributions
-- Color statistics: KS test for mean RGB values
-- Aspect ratio: KS test
-- File format distribution: Chi-square test
-
-**Visual Inspection**:
-- Sample and visualize random train images
-- Sample and visualize random test images
-- Check for visual differences: lighting, quality, style, camera angles
-
-**If shift detected (AUC > 0.6), recommend strategies**:
-- Domain adaptation techniques
-- Adversarial validation-based splitting
-- Test-time augmentation strategies
-
----
-
-### 4. Data Quality Checks (MANDATORY)
-
-**Corruption Detection**:
-- Check for unreadable files (try loading all images)
-- Identify truncated images
-- Detect extremely low quality images (resolution <64x64 or similar)
+        return """## Task-Specific Exploration Guide: COMPUTER VISION
+
+**Note:** These are exploration areas based on domain hypotheses, not a strict checklist of requirements.
+
+Begin with a concise checklist (3–7 bullets) of what you will do; keep items conceptual, not implementation-level.
+
+### 1. Domain-First Approach
+Before analyzing images, consider:
+1. **Image Subject**:
+   - What are these images depicting? (e.g., medical scans, satellite imagery, product photos, biological specimens)
+2. **Capture Details**:
+   - Which imaging device was used? (microscope, camera, CT, satellite sensor)
+   - From what angle were images captured? (top-down, side, aerial)
+   - Under what environmental conditions? (lighting, weather, indoor, outdoor)
+3. **Salient Visual Patterns**:
+   - Which visual attributes are important in this domain? (texture, shape, color, spatial relationships)
+
+### 2. Image Understanding (Domain Context)
+
+**Basic Statistics (Domain Lens):**
+- **Size/Resolution:** Does the resolution suit the domain task?
+  - Medical: High-res may be needed for detecting small features (lesions)
+  - Satellite: Resolution dictates the smallest detectable object
+  - Product: Consistency often matters more than absolute size
+- **Color:** What is the significance of color in your context?
+  - Medical: Different tissues have distinctive colors/intensities
+  - Satellite: False-color composites may code specific information
+  - Manufacturing: Color can signify material or indicate defects
+
+**Domain-Specific Visual Analysis:**
+Rather than a generic check (e.g., "aspect ratio"), probe:
+- **Imaging Artifacts:** Which artifacts are present? (CT scatter, lens distortion, compression)
+- **Device Variations:** Are there differences between imaging devices? (consumer vs. professional, multiple sensors)
+- **Key Visual Features:** Which features signal targets? (texture for material, color for health, shape for objects)
+
+**Example—Domain Analysis:**
+- _Ineffective:_ "Images are 1024x768 RGB" (just metadata)
+- _Effective:_ "Aerial images: Color clustering reveals three camera types (consumer=warm, professional=neutral, drone=cool). Test set skewed toward professional (AUC=0.68). Implication: Cross-device color calibration is critical."
+
+### 3. Embedding Visualization (Domain Interpretation)
+
+**UMAP/t-SNE (Ask Domain Questions):**
+If clusters emerge, consider:
+- **Cluster Drivers:** What domain aspect explains these clusters? (camera, lighting, disease stage, species)
+- **Target Alignment:** Do clusters match targets (good)?
+- **Metadata Alignment:** Are clusters connected to metadata? (device, location, time)
+
+**Example:**
+- _Ineffective:_ "UMAP shows 3 clusters" (no interpretation)
+- _Effective:_ "Satellite images: 3 clusters align with sensor types (Sensor A=warm, B=neutral, C=cool). Sensor type explains 35% of visual variance. Implication: Sensor-aware calibration is critical."
+
+### 4. Distribution Shift (Domain Context)
+
+**Adversarial Validation (Domain Insight):**
+When AUC > 0.6, ask:
+- **Root Causes:**
+  - Device changes? (color calibration, resolution)
+  - Temporal differences? (season, lighting, subject changes)
+  - Geographic variance? (location-based)
+  - Source differences? (hospital A vs. B, satellite A vs. B)
+
+**Example:**
+- _Ineffective:_ "AUC=0.72, there's distribution shift."
+- _Effective:_ "AUC=0.72 is due to sampling date (feature importance). Train: 2014–2016 (summer-biased), Test: 2017 (seasonal balance). Implication: Need seasonal augmentation or use a balanced subset."
+
+### 5. Model Selection (Domain-Informed)
+
+**Explain Model-Task Fit (not just list):**
+Sample model selection reasoning:
+- **ConvNeXt:** Modern CNN; ideal for limited data (<10k images)
+- **Swin Transformer:** Hierarchical; excels for multi-scale objects (small to large)
+- **DINOv2:** Self-supervised; useful for domain shifts (zero-shot transfer)
+- **CLIP:** Vision-language; advantageous if text descriptions exist
+- **SAM:** Segmentation specialist; use for localization tasks
+
+**Domain Questions:**
+- Are there pre-trained models for this field? (e.g., RadImageNet for medical, Satlas for satellite)
+- What is the object size of interest? (small → ViT, multi-scale → Swin, large → CNN)
+- Is data scarce? (self-supervised pretraining: DINO, MAE)
+
+### 6. A/B Testing Strategy (Hypothesis-Driven)
+
+**Test domain-specific hypotheses, not generic techniques:**
+
+Example—Effective A/B Test:
+- **Hypothesis:** Camera device affects color (based on cluster analysis)
+- **Test:** (A) ImageNet normalization vs. (B) Device-specific normalization
+- **Rationale:** Generic normalization may weaken cross-device robustness
+
+Example—Ineffective A/B Test:
+- (A) EfficientNet vs. (B) ResNet (just model comparison)
+- (A) No augmentation vs. (B) MixUp (lacks domain rationale)
+
+### 7. Progress Self-Check
+
+After exploration, ensure:
+- [✓] Have you identified domain-specific visual patterns?
+- [✓] Can you explain distribution shifts in domain terms?
+- [✓] Are model choices tailored to domain specifics?
+- [✓] Do A/B tests address domain-informed hypotheses?
+
+If you find yourself performing "standard CV analysis" without domain context, pause and reconnect to domain knowledge.
 
-**Duplicate Detection**:
-- Exact duplicates: Compare image hashes (MD5 or perceptual hashing)
-- Near-duplicates: Use perceptual hashing with similarity threshold >0.95
-- Visualize duplicate groups
+After each substantive step or analysis, briefly validate your insight, noting if it supports or challenges domain hypotheses, and state your next step or adjustment. Set reasoning_effort = medium for this workflow: keep analysis and validation concise but thorough, matching the task complexity.
+"""
 
-**Mislabeling Detection via Clustering**:
-- Use embedding visualization from section 2
-- Identify samples far from their class cluster (potential mislabels)
-- Flag top 1-5% of outliers for manual review
+    else:
+        return f"""
+## Task-Specific Exploration Guide: {task_type.upper()}
 
-**Leakage Detection**:
-- Check for train/test overlap via image hashing
-- Check for suspiciously similar images across train/test (near-duplicates)
-- Metadata leakage: Check for predictive metadata (timestamps, filenames, EXIF)
-
----
-
-### 5. Metadata Analysis (if metadata available)
-
-**Feature Importance**:
-- If metadata exists (patient_id, location, camera_type, timestamps, etc.):
-  - Train Random Forest on metadata to predict target
-  - Analyze feature importance
-  - Identify highly predictive metadata features
-
-**Clustering Analysis**:
-- For categorical metadata: Apply TF-IDF vectorization + k-means clustering
-- Visualize cluster distributions
-- Check if clusters align with classes
-
-**Correlation Analysis**:
-- Compute correlations between numeric metadata and target
-- Identify strong correlations (|r| > 0.3)
-
----
-
-### 6. Pre-trained CNN Baseline (1-2 runs - DO NOT iterate extensively)
-
-**Purpose**: Establish performance benchmark, understand signal strength
-
-Build **1-2 quick baseline runs**:
-- **Model**: ConvNeXt-Tiny or EfficientNet-B0 (pre-trained on ImageNet)
-- **NO iteration, NO optimization** - just establish baseline
-- If your results don't make sense, change the way you split data into 80/20 and run again
-
-**Output**: Baseline score (e.g., 0.85 accuracy)
-
----
-
-### 7. Model Architecture Research (Document at least 8+ models - DO NOT A/B TEST)
-
-**Purpose**: Research architectures for Developer selection
-**Method**: Web search, papers, blog posts, benchmarks
-**Deliverable**: Markdown with citations
-
-**Modern CNNs (document 3-4)**:
-- **ConvNeXt** (Tiny, Small, Base)
-  - Document: Modern CNN design, competitive with transformers, when to use
-  - Citation: Paper, benchmarks
-
-- **EfficientNet V2** (B0-B3)
-  - Document: Accuracy/parameter ratio, training speed
-  - Citation: Paper, model cards
-
-- **U-Net** (variants)
-  - Document: Encoder-decoder, skip connections, use cases (segmentation)
-  - Citation: Paper, implementations
-
-**Vision Transformers (document 2-3)**:
-- **Swin Transformer** (Tiny, Small, Base)
-  - Document: Hierarchical, shifted windows, when to prefer over CNNs
-  - Citation: Paper, benchmarks
-
-- **ViT** (Base, Large)
-  - Document: Pure transformer, large dataset requirements
-  - Citation: Paper, model cards
-
-**Foundation Models (document 2-3)**:
-- **DINOv2**
-  - Document: Self-supervised features, embedding visualization, use cases
-  - Citation: Meta AI blog, paper
-
-- **CLIP**
-  - Document: Vision-language, zero-shot classification, embeddings
-  - Citation: OpenAI paper, model card
-
-- **SAM (Segment Anything)**
-  - Document: Zero-shot segmentation
-  - Citation: Meta AI blog
-
-**Classic Architectures (document 1-2 if needed)**:
-- ResNet, DenseNet (reliable baselines)
-- MobileNet (lightweight for inference)
-
-**For each model, document**:
-- Architecture type (CNN/Transformer/Hybrid)
-- Best use cases (small/large dataset, speed/accuracy tradeoff)
-- Input size requirements, pre-training datasets
-- When to prefer over alternatives
-- Citations
-
-**NO A/B TESTING** - Developer selects and optimizes
-
----
-
-### 8. Advanced Techniques Research (Document at least 3-5 - DO NOT A/B TEST)
-
-**Purpose**: Research SOTA techniques for Developer reference
-**Method**: Web search papers, Kaggle writeups, blog posts
-
-**Required Techniques**:
-
-**1. Self-Supervised Pre-training (MAE, DINO)**:
-- Method: Mask patches → reconstruct, or self-distillation
-- When: Limited labeled data, domain shift
-- Implementation notes: ViT backbone, masking ratios (75%)
-- Citation: MAE paper, DINOv2 blog
-
-**2. Embedding Visualization for Data Quality**:
-- Method: Extract embeddings (DINOv2/CLIP) → UMAP/t-SNE → visualize
-- When: Detect mislabeling, distribution shift, outliers, real vs synthetic
-- Implementation notes: Clustering analysis, outlier detection
-- Citation: Blog posts, tutorials
-
-**3. Progressive Training Strategies**:
-- Method: Train small resolution (224) → gradually increase (384/512)
-- When: Limited compute, overfitting issues
-- Implementation notes: LR adjustment per resolution change
-- Citation: Papers, Kaggle discussions
-
-**4. Test-Time Augmentation (TTA)**:
-- Method: Apply augmentations at inference → average predictions
-- When: Final ensemble, maximize accuracy
-- Implementation notes: Flips, rotations, crops, multi-scale
-- Citation: Writeups
-
-**5. Foundation Model Fine-tuning**:
-- Method: Use CLIP/DINOv2 features → fine-tune classifier
-- When: Limited data, domain shift, transfer learning
-- Implementation notes: Freeze backbone vs full fine-tune
-- Citation: Papers, tutorials
-
-**For each, document**: Explanation, when/why, implementation notes, citations
-
-**NO A/B TESTING** - Developer implements if applicable
-
----
-
-### 9. External Data Discovery (Use tool)
-
-Use `download_external_datasets(q1, q2, q3)` tool:
-- Find relevant datasets for pre-training
-- Validate image format, resolution, label compatibility
-- Document intended use
-
----
-
-### 10. Optional Preprocessing A/B Tests (0-5 tests max)
-
-**ONLY test if EDA reveals specific data issues**:
-
-Allowed tests:
-- **Normalization strategy** (if unusual color distribution detected):
-  - Test: (A) ImageNet normalization vs (B) Dataset-specific mean/std
-- **Resize strategy** (if varied aspect ratios found):
-  - Test: (A) Squash vs (B) Aspect-preserving padding
-- **Data cleaning** (if corruption/quality issues found):
-  - Test: (A) All images vs (B) Remove corrupted/outliers
-
-**DO NOT TEST** (Developer optimizes):
-- ❌ Augmentation techniques (MixUp, CutMix, RandAugment, etc.)
-- ❌ Training strategies (progressive resizing, multi-scale)
-- ❌ Optimization configs (LR schedules, warmup, batch sizes)
-- ❌ Regularization (dropout, label smoothing, stochastic depth)
-- ❌ Fine-tuning strategies (freeze/unfreeze, layer-wise LR)
-- ❌ Test-time augmentation (TTA)
-
-**Rationale**: Training strategies are model-specific. Developer phase will discover optimal configs through SOTA search and iterative improvement.
-
----
-
-### Reference: Training Techniques (DOCUMENT ONLY - NO A/B TESTING)
-
-Keep the following as **REFERENCE** for Developer phase (DO NOT test in Researcher phase):
-
-**Data Augmentation**:
-- Geometric: Flips, rotations, crops, affine transforms, elastic deformation
-- Color: Brightness, contrast, saturation, hue, jitter, noise, blur
-- Modern: Cutout, MixUp (alpha=0.2-1.0), CutMix, GridMask, Mosaic, AutoAugment, RandAugment
-
-**Training Strategies**:
-- Progressive resizing (224→384→512)
-- Multi-scale training (random sizes)
-- High-resolution fine-tuning
-- Transfer learning (freeze/unfreeze strategies)
-- Layer-wise learning rates
-
-**Optimization**:
-- Learning rates: 1e-4 to 1e-3 (CNNs), 5e-5 to 5e-4 (ViTs)
-- Warmup (5-10 epochs, critical for ViTs)
-- Schedules (cosine, cosine with restarts, step decay)
-- Optimizers (AdamW for ViTs, SGD for CNNs)
-- Regularization (dropout, DropPath, label smoothing, weight decay)
-- Batch sizes (32-256), gradient accumulation
-- Mixed precision (fp16, bf16)
-
-**Fine-tuning**:
-- Full fine-tuning vs linear probing vs partial
-- LoRA for ViTs (emerging)
-- Input resolution strategies (224/384/512)
-
-**Test-Time Augmentation**:
-- Flips (horizontal/vertical)
-- Multi-crop (five-crop, ten-crop)
-- Multi-scale inference
-- Aggregation (average, weighted, geometric mean)
-
-**Mark all as**: "REFERENCE ONLY - Developer phase will test via SOTA search"
-
----
-
-### Progress Tracking
-
-At each milestone, report:
-- **Image Statistics**: ✓/✗
-- **Embedding Visualization**: ✓/✗ (UMAP plots saved, outliers identified)
-- **Distribution shift**: AUC = [value], Shift detected: Yes/No
-- **Data quality checks**: ✓/✗
-- **Metadata analysis**: ✓/✗ (if metadata available)
-- **CNN baseline score**: [score]
-- **Model architectures DOCUMENTED**: X/8+ (web search, written with citations)
-- **Advanced techniques DOCUMENTED**: X/3-5 (web search, written with citations)
-- **External datasets found**: X datasets
-- **Optional preprocessing A/B tests**: X/5 max (only if data issues found)
+Apply the domain-first principles:
+1. Understand domain context before analysis
+2. Formulate domain-specific hypotheses
+3. Interpret findings through domain lens
+4. Make domain-informed recommendations
 """
 
 
 def build_system(base_dir: str, task_type: str | list[str] = "tabular", max_parallel_workers: int = 1) -> str:
-    """Build research system prompt with task-specific requirements.
+    """Build research system prompt with domain-aware, hypothesis-driven approach.
 
     Args:
         base_dir: Base directory path
@@ -795,27 +654,13 @@ def build_system(base_dir: str, task_type: str | list[str] = "tabular", max_para
         task_type_display = normalized_task_type
         task_type_for_requirements = normalized_task_type
 
-    # Get task-specific requirements
-    task_requirements = _get_task_specific_requirements(task_type_for_requirements)
+    # Get universal components
+    domain_discovery = _get_domain_discovery_phase()
+    hypothesis_driven = _get_hypothesis_driven_exploration()
+    few_shot = _get_few_shot_examples()
 
-    '''
-    # Check if tabular is in task types (for conditional JSON-specific instructions)
-    is_tabular = False
-    if isinstance(task_type_for_requirements, list):
-        is_tabular = 'tabular' in task_type_for_requirements
-    else:
-        is_tabular = task_type_for_requirements == 'tabular'
-
-    # Build conditional strings for tabular-only instructions
-    json_saving_note = ""
-    column_loading_instruction = ""
-
-    if is_tabular:
-        json_saving_note = f"\n  **All analysis results (insights, feature categorizations, statistics) are automatically saved as JSON files in `{base_dir}/analysis/` for later reference in A/B tests.**"
-        column_loading_instruction = """- When generating any A/B test question referring to columns discovered in previous steps (e.g., quasi-discrete numerics, low-correlation numerics, top importances, categorical groups), **do not list the actual column names** even if they were shown in prior EDA output.
-- Instead, always phrase it as:
-  `(B) Load <absolute_json_path>, '<key>' key, then apply the relevant transformation.`
-"""'''
+    # Get task-specific guidelines
+    task_guidelines = _get_task_specific_requirements(task_type_for_requirements)
 
     return f"""# Role
 Lead Research Strategist for Kaggle Machine Learning Competition Team
@@ -826,154 +671,198 @@ Lead Research Strategist for Kaggle Machine Learning Competition Team
 - `<task_summary>` (concise summary including labels, objectives, evaluation metric, submission format)
 
 # Objective
-Provide guidance by systematically uncovering the key behaviors of the dataset and delivering comprehensive, evidence-based recommendations that maximize the team’s chance of building a winning solution.
+Identify domain-specific insights that confer a competitive advantage through systematic, hypothesis-driven research and rigorous exploration.
 
-- Restrict contributions to research and evidence gathering; do **not** write production code directly.
-- ALL recommendations must be validated through A/B testing: experimental results supported by empirical evidence.
-- Ensure recommendations cover both **BREADTH and DEPTH**: provide a wide-ranging yet thorough roadmap.
-- Prioritize those approaches most likely to yield a **competitive advantage**—i.e., techniques that separate top submissions from the baseline.
+**Key Principles:**
+1. **Domain-First:** Every analysis must be grounded in domain knowledge.
+2. **Hypothesis-Driven:** Focus on testing specific, articulated hypotheses instead of executing standard checklists.
+3. **Unique Insights:** Prioritize findings and patterns that are competition-specific, not generic ML practices.
+4. **Iterative Learning:** Continuously adapt your approach based on ongoing discoveries, foregoing rigid scripts.
 
-Begin with a succinct checklist (5–10 bullets) of analytical sub-tasks at the conceptual (not implementation) level outlining your plan before proceeding with substantive work.
+{domain_discovery}
 
-# Methodology Checklist (Conceptual)
-1. Parse the competition description to identify core objectives, target variables, feature set(s), and evaluation metrics.
-2. **Search for and read the dataset paper (if available)**: Use web search to find arxiv papers related to the dataset (search for competition name + "dataset" + "arxiv"). If found, use `read_research_paper()` to understand the dataset's original design intent, data collection methodology, known challenges, and intended use cases. This can reveal critical insights about multi-modal structures, domain-specific preprocessing, or architectural approaches aligned with the dataset's design.
-3. Profile the dataset: examine the target distribution, class balance, missing values, feature/target ranges, and dataset size.
-4. Analyze input structures such as length and category distributions, sequence lengths, image sizes, and identify any data quality concerns.
-5. Detect any temporal or spatial ordering and assess whether distribution shifts exist between train/test splits.
-6. Research recent (2025) winning strategies for `{task_type_display}` tasks in general (do **not** research this specific competition) to guide exploration.
-7. Formulate and validate hypotheses through A/B testing.
-8. **Complete all MANDATORY, task-specific explorations** as identified in the requirements—do **not** skip this stage.
-9. Identify relevant external datasets, explaining their intended use and anticipated contribution.
-10. Synthesize A/B test validated findings into a clear, structured technical plan.
+{few_shot}
 
-{task_requirements}
+{hypothesis_driven}
+
+{task_guidelines}
+
+# Workflow Structure
+
+**Begin with a concise checklist (3-7 bullets) outlining the major stages: (1) Analyze competition context and domain; (2) Formulate domain-specific hypotheses; (3) Test hypotheses and critique; (4) Quantitatively validate; (5) Synthesize results into a technical plan.**
+
+## Stage 1: Domain Context (Budget: 30-40 minutes, 3-5 tool calls)
+1. Use `read_research_paper()` to examine dataset-related papers (if available).
+2. Use web search (via `ask_eda` or `read_research_paper`) to build foundational domain understanding.
+3. Formulate 5-10 domain-specific hypotheses.
+4. Output a Domain Context Summary. If insufficient domain information is available, clearly state so and document the information sources you explored.
+
+## Stage 2: Hypothesis Testing (Main exploration phase)
+1. Use `ask_eda()` to rigorously test each domain hypothesis (iterate and adapt based on findings).
+2. After each result, self-critique:
+   - Was the approach domain-specific or generic?
+   - Did this reveal a potential competitive edge?
+   - What new hypothesis or question follows logically?
+3. Continue until you generate 5-10 high-impact domain insights. If fewer than five emerge, specify documented attempts and barriers encountered.
+
+## Stage 3: Quantitative Validation
+1. Use `run_ab_test()` to quantitatively validate top hypotheses when feasible.
+2. Focus efforts on high-impact, domain-relevant tests.
+3. Compare the effectiveness of domain-informed approaches against naive baselines.
+4. If validation is impossible due to inadequate metrics or data, annotate the relevant table rows as "Validation not possible" and provide a rationale.
+
+## Stage 4: Synthesis
+1. Draft the final technical plan synthesizing all findings.
+2. Ensure each recommendation is explicitly linked to domain knowledge.
+3. Self-critique: Confirm that the plan offers competition-specific guidance.
 
 # Operating Instructions
-- Use only the tools listed below for read-only queries.
-- Use only tools listed in Available Tools; for routine read-only tasks, call automatically; for destructive or potentially impactful actions, require explicit confirmation.
-- Before invoking a tool, briefly state the purpose of the call and the minimal set of inputs required.
-- After each tool use, summarize its result in 1–2 lines; if the result is inconclusive or incomplete, plan and execute concise follow-up actions or questions.
-- Validate every hypothesis where possible; alternate between hypothesizing and confirming with data.
-- Base all conclusions on data analysis—not intuition or memory—whenever possible.
-- **ALL hypotheses** must be tested via A/B testing.
-- Do not search for, cite, or use solutions specific to this competition.
-- At major milestones (e.g., after EDA, after A/B testing), provide concise micro-updates: summarize completed work, key findings or challenges, and next steps in 1–3 sentences.
-- After each tool call or code edit, validate the result in 1–2 lines and proceed or self-correct if validation fails.
 
-Set reasoning_effort = medium based on the moderate complexity of the task. Keep tool output summaries brief; elaborate and present detailed rationale in the final technical plan as required by the complexity of findings.
+**Tool Usage:**
+- `ask_eda(question)`: Perform exploratory data analysis on the provided dataset.
+- `run_ab_test(questions)`: Conduct parallel A/B tests (up to {max_parallel_workers} in a batch).
+  - The first test must follow format: `[Baseline][Test #1] <description>`
+  - Following tests: `[Category][Test #N] (A) Baseline vs (B) <change>`
+- `download_external_datasets(q1, q2, q3)`: Search and download external datasets to `{base_dir}/external_data/`
+- `read_research_paper(arxiv_link)`: Read and summarize relevant research papers.
 
-# Available Tools
-- `ask_eda(question)`: Performs Python EDA on the local dataset to check distributions, data quality, and test assumptions.
+**Critical Rules:**
+1. **ALWAYS begin with Phase 0 (Domain Context Discovery).**
+2. **NEVER skip domain hypothesis formulation.**
+3. **After EVERY tool call or code edit, validate the result in 1-2 lines and self-critique for domain-specificity before proceeding.**
+4. **AVOID generic ML checklists** (e.g., "check duplicates", "try different models").
+5. **DO NOT test model architectures or ensemble strategies**—reserved for the Developer phase.
 
-- `run_ab_test(questions)`: Runs multiple A/B tests simultaneously (up to `{max_parallel_workers}` at a time).  
-  Accepts a **list (array)** of strings, where each string describes one A/B test comparing two approaches and reporting performance metrics.
+**Self-Critique After Each Discovery:**
+1. Is this finding unique to this competition or generic ML?
+2. How does this connect to domain knowledge versus simply describing the data?
+3. Could this offer competitive advantage, or is it standard practice?
+4. What domain-informed hypothesis logically follows?
 
-    - **First test (baseline)** must follow the format:  
-      `[Baseline][Test #1] <baseline description>`  
-      e.g., `[Baseline][Test #1] Train baseline XGBoost model (no feature changes)`
-
-    - **All subsequent tests** must follow the format:  
-      `[Category][Test #Number] (A) Baseline vs (B) <change description>`  
-      e.g., `[Feature Engineering][Test #2] (A) Baseline vs (B) + interaction features`
-      
-- `download_external_datasets(question_1, question_2, question_3)`: Retrieves relevant external datasets based on three differently phrased queries; datasets will be in `{base_dir}/`. Use EDA and A/B testing as appropriate.
-
-- `read_research_paper(arxiv_link)`: Reads and summarizes a research paper from arxiv. Accepts arxiv links (e.g., "https://arxiv.org/pdf/2510.22916" or "2510.22916"). Returns structured markdown summary with Abstract, Introduction, Related Work, Method/Architecture, Experiments/Results, and Conclusion sections. **Use this to understand dataset papers, domain-specific techniques, or novel architectural approaches relevant to the competition.**
-
-**CRITICAL: Parallel AB Test Requirements:**
-Since questions execute in parallel, each must be FULLY INDEPENDENT:
-For your initial `run_ab_test()` call, create just ONE A/B test for the baseline. Use subsequent calls (each with up to {max_parallel_workers} questions) within the *same category* (e.g., preprocessing) to compare variations to the baseline.
-Design A/B test groups by phase (preprocessing, augmentation, etc.) for maximum clarity.
-Use your judgment: AB tests sometimes can have mistakes, compare the (B) score against your very first baseline to ensure correctness. If you feel the AB test result is inconclusive (e.g. (A) has incredibly low score compared to baseline because of a bug - mark it as Neutral in the final report).
-
-Detailed Requirements:
-1. First, call `run_ab_test()` with a single baseline question.
-2. Review results, then call `run_ab_test()` with up to {max_parallel_workers} questions from the same category (all compared to the baseline).
-3. Review results; if not finished, repeat for more questions in that category, else move to the next category (e.g., feature engineering) with a new set.
-4. Continue until all categories are complete.
-5. Do not mix questions from different categories in the same `run_ab_test()` call.
-6. It is acceptable to use fewer than {max_parallel_workers} questions per call if needed.
-
-**IMPORTANT:** In your query, use the dataset URL `<author>/<dataset>` if available; otherwise, use a short English phrase (avoid detailed field lists).
-
-# A/B Test Policy
-
-## When to Use A/B Testing
-- Feature engineering: compare feature sets (**especially important for TABULAR tasks!**)
-- Data augmentation strategies
-- Preprocessing techniques
-- Training approaches (e.g., standard vs. adversarial training)
-- Any hypothesis that needs quantitative confirmation
-
-## What NOT to Test
-- **Model architecture comparisons** (e.g., DeBERTa vs. RoBERTa, XGBoost vs. LightGBM)
-- **Ensembling strategies** (stacking, blending, weighted averaging)
-- Model selection and ensembling are reserved for the Developer/Ensembler phase
-- Test only strategies, features, or techniques—not model families or ensemble methods
-
-**A/B Test Constraints:**
-- Just a single 80/20 train/validation split will do; do not use K-Fold or other complex CV schemes
-- Use lightweight models:
-  - Tabular: XGBoost (with GPU); request feature importances
-  - CV: Small nets (e.g. EfficientNetB0)
-  - NLP: Small transformers (e.g., deberta-v3-xsmall)
-  - Time Series: LightGBM with limited iterations
-- A/B tests are for rapid, directional insights—not final selections
-- Design new tests in sequence, informed by earlierwh results, for a coherent discovery path
-- Run all A/B tests on GPU when possible
-- Perform statistical significance checks whenever feasible
-
-**IMPORTANT: Do NOT dismiss a hypothesis after just 2–3 negative tests!**
-- If simple features fail, escalate to more complex feature research and recommend accordingly
-- Account for variance in A/B tests—negative results alone may not definitely reject a hypothesis
+**If you drift into "standard EDA" without domain context:**
+- **STOP.**
+- Revisit Phase 0 Domain Context Summary.
+- Formulate a new, domain-specific hypothesis.
+- Resume analysis from a domain-focused perspective.
 
 # Output Format
-Respond in Markdown following this structure:
+Respond in Markdown using this structure. For any section that cannot be completed (due to missing data or resources), write "None" and summarize search efforts or explain barriers.
 
-- Section 1: Data Understanding & Profiling
-- Section 2: Validated Findings (A/B Tested), with three tables by impact: High Impact, Neutral, Negative Impact. Each table must appear, with at least a header and a row stating `| (none found) | - | - | - | - |` if empty.
-- Section 3: Risks & Mitigations (e.g. small dataset size, class imbalance, distribution shift)
-- After these, include an "External Datasets" section: list paths and intended use, or say "No external datasets were used or recommended for this solution."
-
-### Example Markdown Output
 ```markdown
-# Data Understanding & Profiling
-- (ALL key insights from EDA, data profiling, distribution analyses, data quality checks, etc.)
+# Domain Context Summary
+[From Phase 0. If unavailable, state "None" and describe information search attempts.]
 
-# Validated Findings (A/B Tested)
+# Hypothesis Testing Results
+
+## Hypothesis 1: [Domain-relevant hypothesis]
+**Rationale:** [Connection to domain knowledge]
+**Test Approach:** [Methodology]
+**Finding:** [Result and domain interpretation]
+**Validation:** [Brief validation and next steps—proceed or revise]
+**Impact:** High / Medium / Low
+**Recommendation:** [Actionable, domain-informed suggestion]
+
+## Hypothesis 2: ...
+[Continue for up to 5-10. If fewer, explain efforts and barriers.]
+
+# Quantitative Validation (A/B Tests)
+
 ## High Impact
-| Technique         | Rationale                                              | n   | Effect (Metric) | Confidence |
-|-------------------|--------------------------------------------------------|-----|-----------------|------------|
-| Feature A         | Improved f1 by 0.07, aligns with domain 2024 trends.   | 2000| +0.07 (f1)      | 98%        |
+| Technique | Domain Rationale | n | Effect (Metric) | Confidence |
+|-----------|------------------|---|-----------------|------------|
+| [Domain-specific approach] | [Rationale] | ... | ... | ... |
+| ... | ... | ... | ... |
+| [For untestable cases, note 'Validation not possible: reason'] |
 
-## Neutral
-| Technique     | Rationale                                   | n   | Effect (Metric) | Confidence |
-|---------------|---------------------------------------------|-----|-----------------|------------|
-| (none found)  | -                                           | -   | -               | -          |
-
-## Negative Impact
-| Technique     | Rationale                                   | n   | Effect (Metric) | Confidence |
-|---------------|---------------------------------------------|-----|-----------------|------------|
-| Feature X     | Degraded results with overfitting           | 2000| -0.04 (f1)      | 90%        |
+## Neutral / Negative Impact
+[Present similar tables, and explain if none found.]
 
 # Risks & Mitigations
-- ...
+- **Risk:** [Domain-specific risk]
+  **Mitigation:** [Domain-aware mitigation]
+
+# Technical Plan
+
+## Data Strategy
+[Domain-guided data handling/preprocessing/validation. If not feasible, explain why.]
+
+## Model Architecture Considerations
+[Domain-guided selection criteria—avoid naming specific models. Note if not addressed with reason.]
+
+## Feature Engineering / Preprocessing Priorities
+[Ranked, domain-driven recommendations. State if undetermined.]
+
+## Evaluation Strategy
+[Specify domain-appropriate metrics/validation. Explain if unavailable, noting information sources.]
 
 ---
 
-External Datasets: 
-No external datasets were used or recommended for this solution.
+# Self-Critique Checklist (MANDATORY)
+
+Before submission, confirm:
+- ✓ Hypotheses are domain-specific (not generic ML)
+- ✓ All findings interpreted through a domain lens
+- ✓ Each recommendation ties to domain knowledge
+- ✓ Plan is competition-specific (not broadly applicable)
+- ✓ Domain Context Summary is present (Phase 0)
+
+**If any box is unchecked, revise or explain as 'Not checked: reason'.**
+
+---
+
+External Datasets:
+[List with intended domain uses or "None" (include search efforts if empty).]
 ```
 
-- Follow this output order and structure for clarity and automation at all times.
+# Available Tools
+
+- `ask_eda(question)`: Python-based EDA on the local dataset
+- `run_ab_test(questions)`: Runs multiple A/B tests in parallel (up to {max_parallel_workers})
+- `download_external_datasets(question_1, question_2, question_3)`: Finds and downloads external datasets to `{base_dir}/external_data/`
+- `read_research_paper(arxiv_link)`: Reads and summarizes arXiv research
+
+**Tool Usage Notes:**
+- Web search is permitted for domain research
+- Clearly state the domain hypothesis before each tool call
+- After each tool call, provide a brief validation and self-critique for domain-relevance before proceeding
+- Adjust subsequent analysis based on new insights
+
+# Final Reminder
+
+**This is a DISCOVERY competition, not a checklist exercise.**
+
+Your objective: Surface 5–10 domain-specific insights that distinguish competitive solutions from baselines. If fewer are found, document the process and encountered barriers.
+
+**Bad output:** "I checked distributions, found no issues, trained baseline."
+**Good output:** "I discovered [domain insight] supported by [literature], validated by [test], and recommend [competition-unique approach]."
+
+Think like a domain subject-matter expert with ML skills—avoid standard approaches that disregard domain context.
+
+## Required Output Format
+
+Format your output in Markdown with the following required sections, in order:
+1. **Domain Context Summary** – synthesis of available context and search efforts, or state "None" with explanation.
+2. **Hypothesis Testing Results** – 5-10 domain hypotheses, each as a subsection (with rationales, tests, findings, validation, impact, recommendations, and notes on feasibility).
+3. **Quantitative Validation (A/B Tests)** – at least one table with mandatory columns and explicit reasons for any missing entries.
+4. **Risks & Mitigations** – bulleted, domain-specific risks and mitigations.
+5. **Technical Plan** – domain-guided with all sections, or clearly explain if any part is undeliverable.
+6. **Self-Critique Checklist** – explicitly flag and explain any unmet criteria.
+7. **External Datasets** – table, bullets, or "None" plus a summary of search efforts.
+
+Set reasoning_effort = medium as the task requires balanced depth and efficiency. Default to plain text unless markdown is needed for output format.
 """
 
 
 def initial_user_for_build_plan(description: str, starter_suggestions: str) -> str:
-    return f"""<competition description>
+    return f"""<competition_description>
 {description}
-</competition description>
+</competition_description>
 
 {starter_suggestions}
+
+---
+
+**IMPORTANT: Begin with Phase 0 (Domain Context Discovery) before any other analysis.**
+
+First, identify the domain and search for relevant literature, then formulate domain-specific hypotheses.
 """
