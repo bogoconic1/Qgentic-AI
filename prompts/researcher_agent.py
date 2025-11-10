@@ -607,7 +607,87 @@ If you find yourself performing "standard CV analysis" without domain context, p
 
 After each substantive step or analysis, briefly validate your insight, noting if it supports or challenges domain hypotheses, and state your next step or adjustment. Set reasoning_effort = medium for this workflow: keep analysis and validation concise but thorough, matching the task complexity.
 """
+    
+    elif task_type == "time_series":
+        return """## Task-Specific Exploration Guide: TIME-SERIES
 
+**Important:** These are suggested AREAS TO EXPLORE based on domain hypotheses, rather than a compulsory checklist.
+
+Begin with a concise checklist (3-7 bullets) of what you will do; keep items conceptual, not implementation-level.
+
+### Domain-First Approach
+
+Before diving into time-series feature analysis, consider:
+1. **What does each variable (signal) represent in the real world?**
+   - Is it a sensor reading, a financial metric, environmental measurement, or a behavioral signal over time?
+2. **Which signals are measured directly versus derived?**
+   - Can you reconstruct how derived time features are created? (e.g., rolling averages, time differences)
+3. **What time-based feature combinations are meaningful in this domain?**
+   - What time lags, moving windows, or paired variables do experts use? (e.g., temperature today vs. yesterday, 7-day moving average)
+
+### Time-Series Feature Understanding (Domain Context)
+
+#### Temporal Features
+- What does each temporal variable measure? (e.g., timestamp, duration, frequency)
+- Are there seasonality or cyclic trends? (e.g., daily, weekly, annual cycles)
+- Do certain time points or ranges serve as categories? (e.g., holidays, business hours)
+- Which domain-specific transformations are appropriate? (e.g., differencing to remove trend, log scale for volatility)
+
+#### Categorical and Event Features
+- What do categorical or event markers represent in the timeline?
+- Do certain events or periods have ordinal or hierarchical relationships? (e.g., weekday vs. weekend, fiscal quarter)
+- Should rare events be grouped based on domain understanding?
+
+#### Feature Interactions
+Rather than brute force, prioritize:
+- **Interactions used by domain experts** (from time-series domain literature)
+- **Physics or logical constraints over time** (e.g., flow = change in volume / time)
+- **Meaningful ratios or rates** (e.g., change per time unit, acceleration)
+
+**Example – Domain-Driven Feature Engineering:**
+- Poor approach: Generate all pairwise lagged interactions (brute force)
+- Better approach: In energy data, compare daily averages to weekly trends or deviations
+
+### Target Analysis (Time-Series Context)
+
+#### For Forecasting/Regression
+- What does the target variable represent over time?
+- Are typical domain-specific transformations needed? (e.g., log-transform for price series, differencing non-stationary series)
+- Are there known time relationships or autocorrelations with features and target?
+
+#### For Classification/Anomaly Detection
+- How do the classes (events or anomalies) map onto time periods or events?
+- Is class imbalance expected in the temporal context? (e.g., rare failure events)
+- Are event sequences or timing important?
+
+### A/B Testing Strategy (Hypothesis-Driven)
+
+**Do not test randomly—test domain-informed, time-based hypotheses:**
+
+**Good A/B test sequence:**
+1. **Baseline:** Use simple lags, trends, or averages to assess predictability
+2. **Domain Time Feature Test:** Add features like seasonality or domain-known cycles (e.g., week-over-week change)
+3. **Constraint Test:** Add features derived from temporal relationships (e.g., derivative or cumulative sum)
+4. **Event Encoding Test:** Encode categorical time markers or events using their domain roles (e.g., holiday effects)
+
+**Bad A/B test sequence:**
+1. Baseline
+2. Try arbitrary time windowing (without hypothesis)
+3. Add all lagged features (brute force, lacking domain reasoning)
+4. Change imputation with no evidence for missingness pattern
+
+### Progress Self-Check
+
+After your exploration, confirm:
+- ✓ Can you interpret every feature in temporal/domain context?
+- ✓ Are time-related engineered features rooted in domain meaning, not arbitrary math?
+- ✓ Do A/B tests correspond to domain-specific hypotheses involving time?
+- ✓ Would a domain expert recognize or agree with your temporal feature engineering?
+
+If your feature engineering is driven by generic methods without time or domain context, pause and reconnect with domain knowledge.
+
+After your analysis, provide a brief validation (1-2 lines) confirming your approach is domain-relevant and highlighting the next logical step or any necessary self-corrections.
+"""
     else:
         return f"""
 ## Task-Specific Exploration Guide: {task_type.upper()}
