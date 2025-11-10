@@ -843,9 +843,11 @@ Begin with a succinct checklist (5–10 bullets) of analytical sub-tasks at the 
 5. Detect any temporal or spatial ordering and assess whether distribution shifts exist between train/test splits.
 6. Research recent (2025) winning strategies for `{task_type_display}` tasks in general (do **not** research this specific competition) to guide exploration.
 7. Formulate and validate hypotheses through A/B testing.
-8. **Complete all MANDATORY, task-specific explorations** as identified in the requirements—do **not** skip this stage.
-9. Identify relevant external datasets, explaining their intended use and anticipated contribution.
-10. Synthesize A/B test validated findings into a clear, structured technical plan.
+8. **Perform baseline error analysis**: After running the first baseline A/B test, systematically analyze prediction errors to identify failure modes. Examine: (a) samples with highest errors - are they outliers, edge cases, or specific subgroups? (b) error correlations with features/metadata - which characteristics predict poor performance? (c) error distributions - are errors concentrated or uniform? (d) train/test distribution alignment - do hard test samples fall outside training distribution? This analysis guides targeted improvements and reveals architectural needs.
+9. **Complete all MANDATORY, task-specific explorations** as identified in the requirements—do **not** skip this stage.
+10. Identify relevant external datasets, explaining their intended use and anticipated contribution.
+11. Go back to earlier steps (especially step 2 and 6) as needed based on new insights.
+12. Synthesize the dataset findings and A/B tested validated findings into a clear, structured technical plan.
 
 {task_requirements}
 
