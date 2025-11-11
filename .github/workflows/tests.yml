@@ -1,0 +1,62 @@
+name: Run Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: ['3.12']
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: 'pip'
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements-test.txt
+
+    - name: Create test directories and mock credentials
+      run: |
+        mkdir -p task/dummy-test
+        echo "# Test competition" > task/dummy-test/description.md
+        # Create dummy kaggle.json (needed for imports, not used by tests)
+        mkdir -p ~/.kaggle
+        echo '{"username":"test","key":"test"}' > ~/.kaggle/kaggle.json
+        chmod 600 ~/.kaggle/kaggle.json
+
+    - name: Run tests
+      env:
+        # Mock API keys for tests (tests should use mocks, not real APIs)
+        OPENAI_API_KEY: "sk-test-key-for-ci"
+        ANTHROPIC_API_KEY: "sk-ant-test-key-for-ci"
+        GOOGLE_API_KEY: "test-google-key-for-ci"
+        KAGGLE_USERNAME: "test"
+        KAGGLE_KEY: "test"
+      run: |
+        pytest tests/ -v --tb=short --maxfail=5
+
+    - name: Generate coverage report (optional)
+      if: success()
+      run: |
+        pytest tests/ --cov=agents --cov=tools --cov=utils --cov-report=term-missing --cov-report=xml
+
+    - name: Upload coverage to artifacts (optional)
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report
+        path: coverage.xml

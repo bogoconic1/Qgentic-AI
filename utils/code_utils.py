@@ -38,7 +38,7 @@ def extract_python_code(content: str) -> str:
     # If neither found anything, return original content
     if not code_old and not code_new:
         logger.debug("No fenced code blocks found, returning original content")
-        return content.strip()
+        return ""
 
     # Check compilation for both
     old_compiles = False
