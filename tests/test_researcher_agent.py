@@ -136,7 +136,7 @@ def test_build_plan_with_tool_calls(test_task_dir, monkeypatch):
         """Mock ask_eda tool."""
         return "The training data has shape (10000, 5). Contains text and labels."
 
-    def fake_get_tools():
+    def fake_get_tools(max_parallel_workers: int = 1):
         """Mock get_tools to return tool definitions."""
         return [
             {
@@ -196,7 +196,7 @@ def test_build_plan_direct_output(test_task_dir, monkeypatch):
         )
         return mock_response
 
-    def fake_get_tools():
+    def fake_get_tools(max_parallel_workers: int = 1):
         return []
 
     monkeypatch.setattr("agents.researcher.call_llm_with_retry", fake_call_llm_with_retry)
@@ -295,7 +295,7 @@ def test_researcher_build_plan_invalid_tool_arguments(test_task_dir, monkeypatch
         # This should not be called due to invalid arguments
         raise Exception("Should not reach here - tool should fail before execution")
 
-    def fake_get_tools():
+    def fake_get_tools(max_parallel_workers: int = 1):
         return [{"type": "function", "name": "ask_eda"}]
 
     monkeypatch.setattr("agents.researcher.call_llm_with_retry", fake_call_llm)
@@ -355,7 +355,7 @@ def test_researcher_build_plan_empty_tool_results(test_task_dir, monkeypatch):
         # Return empty string
         return ""
 
-    def fake_get_tools():
+    def fake_get_tools(max_parallel_workers: int = 1):
         return [{"type": "function", "name": "ask_eda"}]
 
     monkeypatch.setattr("agents.researcher.call_llm_with_retry", fake_call_llm)
@@ -427,7 +427,7 @@ def test_execute_tool_call_run_ab_test(test_task_dir, monkeypatch):
     monkeypatch.setattr("agents.researcher._TASK_ROOT", test_task_dir['task_root'])
 
     # Mock ask_eda
-    def fake_ask_eda(question, description, data_path, previous_ab_tests=None):
+    def fake_ask_eda(question, description, data_path, previous_ab_tests=None, **kwargs):
         return "AB test result: Model A outperforms Model B"
 
     monkeypatch.setattr("agents.researcher.ask_eda", fake_ask_eda)
@@ -438,8 +438,8 @@ def test_execute_tool_call_run_ab_test(test_task_dir, monkeypatch):
         test_task_dir['run_id']
     )
 
-    # Create eda_temp.py file to simulate executed code
-    eda_temp_path = agent.base_dir / "eda_temp.py"
+    # Create eda_temp_1.py file to simulate executed code (index 0, suffix _1)
+    eda_temp_path = agent.base_dir / "eda_temp_1.py"
     eda_temp_path.write_text("import pandas as pd\nprint('AB test code')")
 
     # Create mock tool call item
@@ -447,7 +447,7 @@ def test_execute_tool_call_run_ab_test(test_task_dir, monkeypatch):
         type="function_call",
         name="run_ab_test",
         call_id="call_456",
-        arguments=json.dumps({"question": "Compare Model A vs Model B"})
+        arguments=json.dumps({"questions": ["Compare Model A vs Model B"]})
     )
 
     input_list = []

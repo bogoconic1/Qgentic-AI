@@ -106,8 +106,20 @@ def patch_llm_calls(monkeypatch):
             mock_response.output_parsed = mock_parsed
             mock_response.output_text = "Mock LLM response"
         else:
+            # For preprocessing or other non-structured calls, provide JSON in text
             mock_response.output_parsed = None
-            mock_response.output_text = "Mock LLM response"
+            mock_response.output_text = """```json
+{
+    "preprocessing": {
+        "MUST_HAVE": [
+            {"strategy": "Tokenize using BERT", "explanation": "Required for transformer models"}
+        ],
+        "NICE_TO_HAVE": [
+            {"strategy": "Lowercase text", "explanation": "Helps with generalization"}
+        ]
+    }
+}
+```"""
 
         return mock_response
 

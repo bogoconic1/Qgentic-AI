@@ -285,7 +285,7 @@ def test_evaluate_submission_with_score(test_task_dir, monkeypatch):
     log_content = "Training completed successfully"
 
     # Test the method
-    code_with_logs, run_score, previous_successful_version, base_score = agent._evaluate_submission(code_clean, log_content, version, attempt=1)
+    code_with_logs, run_score, previous_successful_version, base_score, submission_exists = agent._evaluate_submission(code_clean, log_content, version, attempt=1)
 
     assert run_score == 0.85
     assert "<code>" in code_with_logs
@@ -295,6 +295,7 @@ def test_evaluate_submission_with_score(test_task_dir, monkeypatch):
     assert "0.85" in code_with_logs
     assert "<analysis>" in code_with_logs
     assert version in agent.successful_versions
+    assert submission_exists is True
 
     print("✅ _evaluate_submission() with score works correctly:")
     print(f"   - Score: {run_score}")

@@ -27,6 +27,8 @@ class _StubMsg:
 class _StubCompletion:
     def __init__(self, content: str):
         self.choices = [type("Ch", (), {"message": _StubMsg(content)})()]
+        self.output_text = content
+        self.output = [{"role": "assistant", "content": content}]
 
 
 def test_ask_eda_sets_media_dir_and_code_can_write(monkeypatch, tmp_path):
@@ -48,7 +50,7 @@ print(str(f.resolve()))
         """
     )
 
-    def _fake_call_llm_with_retry(client, model=None, messages=None, **kwargs):
+    def _fake_call_llm_with_retry(model=None, instructions=None, tools=None, messages=None, **kwargs):
         return _StubCompletion(code)
 
     monkeypatch.setattr(tr, "call_llm_with_retry", _fake_call_llm_with_retry)
@@ -67,31 +69,35 @@ print(str(f.resolve()))
     assert Path(media_dir).exists()
 
 
-def test_ingest_new_media_appends_multimodal_message(tmp_path):
+def test_ingest_new_media_appends_multimodal_message(tmp_path, monkeypatch):
     # Arrange: create agent bound to a temp slug under real task root
     from agents.researcher import ResearcherAgent
+    import uuid
 
-    # Build expected base_dir path: task/<slug>
-    slug = "test-media-ingest"
+    # Use unique slug to avoid test pollution
+    slug = f"test-media-ingest-{uuid.uuid4().hex[:8]}"
+    base_dir = Path("task") / slug
+    base_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create description.md file required by ResearcherAgent
+    (base_dir / "description.md").write_text("Test competition description")
+
     agent = ResearcherAgent(slug=slug, iteration=1)
 
-    # Ensure agent base_dir points to real location; override to tmp if different
-    base_dir = agent.base_dir
-    base_dir.mkdir(parents=True, exist_ok=True)
-    media_dir = base_dir / "media"
-    media_dir.mkdir(parents=True, exist_ok=True)
+    # Use the agent's media_dir (which includes run_id)
+    media_dir = agent.media_dir
 
     before = agent._list_media_files()
     img_path = media_dir / "chart_1.png"
     _write_min_png(img_path)
 
     # Act: ingest the newly created media
-    prior_len = len(agent.messages)
-    agent._ingest_new_media(before)
+    messages = agent._ingest_new_media(before)
 
-    # Assert: a message was added with text first then an image_url entry
-    assert len(agent.messages) == prior_len + 1
-    m = agent.messages[-1]
+    # Assert: a message was returned with correct structure
+    assert messages is not None
+    assert len(messages) == 1
+    m = messages[0]
     assert m.get("role") == "user"
     content = m.get("content")
     assert isinstance(content, list) and len(content) >= 1
@@ -101,25 +107,31 @@ def test_ingest_new_media_appends_multimodal_message(tmp_path):
 
 def test_ingest_media_respects_max_images(tmp_path):
     from agents.researcher import ResearcherAgent, MAX_IMAGES_PER_STEP
+    import uuid
 
-    slug = "test-media-cap"
+    # Use unique slug to avoid test pollution
+    slug = f"test-media-cap-{uuid.uuid4().hex[:8]}"
+    base_dir = Path("task") / slug
+    base_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create description.md file required by ResearcherAgent
+    (base_dir / "description.md").write_text("Test competition description")
+
     agent = ResearcherAgent(slug=slug, iteration=1)
 
-    base_dir = agent.base_dir
-    base_dir.mkdir(parents=True, exist_ok=True)
-    media_dir = base_dir / "media"
-    media_dir.mkdir(parents=True, exist_ok=True)
+    # Use the agent's media_dir (which includes run_id)
+    media_dir = agent.media_dir
 
     before = agent._list_media_files()
     # Create more images than the cap
     for i in range(MAX_IMAGES_PER_STEP + 3):
         _write_min_png(media_dir / f"img_{i}.png")
 
-    prior_len = len(agent.messages)
-    agent._ingest_new_media(before)
+    messages = agent._ingest_new_media(before)
 
-    assert len(agent.messages) == prior_len + 1
-    content = agent.messages[-1]["content"]
+    assert messages is not None
+    assert len(messages) == 1
+    content = messages[0]["content"]
     attached = [c for c in content if c.get("type") == "input_image"]
     assert len(attached) <= MAX_IMAGES_PER_STEP
 

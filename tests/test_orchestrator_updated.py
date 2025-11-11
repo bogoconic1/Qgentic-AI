@@ -1,7 +1,10 @@
 """Test updated orchestrator flow."""
 
-import json
+import sys
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+import json
 from agents.orchestrator import _format_recommendations_for_developer
 
 
@@ -11,44 +14,59 @@ def test_format_recommendations():
     # Sample recommendations with MORE than the old limits
     recommendations = {
         "preprocessing": {
-            "preprocessing": [
-                {"strategy": "Strategy 1", "explanation": "Explanation 1"},
-                {"strategy": "Strategy 2", "explanation": "Explanation 2"},
-                {"strategy": "Strategy 3", "explanation": "Explanation 3"},
-                {"strategy": "Strategy 4", "explanation": "Explanation 4"},
-                {"strategy": "Strategy 5", "explanation": "Explanation 5"},  # More than old limit of 3
-            ],
-            "tokenization": [
-                {"strategy": "Use BPE tokenization", "explanation": "Better for subword handling"}
-            ]
+            "preprocessing": {
+                "MUST_HAVE": [
+                    {"strategy": "Strategy 1", "explanation": "Explanation 1"},
+                    {"strategy": "Strategy 2", "explanation": "Explanation 2"},
+                    {"strategy": "Strategy 3", "explanation": "Explanation 3"},
+                    {"strategy": "Strategy 4", "explanation": "Explanation 4"},
+                    {"strategy": "Strategy 5", "explanation": "Explanation 5"},  # More than old limit of 3
+                ],
+                "NICE_TO_HAVE": []
+            },
+            "tokenization": {
+                "MUST_HAVE": [
+                    {"strategy": "Use BPE tokenization", "explanation": "Better for subword handling"}
+                ],
+                "NICE_TO_HAVE": []
+            }
         },
         "loss_function": {
-            "loss_function": "MSELoss with custom QWK wrapper",
-            "explanation": "Aligns with QWK competition metric"
+            "MUST_HAVE": {
+                "loss_function": "MSELoss with custom QWK wrapper",
+                "explanation": "Aligns with QWK competition metric"
+            },
+            "NICE_TO_HAVE": []
         },
         "hyperparameters": {
-            "hyperparameters": [
-                {"hyperparameter": "learning_rate: 2e-5", "explanation": "Standard for transformers"},
-                {"hyperparameter": "batch_size: 16", "explanation": "Balance memory and training speed"},
-                {"hyperparameter": "epochs: 5", "explanation": "Prevent overfitting"},
-                {"hyperparameter": "warmup_steps: 100", "explanation": "Stabilize training"},
-                {"hyperparameter": "weight_decay: 0.01", "explanation": "Regularization"},
-                {"hyperparameter": "max_grad_norm: 1.0", "explanation": "Gradient clipping"},  # More than old limit of 5
-            ],
-            "architectures": [
-                {"architecture": "Add dropout layer (0.1)", "explanation": "Reduce overfitting"},
-                {"architecture": "Multi-sample dropout", "explanation": "Better regularization"},
-                {"architecture": "Layerwise learning rate decay", "explanation": "Fine-tune pretrained layers"},
-                {"architecture": "EMA weights", "explanation": "Stabilize predictions"},  # More than old limit of 3
-            ]
+            "MUST_HAVE": {
+                "hyperparameters": [
+                    {"hyperparameter": "learning_rate: 2e-5", "explanation": "Standard for transformers"},
+                    {"hyperparameter": "batch_size: 16", "explanation": "Balance memory and training speed"},
+                    {"hyperparameter": "epochs: 5", "explanation": "Prevent overfitting"},
+                    {"hyperparameter": "warmup_steps: 100", "explanation": "Stabilize training"},
+                    {"hyperparameter": "weight_decay: 0.01", "explanation": "Regularization"},
+                    {"hyperparameter": "max_grad_norm: 1.0", "explanation": "Gradient clipping"},  # More than old limit of 5
+                ],
+                "architectures": [
+                    {"architecture": "Add dropout layer (0.1)", "explanation": "Reduce overfitting"},
+                    {"architecture": "Multi-sample dropout", "explanation": "Better regularization"},
+                    {"architecture": "Layerwise learning rate decay", "explanation": "Fine-tune pretrained layers"},
+                    {"architecture": "EMA weights", "explanation": "Stabilize predictions"},  # More than old limit of 3
+                ]
+            },
+            "NICE_TO_HAVE": {"hyperparameters": [], "architectures": []}
         },
         "inference_strategies": {
-            "inference_strategies": [
-                {"strategy": "Test-time augmentation", "explanation": "Improve robustness"},
-                {"strategy": "Threshold tuning", "explanation": "Optimize for metric"},
-                {"strategy": "Fold averaging", "explanation": "Reduce variance"},
-                {"strategy": "Monte Carlo dropout", "explanation": "Uncertainty estimation"},  # More than old limit of 3
-            ]
+            "MUST_HAVE": {
+                "inference_strategies": [
+                    {"strategy": "Test-time augmentation", "explanation": "Improve robustness"},
+                    {"strategy": "Threshold tuning", "explanation": "Optimize for metric"},
+                    {"strategy": "Fold averaging", "explanation": "Reduce variance"},
+                    {"strategy": "Monte Carlo dropout", "explanation": "Uncertainty estimation"},  # More than old limit of 3
+                ]
+            },
+            "NICE_TO_HAVE": {"inference_strategies": []}
         }
     }
 
@@ -101,8 +119,10 @@ def test_partial_recommendations():
     """Test handling of partial recommendations."""
     partial_recs = {
         "loss_function": {
-            "loss_function": "CrossEntropyLoss",
-            "explanation": "Good for classification"
+            "MUST_HAVE": {
+                "loss_function": "CrossEntropyLoss",
+                "explanation": "Good for classification"
+            }
         }
     }
     details = _format_recommendations_for_developer(partial_recs)
