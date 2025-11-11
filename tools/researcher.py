@@ -308,8 +308,15 @@ def scrape_web_page(url: str) -> str:
 
         if doc.markdown:
             title = doc.metadata.title if doc.metadata and doc.metadata.title else url
-            logger.info("Successfully scraped page (length: %d chars, title: %s)", len(doc.markdown), title)
-            return f"# {title}\n\nSource: {url}\n\n{doc.markdown}"
+            content = doc.markdown[:30000]  # Limit to first 30000 characters
+            truncated = len(doc.markdown) > 30000
+            logger.info("Successfully scraped page (length: %d chars, truncated: %s, title: %s)",
+                       len(doc.markdown), truncated, title)
+
+            result = f"# {title}\n\nSource: {url}\n\n{content}"
+            if truncated:
+                result += f"\n\n... (content truncated at 30000 characters, original length: {len(doc.markdown)} chars)"
+            return result
         else:
             logger.warning("No markdown content returned from Firecrawl for URL: %s", url)
             return f"Error: Failed to scrape page at {url}. The page may be inaccessible or contain no readable content."
