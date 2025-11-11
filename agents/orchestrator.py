@@ -709,7 +709,9 @@ class Orchestrator:
 
         if not os.path.exists(self.outputs_dir / "baseline_results.json") or len(existing_baseline_results) < len(now_recommendations_all):
             # Ensure conda environments exist for isolated package installation
-            _ensure_conda_environments(max_parallel_workers)
+            # Create environments for all models (not just parallel workers)
+            num_models = len(now_recommendations_all)
+            _ensure_conda_environments(num_models)
 
             tasks = []
             for idx, (model_name, now_recommendations) in enumerate(now_recommendations_all.items(), start=1):
@@ -833,12 +835,10 @@ class Orchestrator:
             with open(ensemble_metadata_path, "r") as f:
                 ensemble_metadata = json.load(f)
 
-        # Step 3: Re-initialize conda environments if configured
-        if _RUNTIME_CFG.get("reset_conda_envs_per_run", False):
-            print("Re-initializing conda environments for ensemble phase...")
-            num_strategies = len(ensemble_strategies)
-            num_ensemble_workers = min(num_strategies, max_parallel_workers)
-            _ensure_conda_environments(num_ensemble_workers)
+        # Step 3: Ensure conda environments exist for ensemble phase
+        # _ensure_conda_environments handles both reset and reuse modes internally
+        num_strategies = len(ensemble_strategies)
+        _ensure_conda_environments(num_strategies)
 
         # Step 4: Prepare ensemble tasks for parallel execution
         ensemble_tasks = []
