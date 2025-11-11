@@ -151,6 +151,66 @@ def search_red_flags(
     logger.info("Red flags identification completed in single pass")
     return final_content
 
+def _get_sota_tools() -> list:
+    """Get tools available for SOTA suggestions (subset of researcher tools)."""
+    return [
+        {
+            "type": "function",
+            "name": "ask_eda",
+            "description": "Run exploratory data analysis to debug issues or validate hypotheses",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "question": {"type": "string", "description": "The EDA question to answer (e.g. Read train.csv and compute correlation between XXX and YYY, is the relationship really monotonic to justify adding monotonic constraints?)"}
+                },
+            },
+            "additionalProperties": False,
+            "required": ['question']
+        },
+        {
+            "type": "function",
+            "name": "scrape_web_page",
+            "description": "Scrape web pages for implementation guides, documentation, or examples",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description": "URL to scrape"}
+                },
+            },
+            "additionalProperties": False,
+            "required": ["url"]
+        },
+        {
+            "type": "function",
+            "name": "read_research_paper",
+            "description": "Read research papers to understand techniques deeply",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "arxiv_link": {"type": "string", "description": "ArXiv paper ID or link"}
+                },
+            },
+            "additionalProperties": False,
+            "required": ["arxiv_link"]
+        },
+        {
+            "type": "function",
+            "name": "download_external_datasets",
+            "description": "Search and download external datasets to augment training data",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "question_1": {"type": "string", "description": "First phrasing of the dataset query"},
+                    "question_2": {"type": "string", "description": "Second phrasing with different wording"},
+                    "question_3": {"type": "string", "description": "Third phrasing using alternative keywords"}
+                },
+            },
+            "additionalProperties": False,
+            "required": ["question_1", "question_2", "question_3"]
+        },
+    ]
+
+
 @weave.op()
 def search_sota_suggestions(
     description: str,
@@ -164,8 +224,13 @@ def search_sota_suggestions(
     external_data_listing: str | None = None,
     plan_content: str | None = None,
     attempt_number: int = 1,
+    slug: str | None = None,
+    data_path: str | None = None,
+    cpu_core_range: list[int] | None = None,
+    gpu_identifier: str | None = None,
+    max_tool_steps: int = 10,
 ) -> str:
-    """Stage 2: Use web search to generate SOTA suggestions based on red flags.
+    """Stage 2: Use web search and tools to generate SOTA suggestions based on red flags.
 
     Args:
         description: Competition description
@@ -180,6 +245,11 @@ def search_sota_suggestions(
         external_data_listing: Directory listing of external_data_* folders
         plan_content: Content of plan.md file
         attempt_number: Which attempt this is (1, 2, 3, ...) for interleaving strategy
+        slug: Competition slug for download_external_datasets
+        data_path: Path to task data directory for ask_eda
+        cpu_core_range: CPU cores for ask_eda execution
+        gpu_identifier: GPU for ask_eda execution
+        max_tool_steps: Maximum tool call iterations before forcing final answer
 
     Returns:
         SOTA suggestions text with blacklist decision and new suggestion
@@ -230,16 +300,139 @@ def search_sota_suggestions(
         external_data_listing=external_data_listing or "No external data directories found.",
     )
 
+    # Tool execution loop
+    tools = _get_sota_tools() if (slug and data_path) else []
+    input_list = [{"role": "user", "content": user_prompt}]
+
+    for step in range(max_tool_steps):
+        logger.info("SOTA suggestion step %d/%d (tools: %s)", step + 1, max_tool_steps, "enabled" if tools else "disabled")
+
+        response = call_llm_with_retry(
+            model=_DEVELOPER_TOOL_MODEL,
+            instructions=system_prompt,
+            tools=tools,
+            messages=input_list,
+            web_search_enabled=True,
+            text_format=SOTAResponse if step == max_tool_steps - 1 else None,  # Force structured output on last step
+        )
+
+        # Add response to conversation
+        input_list.extend(response.output)
+
+        # Check if response has tool calls
+        has_tool_calls = any(
+            hasattr(item, 'type') and item.type == "function_call"
+            for item in response.output
+        )
+
+        if not has_tool_calls:
+            # No tool calls, final answer reached
+            logger.info("SOTA suggestions completed at step %d (no tool calls)", step + 1)
+            return response
+
+        # Execute tool calls
+        for item in response.output:
+            if hasattr(item, 'type') and item.type == "function_call":
+                tool_result = _execute_sota_tool_call(
+                    item=item,
+                    description=description,
+                    data_path=data_path,
+                    slug=slug,
+                    cpu_core_range=cpu_core_range,
+                    gpu_identifier=gpu_identifier,
+                )
+                input_list.append({
+                    "type": "function_call_output",
+                    "call_id": item.call_id,
+                    "output": tool_result
+                })
+
+    # Reached max steps, force final structured answer
+    logger.warning("SOTA reached max_tool_steps=%d, forcing final answer", max_tool_steps)
     response = call_llm_with_retry(
         model=_DEVELOPER_TOOL_MODEL,
-        instructions=system_prompt,
+        instructions=system_prompt + "\n\nYou have reached the maximum tool usage limit. Provide your final suggestion now based on the information gathered.",
         tools=[],
-        messages=[{"role": "user", "content": user_prompt}],
+        messages=input_list,
         web_search_enabled=True,
         text_format=SOTAResponse,
     )
 
     return response
+
+
+def _execute_sota_tool_call(item, description, data_path, slug, cpu_core_range, gpu_identifier):
+    """Execute a single SOTA tool call and return JSON result."""
+    from tools.researcher import ask_eda, scrape_web_page, read_research_paper, download_external_datasets
+    import json
+
+    try:
+        args = json.loads(item.arguments)
+    except Exception as e:
+        logger.error("Failed to parse tool arguments: %s", e)
+        return json.dumps({"error": f"Failed to parse arguments: {str(e)}"})
+
+    try:
+        if item.name == "ask_eda":
+            question = args.get("question", "")
+            if not question:
+                return json.dumps({"error": "question parameter is required"})
+
+            logger.info("SOTA tool: ask_eda(%s)", question[:100])
+            result = ask_eda(
+                question=question,
+                description=description,
+                data_path=data_path,
+                previous_ab_tests=[],  # SOTA doesn't use AB test history
+                cpu_core_range=cpu_core_range,
+                gpu_identifier=gpu_identifier,
+            )
+            return json.dumps({"result": result})
+
+        elif item.name == "scrape_web_page":
+            url = args.get("url", "")
+            if not url:
+                return json.dumps({"error": "url parameter is required"})
+
+            logger.info("SOTA tool: scrape_web_page(%s)", url)
+            result = scrape_web_page(url)
+            return json.dumps({"content": result})
+
+        elif item.name == "read_research_paper":
+            arxiv_link = args.get("arxiv_link", "")
+            if not arxiv_link:
+                return json.dumps({"error": "arxiv_link parameter is required"})
+
+            logger.info("SOTA tool: read_research_paper(%s)", arxiv_link)
+            result = read_research_paper(arxiv_link)
+            return json.dumps({"summary": result})
+
+        elif item.name == "download_external_datasets":
+            question_1 = args.get("question_1", "")
+            question_2 = args.get("question_2", "")
+            question_3 = args.get("question_3", "")
+
+            if not (question_1 and question_2 and question_3):
+                return json.dumps({"error": "question_1, question_2, and question_3 are all required"})
+
+            logger.info("SOTA tool: download_external_datasets(%s, %s, %s)",
+                       question_1[:50], question_2[:50], question_3[:50])
+            result = download_external_datasets(
+                question_1=question_1,
+                question_2=question_2,
+                question_3=question_3,
+                slug=slug
+            )
+            return json.dumps({"result": result})
+
+        else:
+            logger.error("Unknown SOTA tool: %s", item.name)
+            return json.dumps({"error": f"Unknown tool: {item.name}"})
+
+    except Exception as e:
+        logger.exception("SOTA tool execution failed for %s", item.name)
+        return json.dumps({"error": f"Tool execution failed: {str(e)}"})
+
 
 @weave.op()
 def execute_code(filepath: str, timeout_seconds: int | None = None, conda_env: str | None = None) -> str:
