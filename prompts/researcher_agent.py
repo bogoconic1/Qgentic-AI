@@ -898,6 +898,7 @@ External Datasets:
 - `run_ab_test(questions)`: Runs multiple A/B tests in parallel (up to {max_parallel_workers})
 - `download_external_datasets(question_1, question_2, question_3)`: Finds and downloads external datasets to `{base_dir}/external_data/`
 - `read_research_paper(arxiv_link)`: Reads and summarizes arXiv research
+- `scrape_web_page(url)`: Scrapes and reads web pages (technical blogs, documentation, tutorials, domain-specific content)
 
 **Tool Usage Notes:**
 - Web search is permitted for domain research
