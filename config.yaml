@@ -35,6 +35,7 @@ paths:
   external_data_dirname: "external-data"
 guardrails:
   logging_basicconfig_order: true
+  enable_code_safety: true  # LLM-based critical security checks (eval, exec, command injection)
 tracking:
   wandb:
     entity: 520f8592abc # replace with your W&B entity
