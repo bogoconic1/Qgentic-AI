@@ -29,10 +29,14 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements-test.txt
 
-    - name: Create test directories
+    - name: Create test directories and mock credentials
       run: |
         mkdir -p task/dummy-test
         echo "# Test competition" > task/dummy-test/description.md
+        # Create dummy kaggle.json (needed for imports, not used by tests)
+        mkdir -p ~/.kaggle
+        echo '{"username":"test","key":"test"}' > ~/.kaggle/kaggle.json
+        chmod 600 ~/.kaggle/kaggle.json
 
     - name: Run tests
       env:
@@ -40,6 +44,8 @@ jobs:
         OPENAI_API_KEY: "sk-test-key-for-ci"
         ANTHROPIC_API_KEY: "sk-ant-test-key-for-ci"
         GOOGLE_API_KEY: "test-google-key-for-ci"
+        KAGGLE_USERNAME: "test"
+        KAGGLE_KEY: "test"
       run: |
         pytest tests/ -v --tb=short --maxfail=5
 
