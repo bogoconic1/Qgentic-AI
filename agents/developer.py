@@ -996,15 +996,26 @@ class DeveloperAgent:
                 self.logger.info("Time budget exhausted (%.2f minutes)", (deadline - start_time) / 60.0)
                 break
 
-            # Trim to keep at most 40 messages, ensuring first message is from "user"
-            if len(input_list) > 40:
-                # Trim from the front
-                input_list = input_list[-40:]
-                # Ensure first message is from user (required by API)
-                while input_list and input_list[0].get("role") != "user":
-                    input_list.pop(0)
-                self.logger.info("Trimmed messages to %d (cap: 40, first role: %s)",
-                               len(input_list), input_list[0].get("role") if input_list else "none")
+            # Trim to keep at most 80 messages, ensuring first message is from "user"
+            try:
+                if len(input_list) > 80:
+                    # Trim from the front
+                    input_list = input_list[-80:]
+                    # Ensure first message is from user (required by API)
+                    while input_list:
+                        try:
+                            if input_list[0].get("role") == "user":
+                                break  # Found user message, stop trimming
+                            input_list.pop(0)
+                        except Exception as e:
+                            self.logger.exception("Message has no attribute role: %s", e)
+                            input_list.pop(0)
+
+                    self.logger.info("Trimmed input messages to last 80 for attempt %s", attempt + 1)
+
+            except Exception as e:
+                self.logger.exception("Failed to trim input messages: %s", e)
+                break
 
             attempt += 1
 
