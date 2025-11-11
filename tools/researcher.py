@@ -385,11 +385,11 @@ def get_tools(max_parallel_workers: int = 1):
         {
             "type": "function",
             "name": "scrape_web_page",
-            "description": "Scrape a web page and return LLM-ready markdown content. Useful for reading blog posts, documentation, Kaggle competition discussions, winner solution write-ups, technical tutorials, and other domain-specific web content that complements arxiv papers.",
+            "description": "Scrape a web page and return markdown content. Useful for reading blog posts, documentation, technical tutorials, and other domain-specific web content that complements arxiv papers.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "url": {"type": "string", "description": "The webpage URL to scrape (e.g., 'https://www.kaggle.com/competitions/xyz/discussion/123', 'https://developer.nvidia.com/blog/...')"}
+                    "url": {"type": "string", "description": "The webpage URL to scrape (e.g., 'https://developer.nvidia.com/blog/...')"}
                 },
             },
             "additionalProperties": False,
