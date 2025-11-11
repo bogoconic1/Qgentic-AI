@@ -1287,6 +1287,9 @@ class DeveloperAgent:
                 else:
                     self.logger.debug("Skipping non-file path when logging artifact: %s", path)
 
-            artifact.save()
+            try:
+                artifact.save()
+            except Exception as e:
+                self.logger.exception("Failed to save wandb artifact: %s", e)
 
         return self.best_score, self.best_code_file, self.blacklisted_ideas, self.successful_ideas
