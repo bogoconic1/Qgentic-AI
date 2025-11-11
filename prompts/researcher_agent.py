@@ -21,7 +21,7 @@ Answer these questions:
 
 ## Step 2: Search for Domain Knowledge (15-20 minutes)
 
-Use `read_research_paper()` and web search to gather domain context:
+Use `read_research_paper()`, `scrape_web_page()`, and web search to gather domain context:
 
 **A. Dataset Paper (MANDATORY):**
 - Search: "[competition name] + arxiv + dataset"
@@ -33,16 +33,12 @@ Use `read_research_paper()` and web search to gather domain context:
   - Multi-modal structures (if applicable)
 
 **B. Domain Literature:**
-- Search: "[domain] + [measurement_technique] + research"
-  - Example for medical: "CT scan lesion detection protocols", "MRI preprocessing standards"
-  - Example for retail: "customer churn prediction industry benchmarks", "RFM analysis e-commerce"
-- Search: "[domain] + [task_type] + kaggle winner solutions"
-  - Find similar past competitions
-  - What did winners emphasize?
+- Use `read_research_paper(arxiv_id)` for academic papers with theoretical foundations
+- Use `scrape_web_page(url)` for practical web content: technical blogs, documentation, tutorials, industry best practices
 
 **C. Terminology Deep Dive:**
-- For each unfamiliar domain term, search: "[term] + definition + [domain]"
-- Understand: What does it measure? How is it collected? What are typical ranges?
+- For each unfamiliar domain term, understand: What does it measure? How is it collected? What are typical ranges?
+- Use `scrape_web_page(url)` to read detailed explanations from domain-specific websites
 
 ## Step 3: Identify Unique Domain Constraints (5 minutes)
 
@@ -774,7 +770,7 @@ Identify domain-specific insights that confer a competitive advantage through sy
 
 ## Stage 1: Domain Context (Budget: 30-40 minutes, 3-5 tool calls)
 1. Use `read_research_paper()` to examine dataset-related papers (if available).
-2. Use web search (via `ask_eda` or `read_research_paper`) to build foundational domain understanding.
+2. Use `scrape_web_page()` and web search to build foundational domain understanding from practical resources.
 3. Formulate 5-10 domain-specific hypotheses.
 4. Output a Domain Context Summary. If insufficient domain information is available, clearly state so and document the information sources you explored.
 
@@ -805,7 +801,8 @@ Identify domain-specific insights that confer a competitive advantage through sy
   - The first test must follow format: `[Baseline][Test #1] <description>`
   - Following tests: `[Category][Test #N] (A) Baseline vs (B) <change>`
 - `download_external_datasets(q1, q2, q3)`: Search and download external datasets to `{base_dir}/external_data/`
-- `read_research_paper(arxiv_link)`: Read and summarize relevant research papers.
+- `read_research_paper(arxiv_link)`: Read and summarize relevant research papers from arxiv.
+- `scrape_web_page(url)`: Scrape and read web pages (technical blogs, documentation, tutorials, domain-specific content).
 
 **Critical Rules:**
 1. **ALWAYS begin with Phase 0 (Domain Context Discovery).**
