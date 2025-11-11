@@ -966,7 +966,7 @@ class DeveloperAgent:
             return None
 
     @weave.op()
-    def run(self, max_time_seconds: int = 6 * 3600) -> bool:
+    def run(self, max_time_seconds: int = 6 * 3600) -> tuple[float, Optional[str], list[str], list[str]]:
         self.logger.info(
             "Starting developer run for slug=%s iteration=%s",
             self.slug,
