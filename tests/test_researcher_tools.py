@@ -34,7 +34,7 @@ def test_ask_eda_timeout(test_data_dir, monkeypatch):
         )
         return mock_response
 
-    monkeypatch.setattr("tools.helpers.call_llm_with_retry", fake_call_llm)
+    monkeypatch.setattr("tools.researcher.call_llm_with_retry", fake_call_llm)
 
     result = ask_eda(
         question="Sleep for 5 seconds",
@@ -66,7 +66,7 @@ def test_ask_eda_success(test_data_dir, monkeypatch):
         )
         return mock_response
 
-    monkeypatch.setattr("tools.helpers.call_llm_with_retry", fake_call_llm)
+    monkeypatch.setattr("tools.researcher.call_llm_with_retry", fake_call_llm)
 
     result = ask_eda(
         question="Print a hello message",
@@ -110,7 +110,7 @@ def test_ask_eda_retry_on_no_code_block(test_data_dir, monkeypatch):
 
         return mock_response
 
-    monkeypatch.setattr("tools.helpers.call_llm_with_retry", fake_call_llm)
+    monkeypatch.setattr("tools.researcher.call_llm_with_retry", fake_call_llm)
 
     result = ask_eda(
         question="Test retry logic",
@@ -172,7 +172,7 @@ def test_download_external_datasets(monkeypatch):
 
             return mock_response
 
-        monkeypatch.setattr("tools.helpers.call_llm_with_retry", fake_call_llm)
+        monkeypatch.setattr("tools.researcher.call_llm_with_retry", fake_call_llm)
 
         # Mock Kaggle API
         mock_dataset_metadata = MagicMock()
