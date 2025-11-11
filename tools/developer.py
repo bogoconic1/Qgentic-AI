@@ -326,9 +326,22 @@ def search_sota_suggestions(
         )
 
         if not has_tool_calls:
-            # No tool calls, final answer reached
-            logger.info("SOTA suggestions completed at step %d (no tool calls)", step + 1)
-            return response
+            # No tool calls, check if we have structured output
+            if hasattr(response, 'output_parsed') and response.output_parsed:
+                logger.info("SOTA suggestions completed at step %d (no tool calls, structured output present)", step + 1)
+                return response
+            else:
+                # Need to get structured output - make final call
+                logger.info("SOTA suggestions completed at step %d (no tool calls), requesting structured output", step + 1)
+                response = call_llm_with_retry(
+                    model=_DEVELOPER_TOOL_MODEL,
+                    instructions=system_prompt,
+                    tools=[],  # No more tools
+                    messages=input_list,
+                    web_search_enabled=True,
+                    text_format=SOTAResponse,
+                )
+                return response
 
         # Execute tool calls
         for item in response.output:

@@ -400,6 +400,83 @@ def test_search_sota_suggestions_with_tools(monkeypatch, test_data_dir):
     print(f"   - Final suggestion includes data-driven insights")
 
 
+def test_search_sota_suggestions_early_exit_forces_structured_output(monkeypatch):
+    """Test that early exit (no tool calls on step 2) still returns structured output."""
+    from schemas.developer import SOTAResponse
+    import json
+
+    call_count = [0]
+
+    def fake_call_llm(*args, **kwargs):
+        call_count[0] += 1
+        mock_response = MagicMock()
+
+        # First call: LLM makes a tool call
+        if call_count[0] == 1:
+            mock_tool_call = MagicMock()
+            mock_tool_call.type = "function_call"
+            mock_tool_call.name = "ask_eda"
+            mock_tool_call.call_id = "call_123"
+            mock_tool_call.arguments = json.dumps({"question": "Check data distribution"})
+
+            mock_response.output = [mock_tool_call]
+            mock_response.output_parsed = None
+            mock_response.output_text = "Let me check the data first."
+
+        # Second call: LLM decides to stop (no tool calls, no structured output initially)
+        elif call_count[0] == 2:
+            # Simulate unstructured response (the bug scenario)
+            mock_response.output = []
+            mock_response.output_parsed = None  # No structured output!
+            mock_response.output_text = "Based on EDA, here are my suggestions..."
+
+        # Third call: System requests structured output
+        else:
+            mock_response.output = []
+            mock_response.output_parsed = SOTAResponse(
+                blacklist=False,
+                blacklist_reason="Based on findings",
+                suggestion="Use calibration based on EDA",
+                suggestion_reason="Data shows miscalibration"
+            )
+            mock_response.output_text = "Final structured suggestion"
+
+        return mock_response
+
+    # Mock ask_eda
+    def fake_ask_eda(*args, **kwargs):
+        return "Distribution is imbalanced: 70% class 0, 30% class 1"
+
+    monkeypatch.setattr("tools.developer.call_llm_with_retry", fake_call_llm)
+    monkeypatch.setattr("tools.researcher.ask_eda", fake_ask_eda)
+
+    result = search_sota_suggestions(
+        description="Test competition",
+        context="Current context",
+        red_flags="Class imbalance",
+        executed_suggestion="Baseline",
+        failed_ideas=[],
+        slug="test-comp",
+        data_path="/tmp/test",
+    )
+
+    # Should have made 3 calls:
+    # 1. Initial call with tool call
+    # 2. After tool result, no more tool calls but no structured output
+    # 3. Request structured output
+    assert call_count[0] == 3
+
+    # Final result should have structured output
+    assert hasattr(result, 'output_parsed')
+    assert result.output_parsed is not None
+    assert result.output_parsed.blacklist == False
+    assert "calibration" in result.output_parsed.suggestion.lower()
+
+    print("✅ Early exit correctly forces structured output:")
+    print(f"   - Total LLM calls: {call_count[0]}")
+    print(f"   - Structured output obtained: {result.output_parsed is not None}")
+
+
 def test_search_sota_suggestions_without_tools(monkeypatch):
     """Test search_sota_suggestions without slug/data_path (tools disabled)."""
     from schemas.developer import SOTAResponse
