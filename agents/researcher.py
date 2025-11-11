@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from project_config import get_config
 from weave.trace.util import ThreadPoolExecutor
 
-from tools.researcher import ask_eda, download_external_datasets, read_research_paper, get_tools
+from tools.researcher import ask_eda, download_external_datasets, read_research_paper, scrape_web_page, get_tools
 from prompts.researcher_agent import (
     build_system as prompt_build_system,
     initial_user_for_build_plan as prompt_initial_user,
@@ -426,6 +426,30 @@ class ResearcherAgent:
                 "call_id": item.call_id,
                 "output": json.dumps({
                     "summary": tool_output,
+                })
+            })
+
+        elif item.name == "scrape_web_page":
+            try:
+                args = json.loads(item.arguments)
+                url = args.get("url", "")
+            except Exception as e:
+                logger.error("Failed to parse scrape_web_page arguments: %s", e)
+                url = ""
+
+            if not url:
+                tool_output = "Error: url is required."
+            else:
+                logger.info("Scraping web page: %s", url)
+                tool_output = scrape_web_page(url)
+
+            logger.info("Scraped content length=%s", len(tool_output or ""))
+
+            input_list.append({
+                "type": "function_call_output",
+                "call_id": item.call_id,
+                "output": json.dumps({
+                    "content": tool_output,
                 })
             })
 

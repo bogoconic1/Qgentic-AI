@@ -280,6 +280,48 @@ def read_research_paper(arxiv_link: str) -> str:
         return f"Error reading paper: {str(e)}"
 
 
+@weave.op()
+def scrape_web_page(url: str) -> str:
+    """Scrape a web page and return LLM-ready markdown content.
+
+    Useful for reading blog posts, documentation, competition forums, winner solutions,
+    technical tutorials, and other domain-specific web content that complements arxiv papers.
+
+    Args:
+        url: The webpage URL to scrape (e.g., blog posts, Kaggle discussions, documentation)
+
+    Returns:
+        Markdown content from the page with title and metadata
+    """
+    logger.info("Scraping web page: %s", url)
+
+    try:
+        from firecrawl import Firecrawl
+
+        api_key = os.environ.get("FIRECRAWL_API_KEY")
+        if not api_key:
+            logger.error("FIRECRAWL_API_KEY not set in environment")
+            return "Error: FIRECRAWL_API_KEY environment variable is not set. Cannot scrape web pages."
+
+        app = Firecrawl(api_key=api_key)
+        doc = app.scrape(url, formats=["markdown"])
+
+        if doc.markdown:
+            title = doc.metadata.title if doc.metadata and doc.metadata.title else url
+            logger.info("Successfully scraped page (length: %d chars, title: %s)", len(doc.markdown), title)
+            return f"# {title}\n\nSource: {url}\n\n{doc.markdown}"
+        else:
+            logger.warning("No markdown content returned from Firecrawl for URL: %s", url)
+            return f"Error: Failed to scrape page at {url}. The page may be inaccessible or contain no readable content."
+
+    except ImportError:
+        logger.error("Firecrawl package not installed")
+        return "Error: Firecrawl package is not installed. Install with: pip install firecrawl-py"
+    except Exception as e:
+        logger.exception("Failed to scrape web page: %s", url)
+        return f"Error scraping page: {str(e)}"
+
+
 def get_tools(max_parallel_workers: int = 1):
     return [
         {
@@ -339,5 +381,18 @@ def get_tools(max_parallel_workers: int = 1):
             },
             "additionalProperties": False,
             "required": ["arxiv_link"],
+        },
+        {
+            "type": "function",
+            "name": "scrape_web_page",
+            "description": "Scrape a web page and return LLM-ready markdown content. Useful for reading blog posts, documentation, Kaggle competition discussions, winner solution write-ups, technical tutorials, and other domain-specific web content that complements arxiv papers.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description": "The webpage URL to scrape (e.g., 'https://www.kaggle.com/competitions/xyz/discussion/123', 'https://developer.nvidia.com/blog/...')"}
+                },
+            },
+            "additionalProperties": False,
+            "required": ["url"],
         },
     ]
