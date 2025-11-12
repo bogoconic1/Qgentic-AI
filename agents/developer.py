@@ -959,6 +959,10 @@ class DeveloperAgent:
                 external_data_listing=self.external_data_listing,
                 plan_content=self.plan_content,
                 attempt_number=attempt_number,
+                slug=self.slug,
+                data_path=str(self.base_dir),
+                cpu_core_range=self.cpu_core_range,
+                gpu_identifier=self.gpu_identifier,
             )
             return sota_response
         except Exception as exc:

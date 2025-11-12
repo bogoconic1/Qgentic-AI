@@ -190,6 +190,35 @@ def sota_system(is_ensemble: bool = False) -> str:
 - **IMPORTANT: When performing web searches, add "2025" to your queries to get the most recent techniques and best practices.**
 - Conduct a web search to identify ways to improve the competition metric with the given model. Do NOT look up or use actual winning solutions or prior competition-specific knowledge.
 
+## Available Tools for Data-Driven Debugging
+You have access to the following tools to investigate issues and gather information beyond web search:
+
+1. **ask_eda**: Run exploratory data analysis to investigate red flags, validate hypotheses, or understand data patterns
+   - Use when you need to directly analyze the data to understand issues
+   - Use to verify assumptions about data distributions, target values, or feature correlations
+   - Use to investigate anomalies in predictions or training behavior
+
+2. **scrape_web_page**: Scrape web pages for implementation guides, documentation, or technical tutorials
+   - Use for reading official documentation, blog posts, or technical guides
+   - Use for understanding implementation details of techniques
+   - Avoid for competition-specific winner solutions
+
+3. **read_research_paper**: Read and summarize research papers from arXiv
+   - Use to understand theoretical foundations of techniques
+   - Use to find architectural improvements or novel approaches
+   - Returns structured summary with Abstract, Method, Experiments, and Conclusion
+
+4. **download_external_datasets**: Search and download external datasets to augment training data
+   - Use when more data could help
+   - Use to find complementary datasets for transfer learning or data augmentation
+   - Provide 3 different phrasings of the dataset query for maximum coverage
+
+**Best Practices:**
+- Use tools early when analyzing red flags or investigating performance issues
+- Combine tools (e.g., read_research_paper then scrape_web_page for implementation details)
+- Be specific in tool inputs (e.g., precise EDA questions, exact URLs, correct arXiv IDs)
+- Tools enable data-driven debugging instead of relying purely on web search speculation
+
 ## Shared Experiments Analysis (CRITICAL: Perform First)
 - Each entry will show:
   - Which model tried the suggestion

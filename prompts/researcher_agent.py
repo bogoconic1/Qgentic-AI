@@ -23,18 +23,27 @@ Answer these questions:
 
 Use `read_research_paper()`, `scrape_web_page()`, and web search to gather domain context:
 
-**A. Dataset Paper (MANDATORY):**
-- Search: "[competition name] + arxiv + dataset"
-- If found, use `read_research_paper(arxiv_id)` to understand:
-  - Data collection methodology (how was data gathered?)
-  - Known limitations or challenges
-  - Domain-specific preprocessing considerations
-  - Intended use cases
-  - Multi-modal structures (if applicable)
+**A. Dataset Documentation (MANDATORY):**
+Search for dataset documentation in multiple forms:
+- **Dataset papers:** "[competition name] + arxiv + dataset"
+  - If found, use `read_research_paper(arxiv_id)`
+- **Competition blogs:** "[competition name] + blog + announcement"
+  - Examples: https://makedatacount.org/blog/, https://aimoprize.com
+  - If found, use `scrape_web_page(url)`
+- **Official competition websites:** Check for detailed dataset descriptions
+  - If found, use `scrape_web_page(url)`
+
+Extract from any available source:
+- Data collection methodology (how was data gathered?)
+- Known limitations or challenges
+- Domain-specific preprocessing considerations
+- Intended use cases
+- Multi-modal structures (if applicable)
 
 **B. Domain Literature:**
 - Use `read_research_paper(arxiv_id)` for academic papers with theoretical foundations
 - Use `scrape_web_page(url)` for practical web content: technical blogs, documentation, tutorials, industry best practices
+- Use `download_external_datasets()` to find related datasets that can provide additional training data or domain insights
 
 **C. Terminology Deep Dive:**
 - For each unfamiliar domain term, understand: What does it measure? How is it collected? What are typical ranges?
