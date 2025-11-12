@@ -140,8 +140,6 @@ def test_ask_eda_no_false_positive_on_error_word(test_data_dir, monkeypatch):
         # Return code that prints "Error" in output (e.g., metric name)
         mock_response.output_text = (
             "```python\n"
-            "import transformers\n"
-            "transformers.logging.set_verbosity_error()\n"
             "print('Mean Squared Error: 0.123')\n"
             "print('Error rate: 5%')\n"
             "```"
