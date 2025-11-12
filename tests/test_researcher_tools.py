@@ -129,6 +129,44 @@ def test_ask_eda_retry_on_no_code_block(test_data_dir, monkeypatch):
     print(f"   - Attempted {attempt_count[0]} times")
 
 
+def test_ask_eda_no_false_positive_on_error_word(test_data_dir, monkeypatch):
+    """Test that output containing 'Error' as a word doesn't trigger retry."""
+    attempt_count = [0]
+
+    def fake_call_llm(*args, **kwargs):
+        attempt_count[0] += 1
+        mock_response = MagicMock()
+        mock_response.output = []
+        # Return code that prints "Error" in output (e.g., metric name)
+        mock_response.output_text = (
+            "```python\n"
+            "import transformers\n"
+            "transformers.logging.set_verbosity_error()\n"
+            "print('Mean Squared Error: 0.123')\n"
+            "print('Error rate: 5%')\n"
+            "```"
+        )
+        return mock_response
+
+    monkeypatch.setattr("tools.researcher.call_llm_with_retry", fake_call_llm)
+
+    result = ask_eda(
+        question="Calculate MSE",
+        description="Test competition",
+        data_path=test_data_dir,
+        max_attempts=1,
+        timeout_seconds=10
+    )
+
+    # Should succeed on first attempt (not retry due to "Error" word)
+    assert attempt_count[0] == 1
+    assert "Mean Squared Error" in result or "Error rate" in result
+
+    print("✅ ask_eda doesn't false-positive on 'Error' word:")
+    print(f"   - Only 1 attempt made (no retry)")
+    print(f"   - Output with 'Error' word accepted")
+
+
 def test_download_external_datasets(monkeypatch):
     """Test download_external_datasets with mocked Kaggle API."""
     # Create temporary directory with comp_metadata.yaml

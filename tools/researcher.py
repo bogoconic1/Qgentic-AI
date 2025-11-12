@@ -149,8 +149,8 @@ def ask_eda(question: str, description: str, data_path: str, max_attempts: int |
                 return result
 
             # Check if execution had errors (execute_code returns error traces with guidance)
-            # If there's an error, it will contain stack trace with web search guidance
-            if "Traceback" in result or "Error" in result:
+            # If there's an error, it will contain stack trace (Traceback)
+            if "Traceback" in result:
                 logger.warning("ask_eda execution failed, retrying with error feedback")
                 input_list.append({"role": "user", "content": result + "\n\nPlease regenerate the code to fix the errors above."})
                 continue
