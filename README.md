@@ -41,14 +41,17 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
 
 ## Past Competitions
 
+🏆 Statistics: <br>
+5 competitions: 4 🥇 0 🥈 0 🥉 
+
 | Kaggle Competition | Difficulty | Type | Metric | Qgentic-AI | FM Agent | InternAgent | Operand | R&D-Agent | MLE-STAR-PRO |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| us-patent-phrase-to-phrase-matching | Medium | Information Retrieval | PCC (higher) | 0.85393 (baseline) -> 0.86991 (ensemble) | 0.86169 ± 0.01725 | 0.86793 ± 0.00294 | 0.69230 ± 0.20529 | 0.80092 ± 0.04586 | 0.75311 ± 0.14290 |
-| learning-agency-lab-automated-essay-scoring-2 | Medium | Text | QWK (higher) | 0.84721 (baseline) -> 0.84386 (ensemble) | 0.84471 ± 0.00549 | 0.82996 ± 0.00908 | 0.83013 | 0.82450 ± 0.01155 | 0.83171 ± 0.00660 |
+| 🥇 us-patent-phrase-to-phrase-matching | Medium | Information Retrieval | PCC (higher) | 0.85393 (baseline) -> 0.86991 (ensemble) | 0.86169 ± 0.01725 | 0.86793 ± 0.00294 | 0.69230 ± 0.20529 | 0.80092 ± 0.04586 | 0.75311 ± 0.14290 |
+| 🥇 learning-agency-lab-automated-essay-scoring-2 | Medium | Text | QWK (higher) | 0.84721 (baseline) -> 0.84386 (ensemble) | 0.84471 ± 0.00549 | 0.82996 ± 0.00908 | 0.83013 | 0.82450 ± 0.01155 | 0.83171 ± 0.00660 |
 | tabular-playground-series-dec-2021 | Easy | Tabular | Accuracy % (higher) | TBC | 0.95988 ± 0.00158 | 0.96268 ± 0.00046 | 0.96266 ± 0.00071 | 0.96294 ± 0.00018 | 0.96267 ± 0.00059 |
 | statoil-iceberg-classifier-challenge | Medium | Image Classification | Logloss (lower) | 0.18058 (baseline) -> 0.15977 (ensemble) | 1.25837 ± 0.95314 | 0.20303 ± 0.00651 | Failed | Failed | 0.24558 ± 0.02098 |
-| denoising-dirty-documents | Medium | Computer Vision | RMSE (lower) | 0.02094 (baseline) -> 0.01231 (ensemble) | 0.01958 ± 0.00749 | 0.02283 ± 0.01652 | 0.02301 ± 0.01474 | 0.01122 ± 0.00107 | 0.01145 ± 0.00059 |
-| whale-categorization-playground | Medium | Computer Vision | MAP@5 (higher) | 0.48272 (baseline) -> 0.57087 (ensemble) | 0.46635 ± 0.03608 | 0.18327 ± 0.14001 | 0.36061 ± 0.10255 | 0.26214 ± 0.01121 | 0.35985 ± 0.04825 |
+| 🥇 denoising-dirty-documents | Medium | Computer Vision | RMSE (lower) | 0.02094 (baseline) -> 0.01231 (ensemble) | 0.01958 ± 0.00749 | 0.02283 ± 0.01652 | 0.02301 ± 0.01474 | 0.01122 ± 0.00107 | 0.01145 ± 0.00059 |
+| 🥇 whale-categorization-playground | Medium | Computer Vision | MAP@5 (higher) | 0.48272 (baseline) -> 0.57087 (ensemble) | 0.46635 ± 0.03608 | 0.18327 ± 0.14001 | 0.36061 ± 0.10255 | 0.26214 ± 0.01121 | 0.35985 ± 0.04825 |
 | google-quest-challenge | Medium | Text | Spearman Correlation (higher) | TBC | 0.39365 ± 0.01830 | 0.40873 ± 0.01466 | 0.39802 ± 0.01202 | 0.41488 ± 0.00678 | 0.39628 ± 0.00535 |
 --- 
 
