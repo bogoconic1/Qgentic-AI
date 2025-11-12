@@ -27,8 +27,10 @@ runtime:
   # Conda environment isolation
   reset_conda_envs_per_run: true # If true, delete and recreate conda environments on each run for clean slate (slower startup). If false, reuse existing environments (faster but accumulates packages over time)
   # Time limits (in seconds)
-  baseline_time_limit: 10800  # 4 hours for baseline development
+  baseline_time_limit: 10800  # 3 hours for baseline development
   ensemble_time_limit: 14400  # 4 hours for ensemble phase
+  baseline_code_timeout: 5400  # 1.5 hours for baseline code execution
+  ensemble_code_timeout: 10800  # 3 hours for ensemble code execution
 paths:
   task_root: "task"
   outputs_dirname: "outputs"

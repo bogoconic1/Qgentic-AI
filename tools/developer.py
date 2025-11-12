@@ -40,8 +40,8 @@ _FINETUNED_CODE_API_MODEL = _LLM_CFG.get("finetuned_code_api_model")
 _RUNTIME_CFG = _CONFIG.get("runtime")
 _BASELINE_TIME_LIMIT = _RUNTIME_CFG.get("baseline_time_limit")
 _ENSEMBLE_TIME_LIMIT = _RUNTIME_CFG.get("ensemble_time_limit")
-_BASELINE_CODE_TIMEOUT = 5400  # 1.5 hours for baseline code execution
-_ENSEMBLE_CODE_TIMEOUT = 10800  # 3 hours for ensemble code execution
+_BASELINE_CODE_TIMEOUT = _RUNTIME_CFG.get("baseline_code_timeout")
+_ENSEMBLE_CODE_TIMEOUT = _RUNTIME_CFG.get("ensemble_code_timeout")
 _DEFAULT_CODE_TIMEOUT = _BASELINE_CODE_TIMEOUT  # Default to baseline timeout
 
 @weave.op()

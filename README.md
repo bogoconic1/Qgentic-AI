@@ -253,17 +253,19 @@ Key settings live in `config.yaml` (merged with `project_config.py` defaults):
   - `leakage_review_model` / `leakage_followup_model`: Guardrails (`gpt-5-mini`)
 
 - **runtime**: Execution parameters:
-  - `baseline_time_limit`: Total time budget for baseline iteration in seconds (default: 21600 = 6 hours)
-  - Code execution timeout automatically calculated as `baseline_time_limit // 4` (currently 5400s = 1.5 hours)
-  - `ask_eda_max_attempts`: Max retry attempts for EDA/A/B test code generation (default: 3)
+  - `baseline_time_limit`: Total time budget for baseline iteration in seconds (default: 10800 = 3 hours)
+  - `ensemble_time_limit`: Total time budget for ensemble iteration in seconds (default: 14400 = 4 hours)
+  - `baseline_code_timeout`: Timeout for baseline code execution in seconds (default: 5400 = 1.5 hours)
+  - `ensemble_code_timeout`: Timeout for ensemble code execution in seconds (default: 10800 = 3 hours)
+  - `ask_eda_max_attempts`: Max retry attempts for EDA/A/B test code generation (default: 5)
   - `download_datasets_max_attempts`: Max retry attempts per query phrasing for external dataset discovery (default: 1)
   - `researcher_max_steps`: Max steps for researcher exploration (default: 512)
   - `llm_max_retries`: Max retries for LLM calls (default: 3)
   - `baseline_max_parallel_workers`: Max parallel baseline workers when MIG disabled (default: 3)
   - `enable_mig`: Enable NVIDIA MIG GPU isolation (auto-detects worker count from available MIG instances)
-  - `enable_multi_gpu`: Enable multi-GPU parallelism across physical GPUs (default: false)
-  - `enable_cpu_affinity`: Enable CPU core pinning for parallel processes
-  - `reset_conda_envs_per_run`: Reset conda environments before each run (default: false)
+  - `enable_multi_gpu`: Enable multi-GPU parallelism across physical GPUs (default: true)
+  - `enable_cpu_affinity`: Enable CPU core pinning for parallel processes (default: true)
+  - `reset_conda_envs_per_run`: Reset conda environments before each run (default: true)
   - `patch_mode_enabled`: Experimental diff-based workflow (default: false)
 
 - **paths**: Root directories and naming templates for generated artifacts.
