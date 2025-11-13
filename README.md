@@ -9,6 +9,8 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
 ---
 ## News
 
+**[2025/11/13]** 📊 **Qgentic-AI achieves 94.82% weighted mean percentile across 7 MLE-Bench competitions** - outperforming FM-Agent (93.91%), InternAgent (76.25%), MLE-STAR-PRO (72.74%), Operand (69.81%), and R&D-Agent (62.46%). Results reported as percentiles with 74:1 weighting to match MLE-Bench's 75-competition benchmark.
+
 **[2025/11/10]** 🔬 **Enhanced Researcher with Domain-First Discovery** - example research plan for CSIRO competition [here](https://www.kaggle.com/code/yeoyunsianggeremie/csiro-agentic-ai-solution-mobilenet-v4/comments#3315336)
 
 **[2025/11/04]** 🏆 **Qgentic-AI achieves #1 single-model public notebook on [PS5E11](https://www.kaggle.com/competitions/playground-series-s5e11)** (Top 6%, 40/700) with fully
@@ -30,6 +32,8 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
 
 ## Preliminary Results
 
+The competitions were evaluated on 4x A100 80GB GPUs (splitted into 8 instances of 40GB using MIG). The average runtime is 8-9 hours per competition (1 hour researcher + 3 hours baseline + 4 hours ensemble + buffers).
+
 ## Present Competitions
 
 | Kaggle Competition | LB score | Ranking | Notebook |
@@ -38,21 +42,23 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
 | playground-series-s5e11 | 0.92684 | Top 6% (40/700) - **Best Single Model Public Notebook** 🚀 | [Notebook 1](https://www.kaggle.com/code/yeoyunsianggeremie/ps5e11-agentic-ai-solution-single-xgb) |
 | playground-series-s5e10 | 0.05576 | Top 15% (606/4082) | [Notebook 1](https://www.kaggle.com/code/yeoyunsianggeremie/ps5e10-agentic-ai-solution), [Notebook 2](https://www.kaggle.com/code/yeoyunsianggeremie/ps5e10-agentic-ai-xgb) |
 
+For present competitions, it is strongly recommended to increase the baseline and ensemble time limit to 2 days and 3 days respectively for optimal results.
+
 
 ## Past Competitions
 
-🏆 Statistics: <br>
-5 competitions: 4 🥇 0 🥈 0 🥉 
+Results are reported as **percentiles** (% of leaderboard submissions beaten). The weighted mean uses a 74:1 ratio (weight 12.33 for each of 6 competitions, weight 1.0 for Statoil) to match MLE-Bench's 75-competition benchmark and prevent the Statoil outlier from dominating the overall metric.
 
 | Kaggle Competition | Difficulty | Type | Metric | Qgentic-AI | FM Agent | InternAgent | Operand | R&D-Agent | MLE-STAR-PRO |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 🥇 us-patent-phrase-to-phrase-matching | Medium | Information Retrieval | PCC (higher) | 0.85393 (baseline) -> 0.86991 (ensemble) | 0.86169 ± 0.01725 | 0.86793 ± 0.00294 | 0.69230 ± 0.20529 | 0.80092 ± 0.04586 | 0.75311 ± 0.14290 |
-| 🥇 learning-agency-lab-automated-essay-scoring-2 | Medium | Text | QWK (higher) | 0.84721 (baseline) -> 0.84386 (ensemble) | 0.84471 ± 0.00549 | 0.82996 ± 0.00908 | 0.83013 | 0.82450 ± 0.01155 | 0.83171 ± 0.00660 |
-| tabular-playground-series-dec-2021 | Easy | Tabular | Accuracy % (higher) | TBC | 0.95988 ± 0.00158 | 0.96268 ± 0.00046 | 0.96266 ± 0.00071 | 0.96294 ± 0.00018 | 0.96267 ± 0.00059 |
-| statoil-iceberg-classifier-challenge | Medium | Image Classification | Logloss (lower) | 0.18058 (baseline) -> 0.15977 (ensemble) | 1.25837 ± 0.95314 | 0.20303 ± 0.00651 | Failed | Failed | 0.24558 ± 0.02098 |
-| 🥇 denoising-dirty-documents | Medium | Computer Vision | RMSE (lower) | 0.02094 (baseline) -> 0.01231 (ensemble) | 0.01958 ± 0.00749 | 0.02283 ± 0.01652 | 0.02301 ± 0.01474 | 0.01122 ± 0.00107 | 0.01145 ± 0.00059 |
-| 🥇 whale-categorization-playground | Medium | Computer Vision | MAP@5 (higher) | 0.48272 (baseline) -> 0.57087 (ensemble) | 0.46635 ± 0.03608 | 0.18327 ± 0.14001 | 0.36061 ± 0.10255 | 0.26214 ± 0.01121 | 0.35985 ± 0.04825 |
-| google-quest-challenge | Medium | Text | Spearman Correlation (higher) | TBC | 0.39365 ± 0.01830 | 0.40873 ± 0.01466 | 0.39802 ± 0.01202 | 0.41488 ± 0.00678 | 0.39628 ± 0.00535 |
+| us-patent-phrase-to-phrase-matching | Medium | Information Retrieval | PCC (higher) | 74.01% | 90.26% | **98.99%** | 15.19% | 21.81% | 17.31% |
+| learning-agency-lab-automated-essay-scoring-2 | Medium | Text | QWK (higher) | **100.00%** | **100.00%** | 63.18% | 64.40% | 46.90% | 68.91% |
+| tabular-playground-series-dec-2021 | Easy | Tabular | Accuracy % (higher) | **100.00%** | **100.00%** | **100.00%** | **100.00%** | **100.00%** | **100.00%** |
+| statoil-iceberg-classifier-challenge | Medium | Image Classification | Logloss (lower) | **83.18%** | 3.54% | 50.30% | 0.00% | 0.00% | 33.69% |
+| denoising-dirty-documents | Medium | Computer Vision | RMSE (lower) | **98.15%** | 93.21% | 89.51% | 89.51% | **98.15%** | **98.15%** |
+| whale-categorization-playground | Medium | Computer Vision | MAP@5 (higher) | **97.73%** | 93.01% | 10.40% | 60.11% | 14.37% | 60.11% |
+| google-quest-challenge | Medium | Text | Spearman Correlation (higher) | **100.00%** | 94.34% | 97.52% | 95.29% | 98.60% | 95.10% |
+| **Weighted Mean Percentile** | | | | **94.82%** | 93.91% | 76.25% | 69.81% | 62.46% | 72.74% |
 --- 
 
 ## Architecture at a Glance
