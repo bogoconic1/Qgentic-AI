@@ -12,6 +12,9 @@ You MUST first analyze the traceback in the `<query>`.
     * `transformers`
     * `pytorch`
     * `sklearn` (scikit-learn)
+    * `lightgbm`
+    * `catboost`
+    * `timm`
 
 2.  **If the error IS related** to one of these libraries:
     * You MUST proceed to follow the `Instructions (Success Case)` below.

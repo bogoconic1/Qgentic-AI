@@ -807,8 +807,8 @@ Identify domain-specific insights that confer a competitive advantage through sy
 **Tool Usage:**
 - `ask_eda(question)`: Perform exploratory data analysis on the provided dataset.
 - `run_ab_test(questions)`: Conduct parallel A/B tests (up to {max_parallel_workers} in a batch).
-  - The first test must follow format: `[Baseline][Test #1] <description>`
-  - Following tests: `[Category][Test #N] (A) Baseline vs (B) <change>`
+  - The first test must follow format: `[Baseline][Test #1] <description>` [only 1 test in parallel]
+  - Following tests: `[Category][Test #N] (A) Baseline vs (B) <change>` [up to {max_parallel_workers} tests in parallel]
 - `download_external_datasets(q1, q2, q3)`: Search and download external datasets to `{base_dir}/external_data/`
 - `read_research_paper(arxiv_link)`: Read and summarize relevant research papers from arxiv.
 - `scrape_web_page(url)`: Scrape and read web pages (technical blogs, documentation, tutorials, domain-specific content).

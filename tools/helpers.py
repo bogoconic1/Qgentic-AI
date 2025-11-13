@@ -282,7 +282,7 @@ def call_llm_with_retry_google(
     """
     result = None
 
-    for _ in range(40):
+    for _ in range(5):
         result = call_llm_with_retry_google_helper(
             model=model,
             system_instruction=system_instruction,
@@ -299,7 +299,7 @@ def call_llm_with_retry_google(
             break
 
     if result is None:
-        raise ValueError("Gemini call failed after 40 retries")
+        raise ValueError("Gemini call failed after 5 retries")
 
     return result
 

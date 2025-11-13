@@ -8,7 +8,7 @@ llm:
   model_recommender_model: "gemini-2.5-pro"
   starter_model: "gpt-5"
   ensembler_model: "gpt-5"
-  finetuned_code_api_model: "projects/134356426507/locations/us-central1/endpoints/8455973393806655488"
+  finetuned_code_api_model: "projects/134356426507/locations/us-central1/endpoints/7532524363963170816"
 runtime:
   ask_eda_max_attempts: 5
   download_datasets_max_attempts: 1
