@@ -228,6 +228,7 @@ def search_sota_suggestions(
     data_path: str | None = None,
     cpu_core_range: list[int] | None = None,
     gpu_identifier: str | None = None,
+    file_suffix: str | None = None,
     max_tool_steps: int = 10,
 ) -> str:
     """Stage 2: Use web search and tools to generate SOTA suggestions based on red flags.
@@ -249,6 +250,7 @@ def search_sota_suggestions(
         data_path: Path to task data directory for ask_eda
         cpu_core_range: CPU cores for ask_eda execution
         gpu_identifier: GPU for ask_eda execution
+        file_suffix: Suffix for temporary files to prevent race conditions (e.g., "1_1", "1_2")
         max_tool_steps: Maximum tool call iterations before forcing final answer
 
     Returns:
@@ -353,6 +355,7 @@ def search_sota_suggestions(
                     slug=slug,
                     cpu_core_range=cpu_core_range,
                     gpu_identifier=gpu_identifier,
+                    file_suffix=file_suffix,
                 )
                 input_list.append({
                     "type": "function_call_output",
@@ -374,7 +377,7 @@ def search_sota_suggestions(
     return response
 
 
-def _execute_sota_tool_call(item, description, data_path, slug, cpu_core_range, gpu_identifier):
+def _execute_sota_tool_call(item, description, data_path, slug, cpu_core_range, gpu_identifier, file_suffix):
     """Execute a single SOTA tool call and return JSON result."""
     from tools.researcher import ask_eda, scrape_web_page, read_research_paper, download_external_datasets
     import json
@@ -397,6 +400,7 @@ def _execute_sota_tool_call(item, description, data_path, slug, cpu_core_range, 
                 description=description,
                 data_path=data_path,
                 previous_ab_tests=[],  # SOTA doesn't use AB test history
+                file_suffix=f"_sota_{file_suffix}" if file_suffix else "_sota",  # e.g., "_sota_1_1"
                 cpu_core_range=cpu_core_range,
                 gpu_identifier=gpu_identifier,
             )

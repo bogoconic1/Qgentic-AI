@@ -73,10 +73,10 @@ class DeveloperAgent:
     _shared_suggestions: list[str] = []
     _lock = threading.Lock()
 
-    def __init__(self, slug: str, iteration: int, model_name: Optional[str] = None, model_recommendations: Optional[str] = None, later_recommendations: Optional[dict] = None, external_data_listing: Optional[str] = None, plan_content: Optional[str] = None, cpu_core_range: Optional[list[int]] = None, gpu_identifier: Optional[str] = None, gpu_isolation_mode: str = "none", conda_env: Optional[str] = None):
+    def __init__(self, slug: str, iteration: int | str, model_name: Optional[str] = None, model_recommendations: Optional[str] = None, later_recommendations: Optional[dict] = None, external_data_listing: Optional[str] = None, plan_content: Optional[str] = None, cpu_core_range: Optional[list[int]] = None, gpu_identifier: Optional[str] = None, gpu_isolation_mode: str = "none", conda_env: Optional[str] = None):
         load_dotenv()
         self.slug = slug
-        self.iteration = iteration
+        self.iteration = iteration  # Can be int (legacy) or str like "1_1" (for parallel baselines)
 
         self.task_root = _TASK_ROOT
         self.outputs_dirname = _OUTPUTS_DIRNAME
@@ -963,6 +963,7 @@ class DeveloperAgent:
                 data_path=str(self.base_dir),
                 cpu_core_range=self.cpu_core_range,
                 gpu_identifier=self.gpu_identifier,
+                file_suffix=str(self.iteration),  # Pass iteration as file suffix to prevent race conditions
             )
             return sota_response
         except Exception as exc:
