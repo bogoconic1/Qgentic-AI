@@ -16,3 +16,4 @@ class SOTAResponse(BaseModel):
     blacklist_reason: str
     suggestion: str
     suggestion_reason: str
+    suggestion_code: str

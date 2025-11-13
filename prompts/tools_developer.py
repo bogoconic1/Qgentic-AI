@@ -316,6 +316,7 @@ Provide a 1–3 sentence milestone micro-update at key logical boundaries: after
   - `blacklist_reason`: Succinct justification for the blacklist decision
   - `suggestion`: Your proposed best next idea (or "No suggestions." if no suggestion is viable)
   - `suggestion_reason`: Why it is the best choice now, referencing the red flags and shared suggestions analyses if relevant (or explain why you deem the model family unviable for competitive performance if no suggestion)
+  - `suggestion_code`: The complete Python code snippet implementing the suggestion (or an empty string if no suggestion)
 - Input Schema: enumeration of all input fields
 - Output Fields: enumeration of all output fields in markdown
 

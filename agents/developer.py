@@ -621,15 +621,16 @@ class DeveloperAgent:
 
         return f"{suggestion} (score {impact}: {prev_display} -> {curr_display})"
 
-    def _parse_sota_response(self, response) -> tuple[str, bool, str]:
-        """Extract new suggestion, blacklist decision, and rationale from structured output."""
+    def _parse_sota_response(self, response) -> tuple[str, bool, str, str]:
+        """Extract new suggestion, blacklist decision, rationale, and code from structured output."""
         # ok to fallback if LLM cannot give response
         suggestion_text = ""
         blacklist_flag = False
         blacklist_reason = ""
+        suggestion_code = ""
 
         if not response:
-            return suggestion_text, blacklist_flag, blacklist_reason
+            return suggestion_text, blacklist_flag, blacklist_reason, suggestion_code
 
         # Use structured output
         if hasattr(response, 'output_parsed') and response.output_parsed:
@@ -637,11 +638,13 @@ class DeveloperAgent:
             suggestion_text = parsed.suggestion.strip()
             blacklist_flag = bool(parsed.blacklist)
             blacklist_reason = parsed.blacklist_reason.strip()
-            self.logger.debug("Using structured SOTA output: suggestion=%s, blacklist=%s", suggestion_text, blacklist_flag)
+            suggestion_code = parsed.suggestion_code.strip() if hasattr(parsed, 'suggestion_code') else ""
+            self.logger.debug("Using structured SOTA output: suggestion=%s, blacklist=%s, code_len=%d",
+                            suggestion_text, blacklist_flag, len(suggestion_code))
         else:
             self.logger.warning("No structured output in SOTA response, falling back to empty values")
 
-        return suggestion_text, blacklist_flag, blacklist_reason
+        return suggestion_text, blacklist_flag, blacklist_reason, suggestion_code
 
     def _register_blacklist(self, suggestion: str, reason: str | None = None) -> None:
         if not suggestion:
@@ -1120,8 +1123,8 @@ class DeveloperAgent:
                 # Gather SOTA feedback (red flags + suggestions)
                 sota_response = self._gather_sota_feedback(code_with_logs, attempt_number=sota_suggestions_call_id)
 
-                suggestion_text, blacklist_flag, blacklist_reason = self._parse_sota_response(sota_response)
-                self.logger.info("SOTA suggestion: %s (blacklist=%s)", suggestion_text, blacklist_flag)
+                suggestion_text, blacklist_flag, blacklist_reason, suggestion_code = self._parse_sota_response(sota_response)
+                self.logger.info("SOTA suggestion: %s (blacklist=%s, code_len=%d)", suggestion_text, blacklist_flag, len(suggestion_code))
 
                 # Record the previous suggestion with its score impact (before updating self.last_suggestion)
                 if previous_successful_version is None:
@@ -1191,6 +1194,11 @@ class DeveloperAgent:
                     suggestion_block += f"<suggestion>\n{suggestion_text}\n</suggestion>\n"
                 else:
                     suggestion_block += "<suggestion>\nNo suggestion provided.\n</suggestion>\n"
+
+                if suggestion_code:
+                    suggestion_block += "Suggested code snippet:\n```python\n" + suggestion_code + "\n```\n"
+                else:
+                    suggestion_block += "Suggested code snippet: No code provided.\n"
 
                 # Choose consistent base for the next patch: use most recent valid when blacklisted, else current version.
                 rollback_code = None
