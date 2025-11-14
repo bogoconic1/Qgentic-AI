@@ -47,17 +47,19 @@ For present competitions, it is strongly recommended to increase the baseline an
 
 ## Past Competitions
 
-Results are reported as **percentiles** (% of leaderboard submissions beaten). The weighted mean uses a 74:1 ratio (weight 12.33 for each of 6 competitions, weight 1.0 for Statoil) to match MLE-Bench's 75-competition benchmark and prevent the Statoil outlier from dominating the overall metric.
+Results are reported as **raw score (percentile%)** where percentile = % of leaderboard submissions beaten. The weighted mean uses a 74:1 ratio (weight 12.33 for each of 6 competitions, weight 1.0 for Statoil) to match MLE-Bench's 75-competition benchmark and prevent the Statoil outlier from dominating the overall metric.
+
+**Note**: All results are based on [commit 5b81ee0](https://github.com/bogoconic1/Qgentic-AI/commit/5b81ee06ffe393992a50090dcff180d91e698449).
 
 | Kaggle Competition | Difficulty | Type | Metric | Qgentic-AI | FM Agent | InternAgent | Operand | R&D-Agent | MLE-STAR-PRO |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| us-patent-phrase-to-phrase-matching | Medium | Information Retrieval | PCC (higher) | 74.01% | 90.26% | **98.99%** | 15.19% | 21.81% | 17.31% |
-| learning-agency-lab-automated-essay-scoring-2 | Medium | Text | QWK (higher) | **100.00%** | **100.00%** | 63.18% | 64.40% | 46.90% | 68.91% |
-| tabular-playground-series-dec-2021 | Easy | Tabular | Accuracy % (higher) | **100.00%** | **100.00%** | **100.00%** | **100.00%** | **100.00%** | **100.00%** |
-| statoil-iceberg-classifier-challenge | Medium | Image Classification | Logloss (lower) | **83.18%** | 3.54% | 50.30% | 0.00% | 0.00% | 33.69% |
-| denoising-dirty-documents | Medium | Computer Vision | RMSE (lower) | **98.15%** | 93.21% | 89.51% | 89.51% | **98.15%** | **98.15%** |
-| whale-categorization-playground | Medium | Computer Vision | MAP@5 (higher) | **97.73%** | 93.01% | 10.40% | 60.11% | 14.37% | 60.11% |
-| google-quest-challenge | Medium | Text | Spearman Correlation (higher) | **100.00%** | 94.34% | 97.52% | 95.29% | 98.60% | 95.10% |
+| us-patent-phrase-to-phrase-matching | Medium | Information Retrieval | PCC (higher) | 0.858 (74.01%) | 0.862 (90.26%) | **0.868 (98.99%)** | 0.692 (15.19%) | 0.801 (21.81%) | 0.753 (17.31%) |
+| learning-agency-lab-automated-essay-scoring-2 | Medium | Text | QWK (higher) | **0.847 (100.00%)** | **0.845 (100.00%)** | 0.830 (63.18%) | 0.830 (64.40%) | 0.825 (46.90%) | 0.832 (68.91%) |
+| tabular-playground-series-dec-2021 | Easy | Tabular | Accuracy % (higher) | **0.963 (100.00%)** | **0.960 (100.00%)** | **0.963 (100.00%)** | **0.963 (100.00%)** | **0.963 (100.00%)** | **0.963 (100.00%)** |
+| statoil-iceberg-classifier-challenge | Medium | Image Classification | Logloss (lower) | **0.160 (83.18%)** | 1.258 (3.54%) | 0.203 (50.30%) | Failed (0.00%) | Failed (0.00%) | 0.246 (33.69%) |
+| denoising-dirty-documents | Medium | Computer Vision | RMSE (lower) | **0.012 (98.15%)** | 0.020 (93.21%) | 0.023 (89.51%) | 0.023 (89.51%) | **0.011 (98.15%)** | **0.011 (98.15%)** |
+| whale-categorization-playground | Medium | Computer Vision | MAP@5 (higher) | **0.557 (97.73%)** | 0.466 (93.01%) | 0.183 (10.40%) | 0.361 (60.11%) | 0.262 (14.37%) | 0.360 (60.11%) |
+| google-quest-challenge | Medium | Text | Spearman Correlation (higher) | **0.445 (100.00%)** | 0.394 (94.34%) | 0.409 (97.52%) | 0.398 (95.29%) | 0.415 (98.60%) | 0.396 (95.10%) |
 | **Weighted Mean Percentile** | | | | **94.82%** | 93.91% | 76.25% | 69.81% | 62.46% | 72.74% |
 --- 
 
