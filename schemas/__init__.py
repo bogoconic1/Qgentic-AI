@@ -17,6 +17,10 @@ from schemas.ensembler import (
     EnsembleStrategies,
     EnsembleStrategy,
 )
+from schemas.evolution import (
+    FeatureSpec,
+    EvolutionaryFeatures,
+)
 
 __all__ = [
     "StarterSuggestions",
@@ -30,4 +34,6 @@ __all__ = [
     "SOTAResponse",
     "EnsembleStrategies",
     "EnsembleStrategy",
+    "FeatureSpec",
+    "EvolutionaryFeatures",
 ]
