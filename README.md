@@ -65,7 +65,7 @@ Results are reported as **raw score (percentile%)** where percentile = % of lead
 
 ## Architecture at a Glance
 
-![Architecture diagram showing the Researcher and Developer flow](docs/assets/architecture_v3.png)
+![Architecture diagram showing the Researcher and Developer flow](docs/assets/architecture_v4.png)
 
 - **Starter Agent (`agents/starter.py`)**
   - Proposes 5 starter model ideas with short example code by referencing the competition description and `docs/state_of_competitions_2024.md`.
