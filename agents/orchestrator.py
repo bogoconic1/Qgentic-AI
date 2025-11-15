@@ -604,7 +604,18 @@ class Orchestrator:
                 model_recommendations = json.load(f)
         else:
             model_rec_agent = ModelRecommenderAgent(self.slug, self.iteration)
-            model_recommendations = model_rec_agent.run(use_dynamic_selection=True)
+
+            # Check if human provided models (HITL mode)
+            hitl_models = _CONFIG.get("model_recommender", {}).get("hitl_models", [])
+
+            if hitl_models and len(hitl_models) > 0:
+                # HITL mode: Use human-specified models, skip LLM selection
+                print(f"HITL mode: Using manually specified models: {hitl_models}")
+                model_recommendations = model_rec_agent.run(model_list=hitl_models, use_dynamic_selection=False)
+            else:
+                # Auto mode: Let LLM select models dynamically
+                print("Auto mode: Using LLM dynamic model selection")
+                model_recommendations = model_rec_agent.run(use_dynamic_selection=True)
 
             if model_rec_path.exists():
                 with open(model_rec_path, "r") as f:

@@ -284,7 +284,7 @@ Key settings live in `config.yaml` (merged with `project_config.py` defaults):
 - **guardrails**: Toggles for logging order checks, debug/NaN guard, and leakage reviews.
 
 - **model_recommender**: Model recommendation settings:
-  - `default_models`: Fallback model list (default: `["deberta-v3-large"]`)
+  - `hitl_models`: Human-In-The-Loop model list. If non-empty, these models will be used instead of LLM-based dynamic selection (default: `[]`). Example: `["xgboost", "lightgbm", "deberta-v3-large"]`
   - `enable_web_search`: Enable web search for SOTA strategies (default: true)
 
 > **Patch Mode (Experimental)** – The developer supports a token-efficient diff workflow.

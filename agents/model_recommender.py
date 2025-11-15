@@ -43,7 +43,7 @@ _MODEL_REC_CFG = _CONFIG.get("model_recommender")
 
 _MODEL_SELECTOR_MODEL = _LLM_CFG.get("model_selector_model")
 _MODEL_RECOMMENDER_MODEL = _LLM_CFG.get("model_recommender_model")
-_DEFAULT_MODELS = _MODEL_REC_CFG.get("default_models", ["deberta-v3-large"])
+_HITL_MODELS = _MODEL_REC_CFG.get("hitl_models", [])
 _ENABLE_WEB_SEARCH = _MODEL_REC_CFG.get("enable_web_search", True)
 
 _TASK_ROOT = Path(_PATH_CFG.get("task_root"))
@@ -543,7 +543,7 @@ class ModelRecommenderAgent:
         """Run model recommender for all models in the list.
 
         Args:
-            model_list: List of model names. If None and use_dynamic_selection=False, uses default_models from config.
+            model_list: List of model names. If None and use_dynamic_selection=False, uses hitl_models from config.
                        If use_dynamic_selection=True, dynamically selects models using LLM.
             use_dynamic_selection: If True, use LLM to select models dynamically. Ignores model_list parameter.
 
@@ -554,8 +554,8 @@ class ModelRecommenderAgent:
             logger.info("Using dynamic model selection")
             model_list = self.select_models()
         elif model_list is None:
-            model_list = _DEFAULT_MODELS
-            logger.info("Using default models from config: %s", model_list)
+            model_list = _HITL_MODELS
+            logger.info("Using HITL models from config: %s", model_list)
 
         if not model_list:
             logger.error("No models provided for recommendations")
