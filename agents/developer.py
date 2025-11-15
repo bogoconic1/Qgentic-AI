@@ -1294,11 +1294,18 @@ class DeveloperAgent:
 
             self.logger.info("previous runs count: %s", len(self.previous_runs))
 
+            # Only log specific file types to wandb artifacts
+            allowed_extensions = {'.py', '.txt', '.csv'}
             for path in self.outputs_dir.iterdir():
-                if path.is_file():
+                if not path.is_file():
+                    self.logger.debug("Skipping non-file path when logging artifact: %s", path)
+                    continue
+
+                # Check if file extension is in allowed list (case-insensitive)
+                if path.suffix.lower() in allowed_extensions:
                     artifact.add_file(str(path), overwrite=True)
                 else:
-                    self.logger.debug("Skipping non-file path when logging artifact: %s", path)
+                    self.logger.debug("Skipping file due to extension filtering: %s (extension: %s)", path.name, path.suffix)
 
             try:
                 artifact.save()
