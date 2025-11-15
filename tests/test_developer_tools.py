@@ -204,7 +204,8 @@ def test_search_sota_suggestions(monkeypatch):
             blacklist=False,
             blacklist_reason="The previous suggestion is still valid",
             suggestion="Try using a transformer-based architecture with attention mechanisms",
-            suggestion_reason="Transformers have shown SOTA results on similar tasks"
+            suggestion_reason="Transformers have shown SOTA results on similar tasks",
+            suggestion_code="# Example transformer code\nmodel = TransformerModel()"
         )
         mock_response.output_text = "Mock SOTA suggestions"
         return mock_response
@@ -249,7 +250,8 @@ def test_search_sota_suggestions_with_plan_content(monkeypatch):
             blacklist=False,
             blacklist_reason="Continue with current approach",
             suggestion="Use the plan's recommended approach",
-            suggestion_reason="Following the research plan systematically"
+            suggestion_reason="Following the research plan systematically",
+            suggestion_code="# Following the plan\nmodel = PlanRecommendedModel()"
         )
         mock_response.output_text = "Mock response"
         return mock_response
@@ -299,7 +301,8 @@ def test_search_sota_suggestions_ensemble_mode(monkeypatch):
             blacklist=False,
             blacklist_reason="Ensemble approach is promising",
             suggestion="Ensemble the top models using stacking",
-            suggestion_reason="Stacking typically provides better generalization"
+            suggestion_reason="Stacking typically provides better generalization",
+            suggestion_code="# Ensemble code\nfrom sklearn.ensemble import StackingClassifier"
         )
         mock_response.output_text = "Mock ensemble response"
         return mock_response
@@ -360,7 +363,8 @@ def test_search_sota_suggestions_with_tools(monkeypatch, test_data_dir):
                 blacklist=False,
                 blacklist_reason="Based on EDA findings, previous approach is valid",
                 suggestion="Add stratified sampling based on target distribution",
-                suggestion_reason="EDA shows imbalanced target, stratification will help"
+                suggestion_reason="EDA shows imbalanced target, stratification will help",
+                suggestion_code="# Stratified sampling\nfrom sklearn.model_selection import StratifiedKFold"
             )
             mock_response.output_text = "Final suggestion based on data analysis"
 
@@ -437,7 +441,8 @@ def test_search_sota_suggestions_early_exit_forces_structured_output(monkeypatch
                 blacklist=False,
                 blacklist_reason="Based on findings",
                 suggestion="Use calibration based on EDA",
-                suggestion_reason="Data shows miscalibration"
+                suggestion_reason="Data shows miscalibration",
+                suggestion_code="# Calibration code\nfrom sklearn.calibration import CalibratedClassifierCV"
             )
             mock_response.output_text = "Final structured suggestion"
 
@@ -491,7 +496,8 @@ def test_search_sota_suggestions_without_tools(monkeypatch):
             blacklist=False,
             blacklist_reason="No tools available, using web search only",
             suggestion="Try ensemble methods",
-            suggestion_reason="Common SOTA approach"
+            suggestion_reason="Common SOTA approach",
+            suggestion_code="# Ensemble approach\nfrom sklearn.ensemble import VotingClassifier"
         )
         mock_response.output_text = "Suggestion based on web search"
 

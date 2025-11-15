@@ -2,50 +2,28 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from prompts.shared_constraints import get_hard_constraints
+
 
 def _get_hard_constraints(model_name: str, allow_multi_fold: bool = False) -> str:
-    """Get the hard constraints section for system prompts."""
-    fold_constraint = (
-        ""
-        if allow_multi_fold
-        else "- Just train and validate on fold 0. Skip other folds to save time. If suggested later, you can switch to multi-fold."
+    """
+    Get the hard constraints section for developer agent system prompts.
+
+    This is a wrapper around the shared get_hard_constraints function that
+    maintains backward compatibility with the existing developer agent interface.
+
+    Args:
+        model_name: The model name to be used in constraints
+        allow_multi_fold: Whether to allow multi-fold training
+
+    Returns:
+        Formatted hard constraints string
+    """
+    return get_hard_constraints(
+        model_name=model_name,
+        allow_multi_fold=allow_multi_fold,
+        include_ensemble_copy_directive=False,
     )
-
-    return f"""**Hard Constraints:**
-- Use ONLY `{model_name}` (no substitutions or fallback models).
-- Deliver a fully-contained, single-file script.
-- Use CUDA if available.
-- **DO NOT** explicitly set `os.environ['CUDA_VISIBLE_DEVICES']` in your code.
-- Place all `logging.info` statements for validation results (per fold and overall) as well as model loading, train/test set size; only log data loading/setup if directly relevant to validation.
-- Also emit concise `logging.info` statements for any computed quantities that can go really wrong (e.g. class weights, thresholds).
-- Place `logging.basicConfig()` at the start of the script.
-- Deep learning: **no** gradient checkpointing. Do not code fallback methods.
-- **IMPORTANT: ONLY IN FULL MODE** If you're using XGBoost, LightGBM, or CatBoost, first train the model with the suggested parameters. Then, perform hyperparameter tuning using Optuna for up to 300 seconds. Finally, retrain the model using the best parameters from the tuning run and select the configuration with the best validation performance. DO NOT RUN tuning in DEBUG mode.
-- If you use `transformers.Trainer`, use eval_strategy instead of evaluation_strategy.
-- Do not use `try/except` to suppress errors.
-- Log final validation results, best epoch number and total training time after training.
-- Modular pipeline: update preprocessing/postprocessing or hyperparameters, but do not swap out `{model_name}`.
-- Prefer pretrained models if available. Set pretrained=True if applicable.
-- If an online implementation of the model is available (e.g. GitHub), use it. Do not code from scratch.
-- External datasets: may be appended **only** to training set.
-- **DEBUG flag**: At the script top, define. Pipeline runs twice: once with `DEBUG=True`, then with `DEBUG=False` (full config). Log which mode is running.
-- **DL Only:** After 1st epoch on fold 0 in FULL mode, if loss is NaN, STOP training and jump directly to inference to generate the submission file.
-{fold_constraint}
-- Do not use any `while` loops in your code.
-- YOU SHOULD NOT CREATE A SUBMISSION FILE DURING DEBUG MODE.
-- At the end, log the distribution of the submission predictions (e.g., value counts for classification, summary statistics for regression).
-- If asked to download external datasets, use kagglehub.
-```
-import kagglehub
-
-# Download latest version
-path = kagglehub.dataset_download("<author>/<dataset_name>")
-```
-
-**DEBUG mode guidelines**
-- After splitting the data into train and valid, right before starting training, sample train to 1000 rows. For classification, ensure at least one sample per class, so if there are > 1000 classes there will be > 1000 samples. For time series tasks, take the last 1000 rows (most recent) instead of random sampling to preserve temporal order.
-- For deep learning: reduce epochs to 1. For gradient boosting (XGBoost/LightGBM/CatBoost): reduce n_estimators/num_iterations to 100-200.
-- Log the size of the DEBUG training set."""
 
 
 def build_system(description: str, directory_listing: str, model_name: str, model_recommendations: str, slug: str, cpu_core_range: list[int] | None = None, gpu_identifier: str | None = None, gpu_isolation_mode: str = "none", allow_multi_fold: bool = False) -> str:
@@ -99,6 +77,23 @@ Your response MUST follow these sections, in order:
 - For output (predictions/`submission.csv`, saved models), save to the directory defined by `BASE_DIR` (see sample below).
 - The HuggingFace API token is available via the `HF_TOKEN` environment variable. Make sure to read it in your code.
 
+**Required Outputs:**
+1. **Submission file**: Save test predictions to the submission CSV path specified in the user prompt
+2. **Validation predictions**: Save validation predictions to `models_{{version}}/valid_preds.csv` (where {{version}} is specified in user prompt) with detailed information:
+   - Fold numbers (if using cross-validation)
+   - Predictions for each validation sample
+   - Ground truth labels/values (if available)
+   - Row identifiers (sample IDs, indices, etc.)
+   - Any other relevant metadata
+3. **Trained models**: Save all trained models to `models_{{version}}/` directory:
+   - Use appropriate extensions: .pkl (sklearn/xgboost/lightgbm/catboost), .pt (PyTorch), .h5 (TensorFlow/Keras)
+   - For multi-fold training: save each fold separately (e.g., model_fold0.pkl, model_fold1.pkl)
+   - For single model: use descriptive names (e.g., model.pkl, model.pt)
+4. **Validation score logging**: Log the final validation score (averaged across all folds if using cross-validation) to the log file using the format:
+   - `<final_validation_score>SCORE_VALUE</final_validation_score>`
+   - Example: `<final_validation_score>0.8456</final_validation_score>`
+   - This should be logged near the end of execution, after all training/validation is complete
+
 Example Output Block:
 ```python
 # <YOUR CODE>
@@ -112,20 +107,26 @@ def build_user(
     log_path: str | Path,
     submission_path: str | Path,
     threshold_directive: str = "",
+    version: int = 1,
 ) -> str:
+    models_dir = f"{outputs_dir}/models_{version}"
     base = f"""
 Project structure:
 - Base data dir: {base_dir}
 - Outputs dir: {outputs_dir}
 - The logs should be written to a file named {log_path}
-- Required output: {submission_path}
+- Required submission output: {submission_path}
+- Models and validation predictions directory: {models_dir}
 """
     base += (
         "\nReturn the complete Python script that, when run, writes logs to "
-        f"{log_path} "
-        "and produces a submission CSV at "
-        f"{submission_path}."
+        f"{log_path}, "
+        "produces a submission CSV at "
+        f"{submission_path}, "
+        f"saves validation predictions to {models_dir}/valid_preds.csv, "
+        f"and saves trained models to {models_dir}/."
     )
+
     if threshold_directive:
         base += f"\n{threshold_directive}"
     return base
@@ -159,20 +160,24 @@ Like this
     ).strip()
 
 
-def guardrail_fix_suffix(next_log_path: str | Path, next_submission_path: str | Path) -> str:
+def guardrail_fix_suffix(next_log_path: str | Path, next_submission_path: str | Path, models_dir: str | Path) -> str:
     return (
         "\nPlease regenerate the script addressing the above guardrail issues. "
-        f"Write logs to {next_log_path} "
-        f"and produce {next_submission_path}."
+        f"Write logs to {next_log_path}, "
+        f"produce submission at {next_submission_path}, "
+        f"save validation predictions to {models_dir}/valid_preds.csv, "
+        f"and save models to {models_dir}/."
     )
 
 
-def execution_failure_suffix(next_log_path: str | Path, next_submission_path: str | Path) -> str:
+def execution_failure_suffix(next_log_path: str | Path, next_submission_path: str | Path, models_dir: str | Path) -> str:
     return (
         "\nPlease modify your code to fix the error!\n\n"
         "Remember:\n"
         f"- write logs to {next_log_path}\n"
-        f"- and produce the next submission at {next_submission_path}"
+        f"- produce the next submission at {next_submission_path}\n"
+        f"- save validation predictions to {models_dir}/valid_preds.csv\n"
+        f"- save models to {models_dir}/"
     )
 
 

@@ -43,8 +43,11 @@ _DEFAULT_CONFIG: dict[str, Any] = {
             "project": None,
         }
     },
+    "researcher": {
+        "hitl_instructions": [],
+    },
     "model_recommender": {
-        "default_models": ["deberta-v3-large"],
+        "hitl_models": [],
         "enable_web_search": True,
     },
 }

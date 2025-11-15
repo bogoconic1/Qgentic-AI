@@ -25,12 +25,14 @@ _CONFIG = get_config()
 _LLM_CFG = _CONFIG.get("llm")
 _PATH_CFG = _CONFIG.get("paths")
 _RUNTIME_CFG = _CONFIG.get("runtime")
+_RESEARCHER_CFG = _CONFIG.get("researcher", {})
 _RESEARCHER_AGENT_MODEL = _LLM_CFG.get("researcher_model")
 
 _TASK_ROOT = Path(_PATH_CFG.get("task_root"))
 _OUTPUTS_DIRNAME = _PATH_CFG.get("outputs_dirname")
 
 _DEFAULT_MAX_STEPS = _RUNTIME_CFG.get("researcher_max_steps")
+_HITL_INSTRUCTIONS = _RESEARCHER_CFG.get("hitl_instructions", [])
 
 # Media ingestion limits/types
 SUPPORTED_IMAGE_TYPES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
@@ -194,7 +196,7 @@ class ResearcherAgent:
                 f"task_types must be a non-empty list, got: {task_types}"
             )
 
-        return prompt_build_system(str(self.base_dir), task_type=task_types, max_parallel_workers=self.max_parallel_workers)
+        return prompt_build_system(str(self.base_dir), task_type=task_types, max_parallel_workers=self.max_parallel_workers, hitl_instructions=_HITL_INSTRUCTIONS)
 
     def _read_starter_suggestions(self) -> str:
         # Prefer raw starter_suggestions.txt; fallback to JSON; else 'None'

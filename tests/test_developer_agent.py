@@ -325,7 +325,7 @@ def test_gather_sota_feedback_exception_handling(test_task_dir, monkeypatch):
     code_with_logs = "<code>import pandas as pd</code>"
 
     # Should return None on exception
-    sota_response = agent._gather_sota_feedback(code_with_logs)
+    sota_response = agent._gather_sota_feedback(code_with_logs, version=1)
 
     assert sota_response is None
 
