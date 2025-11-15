@@ -89,6 +89,10 @@ Your response MUST follow these sections, in order:
    - Use appropriate extensions: .pkl (sklearn/xgboost/lightgbm/catboost), .pt (PyTorch), .h5 (TensorFlow/Keras)
    - For multi-fold training: save each fold separately (e.g., model_fold0.pkl, model_fold1.pkl)
    - For single model: use descriptive names (e.g., model.pkl, model.pt)
+4. **Validation score logging**: Log the final validation score (averaged across all folds if using cross-validation) to the log file using the format:
+   - `<final_validation_score>SCORE_VALUE</final_validation_score>`
+   - Example: `<final_validation_score>0.8456</final_validation_score>`
+   - This should be logged near the end of execution, after all training/validation is complete
 
 Example Output Block:
 ```python
