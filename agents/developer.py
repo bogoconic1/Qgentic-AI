@@ -759,6 +759,85 @@ class DeveloperAgent:
             self.logger.warning("Could not extract Final Summary section, using full response")
             return red_flags_response
 
+    def _build_extended_data_listing(self, version: int) -> str:
+        """Build directory listing for SOTA suggestions including base dir and current models.
+
+        Includes:
+        - All files and train/test folders from task/<slug>/
+        - external_data_* folders from outputs/<iteration>/
+        - models_{version}/ folder from outputs/<iteration>/
+
+        Args:
+            version: Current version number
+
+        Returns:
+            Directory listing string
+        """
+        from pathlib import Path
+
+        lines = []
+
+        # 1. Base directory listing (train/, test/, root files)
+        lines.append("=== Base Directory (task data) ===")
+        base_listing = self._build_base_dir_listing()
+        lines.append(base_listing)
+
+        # 2. External data directories
+        if self.external_data_listing and self.external_data_listing != "No external data directories found.":
+            lines.append("\n=== External Data ===")
+            lines.append(self.external_data_listing)
+
+        # 3. Models directory for current version
+        models_dir = self.outputs_dir / f"models_{version}"
+        if models_dir.exists() and models_dir.is_dir():
+            lines.append(f"\n=== Models (version {version}) ===")
+            lines.append(f"models_{version}/")
+            dir_listing = _build_directory_listing(str(models_dir))
+            lines.append(dir_listing)
+
+        return "\n".join(lines)
+
+    def _build_base_dir_listing(self) -> str:
+        """Build directory listing for base task directory (train/, test/, root files).
+
+        Returns:
+            Directory listing showing train/, test/ folders and root-level files
+        """
+        from pathlib import Path
+
+        lines = []
+        base_dir = Path(self.base_dir)
+
+        # Get root-level files
+        root_files = sorted([f.name for f in base_dir.iterdir() if f.is_file()])
+
+        # Show root directory
+        lines.append("./")
+        for file_name in root_files:
+            lines.append(f"    {file_name}")
+
+        # Show train/ directory if it exists
+        train_dir = base_dir / "train"
+        if train_dir.exists() and train_dir.is_dir():
+            lines.append("    train/")
+            train_listing = _build_directory_listing(str(train_dir))
+            # Indent the train listing
+            for line in train_listing.split('\n'):
+                if line.strip():
+                    lines.append(f"    {line}")
+
+        # Show test/ directory if it exists
+        test_dir = base_dir / "test"
+        if test_dir.exists() and test_dir.is_dir():
+            lines.append("    test/")
+            test_listing = _build_directory_listing(str(test_dir))
+            # Indent the test listing
+            for line in test_listing.split('\n'):
+                if line.strip():
+                    lines.append(f"    {line}")
+
+        return "\n".join(lines)
+
     def _call_sota_suggestions(self, attempt_number: int = 1, **kwargs):
         """
         Call SOTA suggestions tool with appropriate parameters.
@@ -918,11 +997,12 @@ class DeveloperAgent:
         # These are None if no submission was generated or if this is the first successful version
         return code_with_logs, run_score, previous_successful_version, base_score, submission_exists
 
-    def _gather_sota_feedback(self, code_with_logs: str, attempt_number: int = 1) -> any:
+    def _gather_sota_feedback(self, code_with_logs: str, version: int, attempt_number: int = 1) -> any:
         """Gather SOTA feedback through red flags analysis and SOTA suggestions.
 
         Args:
             code_with_logs: Code with execution logs and analysis
+            version: Current version number to include models_{version}/ in directory listing
             attempt_number: Which attempt this is (1, 2, 3, ...) for interleaving strategy
 
         Returns:
@@ -931,6 +1011,9 @@ class DeveloperAgent:
         try:
             # Format LATER recommendations for context
             later_context = self._format_later_recommendations()
+
+            # Build extended directory listing including models_{version}/
+            extended_listing = self._build_extended_data_listing(version)
 
             # STAGE 1: Identify red flags via direct analysis
             self.logger.info("Stage 1: Identifying red flags via direct analysis...")
@@ -960,7 +1043,7 @@ class DeveloperAgent:
                 failed_ideas=self.blacklisted_ideas,  # Keep instance-level for context
                 shared_suggestions=shared_suggestions,  # New: shared across all models
                 later_recommendations=later_context,
-                external_data_listing=self.external_data_listing,
+                external_data_listing=extended_listing,
                 plan_content=self.plan_content,
                 attempt_number=attempt_number,
                 slug=self.slug,
@@ -1123,7 +1206,7 @@ class DeveloperAgent:
                 # Increment SOTA suggestions call counter (separate from attempt counter)
                 sota_suggestions_call_id += 1
                 # Gather SOTA feedback (red flags + suggestions)
-                sota_response = self._gather_sota_feedback(code_with_logs, attempt_number=sota_suggestions_call_id)
+                sota_response = self._gather_sota_feedback(code_with_logs, version=version, attempt_number=sota_suggestions_call_id)
 
                 suggestion_text, blacklist_flag, blacklist_reason, suggestion_code = self._parse_sota_response(sota_response)
                 self.logger.info("SOTA suggestion: %s (blacklist=%s, code_len=%d)", suggestion_text, blacklist_flag, len(suggestion_code))

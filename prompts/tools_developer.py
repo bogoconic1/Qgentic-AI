@@ -200,6 +200,7 @@ You have access to the following tools to investigate issues and gather informat
    - Use when you need to directly analyze the data to understand issues
    - Use to verify assumptions about data distributions, target values, or feature correlations
    - Use to investigate anomalies in predictions or training behavior
+   - Example: "Read the OOF predictions file (models_{{version}}/valid_preds.csv) and output the top 5 IDs with the highest prediction error, their ground truths, and predictions"
 
 2. **scrape_web_page**: Scrape web pages for implementation guides, documentation, or technical tutorials
    - Use for reading official documentation, blog posts, or technical guides
