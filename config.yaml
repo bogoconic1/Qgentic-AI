@@ -41,6 +41,8 @@ tracking:
   wandb:
     entity: 520f8592abc # replace with your W&B entity
     project: qgentic-ai # replace with your W&B project
+researcher:
+  hitl_instructions: []  # Human-In-The-Loop: If non-empty, these instructions are added to the researcher's system prompt. Example: ["Focus on time-series cross-validation", "Analyze seasonality patterns", "Consider external weather data"]
 model_recommender:
   hitl_models: []  # Human-In-The-Loop: If non-empty, use these models instead of LLM selection. Example: ["xgboost", "lightgbm", "deberta-v3-large"]
   enable_web_search: true  # Enable web search for finding SOTA strategies

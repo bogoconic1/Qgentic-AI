@@ -283,6 +283,9 @@ Key settings live in `config.yaml` (merged with `project_config.py` defaults):
 
 - **guardrails**: Toggles for logging order checks, debug/NaN guard, and leakage reviews.
 
+- **researcher**: Researcher agent settings:
+  - `hitl_instructions`: Human-In-The-Loop instructions list. If non-empty, these instructions are added to the researcher's system prompt to guide research direction (default: `[]`). Example: `["Focus on time-series cross-validation", "Analyze seasonality patterns", "Consider external weather data"]`
+
 - **model_recommender**: Model recommendation settings:
   - `hitl_models`: Human-In-The-Loop model list. If non-empty, these models will be used instead of LLM-based dynamic selection (default: `[]`). Example: `["xgboost", "lightgbm", "deberta-v3-large"]`
   - `enable_web_search`: Enable web search for SOTA strategies (default: true)
