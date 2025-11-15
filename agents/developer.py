@@ -249,6 +249,7 @@ class DeveloperAgent:
             log_path=log_path_display,
             submission_path=submission_path_display,
             threshold_directive=self.threshold_directive,
+            version=version,
         )
 
     def _format_later_recommendations(self) -> str:
@@ -1099,7 +1100,8 @@ class DeveloperAgent:
                 summary_text = build_block_summary(guard_report)
                 next_log_path = self.outputs_dir / self._log_filename(version + 1)
                 next_submission_path = self.outputs_dir / self._submission_filename(version + 1)
-                fix_instr = prompt_guardrail_fix_suffix(next_log_path, next_submission_path)
+                next_models_dir = self.outputs_dir / f"models_{version + 1}"
+                fix_instr = prompt_guardrail_fix_suffix(next_log_path, next_submission_path, next_models_dir)
                 guardrail_prompt = summary_text + fix_instr
                 base_version_for_next_patch = version
                 guardrail_prompt = self._append_patch_directive(guardrail_prompt, base_version_for_next_patch)
@@ -1188,6 +1190,7 @@ class DeveloperAgent:
 
                 next_log_path = self.outputs_dir / self._log_filename(version + 1)
                 next_submission_path = self.outputs_dir / self._submission_filename(version + 1)
+                next_models_dir = self.outputs_dir / f"models_{version + 1}"
 
                 suggestion_block = ""
                 if suggestion_text:
@@ -1211,7 +1214,11 @@ class DeveloperAgent:
 
                 next_instr = (
                     f"{suggestion_block}\n"
-                    f"Remember:\n- write logs to {next_log_path}\n- and produce the next submission at {next_submission_path}"
+                    f"Remember:\n"
+                    f"- write logs to {next_log_path}\n"
+                    f"- produce the next submission at {next_submission_path}\n"
+                    f"- save validation predictions to {next_models_dir}/valid_preds.csv\n"
+                    f"- save models to {next_models_dir}/"
                 )
                 next_instr = self._append_patch_directive(next_instr, base_version_for_next_patch)
 
@@ -1227,6 +1234,7 @@ class DeveloperAgent:
             else:
                 next_log_path = self.outputs_dir / self._log_filename(version + 1)
                 next_submission_path = self.outputs_dir / self._submission_filename(version + 1)
+                next_models_dir = self.outputs_dir / f"models_{version + 1}"
 
                 # Check if this is a timeout or OOM error
                 is_timeout = "Code execution timed out after" in output
@@ -1263,7 +1271,7 @@ class DeveloperAgent:
                         Performance analysis:
                         {final_summary}
 
-                        {prompt_execution_failure_suffix(next_log_path, next_submission_path)}
+                        {prompt_execution_failure_suffix(next_log_path, next_submission_path, next_models_dir)}
                         """
                     except Exception:
                         self.logger.exception(f"Failed to run red flags analysis for {error_type}")
@@ -1274,7 +1282,7 @@ class DeveloperAgent:
                         This is the stack trace and advice on how to fix the error:
                         {output}
 
-                        {prompt_execution_failure_suffix(next_log_path, next_submission_path)}
+                        {prompt_execution_failure_suffix(next_log_path, next_submission_path, next_models_dir)}
                         """
                 else:
                     # For regular bugs/errors, just show the error (web search already done in execute_code)
@@ -1283,7 +1291,7 @@ class DeveloperAgent:
                     This is the stack trace and advice on how to fix the error:
                     {output}
 
-                    {prompt_execution_failure_suffix(next_log_path, next_submission_path)}
+                    {prompt_execution_failure_suffix(next_log_path, next_submission_path, next_models_dir)}
                     """
 
                 base_version_for_next_patch = version

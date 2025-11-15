@@ -77,6 +77,19 @@ Your response MUST follow these sections, in order:
 - For output (predictions/`submission.csv`, saved models), save to the directory defined by `BASE_DIR` (see sample below).
 - The HuggingFace API token is available via the `HF_TOKEN` environment variable. Make sure to read it in your code.
 
+**Required Outputs:**
+1. **Submission file**: Save test predictions to the submission CSV path specified in the user prompt
+2. **Validation predictions**: Save validation predictions to `models_{{version}}/valid_preds.csv` (where {{version}} is specified in user prompt) with detailed information:
+   - Fold numbers (if using cross-validation)
+   - Predictions for each validation sample
+   - Ground truth labels/values (if available)
+   - Row identifiers (sample IDs, indices, etc.)
+   - Any other relevant metadata
+3. **Trained models**: Save all trained models to `models_{{version}}/` directory:
+   - Use appropriate extensions: .pkl (sklearn/xgboost/lightgbm/catboost), .pt (PyTorch), .h5 (TensorFlow/Keras)
+   - For multi-fold training: save each fold separately (e.g., model_fold0.pkl, model_fold1.pkl)
+   - For single model: use descriptive names (e.g., model.pkl, model.pt)
+
 Example Output Block:
 ```python
 # <YOUR CODE>
@@ -90,20 +103,26 @@ def build_user(
     log_path: str | Path,
     submission_path: str | Path,
     threshold_directive: str = "",
+    version: int = 1,
 ) -> str:
+    models_dir = f"{outputs_dir}/models_{version}"
     base = f"""
 Project structure:
 - Base data dir: {base_dir}
 - Outputs dir: {outputs_dir}
 - The logs should be written to a file named {log_path}
-- Required output: {submission_path}
+- Required submission output: {submission_path}
+- Models and validation predictions directory: {models_dir}
 """
     base += (
         "\nReturn the complete Python script that, when run, writes logs to "
-        f"{log_path} "
-        "and produces a submission CSV at "
-        f"{submission_path}."
+        f"{log_path}, "
+        "produces a submission CSV at "
+        f"{submission_path}, "
+        f"saves validation predictions to {models_dir}/valid_preds.csv, "
+        f"and saves trained models to {models_dir}/."
     )
+
     if threshold_directive:
         base += f"\n{threshold_directive}"
     return base
@@ -137,20 +156,24 @@ Like this
     ).strip()
 
 
-def guardrail_fix_suffix(next_log_path: str | Path, next_submission_path: str | Path) -> str:
+def guardrail_fix_suffix(next_log_path: str | Path, next_submission_path: str | Path, models_dir: str | Path) -> str:
     return (
         "\nPlease regenerate the script addressing the above guardrail issues. "
-        f"Write logs to {next_log_path} "
-        f"and produce {next_submission_path}."
+        f"Write logs to {next_log_path}, "
+        f"produce submission at {next_submission_path}, "
+        f"save validation predictions to {models_dir}/valid_preds.csv, "
+        f"and save models to {models_dir}/."
     )
 
 
-def execution_failure_suffix(next_log_path: str | Path, next_submission_path: str | Path) -> str:
+def execution_failure_suffix(next_log_path: str | Path, next_submission_path: str | Path, models_dir: str | Path) -> str:
     return (
         "\nPlease modify your code to fix the error!\n\n"
         "Remember:\n"
         f"- write logs to {next_log_path}\n"
-        f"- and produce the next submission at {next_submission_path}"
+        f"- produce the next submission at {next_submission_path}\n"
+        f"- save validation predictions to {models_dir}/valid_preds.csv\n"
+        f"- save models to {models_dir}/"
     )
 
 
