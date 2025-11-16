@@ -288,7 +288,11 @@ def search_sota_suggestions(
     if later_recommendations:
         plans_section += f"\n<suggestions>\n{later_recommendations}\n</suggestions>\n"
 
-    system_prompt = prompt_sota_system(is_ensemble=is_ensemble)
+    # Convert time limit from seconds to minutes for prompt
+    time_limit_seconds = _ENSEMBLE_CODE_TIMEOUT if is_ensemble else _BASELINE_CODE_TIMEOUT
+    time_limit_minutes = int(time_limit_seconds / 60)
+
+    system_prompt = prompt_sota_system(is_ensemble=is_ensemble, time_limit_minutes=time_limit_minutes)
 
     user_prompt = prompt_sota_user(
         description=description,

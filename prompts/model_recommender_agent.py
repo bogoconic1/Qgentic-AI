@@ -1,7 +1,7 @@
 from __future__ import annotations # delays type checking (Typing module) until runtime
 
-def model_selector_system_prompt() -> str:
-    return """# Role & Objective
+def model_selector_system_prompt(time_limit_hours: float = 3.0) -> str:
+    return f"""# Role & Objective
 You are a **Kaggle Competitions Grandmaster**.
 Your goal is to recommend up till **16 suitable high-potential models** for a specific competition, based on data characteristics, task type, and evaluation metric.
 
@@ -23,7 +23,7 @@ Begin with a **concise checklist (3-7 conceptual bullets)** describing your reas
 - Decoder models are best for generative tasks, instruction following, text generation.
 
 ## Hard Computational Constraints
-- **Total wall-clock budget:** **≤ 3 hours** end-to-end (data loading + training + validation)
+- **Total wall-clock budget:** **≤ {time_limit_hours:.1f} hours** end-to-end (data loading + training + validation)
 - **GPU memory:** 24GB available
 
 ## Inputs
@@ -86,8 +86,8 @@ The **fold_split_strategy** must be a single, specific strategy.
 - "reason": Why this model is recommended for this competition/data/metric
 """
 
-def preprocessing_system_prompt() -> str:
-    return """# Role & Objective
+def preprocessing_system_prompt(time_limit_minutes: int = 180) -> str:
+    return f"""# Role & Objective
 You are a Kaggle Competitions Grandmaster. Identify the **best preprocessing strategies** for a specific model within a specified competition, split into **MUST_HAVE** (everything needed to train a competitive baseline) vs **NICE_TO_HAVE** (optimizations and refinements) while respecting strict compute constraints.
 
 Begin with a concise checklist (3-7 bullets) describing your *process* (conceptual, not implementation-level).
@@ -365,7 +365,7 @@ Begin with a **concise checklist (3-7 conceptual bullets)** describing your reas
 When selecting hyperparameters or architectures:
 1. **Metric impact first** - what most directly affects leaderboard metric.
 2. **Simplicity next** - minimal code change for max gain.
-3. **Compute efficiency** - ≤ 180 GPU minutes for MUST_HAVE setup to allow I/O overhead.
+3. **Compute efficiency** - ≤ {time_limit_minutes} GPU minutes for MUST_HAVE setup to allow I/O overhead.
 4. **Stability under mixed precision** - avoid exploding gradients / NANs.
 5. **Scalability** - future tuning should reuse baseline checkpoints.
 
