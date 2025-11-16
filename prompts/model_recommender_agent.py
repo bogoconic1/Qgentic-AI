@@ -162,23 +162,23 @@ Provide **MUST_HAVE** and **NICE_TO_HAVE** recommendations **per selected catego
 
 **Schema (example; adapt categories to the task):**
 ```json
-{
-  "feature_creation": {
+{{
+  "feature_creation": {{
     "MUST_HAVE": [
-      {
+      {{
         "strategy": "string",
         "explanation": "why this is a must have for a top-notch solution",
-      }
+      }}
     ],
     "NICE_TO_HAVE": [
-      {
+      {{
         "strategy": "string",
         "explanation": "why this is a nice to have for a top-notch solution and not strictly necessary",
-      }
+      }}
     ]
-  },
-  "data_augmentation": { "MUST_HAVE": [...], "NICE_TO_HAVE": [...] }
-}
+  }},
+  "data_augmentation": {{ "MUST_HAVE": [...], "NICE_TO_HAVE": [...] }}
+}}
 ```
 """
 
