@@ -468,8 +468,12 @@ def execute_code(filepath: str, timeout_seconds: int | None = None, conda_env: s
     """
     if timeout_seconds is None:
         timeout_seconds = _DEFAULT_CODE_TIMEOUT
+
+    # Get conda executable path (resolves "conda: command not found" in subprocess)
+    conda_exe = os.environ.get('CONDA_EXE', 'conda')
+
     if conda_env:
-        cmd = ["conda", "run", "--no-capture-output", "-n", conda_env, "python", filepath]
+        cmd = [conda_exe, "run", "--no-capture-output", "-n", conda_env, "python", filepath]
         logger.info("Executing in conda environment '%s': %s (timeout: %d seconds)", conda_env, filepath, timeout_seconds)
     else:
         cmd = ["python", filepath]
