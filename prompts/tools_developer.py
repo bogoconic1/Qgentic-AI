@@ -175,7 +175,11 @@ def red_flags_user(
 """
 
 
-def sota_system(is_ensemble: bool = False) -> str:
+def sota_system(is_ensemble: bool = False, time_limit_minutes: int = None) -> str:
+    # Default time limits if not provided
+    if time_limit_minutes is None:
+        time_limit_minutes = 180 if is_ensemble else 90
+
     return f"""You will receive:
 - Kaggle competition description
 - One or more researcher plans
@@ -295,7 +299,7 @@ Begin with a brief, high-level statement explaining your rationale for the chose
 
 Make exactly THREE suggestions from different categories (numbered, clear headers). Each:
 - Has one high-impact, complementary, non-overlapping suggestion (~100 words benefit)
-- Should be executable in {"180 minutes" if is_ensemble else "90 minutes"}
+- Should be executable in {time_limit_minutes} minutes
 
 After the suggestions section, validate their direct relevance to the competition and scoring metric, and reference specific input fields where possible.
 Rank all suggestions by likelihood of improving the score (consider feasibility, impact, and time).

@@ -40,6 +40,7 @@ _CONFIG = get_config()
 _LLM_CFG = _CONFIG.get("llm")
 _PATH_CFG = _CONFIG.get("paths")
 _MODEL_REC_CFG = _CONFIG.get("model_recommender")
+_RUNTIME_CFG = _CONFIG.get("runtime")
 
 _MODEL_SELECTOR_MODEL = _LLM_CFG.get("model_selector_model")
 _MODEL_RECOMMENDER_MODEL = _LLM_CFG.get("model_recommender_model")
@@ -48,6 +49,9 @@ _ENABLE_WEB_SEARCH = _MODEL_REC_CFG.get("enable_web_search", True)
 
 _TASK_ROOT = Path(_PATH_CFG.get("task_root"))
 _OUTPUTS_DIRNAME = _PATH_CFG.get("outputs_dirname")
+
+# Time limits from config (in seconds)
+_BASELINE_CODE_TIMEOUT = _RUNTIME_CFG.get("baseline_code_timeout")
 
 
 class ModelRecommenderAgent:
@@ -168,7 +172,8 @@ class ModelRecommenderAgent:
         )
 
         # Call LLM
-        system_prompt = preprocessing_system_prompt()
+        time_limit_minutes = int(_BASELINE_CODE_TIMEOUT / 60)
+        system_prompt = preprocessing_system_prompt(time_limit_minutes=time_limit_minutes)
         messages = [{"role": "user", "content": user_prompt}]
 
         try:
@@ -346,7 +351,8 @@ class ModelRecommenderAgent:
             List of 8 final selected model names
         """
         # STAGE 1: Select 16 candidate models
-        system_prompt = model_selector_system_prompt()
+        time_limit_hours = _BASELINE_CODE_TIMEOUT / 3600
+        system_prompt = model_selector_system_prompt(time_limit_hours=time_limit_hours)
 
         user_prompt = build_user_prompt(
             description=self.inputs["description"],

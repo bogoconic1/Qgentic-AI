@@ -288,7 +288,11 @@ def search_sota_suggestions(
     if later_recommendations:
         plans_section += f"\n<suggestions>\n{later_recommendations}\n</suggestions>\n"
 
-    system_prompt = prompt_sota_system(is_ensemble=is_ensemble)
+    # Convert time limit from seconds to minutes for prompt
+    time_limit_seconds = _ENSEMBLE_CODE_TIMEOUT if is_ensemble else _BASELINE_CODE_TIMEOUT
+    time_limit_minutes = int(time_limit_seconds / 60)
+
+    system_prompt = prompt_sota_system(is_ensemble=is_ensemble, time_limit_minutes=time_limit_minutes)
 
     user_prompt = prompt_sota_user(
         description=description,
@@ -464,8 +468,12 @@ def execute_code(filepath: str, timeout_seconds: int | None = None, conda_env: s
     """
     if timeout_seconds is None:
         timeout_seconds = _DEFAULT_CODE_TIMEOUT
+
+    # Get conda executable path (resolves "conda: command not found" in subprocess)
+    conda_exe = os.environ.get('CONDA_EXE', 'conda')
+
     if conda_env:
-        cmd = ["conda", "run", "--no-capture-output", "-n", conda_env, "python", filepath]
+        cmd = [conda_exe, "run", "--no-capture-output", "-n", conda_env, "python", filepath]
         logger.info("Executing in conda environment '%s': %s (timeout: %d seconds)", conda_env, filepath, timeout_seconds)
     else:
         cmd = ["python", filepath]

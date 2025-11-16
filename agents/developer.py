@@ -25,7 +25,7 @@ from utils.diffs import (
     normalize_diff_payload,
     apply_patch as util_apply_patch,
 )
-from utils.grade import run_grade
+from utils.grade import run_grade, parse_validation_score
 from utils.code_utils import strip_header_from_code, extract_python_code
 from prompts.developer_agent import (
     build_system as prompt_build_system,
@@ -49,6 +49,7 @@ _GUARDRAIL_CFG = _CONFIG.get("guardrails")
 _ENABLE_LOGGING_GUARD = bool(_GUARDRAIL_CFG.get("logging_basicconfig_order"))
 
 _PATCH_MODE_ENABLED = bool(_RUNTIME_CFG.get("patch_mode_enabled"))
+_USE_VALIDATION_SCORE = bool(_RUNTIME_CFG.get("use_validation_score"))
 
 _DEVELOPER_MODEL = _LLM_CFG.get("developer_model")
 
@@ -896,34 +897,54 @@ class DeveloperAgent:
                 "Submission detected at %s after attempt %s (marking v%s as successful)",
                 submission_path, attempt, version
             )
-            grade_feedback = ""
             previous_successful_version = self.last_successful_version  # Initialize before try
-            try:
-                info, grade_feedback, returncode, stderr = run_grade(str(submission_path), self.slug)
+
+            if _USE_VALIDATION_SCORE:
+                # Use validation score from logs instead of MLE-bench grading
+                self.logger.info("Using validation score from logs (use_validation_score=True)")
                 try:
-                    self.logger.info("Grade feedback: %s", grade_feedback)
-                except Exception:
-                    self.logger.debug("Failed to log grade feedback for version %s", version)
-                if returncode != 0:
-                    self.logger.warning(
-                        "Grading command returned non-zero exit (%s). stderr=\n%s",
-                        returncode,
-                        stderr,
-                    )
-                else:
-                    self.logger.info("Grading command completed successfully for version %s", version)
-                    run_score = info.get('score') if info else None
-                    self._log_attempt_score(attempt, run_score)
-                    self.logger.info("Your result on the test set is %s", run_score)
-                    # Store score for this version and track for comparison
+                    run_score = parse_validation_score(log_content)
                     if run_score is not None:
+                        self._log_attempt_score(attempt, run_score)
+                        self.logger.info("Your validation score is %s", run_score)
+                        # Store score for this version and track for comparison
                         self.version_scores[version] = run_score
                         self.last_successful_version = version
-            except Exception as exc:
-                grade_feedback = f"Failed to run grading tool: {exc}"
-                self.logger.exception("Grading command failed for version %s", version)
+                    else:
+                        self.logger.warning("Failed to extract validation score from logs for version %s", version)
+                except Exception as exc:
+                    self.logger.exception("Failed to parse validation score: %s", exc)
 
-            code_with_logs += f"<leaderboard_score>\n{run_score}\n</leaderboard_score>\n"
+                code_with_logs += f"<validation_score>\n{run_score}\n</validation_score>\n"
+            else:
+                # Use MLE-bench grading (original behavior)
+                grade_feedback = ""
+                try:
+                    info, grade_feedback, returncode, stderr = run_grade(str(submission_path), self.slug)
+                    try:
+                        self.logger.info("Grade feedback: %s", grade_feedback)
+                    except Exception:
+                        self.logger.debug("Failed to log grade feedback for version %s", version)
+                    if returncode != 0:
+                        self.logger.warning(
+                            "Grading command returned non-zero exit (%s). stderr=\n%s",
+                            returncode,
+                            stderr,
+                        )
+                    else:
+                        self.logger.info("Grading command completed successfully for version %s", version)
+                        run_score = info.get('score') if info else None
+                        self._log_attempt_score(attempt, run_score)
+                        self.logger.info("Your result on the test set is %s", run_score)
+                        # Store score for this version and track for comparison
+                        if run_score is not None:
+                            self.version_scores[version] = run_score
+                            self.last_successful_version = version
+                except Exception as exc:
+                    grade_feedback = f"Failed to run grading tool: {exc}"
+                    self.logger.exception("Grading command failed for version %s", version)
+
+                code_with_logs += f"<leaderboard_score>\n{run_score}\n</leaderboard_score>\n"
 
             # Compare against most recent successful version (with a score)
             if previous_successful_version is not None:
@@ -1072,7 +1093,11 @@ class DeveloperAgent:
 
         run_score = 0
 
-        system_prompt = self._compose_system(allow_multi_fold=False)
+        # Enable multi-fold from start if using validation scores (need proper CV for reliable scores)
+        initial_allow_multi_fold = _USE_VALIDATION_SCORE
+        if initial_allow_multi_fold:
+            self.logger.info("Multi-fold training enabled from start (use_validation_score=True)")
+        system_prompt = self._compose_system(allow_multi_fold=initial_allow_multi_fold)
         user_prompt = self._build_user_prompt(version=1)
         input_list = [{"role": "user", "content": user_prompt}]
 
@@ -1111,8 +1136,8 @@ class DeveloperAgent:
 
             attempt += 1
 
-            # Rebuild system prompt for attempt 2+ to enable multi-fold training
-            if attempt == 2:
+            # Rebuild system prompt for attempt 2+ to enable multi-fold training (unless already enabled)
+            if attempt == 2 and not initial_allow_multi_fold:
                 self.logger.info("Rebuilding system prompt for attempt 2+ with multi-fold enabled")
                 system_prompt = self._compose_system(allow_multi_fold=True)
 

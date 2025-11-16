@@ -159,6 +159,9 @@ def _ensure_conda_environments(num_workers: int) -> None:
     Args:
         num_workers: Number of conda environments to create (one per parallel worker)
     """
+    # Get conda executable path (resolves "conda: command not found" in subprocess)
+    conda_exe = os.environ.get('CONDA_EXE', 'conda')
+
     # Get the base environment name (current active environment)
     base_env = os.environ.get('CONDA_DEFAULT_ENV', 'qgentic-ai')
 
@@ -173,18 +176,14 @@ def _ensure_conda_environments(num_workers: int) -> None:
         print(f"Base environment: {base_env}")
 
     # Check which environments exist
-    try:
-        result = subprocess.run(
-            ["conda", "env", "list"],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        existing_envs = result.stdout
-    except Exception as e:
-        print(f"Warning: Could not check conda environments: {e}")
-        print("Skipping conda environment creation")
-        return
+    result = subprocess.run(
+        [conda_exe, "env", "list"],
+        capture_output=True,
+        text=True,
+        check=True
+    )
+    
+    existing_envs = result.stdout
 
     # Create or recreate environments based on config
     for i in range(1, num_workers + 1):
@@ -194,45 +193,35 @@ def _ensure_conda_environments(num_workers: int) -> None:
             # Reset mode: Delete and recreate for clean slate
             if env_name in existing_envs:
                 print(f"  Removing existing {env_name}...")
-                try:
-                    subprocess.run(
-                        ["conda", "env", "remove", "-n", env_name, "-y"],
-                        capture_output=True,
-                        text=True,
-                        check=True
-                    )
-                except subprocess.CalledProcessError as e:
-                    print(f"  Warning: Failed to remove {env_name}: {e}")
+                subprocess.run(
+                    [conda_exe, "env", "remove", "-n", env_name, "-y"],
+                    capture_output=True,
+                    text=True,
+                    check=True
+                )
 
             print(f"  Creating {env_name} (cloning from {base_env})...")
-            try:
-                subprocess.run(
-                    ["conda", "create", "--name", env_name, "--clone", base_env, "-y", "--quiet"],
-                    check=True,
-                    capture_output=True,
-                    text=True
-                )
-                print(f"  ✓ Created {env_name}")
-            except subprocess.CalledProcessError as e:
-                print(f"  Warning: Failed to create {env_name}: {e}")
-                print(f"  stderr: {e.stderr}")
+            subprocess.run(
+                [conda_exe, "create", "--name", env_name, "--clone", base_env, "-y", "--quiet"],
+                check=True,
+                capture_output=True,
+                text=True
+            )
+            print(f"  ✓ Created {env_name}")
         else:
             # Reuse mode: Only create if missing
             if env_name in existing_envs:
                 print(f"  ✓ {env_name} already exists (reusing)")
             else:
                 print(f"  Creating {env_name} (cloning from {base_env})...")
-                try:
-                    subprocess.run(
-                        ["conda", "create", "--name", env_name, "--clone", base_env, "-y", "--quiet"],
-                        check=True,
-                        capture_output=True,
-                        text=True
-                    )
-                    print(f"  ✓ Created {env_name}")
-                except subprocess.CalledProcessError as e:
-                    print(f"  Warning: Failed to create {env_name}: {e}")
-                    print(f"  stderr: {e.stderr}")
+                subprocess.run(
+                    [conda_exe, "create", "--name", env_name, "--clone", base_env, "-y", "--quiet"],
+                    check=True,
+                    capture_output=True,
+                    text=True
+                )
+                print(f"  ✓ Created {env_name}")
+
 
     print("Conda environment setup complete!")
     print()
