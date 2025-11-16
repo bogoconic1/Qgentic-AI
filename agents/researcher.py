@@ -84,6 +84,10 @@ class ResearcherAgent:
         self.ab_test_history: list[dict] = []
         self.ab_test_lock = threading.Lock()  # Thread-safe access to ab_test_history
 
+        # Track EDA history: stores last 6 EDA calls with 'question' and 'code'
+        self.eda_history: list[dict] = []
+        self.eda_lock = threading.Lock()  # Thread-safe access to eda_history
+
         self._configure_logger()
 
     def _configure_logger(self) -> None:
@@ -299,12 +303,41 @@ class ResearcherAgent:
             else:
                 before_media = self._list_media_files()
 
+                # Get last 6 EDA calls for context (thread-safe)
+                with self.eda_lock:
+                    previous_edas = self.eda_history[-6:].copy()
+
                 tool_output = ask_eda(
                     question,
                     self.description,
                     data_path=str(self.base_dir),
-                    previous_ab_tests=[]  # EDA questions don't use AB test history
+                    previous_ab_tests=previous_edas  # Pass EDA history (parameter name kept for compatibility)
                 )
+
+                # Extract and store the executed code in EDA history
+                code_file = self.base_dir / "eda_temp.py"
+                if code_file.exists():
+                    try:
+                        with open(code_file, "r") as f:
+                            executed_code = f.read()
+
+                        # Strip OpenBLAS prefix if present (first 3 lines)
+                        if executed_code.startswith('import os\nos.environ["OPENBLAS_NUM_THREADS"]'):
+                            lines = executed_code.split('\n')
+                            executed_code = '\n'.join(lines[3:])
+
+                        # Store in EDA history (keep last 6)
+                        with self.eda_lock:
+                            self.eda_history.append({
+                                'question': question,
+                                'code': executed_code
+                            })
+                            # Keep only last 6
+                            if len(self.eda_history) > 6:
+                                self.eda_history = self.eda_history[-6:]
+                            logger.info("Stored EDA call in history (%d total)", len(self.eda_history))
+                    except Exception as e:
+                        logger.error("Failed to store EDA history: %s", e)
 
                 input_list.append({
                     "type": "function_call_output",

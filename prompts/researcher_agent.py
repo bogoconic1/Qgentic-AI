@@ -754,7 +754,7 @@ def build_system(base_dir: str, task_type: str | list[str] = "tabular", max_para
         hitl_section = f"""
 # Human-In-The-Loop Instructions
 
-You have been provided with the following specific instructions to guide your research:
+You have been provided with the following recommendations:
 
 {hitl_items}
 
