@@ -1093,7 +1093,11 @@ class DeveloperAgent:
 
         run_score = 0
 
-        system_prompt = self._compose_system(allow_multi_fold=False)
+        # Enable multi-fold from start if using validation scores (need proper CV for reliable scores)
+        initial_allow_multi_fold = _USE_VALIDATION_SCORE
+        if initial_allow_multi_fold:
+            self.logger.info("Multi-fold training enabled from start (use_validation_score=True)")
+        system_prompt = self._compose_system(allow_multi_fold=initial_allow_multi_fold)
         user_prompt = self._build_user_prompt(version=1)
         input_list = [{"role": "user", "content": user_prompt}]
 
@@ -1132,8 +1136,8 @@ class DeveloperAgent:
 
             attempt += 1
 
-            # Rebuild system prompt for attempt 2+ to enable multi-fold training
-            if attempt == 2:
+            # Rebuild system prompt for attempt 2+ to enable multi-fold training (unless already enabled)
+            if attempt == 2 and not initial_allow_multi_fold:
                 self.logger.info("Rebuilding system prompt for attempt 2+ with multi-fold enabled")
                 system_prompt = self._compose_system(allow_multi_fold=True)
 
