@@ -705,7 +705,7 @@ Apply the domain-first principles:
 """
 
 
-def build_system(base_dir: str, task_type: str | list[str] = "tabular", max_parallel_workers: int = 1) -> str:
+def build_system(base_dir: str, task_type: str | list[str] = "tabular", max_parallel_workers: int = 1, hitl_instructions: list[str] | None = None) -> str:
     """Build research system prompt with domain-aware, hypothesis-driven approach.
 
     Args:
@@ -747,6 +747,22 @@ def build_system(base_dir: str, task_type: str | list[str] = "tabular", max_para
     # Get task-specific guidelines
     task_guidelines = _get_task_specific_requirements(task_type_for_requirements)
 
+    # Build HITL instructions section if provided
+    hitl_section = ""
+    if hitl_instructions and len(hitl_instructions) > 0:
+        hitl_items = "\n".join([f"{i+1}. {instr}" for i, instr in enumerate(hitl_instructions)])
+        hitl_section = f"""
+# Human-In-The-Loop Instructions
+
+You have been provided with the following recommendations:
+
+{hitl_items}
+
+**These instructions should inform your domain hypotheses, EDA focus areas, and A/B testing priorities. Incorporate them into your research workflow while maintaining the domain-first, hypothesis-driven approach.**
+
+---
+"""
+
     return f"""# Role
 Lead Research Strategist for Kaggle Machine Learning Competition Team
 
@@ -764,7 +780,7 @@ Identify domain-specific insights that confer a competitive advantage through sy
 3. **Unique Insights:** Prioritize findings and patterns that are competition-specific, not generic ML practices.
 4. **Iterative Learning:** Continuously adapt your approach based on ongoing discoveries, foregoing rigid scripts.
 5. **DO NOT** search for winning solutions from this specific competition.
-
+{hitl_section}
 {domain_discovery}
 
 {few_shot}

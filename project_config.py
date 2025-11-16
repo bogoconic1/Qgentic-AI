@@ -28,6 +28,7 @@ _DEFAULT_CONFIG: dict[str, Any] = {
         "directory_listing_max_files": 10,
         "researcher_parallel_runs": 1,
         "patch_mode_enabled": False,
+        "use_validation_score": False,
     },
     "paths": {
         "task_root": "task",
@@ -43,8 +44,11 @@ _DEFAULT_CONFIG: dict[str, Any] = {
             "project": None,
         }
     },
+    "researcher": {
+        "hitl_instructions": [],
+    },
     "model_recommender": {
-        "default_models": ["deberta-v3-large"],
+        "hitl_models": [],
         "enable_web_search": True,
     },
 }

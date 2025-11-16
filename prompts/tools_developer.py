@@ -175,7 +175,11 @@ def red_flags_user(
 """
 
 
-def sota_system(is_ensemble: bool = False) -> str:
+def sota_system(is_ensemble: bool = False, time_limit_minutes: int = None) -> str:
+    # Default time limits if not provided
+    if time_limit_minutes is None:
+        time_limit_minutes = 180 if is_ensemble else 90
+
     return f"""You will receive:
 - Kaggle competition description
 - One or more researcher plans
@@ -200,6 +204,7 @@ You have access to the following tools to investigate issues and gather informat
    - Use when you need to directly analyze the data to understand issues
    - Use to verify assumptions about data distributions, target values, or feature correlations
    - Use to investigate anomalies in predictions or training behavior
+   - Example: "Read the OOF predictions file (models_{{version}}/valid_preds.csv) and output the top 5 IDs with the highest prediction error, their ground truths, and predictions"
 
 2. **scrape_web_page**: Scrape web pages for implementation guides, documentation, or technical tutorials
    - Use for reading official documentation, blog posts, or technical guides
@@ -294,7 +299,7 @@ Begin with a brief, high-level statement explaining your rationale for the chose
 
 Make exactly THREE suggestions from different categories (numbered, clear headers). Each:
 - Has one high-impact, complementary, non-overlapping suggestion (~100 words benefit)
-- Should be executable in {"180 minutes" if is_ensemble else "90 minutes"}
+- Should be executable in {time_limit_minutes} minutes
 
 After the suggestions section, validate their direct relevance to the competition and scoring metric, and reference specific input fields where possible.
 Rank all suggestions by likelihood of improving the score (consider feasibility, impact, and time).

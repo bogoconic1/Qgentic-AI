@@ -54,7 +54,7 @@ def ask_eda(question: str, description: str, data_path: str, max_attempts: int |
         data_path: Path to the data directory
         max_attempts: Maximum number of attempts (default from config)
         timeout_seconds: Timeout for code execution in seconds (default 1800 = 30 minutes)
-        previous_ab_tests: List of previous AB test dicts with 'question' and 'code' keys (empty for EDA, last 8 for AB tests)
+        previous_ab_tests: List of previous question/code dicts with 'question' and 'code' keys (last 6 for EDA, first 1 for AB tests)
         file_suffix: Optional suffix for the temp file (e.g., "_1", "_2" for parallel execution)
         cpu_core_range: List of CPU cores to use (e.g., [0,1,2,...,41]) for CPU affinity
         gpu_identifier: GPU identifier: MIG UUID or GPU ID (as string) for GPU isolation
@@ -77,12 +77,12 @@ def ask_eda(question: str, description: str, data_path: str, max_attempts: int |
     attempts = max_attempts or _DEFAULT_ASK_ATTEMPTS
     PROMPT = prompt_ask_eda(data_path, directory_listing, description)
 
-    # Build input_list with AB test history: prepend previous AB tests (question + code)
+    # Build input_list with history: prepend previous EDA/AB test (question + code) pairs
     input_list = []
     if previous_ab_tests:
-        for ab_test in previous_ab_tests:
-            input_list.append({"role": "user", "content": "Question: " + ab_test['question']})
-            input_list.append({"role": "assistant", "content": f"```python\n{ab_test['code']}\n```"})
+        for prev_item in previous_ab_tests:
+            input_list.append({"role": "user", "content": "Question: " + prev_item['question']})
+            input_list.append({"role": "assistant", "content": f"```python\n{prev_item['code']}\n```"})
 
     # Add the current question
     input_list.append({"role": "user", "content": "Question: " + question})

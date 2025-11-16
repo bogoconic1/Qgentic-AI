@@ -25,7 +25,7 @@ from utils.diffs import (
     normalize_diff_payload,
     apply_patch as util_apply_patch,
 )
-from utils.grade import run_grade
+from utils.grade import run_grade, parse_validation_score
 from utils.code_utils import strip_header_from_code, extract_python_code
 from prompts.developer_agent import (
     build_system as prompt_build_system,
@@ -49,6 +49,7 @@ _GUARDRAIL_CFG = _CONFIG.get("guardrails")
 _ENABLE_LOGGING_GUARD = bool(_GUARDRAIL_CFG.get("logging_basicconfig_order"))
 
 _PATCH_MODE_ENABLED = bool(_RUNTIME_CFG.get("patch_mode_enabled"))
+_USE_VALIDATION_SCORE = bool(_RUNTIME_CFG.get("use_validation_score"))
 
 _DEVELOPER_MODEL = _LLM_CFG.get("developer_model")
 
@@ -249,6 +250,7 @@ class DeveloperAgent:
             log_path=log_path_display,
             submission_path=submission_path_display,
             threshold_directive=self.threshold_directive,
+            version=version,
         )
 
     def _format_later_recommendations(self) -> str:
@@ -758,6 +760,85 @@ class DeveloperAgent:
             self.logger.warning("Could not extract Final Summary section, using full response")
             return red_flags_response
 
+    def _build_extended_data_listing(self, version: int) -> str:
+        """Build directory listing for SOTA suggestions including base dir and current models.
+
+        Includes:
+        - All files and train/test folders from task/<slug>/
+        - external_data_* folders from outputs/<iteration>/
+        - models_{version}/ folder from outputs/<iteration>/
+
+        Args:
+            version: Current version number
+
+        Returns:
+            Directory listing string
+        """
+        from pathlib import Path
+
+        lines = []
+
+        # 1. Base directory listing (train/, test/, root files)
+        lines.append("=== Base Directory (task data) ===")
+        base_listing = self._build_base_dir_listing()
+        lines.append(base_listing)
+
+        # 2. External data directories
+        if self.external_data_listing and self.external_data_listing != "No external data directories found.":
+            lines.append("\n=== External Data ===")
+            lines.append(self.external_data_listing)
+
+        # 3. Models directory for current version
+        models_dir = self.outputs_dir / f"models_{version}"
+        if models_dir.exists() and models_dir.is_dir():
+            lines.append(f"\n=== Models (version {version}) ===")
+            lines.append(f"models_{version}/")
+            dir_listing = _build_directory_listing(str(models_dir))
+            lines.append(dir_listing)
+
+        return "\n".join(lines)
+
+    def _build_base_dir_listing(self) -> str:
+        """Build directory listing for base task directory (train/, test/, root files).
+
+        Returns:
+            Directory listing showing train/, test/ folders and root-level files
+        """
+        from pathlib import Path
+
+        lines = []
+        base_dir = Path(self.base_dir)
+
+        # Get root-level files
+        root_files = sorted([f.name for f in base_dir.iterdir() if f.is_file()])
+
+        # Show root directory
+        lines.append("./")
+        for file_name in root_files:
+            lines.append(f"    {file_name}")
+
+        # Show train/ directory if it exists
+        train_dir = base_dir / "train"
+        if train_dir.exists() and train_dir.is_dir():
+            lines.append("    train/")
+            train_listing = _build_directory_listing(str(train_dir))
+            # Indent the train listing
+            for line in train_listing.split('\n'):
+                if line.strip():
+                    lines.append(f"    {line}")
+
+        # Show test/ directory if it exists
+        test_dir = base_dir / "test"
+        if test_dir.exists() and test_dir.is_dir():
+            lines.append("    test/")
+            test_listing = _build_directory_listing(str(test_dir))
+            # Indent the test listing
+            for line in test_listing.split('\n'):
+                if line.strip():
+                    lines.append(f"    {line}")
+
+        return "\n".join(lines)
+
     def _call_sota_suggestions(self, attempt_number: int = 1, **kwargs):
         """
         Call SOTA suggestions tool with appropriate parameters.
@@ -816,34 +897,54 @@ class DeveloperAgent:
                 "Submission detected at %s after attempt %s (marking v%s as successful)",
                 submission_path, attempt, version
             )
-            grade_feedback = ""
             previous_successful_version = self.last_successful_version  # Initialize before try
-            try:
-                info, grade_feedback, returncode, stderr = run_grade(str(submission_path), self.slug)
+
+            if _USE_VALIDATION_SCORE:
+                # Use validation score from logs instead of MLE-bench grading
+                self.logger.info("Using validation score from logs (use_validation_score=True)")
                 try:
-                    self.logger.info("Grade feedback: %s", grade_feedback)
-                except Exception:
-                    self.logger.debug("Failed to log grade feedback for version %s", version)
-                if returncode != 0:
-                    self.logger.warning(
-                        "Grading command returned non-zero exit (%s). stderr=\n%s",
-                        returncode,
-                        stderr,
-                    )
-                else:
-                    self.logger.info("Grading command completed successfully for version %s", version)
-                    run_score = info.get('score') if info else None
-                    self._log_attempt_score(attempt, run_score)
-                    self.logger.info("Your result on the test set is %s", run_score)
-                    # Store score for this version and track for comparison
+                    run_score = parse_validation_score(log_content)
                     if run_score is not None:
+                        self._log_attempt_score(attempt, run_score)
+                        self.logger.info("Your validation score is %s", run_score)
+                        # Store score for this version and track for comparison
                         self.version_scores[version] = run_score
                         self.last_successful_version = version
-            except Exception as exc:
-                grade_feedback = f"Failed to run grading tool: {exc}"
-                self.logger.exception("Grading command failed for version %s", version)
+                    else:
+                        self.logger.warning("Failed to extract validation score from logs for version %s", version)
+                except Exception as exc:
+                    self.logger.exception("Failed to parse validation score: %s", exc)
 
-            code_with_logs += f"<leaderboard_score>\n{run_score}\n</leaderboard_score>\n"
+                code_with_logs += f"<validation_score>\n{run_score}\n</validation_score>\n"
+            else:
+                # Use MLE-bench grading (original behavior)
+                grade_feedback = ""
+                try:
+                    info, grade_feedback, returncode, stderr = run_grade(str(submission_path), self.slug)
+                    try:
+                        self.logger.info("Grade feedback: %s", grade_feedback)
+                    except Exception:
+                        self.logger.debug("Failed to log grade feedback for version %s", version)
+                    if returncode != 0:
+                        self.logger.warning(
+                            "Grading command returned non-zero exit (%s). stderr=\n%s",
+                            returncode,
+                            stderr,
+                        )
+                    else:
+                        self.logger.info("Grading command completed successfully for version %s", version)
+                        run_score = info.get('score') if info else None
+                        self._log_attempt_score(attempt, run_score)
+                        self.logger.info("Your result on the test set is %s", run_score)
+                        # Store score for this version and track for comparison
+                        if run_score is not None:
+                            self.version_scores[version] = run_score
+                            self.last_successful_version = version
+                except Exception as exc:
+                    grade_feedback = f"Failed to run grading tool: {exc}"
+                    self.logger.exception("Grading command failed for version %s", version)
+
+                code_with_logs += f"<leaderboard_score>\n{run_score}\n</leaderboard_score>\n"
 
             # Compare against most recent successful version (with a score)
             if previous_successful_version is not None:
@@ -917,11 +1018,12 @@ class DeveloperAgent:
         # These are None if no submission was generated or if this is the first successful version
         return code_with_logs, run_score, previous_successful_version, base_score, submission_exists
 
-    def _gather_sota_feedback(self, code_with_logs: str, attempt_number: int = 1) -> any:
+    def _gather_sota_feedback(self, code_with_logs: str, version: int, attempt_number: int = 1) -> any:
         """Gather SOTA feedback through red flags analysis and SOTA suggestions.
 
         Args:
             code_with_logs: Code with execution logs and analysis
+            version: Current version number to include models_{version}/ in directory listing
             attempt_number: Which attempt this is (1, 2, 3, ...) for interleaving strategy
 
         Returns:
@@ -930,6 +1032,9 @@ class DeveloperAgent:
         try:
             # Format LATER recommendations for context
             later_context = self._format_later_recommendations()
+
+            # Build extended directory listing including models_{version}/
+            extended_listing = self._build_extended_data_listing(version)
 
             # STAGE 1: Identify red flags via direct analysis
             self.logger.info("Stage 1: Identifying red flags via direct analysis...")
@@ -959,7 +1064,7 @@ class DeveloperAgent:
                 failed_ideas=self.blacklisted_ideas,  # Keep instance-level for context
                 shared_suggestions=shared_suggestions,  # New: shared across all models
                 later_recommendations=later_context,
-                external_data_listing=self.external_data_listing,
+                external_data_listing=extended_listing,
                 plan_content=self.plan_content,
                 attempt_number=attempt_number,
                 slug=self.slug,
@@ -988,7 +1093,11 @@ class DeveloperAgent:
 
         run_score = 0
 
-        system_prompt = self._compose_system(allow_multi_fold=False)
+        # Enable multi-fold from start if using validation scores (need proper CV for reliable scores)
+        initial_allow_multi_fold = _USE_VALIDATION_SCORE
+        if initial_allow_multi_fold:
+            self.logger.info("Multi-fold training enabled from start (use_validation_score=True)")
+        system_prompt = self._compose_system(allow_multi_fold=initial_allow_multi_fold)
         user_prompt = self._build_user_prompt(version=1)
         input_list = [{"role": "user", "content": user_prompt}]
 
@@ -1027,8 +1136,8 @@ class DeveloperAgent:
 
             attempt += 1
 
-            # Rebuild system prompt for attempt 2+ to enable multi-fold training
-            if attempt == 2:
+            # Rebuild system prompt for attempt 2+ to enable multi-fold training (unless already enabled)
+            if attempt == 2 and not initial_allow_multi_fold:
                 self.logger.info("Rebuilding system prompt for attempt 2+ with multi-fold enabled")
                 system_prompt = self._compose_system(allow_multi_fold=True)
 
@@ -1099,7 +1208,8 @@ class DeveloperAgent:
                 summary_text = build_block_summary(guard_report)
                 next_log_path = self.outputs_dir / self._log_filename(version + 1)
                 next_submission_path = self.outputs_dir / self._submission_filename(version + 1)
-                fix_instr = prompt_guardrail_fix_suffix(next_log_path, next_submission_path)
+                next_models_dir = self.outputs_dir / f"models_{version + 1}"
+                fix_instr = prompt_guardrail_fix_suffix(next_log_path, next_submission_path, next_models_dir)
                 guardrail_prompt = summary_text + fix_instr
                 base_version_for_next_patch = version
                 guardrail_prompt = self._append_patch_directive(guardrail_prompt, base_version_for_next_patch)
@@ -1121,7 +1231,7 @@ class DeveloperAgent:
                 # Increment SOTA suggestions call counter (separate from attempt counter)
                 sota_suggestions_call_id += 1
                 # Gather SOTA feedback (red flags + suggestions)
-                sota_response = self._gather_sota_feedback(code_with_logs, attempt_number=sota_suggestions_call_id)
+                sota_response = self._gather_sota_feedback(code_with_logs, version=version, attempt_number=sota_suggestions_call_id)
 
                 suggestion_text, blacklist_flag, blacklist_reason, suggestion_code = self._parse_sota_response(sota_response)
                 self.logger.info("SOTA suggestion: %s (blacklist=%s, code_len=%d)", suggestion_text, blacklist_flag, len(suggestion_code))
@@ -1188,6 +1298,7 @@ class DeveloperAgent:
 
                 next_log_path = self.outputs_dir / self._log_filename(version + 1)
                 next_submission_path = self.outputs_dir / self._submission_filename(version + 1)
+                next_models_dir = self.outputs_dir / f"models_{version + 1}"
 
                 suggestion_block = ""
                 if suggestion_text:
@@ -1211,7 +1322,11 @@ class DeveloperAgent:
 
                 next_instr = (
                     f"{suggestion_block}\n"
-                    f"Remember:\n- write logs to {next_log_path}\n- and produce the next submission at {next_submission_path}"
+                    f"Remember:\n"
+                    f"- write logs to {next_log_path}\n"
+                    f"- produce the next submission at {next_submission_path}\n"
+                    f"- save validation predictions to {next_models_dir}/valid_preds.csv\n"
+                    f"- save models to {next_models_dir}/"
                 )
                 next_instr = self._append_patch_directive(next_instr, base_version_for_next_patch)
 
@@ -1227,6 +1342,7 @@ class DeveloperAgent:
             else:
                 next_log_path = self.outputs_dir / self._log_filename(version + 1)
                 next_submission_path = self.outputs_dir / self._submission_filename(version + 1)
+                next_models_dir = self.outputs_dir / f"models_{version + 1}"
 
                 # Check if this is a timeout or OOM error
                 is_timeout = "Code execution timed out after" in output
@@ -1263,7 +1379,7 @@ class DeveloperAgent:
                         Performance analysis:
                         {final_summary}
 
-                        {prompt_execution_failure_suffix(next_log_path, next_submission_path)}
+                        {prompt_execution_failure_suffix(next_log_path, next_submission_path, next_models_dir)}
                         """
                     except Exception:
                         self.logger.exception(f"Failed to run red flags analysis for {error_type}")
@@ -1274,7 +1390,7 @@ class DeveloperAgent:
                         This is the stack trace and advice on how to fix the error:
                         {output}
 
-                        {prompt_execution_failure_suffix(next_log_path, next_submission_path)}
+                        {prompt_execution_failure_suffix(next_log_path, next_submission_path, next_models_dir)}
                         """
                 else:
                     # For regular bugs/errors, just show the error (web search already done in execute_code)
@@ -1283,7 +1399,7 @@ class DeveloperAgent:
                     This is the stack trace and advice on how to fix the error:
                     {output}
 
-                    {prompt_execution_failure_suffix(next_log_path, next_submission_path)}
+                    {prompt_execution_failure_suffix(next_log_path, next_submission_path, next_models_dir)}
                     """
 
                 base_version_for_next_patch = version
