@@ -28,7 +28,7 @@ Begin with a **concise checklist (3-7 conceptual bullets)** describing your reas
 
 ## Inputs
 - `<competition_description>`
-- `<task_type>` ∈ {computer_vision, nlp, tabular, time_series, audio} or multimodal combination (e.g., "nlp + tabular")
+- `<task_type>` ∈ {{computer_vision, nlp, tabular, time_series, audio}} or multimodal combination (e.g., "nlp + tabular")
 - `<task_summary>`
 - `<research_plan>`
 
@@ -98,7 +98,7 @@ Begin with a concise checklist (3-7 bullets) describing your *process* (conceptu
 
 ## Inputs
 - `<competition_description>`
-- `<task_type>` ∈ {computer_vision, nlp, tabular, time_series, audio} or multimodal combination (e.g., "nlp + tabular")
+- `<task_type>` ∈ {{computer_vision, nlp, tabular, time_series, audio}} or multimodal combination (e.g., "nlp + tabular")
 - `<task_summary>`
 - `<model_name>` (may be a multi-stage pipeline like "NLP model (stage 1) + Tabular model (stage 2)" for multimodal tasks)
 - `<research_plan>`
@@ -201,7 +201,7 @@ Begin with a **concise checklist (3-7 bullets)** summarizing your conceptual rea
 
 ## Inputs
 - `<competition_description>`
-- `<task_type>` ∈ {computer_vision, nlp, tabular, time_series, audio} or multimodal combination (e.g., "nlp + tabular")
+- `<task_type>` ∈ {{computer_vision, nlp, tabular, time_series, audio}} or multimodal combination (e.g., "nlp + tabular")
 - `<task_summary>`
 - `<model_name>` (may be a multi-stage pipeline like "NLP model (stage 1) + Tabular model (stage 2)" for multimodal tasks)
 - `<research_plan>`
@@ -311,7 +311,7 @@ Begin with a **concise checklist (3-7 conceptual bullets)** describing your reas
 
 ## Inputs
 - `<competition_description>`
-- `<task_type>` ∈ {computer_vision, nlp, tabular, time_series, audio} or multimodal combination (e.g., "nlp + tabular")
+- `<task_type>` ∈ {{computer_vision, nlp, tabular, time_series, audio}} or multimodal combination (e.g., "nlp + tabular")
 - `<task_summary>`
 - `<model_name>` (may be a multi-stage pipeline like "NLP model (stage 1) + Tabular model (stage 2)" for multimodal tasks)
 - `<research_plan>`
@@ -409,7 +409,7 @@ All strategies must be **realistically executable** within these constraints.
 
 ## Inputs
 - `<competition_description>`
-- `<task_type>` ∈ {computer_vision, nlp, tabular, time_series, audio} or multimodal combination (e.g., "nlp + tabular")
+- `<task_type>` ∈ {{computer_vision, nlp, tabular, time_series, audio}} or multimodal combination (e.g., "nlp + tabular")
 - `<task_summary>`
 - `<model_name>` (may be a multi-stage pipeline like "NLP model (stage 1) + Tabular model (stage 2)" for multimodal tasks)
 - `<research_plan>`
