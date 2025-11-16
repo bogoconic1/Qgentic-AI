@@ -76,7 +76,10 @@ def call_llm_with_retry_helper(
     runtime_cfg = cfg.get("runtime")
     retries = max_retries or runtime_cfg.get("llm_max_retries")
     if retries < 1: retries = 1
-    if web_search_enabled: tools.append({"type": "web_search"})
+
+    # Add web_search without mutating caller's tools list
+    if web_search_enabled:
+        tools = tools + [{"type": "web_search"}]
 
     for attempt in range(retries):
         try:
