@@ -12,7 +12,7 @@ from weave.trace.util import ThreadPoolExecutor
 
 from project_config import get_config
 from tools.helpers import call_llm_with_retry, call_llm_with_retry_google
-from tools.gemini_google_search import GeminiPaperSummaryClient
+from tools.generate_paper_summary import PaperSummaryClient
 from prompts.model_recommender_agent import (
     model_selector_system_prompt,
     model_refiner_system_prompt,
@@ -446,7 +446,7 @@ class ModelRecommenderAgent:
         """
         logger.info("Starting paper summary retrieval for %d models", len(model_names))
 
-        client = GeminiPaperSummaryClient(is_model=True)
+        client = PaperSummaryClient(is_model=True)
         summaries = {}
 
         # Fetch summaries in parallel

@@ -8,7 +8,7 @@ from tools.helpers import call_llm_with_retry_google
 load_dotenv()
 
 
-class GeminiPaperSummaryClient:
+class PaperSummaryClient:
     """Wrapper around Gemini for Google-enabled paper summarization."""
 
     _DEFAULT_PROMPT_MODEL = (
@@ -26,7 +26,7 @@ class GeminiPaperSummaryClient:
         api_key = api_key or os.environ.get("GOOGLE_API_KEY")
         if not api_key:
             raise ValueError(
-                "GOOGLE_API_KEY is required to initialize GeminiPaperSummaryClient")
+                "GOOGLE_API_KEY is required to initialize PaperSummaryClient")
 
         cfg = get_config()
         self.model_name = cfg["llm"]["model_recommender_model"]

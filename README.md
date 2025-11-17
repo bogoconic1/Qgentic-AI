@@ -75,13 +75,13 @@ Results are reported as **raw score (percentile%)** where percentile = % of lead
   - **Domain-First Discovery**: Implements mandatory Phase 0 (30-40 min budget) to deeply understand domain context before analysis:
     - Identifies real-world domain and stakeholders
     - Searches for dataset papers and domain literature using Gemini API with Google Search
-    - Reads and summarizes research papers with `read_research_paper()` tool (powered by `GeminiPaperSummaryClient`)
+    - Reads and summarizes research papers with `read_research_paper()` tool (powered by `PaperSummaryClient`)
     - Formulates 5-10 domain-specific hypotheses grounded in literature
     - Outputs structured domain context summary
   - **Hypothesis-Driven Exploration**: Tests domain-specific hypotheses with quantitative validation (correlations, distributions, A/B tests)
   - **Task-Specific Guides**: Provides tailored exploration strategies for tabular, NLP, computer vision, and time series tasks
   - **A/B Testing**: Runs controlled experiments comparing modeling approaches with automatic code generation and execution
-  - **Research Paper Reading**: Integrates `GeminiPaperSummaryClient` with Google Search + URL Context tools to:
+  - **Research Paper Reading**: Integrates `PaperSummaryClient` with Google Search + URL Context tools to:
     - Find and read dataset papers via arXiv IDs
     - Search for model papers and technical documentation
     - Generate structured 6-section summaries (Abstract, Introduction, Related Work, Method/Architecture, Experiments/Results, Conclusion)
@@ -139,7 +139,7 @@ Results are reported as **raw score (percentile%)** where percentile = % of lead
     - `ask_eda()`: Execute exploratory data analysis code snippets
     - `download_datasets()`: Search and download external datasets
     - `read_research_paper()`: Read and summarize research papers via arXiv ID using Gemini API
-  - `tools.gemini_google_search` provides `GeminiPaperSummaryClient`:
+  - `tools.generate_paper_summary` provides `PaperSummaryClient`:
     - Supports both arXiv paper IDs and model names
     - Uses Gemini API with Google Search + URL Context tools for paper discovery and reading
     - Generates structured 6-section summaries with domain-specific insights

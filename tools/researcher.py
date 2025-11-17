@@ -15,7 +15,7 @@ import pandas as pd
 import weave
 from project_config import get_config
 from tools.helpers import call_llm_with_retry, _build_directory_listing
-from tools.gemini_google_search import GeminiPaperSummaryClient
+from tools.generate_paper_summary import PaperSummaryClient
 from prompts.tools_researcher import (
     ask_eda_template as prompt_ask_eda,
     datasets_prompt as prompt_datasets,
@@ -271,7 +271,7 @@ def read_research_paper(arxiv_link: str) -> str:
     logger.info("Reading research paper with arxiv ID: %s", arxiv_id)
 
     try:
-        client = GeminiPaperSummaryClient(is_model=False)
+        client = PaperSummaryClient(is_model=False)
         summary = client.generate_summary(model_name=arxiv_id)
         logger.info("Successfully generated paper summary (length: %d chars)", len(summary))
         return summary

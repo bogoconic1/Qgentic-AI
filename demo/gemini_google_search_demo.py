@@ -5,11 +5,11 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from tools.gemini_google_search import GeminiPaperSummaryClient
+from tools.generate_paper_summary import PaperSummaryClient
 
 
 def generate(model_name: str) -> str:
-    client = GeminiPaperSummaryClient(is_model=True)
+    client = PaperSummaryClient(is_model=True)
     return client.generate_summary(model_name=model_name)
 
 
