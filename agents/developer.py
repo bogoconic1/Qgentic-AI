@@ -19,7 +19,8 @@ from tools.developer import (
     search_sota_suggestions,
 )
 from utils.guardrails import evaluate_guardrails, build_block_summary
-from tools.helpers import call_llm_with_retry, _build_directory_listing
+from tools.helpers import call_llm_with_retry, call_llm_with_retry_anthropic, _build_directory_listing
+from utils.llm_utils import detect_provider, extract_text_from_response
 from utils.diffs import (
     extract_diff_block,
     normalize_diff_payload,
@@ -357,21 +358,39 @@ class DeveloperAgent:
     @weave.op()
     def _generate_code(self, instructions: str, messages: list[dict[str, str]], expect_patch: bool = False) -> str:
         self.logger.info("Requesting code generation from model for iteration %s", self.iteration)
-        response = call_llm_with_retry(
-            model=_DEVELOPER_MODEL,
-            instructions=instructions,
-            tools=[],
-            messages=messages,
-            web_search_enabled=True
-        )
 
-        content = response.output_text
+        # Detect provider
+        provider = detect_provider(_DEVELOPER_MODEL)
+
+        if provider == "openai":
+            response = call_llm_with_retry(
+                model=_DEVELOPER_MODEL,
+                instructions=instructions,
+                tools=[],
+                messages=messages,
+                web_search_enabled=True
+            )
+            content = response.output_text
+            output = response.output
+        elif provider == "anthropic":
+            response = call_llm_with_retry_anthropic(
+                model=_DEVELOPER_MODEL,
+                instructions=instructions,
+                tools=[],
+                messages=messages,
+                web_search_enabled=True
+            )
+            content = extract_text_from_response(response, provider)
+            # For Anthropic, construct output format compatible with message history
+            output = [{"role": "assistant", "content": response.content}]
+        else:
+            raise ValueError(f"Unsupported provider: {provider}")
 
         self.logger.info("Model response received for iteration %s", self.iteration)
         self.logger.debug("Completion content length: %s", len(content))
         if expect_patch:
             return content.strip()
-        return response.output, self._extract_code(content)
+        return output, self._extract_code(content)
 
     @staticmethod
     def _normalize_diff_payload(base_path: Path, diff_text: str) -> Optional[str]:

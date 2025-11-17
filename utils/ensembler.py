@@ -12,7 +12,8 @@ import pandas as pd
 from concurrent.futures import ThreadPoolExecutor
 from utils.grade import run_grade
 from utils.code_utils import strip_header_from_code
-from tools.helpers import call_llm_with_retry
+from tools.helpers import call_llm_with_retry, call_llm_with_retry_anthropic
+from utils.llm_utils import detect_provider, extract_text_from_response
 from project_config import get_config
 from schemas.ensembler import EnsembleStrategies
 from prompts.ensembler_agent import (
@@ -415,23 +416,39 @@ Produce a JSON object:
 
     user_prompt = "Generate 8 diverse ensemble strategies for this competition."
 
-    # Call LLM with web search enabled and structured outputs
-    response = call_llm_with_retry(
-        model=_ENSEMBLER_MODEL,
-        instructions=system_prompt,
-        tools=[],
-        messages=[{"role": "user", "content": user_prompt}],
-        web_search_enabled=True,
-        text_format=EnsembleStrategies,
-    )
+    # Detect provider and call appropriate API
+    provider = detect_provider(_ENSEMBLER_MODEL)
+
+    if provider == "openai":
+        response = call_llm_with_retry(
+            model=_ENSEMBLER_MODEL,
+            instructions=system_prompt,
+            tools=[],
+            messages=[{"role": "user", "content": user_prompt}],
+            web_search_enabled=True,
+            text_format=EnsembleStrategies,
+        )
+        parsed = response.output_parsed if (response and hasattr(response, 'output_parsed') and response.output_parsed) else None
+    elif provider == "anthropic":
+        response = call_llm_with_retry_anthropic(
+            model=_ENSEMBLER_MODEL,
+            instructions=system_prompt,
+            tools=[],
+            messages=[{"role": "user", "content": user_prompt}],
+            web_search_enabled=True,
+            text_format=EnsembleStrategies,
+        )
+        parsed = response.parsed_output if (response and hasattr(response, 'parsed_output') and response.parsed_output) else None
+    else:
+        raise ValueError(f"Unsupported provider: {provider}")
 
     # Use structured output
     strategies = []
     checklist = []
     validation_summary = ""
 
-    if response and hasattr(response, 'output_parsed') and response.output_parsed:
-        parsed = response.output_parsed
+    if parsed:
+        # parsed is now set from provider-specific attribute above
 
         # Extract checklist and validation summary
         checklist = parsed.checklist if hasattr(parsed, 'checklist') else []
@@ -494,14 +511,27 @@ def generate_model_summary(
     system_prompt = ensembler_code_summarize_system_prompt()
     user_prompt = ensembler_code_summarize_user_prompt(description, model_name, code, logs)
 
-    response = call_llm_with_retry(
-        model=_ENSEMBLER_MODEL,
-        instructions=system_prompt,
-        tools=[],
-        messages=[{"role": "user", "content": user_prompt}]
-    )
+    # Detect provider and call appropriate API
+    provider = detect_provider(_ENSEMBLER_MODEL)
 
-    return response.output_text
+    if provider == "openai":
+        response = call_llm_with_retry(
+            model=_ENSEMBLER_MODEL,
+            instructions=system_prompt,
+            tools=[],
+            messages=[{"role": "user", "content": user_prompt}]
+        )
+        return response.output_text
+    elif provider == "anthropic":
+        response = call_llm_with_retry_anthropic(
+            model=_ENSEMBLER_MODEL,
+            instructions=system_prompt,
+            tools=[],
+            messages=[{"role": "user", "content": user_prompt}]
+        )
+        return extract_text_from_response(response, provider)
+    else:
+        raise ValueError(f"Unsupported provider: {provider}")
 
 
 def _generate_summary_task(

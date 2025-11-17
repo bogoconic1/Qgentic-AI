@@ -123,7 +123,7 @@ class ResearcherAgent:
                 files.add(p)
         return files
 
-    def _encode_image_to_data_url(self, path: Path) -> str:
+    def _encode_image_to_data_url(self, path: Path, resize_for_anthropic: bool = False) -> str:
         mime, _ = mimetypes.guess_type(path.name)
         if mime is None:
             suffix = path.suffix.lower()
@@ -138,7 +138,44 @@ class ResearcherAgent:
             else:
                 return ""
         try:
-            data = base64.b64encode(path.read_bytes()).decode("utf-8")
+            image_bytes = path.read_bytes()
+
+            # Resize image if needed for Anthropic (max 2000px per dimension for multi-image requests)
+            if resize_for_anthropic:
+                try:
+                    from PIL import Image
+                    import io
+
+                    img = Image.open(io.BytesIO(image_bytes))
+                    width, height = img.size
+
+                    # Check if resizing is needed
+                    if width > 2000 or height > 2000:
+                        # Calculate new dimensions maintaining aspect ratio
+                        if width > height:
+                            new_width = 2000
+                            new_height = int(height * (2000 / width))
+                        else:
+                            new_height = 2000
+                            new_width = int(width * (2000 / height))
+
+                        # Resize the image
+                        img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+                        # Save to bytes
+                        output = io.BytesIO()
+                        # Preserve format, default to PNG if format is unknown
+                        img_format = img.format if img.format else 'PNG'
+                        img.save(output, format=img_format)
+                        image_bytes = output.getvalue()
+
+                        logger.info(f"Resized image {path.name} from {width}x{height} to {new_width}x{new_height} for Anthropic API")
+                except ImportError:
+                    logger.warning("PIL not available for image resizing. Image may fail if dimensions exceed 2000px.")
+                except Exception as e:
+                    logger.warning(f"Failed to resize image {path.name}: {e}. Using original.")
+
+            data = base64.b64encode(image_bytes).decode("utf-8")
         except Exception:
             return ""
         return f"data:{mime};base64,{data}"
@@ -168,7 +205,9 @@ class ResearcherAgent:
             return
         content: list[dict] = []
         for p in selected:
-            data_url = self._encode_image_to_data_url(p)
+            # Resize images for Anthropic to respect 2000px limit for multi-image requests
+            resize_for_anthropic = (provider == "anthropic")
+            data_url = self._encode_image_to_data_url(p, resize_for_anthropic=resize_for_anthropic)
             if not data_url:
                 continue
 

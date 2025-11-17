@@ -11,7 +11,8 @@ import traceback
 from dotenv import load_dotenv
 from openai import OpenAI
 from project_config import get_config
-from tools.helpers import call_llm_with_retry
+from tools.helpers import call_llm_with_retry, call_llm_with_retry_anthropic
+from utils.llm_utils import detect_provider, extract_text_from_response
 from prompts.tools_developer import (
     build_stack_trace_prompt as prompt_stack_trace,
     build_stack_trace_pseudo_prompt as prompt_stack_trace_pseudo,
@@ -94,26 +95,55 @@ def web_search_stack_trace(query: str) -> str:
     messages = [{"role": "user", "content": "<query>\n" + query + "\n</query>"}]
     logger.debug("Web search messages: %s", messages)
 
-    response = call_llm_with_retry(
-        model=_DEVELOPER_TOOL_MODEL,
-        instructions=system_prompt,
-        tools=[],
-        messages=messages,
-        web_search_enabled=True,
-        text_format=StackTraceSolution,
-    )
+    # Detect provider
+    provider = detect_provider(_DEVELOPER_TOOL_MODEL)
 
-    # Use structured output
-    solution_text = ""
-    if response and hasattr(response, 'output_parsed') and response.output_parsed:
-        solution_text = response.output_parsed.reasoning_and_solution.strip()
-        logger.debug("Returning solution from structured output.")
-        return query + "\n" + "This is how you can fix the error: \n" + solution_text
+    if provider == "openai":
+        response = call_llm_with_retry(
+            model=_DEVELOPER_TOOL_MODEL,
+            instructions=system_prompt,
+            tools=[],
+            messages=messages,
+            web_search_enabled=True,
+            text_format=StackTraceSolution,
+        )
 
-    # Fallback to raw output if structured parsing fails
-    content = response.output_text or ""
-    logger.warning("Structured output parsing failed, falling back to raw content.")
-    return query + "\n" + "This is how you can fix the error: \n" + content
+        # Use structured output
+        solution_text = ""
+        if response and hasattr(response, 'output_parsed') and response.output_parsed:
+            solution_text = response.output_parsed.reasoning_and_solution.strip()
+            logger.debug("Returning solution from structured output.")
+            return query + "\n" + "This is how you can fix the error: \n" + solution_text
+
+        # Fallback to raw output if structured parsing fails
+        content = response.output_text or ""
+        logger.warning("Structured output parsing failed, falling back to raw content.")
+        return query + "\n" + "This is how you can fix the error: \n" + content
+
+    elif provider == "anthropic":
+        response = call_llm_with_retry_anthropic(
+            model=_DEVELOPER_TOOL_MODEL,
+            instructions=system_prompt,
+            tools=[],
+            messages=messages,
+            web_search_enabled=True,
+            text_format=StackTraceSolution,
+        )
+
+        # Use structured output
+        solution_text = ""
+        if response and hasattr(response, 'parsed_output') and response.parsed_output:
+            solution_text = response.parsed_output.reasoning_and_solution.strip()
+            logger.debug("Returning solution from structured output.")
+            return query + "\n" + "This is how you can fix the error: \n" + solution_text
+
+        # Fallback to raw output if structured parsing fails
+        content = extract_text_from_response(response, provider)
+        logger.warning("Structured output parsing failed, falling back to raw content.")
+        return query + "\n" + "This is how you can fix the error: \n" + content
+
+    else:
+        raise ValueError(f"Unsupported provider: {provider}")
 
 @weave.op()
 def search_red_flags(
@@ -137,22 +167,44 @@ def search_red_flags(
         context=context,
     )
 
-    # Single-pass analysis with web search enabled
-    response = call_llm_with_retry(
-        model=_DEVELOPER_TOOL_MODEL,
-        instructions=system_prompt,
-        tools=[],
-        messages=[{"role": "user", "content": user_prompt}],
-        web_search_enabled=True
-    )
+    # Detect provider and call appropriate API
+    provider = detect_provider(_DEVELOPER_TOOL_MODEL)
 
-    final_content = response.output_text or ""
+    if provider == "openai":
+        response = call_llm_with_retry(
+            model=_DEVELOPER_TOOL_MODEL,
+            instructions=system_prompt,
+            tools=[],
+            messages=[{"role": "user", "content": user_prompt}],
+            web_search_enabled=True
+        )
+        final_content = response.output_text or ""
+    elif provider == "anthropic":
+        response = call_llm_with_retry_anthropic(
+            model=_DEVELOPER_TOOL_MODEL,
+            instructions=system_prompt,
+            tools=[],
+            messages=[{"role": "user", "content": user_prompt}],
+            web_search_enabled=True
+        )
+        final_content = extract_text_from_response(response, provider)
+    else:
+        raise ValueError(f"Unsupported provider: {provider}")
+
     logger.info("Red flags identification completed in single pass")
     return final_content
 
-def _get_sota_tools() -> list:
-    """Get tools available for SOTA suggestions (subset of researcher tools)."""
-    return [
+def _get_sota_tools(provider: str = "openai") -> list:
+    """Get tools available for SOTA suggestions (subset of researcher tools).
+
+    Args:
+        provider: "openai" or "anthropic" for format conversion
+
+    Returns:
+        List of tool definitions in provider-specific format
+    """
+    # Define tools in OpenAI format first
+    openai_tools = [
         {
             "type": "function",
             "name": "ask_eda",
@@ -162,9 +214,8 @@ def _get_sota_tools() -> list:
                 "properties": {
                     "question": {"type": "string", "description": "The EDA question to answer (e.g. Read train.csv and compute correlation between XXX and YYY, is the relationship really monotonic to justify adding monotonic constraints?)"}
                 },
+                "required": ['question']
             },
-            "additionalProperties": False,
-            "required": ['question']
         },
         {
             "type": "function",
@@ -175,9 +226,8 @@ def _get_sota_tools() -> list:
                 "properties": {
                     "url": {"type": "string", "description": "URL to scrape"}
                 },
+                "required": ["url"]
             },
-            "additionalProperties": False,
-            "required": ["url"]
         },
         {
             "type": "function",
@@ -188,9 +238,8 @@ def _get_sota_tools() -> list:
                 "properties": {
                     "arxiv_link": {"type": "string", "description": "ArXiv paper ID or link"}
                 },
+                "required": ["arxiv_link"]
             },
-            "additionalProperties": False,
-            "required": ["arxiv_link"]
         },
         {
             "type": "function",
@@ -203,11 +252,25 @@ def _get_sota_tools() -> list:
                     "question_2": {"type": "string", "description": "Second phrasing with different wording"},
                     "question_3": {"type": "string", "description": "Third phrasing using alternative keywords"}
                 },
+                "required": ["question_1", "question_2", "question_3"]
             },
-            "additionalProperties": False,
-            "required": ["question_1", "question_2", "question_3"]
         },
     ]
+
+    if provider == "openai":
+        return openai_tools
+    elif provider == "anthropic":
+        # Convert to Anthropic format
+        anthropic_tools = []
+        for tool in openai_tools:
+            anthropic_tools.append({
+                "name": tool["name"],
+                "description": tool["description"],
+                "input_schema": tool["parameters"]
+            })
+        return anthropic_tools
+    else:
+        raise ValueError(f"Unsupported provider: {provider}")
 
 
 @weave.op()
@@ -306,90 +369,191 @@ def search_sota_suggestions(
     )
 
     # Tool execution loop
-    tools = _get_sota_tools() if (slug and data_path) else []
+    provider = detect_provider(_DEVELOPER_TOOL_MODEL)
+    tools = _get_sota_tools(provider) if (slug and data_path) else []
     input_list = [{"role": "user", "content": user_prompt}]
 
     for step in range(max_tool_steps):
-        logger.info("SOTA suggestion step %d/%d (tools: %s)", step + 1, max_tool_steps, "enabled" if tools else "disabled")
+        logger.info("SOTA suggestion step %d/%d (tools: %s, provider: %s)", step + 1, max_tool_steps, "enabled" if tools else "disabled", provider)
 
-        response = call_llm_with_retry(
-            model=_DEVELOPER_TOOL_MODEL,
-            instructions=system_prompt,
-            tools=tools,
-            messages=input_list,
-            web_search_enabled=True,
-            text_format=SOTAResponse if step == max_tool_steps - 1 else None,  # Force structured output on last step
-        )
+        if provider == "openai":
+            response = call_llm_with_retry(
+                model=_DEVELOPER_TOOL_MODEL,
+                instructions=system_prompt,
+                tools=tools,
+                messages=input_list,
+                web_search_enabled=True,
+                text_format=SOTAResponse if step == max_tool_steps - 1 else None,
+            )
 
-        # Add response to conversation
-        input_list.extend(response.output)
+            # Add response to conversation
+            input_list.extend(response.output)
 
-        # Check if response has tool calls
-        has_tool_calls = any(
-            hasattr(item, 'type') and item.type == "function_call"
-            for item in response.output
-        )
+            # Check if response has tool calls
+            has_tool_calls = any(
+                hasattr(item, 'type') and item.type == "function_call"
+                for item in response.output
+            )
 
-        if not has_tool_calls:
-            # No tool calls, check if we have structured output
-            if hasattr(response, 'output_parsed') and response.output_parsed:
-                logger.info("SOTA suggestions completed at step %d (no tool calls, structured output present)", step + 1)
-                return response
-            else:
-                # Need to get structured output - make final call
-                logger.info("SOTA suggestions completed at step %d (no tool calls), requesting structured output", step + 1)
-                response = call_llm_with_retry(
-                    model=_DEVELOPER_TOOL_MODEL,
-                    instructions=system_prompt,
-                    tools=[],  # No more tools
-                    messages=input_list,
-                    web_search_enabled=True,
-                    text_format=SOTAResponse,
-                )
-                return response
+            if not has_tool_calls:
+                # No tool calls, check if we have structured output
+                if hasattr(response, 'output_parsed') and response.output_parsed:
+                    logger.info("SOTA suggestions completed at step %d (no tool calls, structured output present)", step + 1)
+                    return response
+                else:
+                    # Need to get structured output - make final call
+                    logger.info("SOTA suggestions completed at step %d (no tool calls), requesting structured output", step + 1)
+                    response = call_llm_with_retry(
+                        model=_DEVELOPER_TOOL_MODEL,
+                        instructions=system_prompt,
+                        tools=[],
+                        messages=input_list,
+                        web_search_enabled=True,
+                        text_format=SOTAResponse,
+                    )
+                    return response
 
-        # Execute tool calls
-        for item in response.output:
-            if hasattr(item, 'type') and item.type == "function_call":
-                tool_result = _execute_sota_tool_call(
-                    item=item,
-                    description=description,
-                    data_path=data_path,
-                    slug=slug,
-                    cpu_core_range=cpu_core_range,
-                    gpu_identifier=gpu_identifier,
-                    file_suffix=file_suffix,
-                )
+            # Execute tool calls
+            for item in response.output:
+                if hasattr(item, 'type') and item.type == "function_call":
+                    tool_result = _execute_sota_tool_call(
+                        item=item,
+                        description=description,
+                        data_path=data_path,
+                        slug=slug,
+                        cpu_core_range=cpu_core_range,
+                        gpu_identifier=gpu_identifier,
+                        file_suffix=file_suffix,
+                        provider=provider,
+                    )
+                    input_list.append({
+                        "type": "function_call_output",
+                        "call_id": item.call_id,
+                        "output": tool_result
+                    })
+
+        elif provider == "anthropic":
+            response = call_llm_with_retry_anthropic(
+                model=_DEVELOPER_TOOL_MODEL,
+                instructions=system_prompt,
+                tools=tools,
+                messages=input_list,
+                web_search_enabled=True,
+                text_format=SOTAResponse if step == max_tool_steps - 1 else None,
+            )
+
+            # Check stop_reason
+            if response.stop_reason == "tool_use":
+                # Extract tool_use blocks
+                tool_uses = [
+                    block for block in response.content
+                    if hasattr(block, 'type') and block.type == 'tool_use'
+                ]
+
+                # Execute all tools and collect results
+                tool_results = []
+                for tool_use in tool_uses:
+                    tool_result_str = _execute_sota_tool_call(
+                        item=tool_use,
+                        description=description,
+                        data_path=data_path,
+                        slug=slug,
+                        cpu_core_range=cpu_core_range,
+                        gpu_identifier=gpu_identifier,
+                        file_suffix=file_suffix,
+                        provider=provider,
+                    )
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": tool_use.id,
+                        "content": tool_result_str
+                    })
+
+                # Add to messages in Anthropic format
                 input_list.append({
-                    "type": "function_call_output",
-                    "call_id": item.call_id,
-                    "output": tool_result
+                    "role": "assistant",
+                    "content": response.content
                 })
+                input_list.append({
+                    "role": "user",
+                    "content": tool_results
+                })
+
+            else:
+                # No tool use, check if we have structured output
+                if hasattr(response, 'parsed_output') and response.parsed_output:
+                    logger.info("SOTA suggestions completed at step %d (no tool use, structured output present)", step + 1)
+                    return response
+                else:
+                    # Need to get structured output - make final call
+                    logger.info("SOTA suggestions completed at step %d (no tool use), requesting structured output", step + 1)
+                    response = call_llm_with_retry_anthropic(
+                        model=_DEVELOPER_TOOL_MODEL,
+                        instructions=system_prompt,
+                        tools=[],
+                        messages=input_list,
+                        web_search_enabled=True,
+                        text_format=SOTAResponse,
+                    )
+                    return response
+
+        else:
+            raise ValueError(f"Unsupported provider: {provider}")
 
     # Reached max steps, force final structured answer
     logger.warning("SOTA reached max_tool_steps=%d, forcing final answer", max_tool_steps)
-    response = call_llm_with_retry(
-        model=_DEVELOPER_TOOL_MODEL,
-        instructions=system_prompt + "\n\nYou have reached the maximum tool usage limit. Provide your final suggestion now based on the information gathered.",
-        tools=[],
-        messages=input_list,
-        web_search_enabled=True,
-        text_format=SOTAResponse,
-    )
+
+    if provider == "openai":
+        response = call_llm_with_retry(
+            model=_DEVELOPER_TOOL_MODEL,
+            instructions=system_prompt + "\n\nYou have reached the maximum tool usage limit. Provide your final suggestion now based on the information gathered.",
+            tools=[],
+            messages=input_list,
+            web_search_enabled=True,
+            text_format=SOTAResponse,
+        )
+    elif provider == "anthropic":
+        response = call_llm_with_retry_anthropic(
+            model=_DEVELOPER_TOOL_MODEL,
+            instructions=system_prompt + "\n\nYou have reached the maximum tool usage limit. Provide your final suggestion now based on the information gathered.",
+            tools=[],
+            messages=input_list,
+            web_search_enabled=True,
+            text_format=SOTAResponse,
+        )
+    else:
+        raise ValueError(f"Unsupported provider: {provider}")
 
     return response
 
 
-def _execute_sota_tool_call(item, description, data_path, slug, cpu_core_range, gpu_identifier, file_suffix):
-    """Execute a single SOTA tool call and return JSON result."""
+def _execute_sota_tool_call(item, description, data_path, slug, cpu_core_range, gpu_identifier, file_suffix, provider="openai"):
+    """Execute a single SOTA tool call and return JSON result.
+
+    Args:
+        item: Tool call item (OpenAI or Anthropic format)
+        provider: "openai" or "anthropic"
+        ...other args...
+
+    Returns:
+        JSON string with result
+    """
     from tools.researcher import ask_eda, scrape_web_page, read_research_paper, download_external_datasets
     import json
 
-    try:
-        args = json.loads(item.arguments)
-    except Exception as e:
-        logger.error("Failed to parse tool arguments: %s", e)
-        return json.dumps({"error": f"Failed to parse arguments: {str(e)}"})
+    # Parse tool name and arguments based on provider
+    if provider == "openai":
+        tool_name = item.name
+        try:
+            args = json.loads(item.arguments)
+        except Exception as e:
+            logger.error("Failed to parse tool arguments: %s", e)
+            return json.dumps({"error": f"Failed to parse arguments: {str(e)}"})
+    elif provider == "anthropic":
+        tool_name = item.name
+        args = item.input  # Already a dict
+    else:
+        return json.dumps({"error": f"Unsupported provider: {provider}"})
 
     try:
         if item.name == "ask_eda":
