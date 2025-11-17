@@ -154,7 +154,7 @@ def call_llm_with_retry_anthropic_helper(
     max_retries: int | None = None,
     web_search_enabled: bool = False,
     text_format = None,
-    max_tokens: int = 8192,
+    max_tokens: int = 16384,
 ):
     """Helper function to call Anthropic API with retry logic.
 
