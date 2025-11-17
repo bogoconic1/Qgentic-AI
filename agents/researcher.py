@@ -711,6 +711,17 @@ class ResearcherAgent:
             else:
                 raise ValueError(f"Unsupported provider: {provider}")
 
+            if step < 5:
+                input_list.append({
+                    "role": "assistant",
+                    "content": final_content
+                })
+                input_list.append({
+                    "role": "user", 
+                    "content": "Go ahead."
+                })
+                continue
+
             # Common final plan handling
             logger.info("Final plan received at step %s with length=%s", step + 1, len(final_content))
             if len(final_content) == 0:
