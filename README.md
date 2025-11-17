@@ -290,6 +290,9 @@ Key settings live in `config.yaml` (merged with `project_config.py` defaults):
   - `hitl_models`: Human-In-The-Loop model list. If non-empty, these models will be used instead of LLM-based dynamic selection (default: `[]`). Example: `["xgboost", "lightgbm", "deberta-v3-large"]`
   - `enable_web_search`: Enable web search for SOTA strategies (default: true)
 
+- **developer**: Developer agent settings:
+  - `hitl_instructions`: Human-In-The-Loop instructions list. If non-empty, these instructions are added to the developer's system prompt to guide code implementation (default: `[]`). Example: `["Use gradient clipping to prevent exploding gradients", "Implement mixed precision training", "Focus on domain-specific data augmentation"]`
+
 > **Patch Mode (Experimental)** – The developer supports a token-efficient diff workflow.
 > Toggle `runtime.patch_mode_enabled: true` to request unified diffs (with line numbers)
 > from the model instead of full files. This feature is still being tuned.

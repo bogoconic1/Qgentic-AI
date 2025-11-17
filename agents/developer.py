@@ -46,6 +46,7 @@ _LLM_CFG = _CONFIG.get("llm")
 _PATH_CFG = _CONFIG.get("paths")
 _RUNTIME_CFG = _CONFIG.get("runtime")
 _GUARDRAIL_CFG = _CONFIG.get("guardrails")
+_DEVELOPER_CFG = _CONFIG.get("developer")
 
 _ENABLE_LOGGING_GUARD = bool(_GUARDRAIL_CFG.get("logging_basicconfig_order"))
 
@@ -53,6 +54,7 @@ _PATCH_MODE_ENABLED = bool(_RUNTIME_CFG.get("patch_mode_enabled"))
 _USE_VALIDATION_SCORE = bool(_RUNTIME_CFG.get("use_validation_score"))
 
 _DEVELOPER_MODEL = _LLM_CFG.get("developer_model")
+_HITL_INSTRUCTIONS = _DEVELOPER_CFG.get("hitl_instructions", [])
 
 _TASK_ROOT = Path(_PATH_CFG.get("task_root"))
 _OUTPUTS_DIRNAME = _PATH_CFG.get("outputs_dirname")
@@ -237,6 +239,7 @@ class DeveloperAgent:
             gpu_identifier=self.gpu_identifier,
             gpu_isolation_mode=self.gpu_isolation_mode,
             allow_multi_fold=allow_multi_fold,
+            hitl_instructions=_HITL_INSTRUCTIONS,
         )
 
     def _build_user_prompt(self, version: int) -> str:
