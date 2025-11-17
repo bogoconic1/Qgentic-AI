@@ -99,6 +99,7 @@ kaggle.json
 unit_test.md
 web_search/
 logs/
+demo/
 
 # pyenv
 #   For a library or package, you might want to ignore these files since the code is

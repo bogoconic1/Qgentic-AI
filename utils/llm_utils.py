@@ -1,0 +1,290 @@
+"""
+LLM utility functions for provider detection and response handling.
+"""
+
+
+def detect_provider(model_name: str) -> str:
+    """
+    Detect LLM provider from model name.
+
+    Args:
+        model_name: Model identifier (e.g., "gpt-5", "claude-sonnet-4-5-20250929", "gemini-2.5-pro")
+
+    Returns:
+        "openai" | "anthropic" | "gemini"
+
+    Raises:
+        ValueError: If provider cannot be determined
+
+    Examples:
+        >>> detect_provider("gpt-5")
+        'openai'
+        >>> detect_provider("claude-sonnet-4-5-20250929")
+        'anthropic'
+        >>> detect_provider("gemini-2.5-pro")
+        'gemini'
+    """
+    if model_name.startswith("gpt-") or model_name.startswith("o1-"):
+        return "openai"
+    elif model_name.startswith("claude-"):
+        return "anthropic"
+    elif model_name.startswith("gemini-"):
+        return "gemini"
+    else:
+        raise ValueError(f"Unknown provider for model: {model_name}")
+
+
+def extract_text_from_response(response, provider: str) -> str:
+    """
+    Extract text from provider-specific response format.
+
+    Args:
+        response: OpenAI or Anthropic response object
+        provider: "openai" or "anthropic"
+
+    Returns:
+        Extracted text string
+
+    Raises:
+        ValueError: If provider is not supported
+
+    Examples:
+        # OpenAI response
+        >>> text = extract_text_from_response(openai_response, "openai")
+
+        # Anthropic response
+        >>> text = extract_text_from_response(anthropic_response, "anthropic")
+    """
+    if provider == "openai":
+        return response.output_text
+
+    elif provider == "anthropic":
+        # Concatenate all text blocks from content
+        text_blocks = [
+            block.text for block in response.content
+            if hasattr(block, 'text')
+        ]
+        return ''.join(text_blocks)
+
+    else:
+        raise ValueError(f"Unsupported provider: {provider}")
+
+
+def get_tools_openai(max_parallel_workers: int = 1):
+    """
+    Get tools in OpenAI format.
+
+    Args:
+        max_parallel_workers: Maximum parallel workers for run_ab_test
+
+    Returns:
+        List of tool definitions in OpenAI format
+    """
+    return [
+        {
+            "type": "function",
+            "name": "ask_eda",
+            "description": "Ask a question to the EDA expert",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "question": {"type": "string", "description": "The question to ask the EDA expert"}
+                },
+            },
+            "additionalProperties": False,
+            "required": ['question']
+        },
+        {
+            "type": "function",
+            "name": "run_ab_test",
+            "description": f"Run A/B tests to validate modeling or feature engineering choices by comparing their impact on performance. You can ask up to {max_parallel_workers} questions in parallel for efficiency.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "questions": {
+                        "type": "array",
+                        "description": f"List of A/B testing questions to run in parallel (max {max_parallel_workers}). Each question should be a comparison test",
+                        "items": {"type": "string"},
+                    }
+                },
+            },
+            "additionalProperties": False,
+            "required": ['questions']
+        },
+        {
+            "type": "function",
+            "name": "download_external_datasets",
+            "description": "Download external data to working directory by searching with 3 different phrasings to maximize search coverage",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "question_1": {"type": "string", "description": "First phrasing of the dataset query"},
+                    "question_2": {"type": "string", "description": "Second phrasing with different wording"},
+                    "question_3": {"type": "string", "description": "Third phrasing using alternative keywords"}
+                },
+            },
+            "additionalProperties": False,
+            "required": ["question_1", "question_2", "question_3"],
+        },
+        {
+            "type": "function",
+            "name": "read_research_paper",
+            "description": "Read and summarize a research paper from arxiv. Returns structured markdown summary with Abstract, Introduction, Related Work, Method/Architecture, Experiments/Results, and Conclusion sections.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "arxiv_link": {"type": "string", "description": "ArXiv paper link (e.g., 'https://arxiv.org/pdf/2510.22916' or just '2510.22916')"}
+                },
+            },
+            "additionalProperties": False,
+            "required": ["arxiv_link"],
+        },
+        {
+            "type": "function",
+            "name": "scrape_web_page",
+            "description": "Scrape a web page and return markdown content. Useful for reading blog posts, documentation, technical tutorials, and other domain-specific web content that complements arxiv papers.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description": "The webpage URL to scrape (e.g., 'https://developer.nvidia.com/blog/...')"}
+                },
+            },
+            "additionalProperties": False,
+            "required": ["url"],
+        },
+    ]
+
+
+def get_tools_anthropic(max_parallel_workers: int = 1):
+    """
+    Get tools in Anthropic format.
+
+    Key differences from OpenAI format:
+    - No nested "function" wrapper
+    - Uses "input_schema" instead of "parameters"
+    - 3-4 sentence descriptions (Anthropic best practice)
+
+    Args:
+        max_parallel_workers: Maximum parallel workers for run_ab_test
+
+    Returns:
+        List of tool definitions in Anthropic format
+    """
+    return [
+        {
+            "name": "ask_eda",
+            "description": """Ask a question to the EDA expert for exploratory data analysis.
+            Returns statistical insights, data quality assessments, and feature analysis based on
+            the provided dataset. Use this tool when you need to understand dataset characteristics,
+            distributions, correlations, or potential data issues before deciding on modeling approaches.""",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "question": {
+                        "type": "string",
+                        "description": "The question to ask the EDA expert"
+                    }
+                },
+                "required": ["question"]
+            }
+        },
+        {
+            "name": "run_ab_test",
+            "description": f"""Run A/B tests to validate modeling or feature engineering choices by comparing
+            their impact on performance. You can ask up to {max_parallel_workers} questions in parallel for efficiency.
+            Returns performance comparisons with statistical significance. Use this when you need empirical
+            evidence to choose between different approaches or validate hypotheses about model improvements.""",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "questions": {
+                        "type": "array",
+                        "description": f"List of A/B testing questions to run in parallel (max {max_parallel_workers}). Each question should be a comparison test",
+                        "items": {"type": "string"}
+                    }
+                },
+                "required": ["questions"]
+            }
+        },
+        {
+            "name": "download_external_datasets",
+            "description": """Download external datasets to augment your training data by searching with
+            3 different phrasings to maximize search coverage. Retrieves publicly available datasets from
+            Kaggle and other sources. Use this when the current dataset is insufficient or you need additional
+            examples for specific classes, features, or data diversity to improve model generalization.""",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "question_1": {
+                        "type": "string",
+                        "description": "First phrasing of the dataset query"
+                    },
+                    "question_2": {
+                        "type": "string",
+                        "description": "Second phrasing with different wording"
+                    },
+                    "question_3": {
+                        "type": "string",
+                        "description": "Third phrasing using alternative keywords"
+                    }
+                },
+                "required": ["question_1", "question_2", "question_3"]
+            }
+        },
+        {
+            "name": "read_research_paper",
+            "description": """Read and summarize academic research papers from arXiv relevant to the machine learning task.
+            Returns structured markdown summary with Abstract, Introduction, Related Work, Method/Architecture,
+            Experiments/Results, and Conclusion sections. Use this to discover state-of-the-art techniques,
+            validate your approach against published research, or find novel methods applicable to your problem.""",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "arxiv_link": {
+                        "type": "string",
+                        "description": "ArXiv paper link (e.g., 'https://arxiv.org/pdf/2510.22916' or just '2510.22916')"
+                    }
+                },
+                "required": ["arxiv_link"]
+            }
+        },
+        {
+            "name": "scrape_web_page",
+            "description": """Scrape web pages and return markdown content from technical documentation, blog posts,
+            and tutorials. Useful for accessing domain-specific knowledge, implementation guides, or best practices
+            that complement academic papers. Use this to gather practical insights from developer blogs, official
+            documentation, or technical articles that can inform your modeling approach.""",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "The webpage URL to scrape (e.g., 'https://developer.nvidia.com/blog/...')"
+                    }
+                },
+                "required": ["url"]
+            }
+        }
+    ]
+
+
+def get_tools_for_provider(provider: str, max_parallel_workers: int = 1):
+    """
+    Get tools in the appropriate format for the provider.
+
+    Args:
+        provider: "openai" or "anthropic"
+        max_parallel_workers: Maximum parallel workers for run_ab_test
+
+    Returns:
+        List of tool definitions in provider-specific format
+
+    Raises:
+        ValueError: If provider is not supported
+    """
+    if provider == "openai":
+        return get_tools_openai(max_parallel_workers)
+    elif provider == "anthropic":
+        return get_tools_anthropic(max_parallel_workers)
+    else:
+        raise ValueError(f"Unsupported provider: {provider}")

@@ -53,7 +53,7 @@ def web_search_stack_trace(query: str) -> str:
     logger.debug("Stack trace query: %s", query)
 
     # Step 1: Try fine-tuned model first (no web search capability)
-    logger.info("Attempting fine-tuned model endpoint first...")
+    '''logger.info("Attempting fine-tuned model endpoint first...")
     from tools.helpers import call_llm_with_retry_google
 
     try:
@@ -85,7 +85,7 @@ def web_search_stack_trace(query: str) -> str:
             return query + "\n" + "This is how you can fix the error: \n" + solution_text
 
     except Exception as e:
-        logger.warning(f"Fine-tuned model call failed with error: {e}. Falling back to web search workflow.")
+        logger.warning(f"Fine-tuned model call failed with error: {e}. Falling back to web search workflow.")'''
 
     # Step 2: Fallback to current workflow with web search
     logger.info("Fine-tuned model cannot answer (response too short or failure message), falling back to web search workflow.")

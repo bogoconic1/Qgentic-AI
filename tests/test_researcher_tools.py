@@ -8,7 +8,8 @@ import pytest
 import tempfile
 from unittest.mock import MagicMock
 
-from tools.researcher import ask_eda, download_external_datasets, get_tools
+from tools.researcher import ask_eda, download_external_datasets
+from utils.llm_utils import get_tools_openai
 
 
 @pytest.fixture
@@ -265,7 +266,7 @@ def test_download_external_datasets(monkeypatch):
 
 def test_get_tools():
     """Test that get_tools returns proper tool definitions."""
-    tools = get_tools()
+    tools = get_tools_openai()
 
     # Verify structure
     assert isinstance(tools, list)

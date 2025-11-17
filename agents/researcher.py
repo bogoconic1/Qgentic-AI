@@ -11,12 +11,13 @@ from dotenv import load_dotenv
 from project_config import get_config
 from weave.trace.util import ThreadPoolExecutor
 
-from tools.researcher import ask_eda, download_external_datasets, read_research_paper, scrape_web_page, get_tools
+from tools.researcher import ask_eda, download_external_datasets, read_research_paper, scrape_web_page
+from utils.llm_utils import get_tools_for_provider, detect_provider
 from prompts.researcher_agent import (
     build_system as prompt_build_system,
     initial_user_for_build_plan as prompt_initial_user,
 )
-from tools.helpers import call_llm_with_retry
+from tools.helpers import call_llm_with_retry, call_llm_with_retry_anthropic
 import weave
 
 logger = logging.getLogger(__name__)
@@ -142,7 +143,7 @@ class ResearcherAgent:
             return ""
         return f"data:{mime};base64,{data}"
 
-    def _ingest_new_media(self, before_set: set[Path]) -> None:
+    def _ingest_new_media(self, before_set: set[Path], provider: str = "openai") -> None:
         after_set = self._list_media_files()
         new_files = list(after_set - before_set)
         if not new_files:
@@ -170,7 +171,24 @@ class ResearcherAgent:
             data_url = self._encode_image_to_data_url(p)
             if not data_url:
                 continue
-            content.append({"type": "input_image", "image_url": data_url})
+
+            # Format image based on provider
+            if provider == "anthropic":
+                # Extract base64 data and mime type from data URL
+                # data_url format: "data:image/jpeg;base64,/9j/4AAQ..."
+                if ";base64," in data_url:
+                    mime_part, b64_data = data_url.split(";base64,", 1)
+                    mime_type = mime_part.replace("data:", "")
+                    content.append({
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": mime_type,
+                            "data": b64_data
+                        }
+                    })
+            else:  # OpenAI format
+                content.append({"type": "input_image", "image_url": data_url})
 
         return [{"role": "user", "content": content}]
 
@@ -259,10 +277,29 @@ class ResearcherAgent:
             with open(code_file, "r") as f:
                 executed_code = f.read()
 
-            # Strip OpenBLAS prefix if present (first 3 lines)
-            if executed_code.startswith('import os\nos.environ["OPENBLAS_NUM_THREADS"]'):
-                lines = executed_code.split('\n')
-                executed_code = '\n'.join(lines[3:])
+            # Strip resource allocation header (CPU affinity, CUDA, OpenBLAS)
+            # New format with CPU affinity or old format with just OpenBLAS
+            lines = executed_code.split('\n')
+
+            # Find the first line that's not part of the header
+            start_idx = 0
+            for i, line in enumerate(lines):
+                stripped = line.strip()
+                # Skip imports, psutil calls, os.environ assignments, comments, and empty lines
+                if (stripped.startswith('import os') or
+                    stripped.startswith('import psutil') or
+                    stripped.startswith('psutil.Process(') or
+                    stripped.startswith('os.environ["CUDA_VISIBLE_DEVICES"]') or
+                    stripped.startswith('os.environ["OPENBLAS_NUM_THREADS"]') or
+                    stripped.startswith('# CPU affinity') or
+                    stripped == ''):
+                    continue
+                else:
+                    start_idx = i
+                    break
+
+            if start_idx > 0:
+                executed_code = '\n'.join(lines[start_idx:])
 
             # Only store the baseline (first) AB test in memory
             with self.ab_test_lock:
@@ -277,29 +314,71 @@ class ResearcherAgent:
 
         return question, tool_output
 
-    def _execute_tool_call(self, item, input_list: list) -> None:
-        """Execute a single tool call and append results to input_list.
+    def _format_tool_result(self, tool_id: str, output_data: dict, provider: str, is_error: bool = False):
+        """Format tool result for the appropriate provider.
 
         Args:
-            item: Tool call item from LLM response
-            input_list: Message list to append tool results to (modified in-place)
+            tool_id: Tool call ID (call_id for OpenAI, id for Anthropic)
+            output_data: Dict of output data (e.g., {"insights": "..."})
+            provider: "openai" or "anthropic"
+            is_error: Whether this is an error response
+
+        Returns:
+            Formatted dict for the provider
         """
-        if item.name == "ask_eda":
+        if provider == "openai":
+            return {
+                "type": "function_call_output",
+                "call_id": tool_id,
+                "output": json.dumps(output_data)
+            }
+        else:  # anthropic
+            return {
+                "type": "tool_result",
+                "tool_use_id": tool_id,
+                "content": json.dumps(output_data),
+                "is_error": is_error
+            }
+
+    def _execute_tool_call(self, item, input_list: list = None, provider: str = "openai"):
+        """Execute a single tool call and append results to input_list or return dict.
+
+        Args:
+            item: Tool call item from LLM response (OpenAI format with .name, .arguments, .call_id)
+                  OR Anthropic format with .name, .input, .id
+            input_list: Message list to append tool results to (for OpenAI, modified in-place)
+                       If None, returns dict (for Anthropic)
+            provider: "openai" or "anthropic"
+
+        Returns:
+            None for OpenAI (modifies input_list in-place)
+            dict for Anthropic (tool_result format)
+        """
+        # Parse tool name and arguments based on provider
+        if provider == "openai":
+            tool_name = item.name
             try:
-                question = json.loads(item.arguments)["question"]
+                tool_args = json.loads(item.arguments)
             except Exception as e:
-                logger.error("Failed to parse ask_eda arguments: %s", e)
-                question = ""
+                logger.error("Failed to parse arguments: %s", e)
+                tool_args = {}
+            tool_id = item.call_id
+        else:  # anthropic
+            tool_name = item.name
+            tool_args = item.input  # Already a dict
+            tool_id = item.id
+
+        # Execute the tool based on tool_name
+        if tool_name == "ask_eda":
+            question = tool_args.get("question", "")
             logger.info(f"EDA: {question}")
             if len(question) == 0:
                 tool_output = "An error occurred. Please retry."
-                input_list.append({
-                    "type": "function_call_output",
-                    "call_id": item.call_id,
-                    "output": json.dumps({
-                        "insights": tool_output,
-                    })
-                })
+                result = self._format_tool_result(tool_id, {"insights": tool_output}, provider, is_error=True)
+                if provider == "openai":
+                    input_list.append(result)
+                else:
+                    return result
             else:
                 before_media = self._list_media_files()
 
@@ -321,10 +400,29 @@ class ResearcherAgent:
                         with open(code_file, "r") as f:
                             executed_code = f.read()
 
-                        # Strip OpenBLAS prefix if present (first 3 lines)
-                        if executed_code.startswith('import os\nos.environ["OPENBLAS_NUM_THREADS"]'):
-                            lines = executed_code.split('\n')
-                            executed_code = '\n'.join(lines[3:])
+                        # Strip resource allocation header (CPU affinity, CUDA, OpenBLAS)
+                        # New format with CPU affinity or old format with just OpenBLAS
+                        lines = executed_code.split('\n')
+
+                        # Find the first line that's not part of the header
+                        start_idx = 0
+                        for i, line in enumerate(lines):
+                            stripped = line.strip()
+                            # Skip imports, psutil calls, os.environ assignments, comments, and empty lines
+                            if (stripped.startswith('import os') or
+                                stripped.startswith('import psutil') or
+                                stripped.startswith('psutil.Process(') or
+                                stripped.startswith('os.environ["CUDA_VISIBLE_DEVICES"]') or
+                                stripped.startswith('os.environ["OPENBLAS_NUM_THREADS"]') or
+                                stripped.startswith('# CPU affinity') or
+                                stripped == ''):
+                                continue
+                            else:
+                                start_idx = i
+                                break
+
+                        if start_idx > 0:
+                            executed_code = '\n'.join(lines[start_idx:])
 
                         # Store in EDA history (keep last 6)
                         with self.eda_lock:
@@ -339,38 +437,37 @@ class ResearcherAgent:
                     except Exception as e:
                         logger.error("Failed to store EDA history: %s", e)
 
-                input_list.append({
-                    "type": "function_call_output",
-                    "call_id": item.call_id,
-                    "output": json.dumps({
-                        "insights": tool_output,
-                    })
-                })
+                result = self._format_tool_result(tool_id, {"insights": tool_output}, provider)
+
+                # Ingest media for both providers
+                media_prompt = None
                 try:
-                    media_prompt = self._ingest_new_media(before_media)
-                    if media_prompt: input_list += media_prompt
+                    media_prompt = self._ingest_new_media(before_media, provider)
                 except Exception as e:
                     logger.error("Failed to ingest new media: %s", e)
                     logger.info("No media ingested for this step.")
 
-        elif item.name == "run_ab_test":
-            try:
-                questions = json.loads(item.arguments)["questions"]
-                if not isinstance(questions, list):
-                    questions = [questions]
-            except Exception as e:
-                logger.error("Failed to parse run_ab_test arguments: %s", e)
-                questions = []
+                if provider == "openai":
+                    input_list.append(result)
+                    if media_prompt:
+                        input_list += media_prompt
+                else:  # anthropic
+                    # For Anthropic, return both tool result and media (to be combined in main loop)
+                    self._pending_media = media_prompt  # Store for later use
+                    return result
+
+        elif tool_name == "run_ab_test":
+            questions = tool_args.get("questions", [])
+            if not isinstance(questions, list):
+                questions = [questions]
 
             if len(questions) == 0:
                 tool_output = "An error occurred. Please retry with valid questions."
-                input_list.append({
-                    "type": "function_call_output",
-                    "call_id": item.call_id,
-                    "output": json.dumps({
-                        "insights": tool_output,
-                    })
-                })
+                result = self._format_tool_result(tool_id, {"insights": tool_output}, provider, is_error=True)
+                if provider == "openai":
+                    input_list.append(result)
+                else:
+                    return result
             else:
                 # Truncate to max_parallel_workers if too many questions provided
                 truncation_warning = ""
@@ -404,26 +501,29 @@ class ResearcherAgent:
                 # Combine all results
                 combined_output = "\n\n---\n\n".join(results) + truncation_warning
 
-                input_list.append({
-                    "type": "function_call_output",
-                    "call_id": item.call_id,
-                    "output": json.dumps({
-                        "insights": combined_output,
-                    })
-                })
+                result = self._format_tool_result(tool_id, {"insights": combined_output}, provider)
 
+                # Ingest media for both providers
+                media_prompt = None
                 try:
-                    media_prompt = self._ingest_new_media(before_media)
-                    if media_prompt: input_list += media_prompt
+                    media_prompt = self._ingest_new_media(before_media, provider)
                 except Exception as e:
                     logger.error("Failed to ingest new media: %s", e)
                     logger.info("No media ingested for this step.")
 
-        elif item.name == "download_external_datasets":
-            args = json.loads(item.arguments)
-            question_1 = args.get("question_1", "")
-            question_2 = args.get("question_2", "")
-            question_3 = args.get("question_3", "")
+                if provider == "openai":
+                    input_list.append(result)
+                    if media_prompt:
+                        input_list += media_prompt
+                else:  # anthropic
+                    # For Anthropic, return both tool result and media (to be combined in main loop)
+                    self._pending_media = media_prompt  # Store for later use
+                    return result
+
+        elif tool_name == "download_external_datasets":
+            question_1 = tool_args.get("question_1", "")
+            question_2 = tool_args.get("question_2", "")
+            question_3 = tool_args.get("question_3", "")
 
             if not question_1 or not question_2 or not question_3:
                 tool_output = "All 3 question phrasings are required. Please provide question_1, question_2, and question_3."
@@ -432,21 +532,14 @@ class ResearcherAgent:
 
             logger.info("External search response length=%s", len(tool_output or ""))
 
-            input_list.append({
-                "type": "function_call_output",
-                "call_id": item.call_id,
-                "output": json.dumps({
-                    "results": tool_output,
-                })
-            })
+            result = self._format_tool_result(tool_id, {"results": tool_output}, provider)
+            if provider == "openai":
+                input_list.append(result)
+            else:
+                return result
 
-        elif item.name == "read_research_paper":
-            try:
-                args = json.loads(item.arguments)
-                arxiv_link = args.get("arxiv_link", "")
-            except Exception as e:
-                logger.error("Failed to parse read_research_paper arguments: %s", e)
-                arxiv_link = ""
+        elif tool_name == "read_research_paper":
+            arxiv_link = tool_args.get("arxiv_link", "")
 
             if not arxiv_link:
                 tool_output = "Error: arxiv_link is required."
@@ -456,21 +549,14 @@ class ResearcherAgent:
 
             logger.info("Paper summary response length=%s", len(tool_output or ""))
 
-            input_list.append({
-                "type": "function_call_output",
-                "call_id": item.call_id,
-                "output": json.dumps({
-                    "summary": tool_output,
-                })
-            })
+            result = self._format_tool_result(tool_id, {"summary": tool_output}, provider)
+            if provider == "openai":
+                input_list.append(result)
+            else:
+                return result
 
-        elif item.name == "scrape_web_page":
-            try:
-                args = json.loads(item.arguments)
-                url = args.get("url", "")
-            except Exception as e:
-                logger.error("Failed to parse scrape_web_page arguments: %s", e)
-                url = ""
+        elif tool_name == "scrape_web_page":
+            url = tool_args.get("url", "")
 
             if not url:
                 tool_output = "Error: url is required."
@@ -480,13 +566,11 @@ class ResearcherAgent:
 
             logger.info("Scraped content length=%s", len(tool_output or ""))
 
-            input_list.append({
-                "type": "function_call_output",
-                "call_id": item.call_id,
-                "output": json.dumps({
-                    "content": tool_output,
-                })
-            })
+            result = self._format_tool_result(tool_id, {"content": tool_output}, provider)
+            if provider == "openai":
+                input_list.append(result)
+            else:
+                return result
 
     @weave.op()
     def build_plan(self, max_steps: int | None = None) -> str:
@@ -498,35 +582,97 @@ class ResearcherAgent:
 
         max_steps = max_steps or _DEFAULT_MAX_STEPS
         logger.info("Researcher run started with max_steps=%s, max_parallel_workers=%s", max_steps, self.max_parallel_workers)
-        tools = get_tools(max_parallel_workers=self.max_parallel_workers)
+
+        # Detect provider and get appropriate tools
+        provider = detect_provider(_RESEARCHER_AGENT_MODEL)
+        tools = get_tools_for_provider(provider, max_parallel_workers=self.max_parallel_workers)
+        logger.info("Using provider: %s with model: %s", provider, _RESEARCHER_AGENT_MODEL)
 
         for step in range(max_steps):
-            # logger.debug("Current conversation tail: %s", self.messages[-2:])
             logger.info("[Researcher] Step %s/%s", step + 1, max_steps)
             if step == max_steps - 1:
                 input_list.append({"role": "user", "content": "This is your FINAL step. Output the final plan now!"})
                 logger.info("Reached final step; forcing plan output prompt")
 
-            response = call_llm_with_retry(
-                model=_RESEARCHER_AGENT_MODEL,
-                instructions=system_prompt,
-                tools=tools,
-                messages=input_list,
-                web_search_enabled=True,
-            )
+            if provider == "openai":
+                response = call_llm_with_retry(
+                    model=_RESEARCHER_AGENT_MODEL,
+                    instructions=system_prompt,
+                    tools=tools,
+                    messages=input_list,
+                    web_search_enabled=True,
+                )
 
-            input_list += response.output
-            tool_calls = False
+                input_list += response.output
+                tool_calls = False
 
-            for item in response.output:
-                if item.type == "function_call":
-                    tool_calls = True
-                    self._execute_tool_call(item, input_list)
+                for item in response.output:
+                    if item.type == "function_call":
+                        tool_calls = True
+                        self._execute_tool_call(item, input_list, provider="openai")
 
-            if tool_calls: continue
+                if tool_calls:
+                    continue
 
-            # No tool calls -> final plan
-            final_content = response.output_text or ""
+                # No tool calls -> final plan
+                final_content = response.output_text or ""
+
+            elif provider == "anthropic":
+                response = call_llm_with_retry_anthropic(
+                    model=_RESEARCHER_AGENT_MODEL,
+                    instructions=system_prompt,
+                    tools=tools,
+                    messages=input_list,
+                    web_search_enabled=True,
+                )
+
+                # Check stop_reason
+                if response.stop_reason == "tool_use":
+                    # Extract tool_use blocks from content
+                    tool_uses = [
+                        block for block in response.content
+                        if hasattr(block, 'type') and block.type == 'tool_use'
+                    ]
+
+                    # Execute all tools and collect results
+                    tool_results = []
+                    self._pending_media = None  # Reset pending media
+                    for tool_use in tool_uses:
+                        result = self._execute_tool_call(tool_use, provider="anthropic")
+                        tool_results.append(result)
+
+                    # Add to messages in Anthropic format
+                    # IMPORTANT: Keep ALL content blocks including web_search_result
+                    # (needed for citations to work, even though they increase token usage)
+                    input_list.append({
+                        "role": "assistant",
+                        "content": response.content
+                    })
+
+                    # Combine tool results with media if available
+                    user_content = tool_results
+                    if hasattr(self, '_pending_media') and self._pending_media:
+                        # Add media images after tool results
+                        user_content = tool_results + self._pending_media[0]["content"]
+                        self._pending_media = None  # Clear after use
+
+                    input_list.append({
+                        "role": "user",
+                        "content": user_content
+                    })
+
+                    continue
+
+                # No tool use -> final plan
+                final_content = ''.join([
+                    block.text for block in response.content
+                    if hasattr(block, 'text')
+                ])
+
+            else:
+                raise ValueError(f"Unsupported provider: {provider}")
+
+            # Common final plan handling
             logger.info("Final plan received at step %s with length=%s", step + 1, len(final_content))
             if len(final_content) == 0:
                 logger.error("LLM returned empty final plan at step %s", step + 1)

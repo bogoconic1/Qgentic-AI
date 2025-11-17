@@ -3,13 +3,14 @@ from dotenv import load_dotenv
 import weave
 
 from project_config import get_config
-from tools.helpers import call_llm_with_retry_google
+from tools.helpers import call_llm_with_retry_anthropic
+from utils.llm_utils import extract_text_from_response
 
 load_dotenv()
 
 
 class PaperSummaryClient:
-    """Wrapper around Gemini for Google-enabled paper summarization."""
+    """Wrapper for paper summarization using Claude."""
 
     _DEFAULT_PROMPT_MODEL = (
         "The model name: {model_name}\n"
@@ -23,13 +24,13 @@ class PaperSummaryClient:
     )
 
     def __init__(self, api_key: str | None = None, is_model: bool = True) -> None:
-        api_key = api_key or os.environ.get("GOOGLE_API_KEY")
+        api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
         if not api_key:
             raise ValueError(
-                "GOOGLE_API_KEY is required to initialize PaperSummaryClient")
+                "ANTHROPIC_API_KEY is required to initialize PaperSummaryClient")
 
         cfg = get_config()
-        self.model_name = cfg["llm"]["model_recommender_model"]
+        self.model_name = cfg["llm"]["paper_summary_model"]
         self.is_model = is_model
 
         if self.is_model:
@@ -80,13 +81,13 @@ class PaperSummaryClient:
             default_prompt = self._DEFAULT_PROMPT_MODEL if self.is_model else self._DEFAULT_PROMPT_ARXIV
             prompt = default_prompt.format(model_name=model_name)
 
-        result = call_llm_with_retry_google(
+        response = call_llm_with_retry_anthropic(
             model=self.model_name,
-            system_instruction=self.system_instruction,
-            user_prompt=prompt,
-            temperature=0.3,
-            enable_google_search=True,
-            enable_url_context=True,
+            instructions=self.system_instruction,
+            tools=[],
+            messages=[{"role": "user", "content": prompt}],
+            web_search_enabled=True,
         )
 
+        result = extract_text_from_response(response, "anthropic")
         return result if result else "Error: Failed to generate summary"

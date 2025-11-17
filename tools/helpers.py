@@ -286,7 +286,7 @@ def call_llm_with_retry_anthropic(
     max_retries: int | None = None,
     web_search_enabled: bool = False,
     text_format = None,
-    max_tokens: int = 8192,
+    max_tokens: int = 16384,
 ):
     """Call Anthropic API with comprehensive retry logic.
 
