@@ -71,7 +71,7 @@ You should perform web searches to determine how to set up and configure your ch
 
 ---
 **Training and Inference Environment:**
-Single GPU (24GB VRAM) {resource_info}
+Single GPU (40GB VRAM) {resource_info}
 
 {recommendations_section}{hitl_section}{constraints}
 ---
