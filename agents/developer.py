@@ -645,31 +645,6 @@ class DeveloperAgent:
 
         return f"{suggestion} (score {impact}: {prev_display} -> {curr_display})"
 
-    def _parse_sota_response(self, response) -> tuple[str, bool, str, str]:
-        """Extract new suggestion, blacklist decision, rationale, and code from structured output."""
-        # ok to fallback if LLM cannot give response
-        suggestion_text = ""
-        blacklist_flag = False
-        blacklist_reason = ""
-        suggestion_code = ""
-
-        if not response:
-            return suggestion_text, blacklist_flag, blacklist_reason, suggestion_code
-
-        # Use structured output
-        if hasattr(response, 'output_parsed') and response.output_parsed:
-            parsed = response.output_parsed
-            suggestion_text = parsed.suggestion.strip()
-            blacklist_flag = bool(parsed.blacklist)
-            blacklist_reason = parsed.blacklist_reason.strip()
-            suggestion_code = parsed.suggestion_code.strip() if hasattr(parsed, 'suggestion_code') else ""
-            self.logger.debug("Using structured SOTA output: suggestion=%s, blacklist=%s, code_len=%d",
-                            suggestion_text, blacklist_flag, len(suggestion_code))
-        else:
-            self.logger.warning("No structured output in SOTA response, falling back to empty values")
-
-        return suggestion_text, blacklist_flag, blacklist_reason, suggestion_code
-
     def _register_blacklist(self, suggestion: str, reason: str | None = None) -> None:
         if not suggestion:
             return
@@ -872,7 +847,7 @@ class DeveloperAgent:
             **kwargs: Arguments to pass to search_sota_suggestions
 
         Returns:
-            SOTA suggestions text
+            Parsed SOTAResponse object or None if parsing fails
         """
         return search_sota_suggestions(attempt_number=attempt_number, **kwargs)
 
@@ -1040,7 +1015,7 @@ class DeveloperAgent:
         # These are None if no submission was generated or if this is the first successful version
         return code_with_logs, run_score, previous_successful_version, base_score, submission_exists
 
-    def _gather_sota_feedback(self, code_with_logs: str, version: int, attempt_number: int = 1) -> any:
+    def _gather_sota_feedback(self, code_with_logs: str, version: int, attempt_number: int = 1):
         """Gather SOTA feedback through red flags analysis and SOTA suggestions.
 
         Args:
@@ -1049,7 +1024,7 @@ class DeveloperAgent:
             attempt_number: Which attempt this is (1, 2, 3, ...) for interleaving strategy
 
         Returns:
-            SOTA response object or None if gathering failed
+            Parsed SOTAResponse object or None if gathering/parsing failed
         """
         try:
             # Format LATER recommendations for context
@@ -1253,9 +1228,21 @@ class DeveloperAgent:
                 # Increment SOTA suggestions call counter (separate from attempt counter)
                 sota_suggestions_call_id += 1
                 # Gather SOTA feedback (red flags + suggestions)
+                # sota_response is now a parsed SOTAResponse object (or None)
                 sota_response = self._gather_sota_feedback(code_with_logs, version=version, attempt_number=sota_suggestions_call_id)
 
-                suggestion_text, blacklist_flag, blacklist_reason, suggestion_code = self._parse_sota_response(sota_response)
+                # Extract fields directly from parsed object
+                if sota_response:
+                    suggestion_text = sota_response.suggestion.strip()
+                    blacklist_flag = bool(sota_response.blacklist)
+                    blacklist_reason = sota_response.blacklist_reason.strip()
+                    suggestion_code = sota_response.suggestion_code.strip() if hasattr(sota_response, 'suggestion_code') else ""
+                else:
+                    suggestion_text = ""
+                    blacklist_flag = False
+                    blacklist_reason = ""
+                    suggestion_code = ""
+
                 self.logger.info("SOTA suggestion: %s (blacklist=%s, code_len=%d)", suggestion_text, blacklist_flag, len(suggestion_code))
 
                 # Record the previous suggestion with its score impact (before updating self.last_suggestion)
