@@ -316,7 +316,8 @@ def search_sota_suggestions(
         max_tool_steps: Maximum tool call iterations before forcing final answer
 
     Returns:
-        SOTA suggestions text with blacklist decision and new suggestion
+        Parsed SOTAResponse object with suggestion, blacklist, blacklist_reason, and suggestion_code fields.
+        Returns None if parsing fails.
     """
     logger.info("Dispatching SOTA suggestions (Stage 2) with web search (attempt #%d)", attempt_number)
     executed_suggestion_text = executed_suggestion or "No previous suggestion executed; this is the first attempt."
@@ -399,7 +400,7 @@ def search_sota_suggestions(
                 # No tool calls, check if we have structured output
                 if hasattr(response, 'output_parsed') and response.output_parsed:
                     logger.info("SOTA suggestions completed at step %d (no tool calls, structured output present)", step + 1)
-                    return response
+                    return response.output_parsed
                 else:
                     # Need to get structured output - make final call
                     logger.info("SOTA suggestions completed at step %d (no tool calls), requesting structured output", step + 1)
@@ -411,7 +412,7 @@ def search_sota_suggestions(
                         web_search_enabled=True,
                         text_format=SOTAResponse,
                     )
-                    return response
+                    return response.output_parsed if (hasattr(response, 'output_parsed') and response.output_parsed) else None
 
             # Execute tool calls
             for item in response.output:
@@ -483,7 +484,7 @@ def search_sota_suggestions(
                 # No tool use, check if we have structured output
                 if hasattr(response, 'parsed_output') and response.parsed_output:
                     logger.info("SOTA suggestions completed at step %d (no tool use, structured output present)", step + 1)
-                    return response
+                    return response.parsed_output
                 else:
                     # Need to get structured output - make final call
                     logger.info("SOTA suggestions completed at step %d (no tool use), requesting structured output", step + 1)
@@ -495,7 +496,7 @@ def search_sota_suggestions(
                         web_search_enabled=True,
                         text_format=SOTAResponse,
                     )
-                    return response
+                    return response.parsed_output if (hasattr(response, 'parsed_output') and response.parsed_output) else None
 
         else:
             raise ValueError(f"Unsupported provider: {provider}")
@@ -512,6 +513,7 @@ def search_sota_suggestions(
             web_search_enabled=True,
             text_format=SOTAResponse,
         )
+        return response.output_parsed if (hasattr(response, 'output_parsed') and response.output_parsed) else None
     elif provider == "anthropic":
         response = call_llm_with_retry_anthropic(
             model=_DEVELOPER_TOOL_MODEL,
@@ -521,10 +523,9 @@ def search_sota_suggestions(
             web_search_enabled=True,
             text_format=SOTAResponse,
         )
+        return response.parsed_output if (hasattr(response, 'parsed_output') and response.parsed_output) else None
     else:
         raise ValueError(f"Unsupported provider: {provider}")
-
-    return response
 
 
 def _execute_sota_tool_call(item, description, data_path, slug, cpu_core_range, gpu_identifier, file_suffix, provider="openai"):
