@@ -6,7 +6,8 @@ from typing import Any, Dict, Optional
 from dotenv import load_dotenv
 
 from project_config import get_config
-from tools.helpers import call_llm_with_retry
+from tools.helpers import call_llm_with_retry, call_llm_with_retry_anthropic, call_llm_with_retry_google
+from utils.llm_utils import detect_provider, append_message
 from prompts.starter_agent import (
     build_system as prompt_build_system,
     build_user as prompt_build_user,
@@ -68,25 +69,43 @@ class StarterAgent:
         system_prompt = prompt_build_system()
         user_prompt = prompt_build_user(description=description)
 
-        messages = [{"role": "user", "content": user_prompt}]
+        # Detect provider from model name
+        provider = detect_provider(_STARTER_MODEL)
 
-        logger.info("Dispatching StarterAgent request for slug=%s iteration=%s", self.slug, self.iteration)
-        response = call_llm_with_retry(
-            model=_STARTER_MODEL,
-            instructions=system_prompt,
-            tools=[],
-            messages=messages,
-            web_search_enabled=True,
-            text_format=StarterSuggestions,
-        )
+        # Create messages in provider-specific format
+        messages = [append_message(provider, "user", user_prompt)]
+        logger.info("Dispatching StarterAgent request for slug=%s iteration=%s using provider=%s",
+                   self.slug, self.iteration, provider)
 
-        # Persist raw content (if output_text exists)
-        content = response.output_text or ""
-        try:
-            if content:
-                self.text_path.write_text(content)
-        except Exception:
-            logger.debug("Failed to persist starter_suggestions.txt")
+        # Call appropriate LLM helper based on provider
+        if provider == "openai":
+            response = call_llm_with_retry(
+                model=_STARTER_MODEL,
+                instructions=system_prompt,
+                tools=[],
+                messages=messages,
+                web_search_enabled=True,
+                text_format=StarterSuggestions,
+            )
+        elif provider == "anthropic":
+            response = call_llm_with_retry_anthropic(
+                model=_STARTER_MODEL,
+                instructions=system_prompt,
+                tools=[],
+                messages=messages,
+                web_search_enabled=True,
+                text_format=StarterSuggestions,
+            )
+        elif provider == "google":
+            response = call_llm_with_retry_google(
+                model=_STARTER_MODEL,
+                system_instruction=system_prompt,
+                messages=messages,
+                text_format=StarterSuggestions,
+                enable_google_search=True,
+            )
+        else:
+            raise ValueError(f"Unsupported provider for StarterAgent: {provider}")
 
         # Use structured output parsing
         suggestions: Dict[str, Any] = {}
