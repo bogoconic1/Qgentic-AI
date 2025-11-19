@@ -14,8 +14,8 @@ import yaml
 import pandas as pd
 import weave
 from project_config import get_config
-from tools.helpers import call_llm_with_retry, call_llm_with_retry_anthropic, _build_directory_listing
-from utils.llm_utils import detect_provider, extract_text_from_response
+from tools.helpers import call_llm_with_retry, call_llm_with_retry_anthropic, call_llm_with_retry_google, _build_directory_listing
+from utils.llm_utils import detect_provider, extract_text_from_response, append_message
 from tools.generate_paper_summary import PaperSummaryClient
 from prompts.tools_researcher import (
     ask_eda_template as prompt_ask_eda,
@@ -78,18 +78,18 @@ def ask_eda(question: str, description: str, data_path: str, max_attempts: int |
     attempts = max_attempts or _DEFAULT_ASK_ATTEMPTS
     PROMPT = prompt_ask_eda(data_path, directory_listing, description)
 
-    # Build input_list with history: prepend previous EDA/AB test (question + code) pairs
+    # Detect provider from model name FIRST
+    provider = detect_provider(_RESEARCHER_TOOL_OFFLINE_MODEL)
+
+    # Build input_list with history in provider-specific format
     input_list = []
     if previous_ab_tests:
         for prev_item in previous_ab_tests:
-            input_list.append({"role": "user", "content": "Question: " + prev_item['question']})
-            input_list.append({"role": "assistant", "content": f"```python\n{prev_item['code']}\n```"})
+            input_list.append(append_message(provider, "user", "Question: " + prev_item['question']))
+            input_list.append(append_message(provider, "assistant", f"```python\n{prev_item['code']}\n```"))
 
     # Add the current question
-    input_list.append({"role": "user", "content": "Question: " + question})
-
-    # Detect provider from model name
-    provider = detect_provider(_RESEARCHER_TOOL_OFFLINE_MODEL)
+    input_list.append(append_message(provider, "user", "Question: " + question))
 
     for attempt in range(1, attempts + 1):
         logger.info("ask_eda attempt %s/%s", attempt, attempts)
@@ -120,6 +120,18 @@ def ask_eda(question: str, description: str, data_path: str, max_attempts: int |
             # (needed for citations to work, even though they increase token usage)
             input_list.append({"role": "assistant", "content": response.content})
 
+        elif provider == "google":
+            response = call_llm_with_retry_google(
+                model=_RESEARCHER_TOOL_OFFLINE_MODEL,
+                system_instruction=PROMPT,
+                messages=input_list,
+                enable_google_search=True,
+            )
+            # Extract text from Gemini response
+            response_text = response.text if hasattr(response, 'text') else str(response)
+            # Add assistant response to conversation history
+            input_list.append(append_message(provider, "model", response_text))
+
         else:
             raise ValueError(f"Unsupported provider for ask_eda: {provider}")
 
@@ -127,7 +139,7 @@ def ask_eda(question: str, description: str, data_path: str, max_attempts: int |
         logger.debug("ask_eda generated code (truncated): %s", code[:200] if code else "")
 
         if not code:
-            input_list.append({"role": "user", "content": "No python code block found. Please try again."})
+            input_list.append(append_message(provider, "user", "No python code block found. Please try again."))
             logger.warning("ask_eda found no python code block in response.")
             continue
         else:
@@ -176,7 +188,7 @@ def ask_eda(question: str, description: str, data_path: str, max_attempts: int |
             # If there's an error, it will contain stack trace (Traceback)
             if "Traceback" in result:
                 logger.warning("ask_eda execution failed, retrying with error feedback")
-                input_list.append({"role": "user", "content": result + "\n\nPlease regenerate the code to fix the errors above."})
+                input_list.append(append_message(provider, "user", result + "\n\nPlease regenerate the code to fix the errors above."))
                 continue
 
             # Success - truncate to last 30000 characters and return
@@ -208,7 +220,7 @@ def download_external_datasets(question_1: str, question_2: str, question_3: str
     # Loop through 3 different query phrasings
     for q_idx, query in enumerate([question_1, question_2, question_3], start=1):
         logger.info("Processing query phrasing %s/3: %s", q_idx, query)
-        input_list = [{"role": "user", "content": "Dataset Name: " + query}]
+        input_list = [append_message(provider, "user", "Dataset Name: " + query)]
 
         # For each query, retry up to 'attempts' times
         for attempt in range(1, attempts + 1):
@@ -241,6 +253,24 @@ def download_external_datasets(question_1: str, question_2: str, question_3: str
                     messages=input_list,
                     web_search_enabled=True,
                     text_format=DatasetDiscovery,
+                )
+                # Response is already parsed Pydantic object
+                if response and hasattr(response, 'datasets'):
+                    new_datasets = response.datasets
+                    logger.info("Query %s found %s datasets: %s", q_idx, len(new_datasets), new_datasets)
+                    relevant_datasets.extend(new_datasets)
+                    break  # Success, move to next query
+                else:
+                    logger.warning("No valid structured output for query %s attempt %s.", q_idx, attempt)
+                    continue
+
+            elif provider == "google":
+                response = call_llm_with_retry_google(
+                    model=_RESEARCHER_TOOL_ONLINE_MODEL,
+                    system_instruction=PROMPT,
+                    messages=input_list,
+                    text_format=DatasetDiscovery,
+                    enable_google_search=True,
                 )
                 # Response is already parsed Pydantic object
                 if response and hasattr(response, 'datasets'):
