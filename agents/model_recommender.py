@@ -272,7 +272,8 @@ class ModelRecommenderAgent:
             research_plan=self.inputs.get("plan"),
         )
 
-        system_prompt = loss_function_system_prompt()
+        time_limit_minutes = int(_BASELINE_CODE_TIMEOUT / 60)
+        system_prompt = loss_function_system_prompt(time_limit_minutes=time_limit_minutes)
         messages = [{"role": "user", "content": user_prompt}]
 
         try:
@@ -304,7 +305,8 @@ class ModelRecommenderAgent:
             research_plan=self.inputs.get("plan"),
         )
 
-        system_prompt = hyperparameter_tuning_system_prompt()
+        time_limit_minutes = int(_BASELINE_CODE_TIMEOUT / 60)
+        system_prompt = hyperparameter_tuning_system_prompt(time_limit_minutes=time_limit_minutes)
         messages = [{"role": "user", "content": user_prompt}]
 
         try:
@@ -336,7 +338,8 @@ class ModelRecommenderAgent:
             research_plan=self.inputs.get("plan"),
         )
 
-        system_prompt = inference_strategy_system_prompt()
+        inference_time_limit_minutes = int(_BASELINE_CODE_TIMEOUT / 60)
+        system_prompt = inference_strategy_system_prompt(inference_time_limit_minutes=inference_time_limit_minutes)
         messages = [{"role": "user", "content": user_prompt}]
 
         try:
@@ -390,8 +393,8 @@ class ModelRecommenderAgent:
             List of 8 final selected model names
         """
         # STAGE 1: Select 16 candidate models
-        time_limit_hours = _BASELINE_CODE_TIMEOUT / 3600
-        system_prompt = model_selector_system_prompt(time_limit_hours=time_limit_hours)
+        time_limit_minutes = int(_BASELINE_CODE_TIMEOUT / 60)
+        system_prompt = model_selector_system_prompt(time_limit_minutes=time_limit_minutes)
 
         user_prompt = build_user_prompt(
             description=self.inputs["description"],
@@ -535,6 +538,8 @@ class ModelRecommenderAgent:
         """
         logger.info("Starting model refinement: %d candidates -> 8 final models", len(candidate_models))
 
+        time_limit_minutes = int(_BASELINE_CODE_TIMEOUT / 60)
+
         # Build prompts from prompts module
         user_prompt = build_refiner_user_prompt(
             description=self.inputs["description"],
@@ -543,9 +548,10 @@ class ModelRecommenderAgent:
             research_plan=self.inputs.get("plan"),
             candidate_models=candidate_models,
             summaries=summaries,
+            time_limit_minutes=time_limit_minutes,
         )
 
-        system_instruction = model_refiner_system_prompt()
+        system_instruction = model_refiner_system_prompt(time_limit_minutes=time_limit_minutes)
 
         # Call Gemini 2.5 Pro with structured output
         try:

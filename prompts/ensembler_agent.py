@@ -90,7 +90,7 @@ You should perform web searches to determine how to implement the ensemble strat
 
 ---
 **Training and Inference Environment:**
-Single GPU (24GB VRAM)
+Single GPU (40GB VRAM)
 
 **Ensemble Strategy:**
 {strategy_text}

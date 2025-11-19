@@ -26,7 +26,7 @@ def _get_hard_constraints(model_name: str, allow_multi_fold: bool = False) -> st
     )
 
 
-def build_system(description: str, directory_listing: str, model_name: str, model_recommendations: str, slug: str, cpu_core_range: list[int] | None = None, gpu_identifier: str | None = None, gpu_isolation_mode: str = "none", allow_multi_fold: bool = False, hitl_instructions: list[str] | None = None) -> str:
+def build_system(description: str, directory_listing: str, model_name: str, model_recommendations: str, slug: str, cpu_core_range: list[int] | None = None, gpu_identifier: str | None = None, gpu_isolation_mode: str = "none", allow_multi_fold: bool = False, hitl_instructions: list[str] | None = None, version: int = 1) -> str:
     # Build resource allocation info
     resource_info = ""
     if cpu_core_range is not None:
@@ -48,25 +48,32 @@ You have been provided with the following guidance for code implementation:
 ---
 """
 
-    constraints = _get_hard_constraints(model_name, allow_multi_fold=allow_multi_fold)
-
-    return f"""# Role: Lead Developer for Machine-Learning Competition Team
-Your objective is to deliver a single, self-contained Python script for a Kaggle Competition using **only** the specified model `{model_name}`.
-
-Begin with a concise checklist (3-7 bullets) of what you will do; keep items conceptual, not implementation-level.
-You should perform web searches to determine how to set up and configure `{model_name}` in Python. If the model name doesn't exist, find the closest alternative and explain your choice in comments. It's alright if the alternative is larger, but please still use a pretrained version rather than training from scratch.
-
----
-**Training and Inference Environment:**
-Single GPU (24GB VRAM) {resource_info}
-
+    # Build model recommendations section (only for version 1)
+    recommendations_section = ""
+    if version == 1 and model_recommendations:
+        recommendations_section = f"""
 **Model Name:**
 `{model_name}`
 
 **Model Recommendations:**
 {model_recommendations}
 
-{hitl_section}{constraints}
+"""
+
+    # Don't enforce model in constraints anymore
+    constraints = _get_hard_constraints(model_name=None, allow_multi_fold=allow_multi_fold)
+
+    return f"""# Role: Lead Developer for Machine-Learning Competition Team
+Your objective is to deliver a single, self-contained Python script for a Kaggle Competition.
+
+Begin with a concise checklist (3-7 bullets) of what you will do; keep items conceptual, not implementation-level.
+You should perform web searches to determine how to set up and configure your chosen model in Python. Prefer pretrained models rather than training from scratch.
+
+---
+**Training and Inference Environment:**
+Single GPU (40GB VRAM) {resource_info}
+
+{recommendations_section}{hitl_section}{constraints}
 ---
 
 Before any significant tool call or external library use, state the purpose and minimal inputs required, and validate actions after key steps with a 1-2 line summary. If a step fails (e.g., CUDA unavailable), state the limitation clearly and proceed conservatively where allowed.

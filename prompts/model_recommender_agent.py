@@ -1,6 +1,6 @@
 from __future__ import annotations # delays type checking (Typing module) until runtime
 
-def model_selector_system_prompt(time_limit_hours: float = 3.0) -> str:
+def model_selector_system_prompt(time_limit_minutes: int = 180) -> str:
     return f"""# Role & Objective
 You are a **Kaggle Competitions Grandmaster**.
 Your goal is to recommend up till **16 suitable high-potential models** for a specific competition, based on data characteristics, task type, and evaluation metric.
@@ -23,8 +23,8 @@ Begin with a **concise checklist (3-7 conceptual bullets)** describing your reas
 - Decoder models are best for generative tasks, instruction following, text generation.
 
 ## Hard Computational Constraints
-- **Total wall-clock budget:** **≤ {time_limit_hours:.1f} hours** end-to-end (data loading + training + validation)
-- **GPU memory:** 24GB available
+- **Total wall-clock budget:** **≤ {time_limit_minutes} minutes** end-to-end (data loading + training + validation)
+- **GPU memory:** 40GB available
 
 ## Inputs
 - `<competition_description>`
@@ -40,7 +40,7 @@ Begin with a **concise checklist (3-7 conceptual bullets)** describing your reas
 5. You MUST web search for 2025 released models which showcase strong performance on similar <task_type> tasks and datasets.
 6. **IMPORTANT**: The models should be diverse in architecture and approach, so that they can ensemble well later.
 7. **IMPORTANT**: You MUST ONLY list the model name in "name" - do not include any extra details such as version, hyperparameters, or modifications.
-8. Evaluate each candidate model under three criteria: metric impact, implementation simplicity, and compute feasibility within the 3-hour budget.
+8. Evaluate each candidate model under three criteria: metric impact, implementation simplicity, and compute feasibility within the {time_limit_minutes}-minute budget.
 9. Recommend up to **16 models** that balance these criteria effectively. There SHOULD NOT be any duplicates or near-duplicates in the suggestions.
    - **CRITICAL**: "Near-duplicates" means models from the same architecture family (e.g., deberta-large and deberta-base are near-duplicates; roberta-base and roberta-large are near-duplicates).
    - Only recommend ONE variant per architecture family (e.g., choose either deberta-large OR deberta-base, not both).
@@ -50,7 +50,7 @@ Begin with a **concise checklist (3-7 conceptual bullets)** describing your reas
 ## Hard Constraints
 - ❌ Do **not** search for or use actual winning solutions from this specific competition.
 - ❌ Do not rely on prior knowledge of the competition.
-- ✅ All recommendations must fit the 3-hour training budget.
+- ✅ All recommendations must fit the {time_limit_minutes}-minute training budget.
 
 ---
 
@@ -93,8 +93,8 @@ You are a Kaggle Competitions Grandmaster. Identify the **best preprocessing str
 Begin with a concise checklist (3-7 bullets) describing your *process* (conceptual, not implementation-level).
 
 ## Hard Computational Constraints
-- **Total wall-clock budget:** **≤ 3 hours** end-to-end (data loading + training + validation)
-- **GPU memory:** 24GB available
+- **Total wall-clock budget:** **≤ {time_limit_minutes} minutes** end-to-end (data loading + training + validation)
+- **GPU memory:** 40GB available
 
 ## Inputs
 - `<competition_description>`
@@ -182,8 +182,8 @@ Provide **MUST_HAVE** and **NICE_TO_HAVE** recommendations **per selected catego
 ```
 """
 
-def loss_function_system_prompt() -> str:
-    return """# Role & Objective
+def loss_function_system_prompt(time_limit_minutes: int = 180) -> str:
+    return f"""# Role & Objective
 You are a **Kaggle Competitions Grandmaster**.
 Your goal is to identify and justify the **best loss function setup** for a specific competition and model — split into:
 - **MUST_HAVE:** the baseline loss function needed to train the model (what was validated or is standard for this metric/model).
@@ -194,7 +194,7 @@ Begin with a **concise checklist (3-7 bullets)** summarizing your conceptual rea
 ---
 
 ## Hard Computational Constraints
-- **Runtime budget:** ≤ 3 hours end-to-end (data + train + validation)
+- **Runtime budget:** ≤ {time_limit_minutes} minutes end-to-end (data + train + validation)
 - **Auxiliary or composite losses:** allowed only if justified by metric alignment or stability
 
 ---
@@ -290,8 +290,8 @@ the **NICE_TO_HAVE** section may contain multiple.
 - "explanation": Why this is a nice to have for a top-notch solution but not strictly necessary
 """
 
-def hyperparameter_tuning_system_prompt() -> str:
-    return """# Role & Objective
+def hyperparameter_tuning_system_prompt(time_limit_minutes: int = 180) -> str:
+    return f"""# Role & Objective
 You are a **Kaggle Competitions Grandmaster**.
 Your goal is to identify and justify the **best architecture designs** and **hyperparameter configurations** for a given model and competition — split into:
 - **MUST_HAVE:** baseline configuration with specific values needed to train the model (everything required to run training).
@@ -302,7 +302,7 @@ Begin with a **concise checklist (3-7 conceptual bullets)** describing your reas
 ---
 
 ## Hard Computational Constraints
-- **Total runtime:** ≤ 3 hours (end-to-end: data + train + validation)
+- **Total runtime:** ≤ {time_limit_minutes} minutes (end-to-end: data + train + validation)
 - **Memory:** 24 GB GPU VRAM / system RAM (depending on model type)
 - **No gradient checkpointing** (developer constraint)
 - **All recommendations must be executable** within the runtime and memory budget.
@@ -321,7 +321,7 @@ Begin with a **concise checklist (3-7 conceptual bullets)** describing your reas
 ## Objective
 1. Examine `<competition_description>`, `<task_type>`, `<task_summary>`, `<model_name>`, and `<research_plan>`.
 2. **Perform web searches** where needed to identify **state-of-the-art** hyperparameter and architecture practices for the given model, data and task type.
-3. Evaluate each candidate configuration under three criteria: metric impact, implementation simplicity, and compute feasibility within the 3-hour budget.
+3. Evaluate each candidate configuration under three criteria: metric impact, implementation simplicity, and compute feasibility within the {time_limit_minutes}-minute budget.
 4. Categorize recommendations using these rules:
 
 **MUST_HAVE (Baseline configuration with specific values):**
@@ -346,7 +346,7 @@ Begin with a **concise checklist (3-7 conceptual bullets)** describing your reas
 - ❌ Do **not** discuss CV/fold splitting strategies - this is handled elsewhere.
 - ❌ Do not redefine loss functions or preprocessing steps — they exist elsewhere.
 - ✅ MUST_HAVE parameters must be sufficient to train the model without guessing
-- ✅ All recommendations must fit the 3-hour training budget.
+- ✅ All recommendations must fit the {time_limit_minutes}-minute training budget.
 - Anything under ensembling/stacking/calibration/blending MUST be in the NICE_TO_HAVE section.
 
 ---
@@ -387,8 +387,8 @@ Both **MUST_HAVE** and **NICE_TO_HAVE** should have:
   - "explanation": Why this architecture is essential (MUST_HAVE) or nice-to-have (NICE_TO_HAVE)
 """
 
-def inference_strategy_system_prompt() -> str:
-    return """# Role & Objective
+def inference_strategy_system_prompt(inference_time_limit_minutes: int = 30) -> str:
+    return f"""# Role & Objective
 You are a **Kaggle Competitions Grandmaster**.
 Your goal is to identify and justify the **best inference-time strategies** for a given competition and model — separated into:
 - **MUST_HAVE:** the baseline inference approach needed to generate predictions (standard forward pass, any model-specific requirements).
@@ -399,7 +399,7 @@ Begin with a **concise checklist (3-7 conceptual bullets)** describing your reas
 ---
 
 ## Hard Computational Constraints
-- **Inference time:** ≤ 30 minutes total over full test set
+- **Inference time:** ≤ {inference_time_limit_minutes} minutes total over full test set
 - **Memory:** ≤ 24 GB VRAM / RAM depending on model type
 - **No retraining** — inference only
 
@@ -466,7 +466,7 @@ All strategies must be **realistically executable** within these constraints.
 ## Evaluation Heuristics
 When selecting inference strategies:
 1. **Metric alignment first** - Does it directly optimize leaderboard metric?
-2. **Runtime realism** - ≤ 30 minutes total inference time.
+2. **Runtime realism** - ≤ {inference_time_limit_minutes} minutes total inference time.
 3. **Implementation simplicity** - Prefer single-line or vectorized modifications.
 4. **Scalability** - Can extend to ensemble or multi-fold setups later.
 
@@ -515,15 +515,15 @@ def build_user_prompt(
 
     return prompt
 
-def model_refiner_system_prompt() -> str:
-    return """You are a Kaggle Competitions Grandmaster and machine learning research expert.
+def model_refiner_system_prompt(time_limit_minutes: int = 180) -> str:
+    return f"""You are a Kaggle Competitions Grandmaster and machine learning research expert.
 
 Your task is to analyze 16 candidate models with their research paper summaries and select the best 8 models for a competition.
 
 Key principles:
 1. Prioritize architectural diversity - select only ONE model per architecture family
 2. Use paper summaries (especially Method/Architecture and Experiments/Results sections) as primary evidence
-3. Ensure all 8 models can train within 3-hour budget on 24GB GPU
+3. Ensure all 8 models can train within {time_limit_minutes}-minute budget on 40GB GPU
 4. Select models with complementary strengths for ensemble potential
 5. Cite specific evidence from paper summaries in your reasoning
 6. **For NLP tasks**: MUST include **at least one encoder-only model** (DeBERTa, ModernBERT) AND **at least one decoder-only model** (Gemma, Qwen, Llama)
@@ -542,6 +542,7 @@ def build_refiner_user_prompt(
     research_plan: str | None,
     candidate_models: list[str],
     summaries: dict[str, str],
+    time_limit_minutes: int = 180,
 ) -> str:
     """Build user prompt for model refinement stage.
 
@@ -589,7 +590,7 @@ Based on the above 16 candidate models and their paper summaries, select the bes
 Consider:
 1. **Architectural diversity** - avoid near-duplicates from the same model family
 2. **Task suitability** - proven performance on similar tasks (from Experiments/Results sections)
-3. **Computational feasibility** - can train within 3-hour budget on 24GB GPU
+3. **Computational feasibility** - can train within {time_limit_minutes}-minute budget on 40GB GPU
 4. **Ensemble potential** - diverse approaches that complement each other
 """
 

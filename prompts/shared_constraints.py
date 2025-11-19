@@ -52,7 +52,7 @@ def get_hard_constraints(
 - Also emit concise `logging.info` statements for any computed quantities that can go really wrong (e.g. class weights, thresholds{ensemble_weights_suffix}).
 - Place `logging.basicConfig()` at the start of the script.
 - Deep learning: **no** gradient checkpointing. Do not code fallback methods.
-- **IMPORTANT: ONLY IN FULL MODE** If you're using XGBoost, LightGBM, or CatBoost, first train the model with the suggested parameters. Then, perform hyperparameter tuning using Optuna for up to 300 seconds. Finally, retrain the model using the best parameters from the tuning run and select the configuration with the best validation performance. DO NOT RUN tuning in DEBUG mode.
+- **IMPORTANT:** If you're using XGBoost, LightGBM, or CatBoost, first train the model with the suggested parameters. Then, perform hyperparameter tuning using Optuna for up to 300 seconds. Finally, retrain the model using the best parameters from the tuning run and select the configuration with the best validation performance.
 - If you use `transformers.Trainer`, use eval_strategy instead of evaluation_strategy.
 - Do not use `try/except` to suppress errors.
 - Log final validation results, best epoch{iteration_suffix} number and total training time after training."""
@@ -69,8 +69,7 @@ def get_hard_constraints(
     additional_common_constraints = """- Prefer pretrained models if available. Set pretrained=True if applicable.
 - If an online implementation of the model is available (e.g. GitHub), use it. Do not code from scratch.
 - External datasets: may be appended **only** to training set.
-- **DEBUG flag**: At the script top, define. Pipeline runs twice: once with `DEBUG=True`, then with `DEBUG=False` (full config). Log which mode is running.
-- **DL Only:** After 1st epoch on fold 0 in FULL mode, if loss is NaN, STOP training and jump directly to inference to generate the submission file."""
+- **DL Only:** After 1st epoch on fold 0, if loss is NaN, STOP training and jump directly to inference to generate the submission file."""
 
     # Build the constraints with conditional sections
     constraints_parts = ["**Hard Constraints:**"]
@@ -92,8 +91,7 @@ def get_hard_constraints(
         constraints_parts.append(modular_pipeline_constraint)
 
     # Add final common constraints
-    constraints_parts.append("""- Do not use any `while` loops in your code.
-- YOU SHOULD NOT CREATE A SUBMISSION FILE DURING DEBUG MODE.""")
+    constraints_parts.append("""- Do not use any `while` loops in your code.""")
 
     # Add the 's' typo from the original code for backward compatibility
     if model_name:  # Only developer has this typo
@@ -126,14 +124,5 @@ The baseline models achieved their top-notch scores BECAUSE of these exact confi
 DO NOT simplify, remove, or "clean up" the baseline code. DO NOT start from scratch with basic features. The baseline code already handles data leakage correctly via OOF encodings.
 """
         constraints_parts.append(ensemble_directive)
-
-    # Add DEBUG mode guidelines
-    debug_guidelines = """
-**DEBUG mode guidelines**
-- After splitting the data into train and valid, right before starting training, sample train to 1000 rows. For classification, ensure at least one sample per class, so if there are > 1000 classes there will be > 1000 samples. For time series tasks, take the last 1000 rows (most recent) instead of random sampling to preserve temporal order.
-- For deep learning: reduce epochs to 1. For gradient boosting (XGBoost/LightGBM/CatBoost): reduce n_estimators/num_iterations to 100-200.
-- Log the size of the DEBUG training set."""
-
-    constraints_parts.append(debug_guidelines)
 
     return "\n".join(constraints_parts)
