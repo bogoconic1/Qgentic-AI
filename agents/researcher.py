@@ -389,7 +389,7 @@ class ResearcherAgent:
                 "call_id": tool_id,
                 "output": json.dumps(output_data)
             }
-        else:  # anthropic
+        else:  # anthropic or google
             return {
                 "type": "tool_result",
                 "tool_use_id": tool_id,
