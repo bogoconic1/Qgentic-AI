@@ -19,8 +19,8 @@ from tools.developer import (
     search_sota_suggestions,
 )
 from utils.guardrails import evaluate_guardrails, build_block_summary
-from tools.helpers import call_llm_with_retry, call_llm_with_retry_anthropic, _build_directory_listing
-from utils.llm_utils import detect_provider, extract_text_from_response
+from tools.helpers import call_llm_with_retry, call_llm_with_retry_anthropic, call_llm_with_retry_google, _build_directory_listing
+from utils.llm_utils import detect_provider, extract_text_from_response, append_message
 from utils.diffs import (
     extract_diff_block,
     normalize_diff_payload,
@@ -386,6 +386,16 @@ class DeveloperAgent:
             content = extract_text_from_response(response, provider)
             # For Anthropic, construct output format compatible with message history
             output = [{"role": "assistant", "content": response.content}]
+        elif provider == "google":
+            response = call_llm_with_retry_google(
+                model=_DEVELOPER_MODEL,
+                system_instruction=instructions,
+                messages=messages,
+                enable_google_search=True
+            )
+            content = response.text if hasattr(response, 'text') else str(response)
+            # For Gemini, construct output format compatible with message history
+            output = [append_message(provider, "assistant", content)]
         else:
             raise ValueError(f"Unsupported provider: {provider}")
 
@@ -1096,7 +1106,10 @@ class DeveloperAgent:
             self.logger.info("Multi-fold training enabled from start (use_validation_score=True)")
         system_prompt = self._compose_system(allow_multi_fold=initial_allow_multi_fold)
         user_prompt = self._build_user_prompt(version=1)
-        input_list = [{"role": "user", "content": user_prompt}]
+
+        # Detect provider early for consistent message formatting
+        provider = detect_provider(_DEVELOPER_MODEL)
+        input_list = [append_message(provider, "user", user_prompt)]
 
         # Log external data listing and plan content (passed from orchestrator)
         self.logger.info("External data listing (%d chars): %s", len(self.external_data_listing), self.external_data_listing[:200] + "..." if len(self.external_data_listing) > 200 else self.external_data_listing)
@@ -1172,7 +1185,7 @@ class DeveloperAgent:
                         "Patch generation failed for attempt %s; requesting full script instead.",
                         attempt,
                     )
-                    input_list.append({"role": "user", "content": "Patch application failed. Ignore the diff request and return the complete updated script enclosed within ```python backticks."})
+                    input_list.append(append_message(provider, "user", "Patch application failed. Ignore the diff request and return the complete updated script enclosed within ```python backticks."))
                     expect_patch = False
                     continue
                 else:
@@ -1210,7 +1223,7 @@ class DeveloperAgent:
                 guardrail_prompt = summary_text + fix_instr
                 base_version_for_next_patch = version
                 guardrail_prompt = self._append_patch_directive(guardrail_prompt, base_version_for_next_patch)
-                input_list.append({"role": "user", "content": guardrail_prompt})
+                input_list.append(append_message(provider, "user", guardrail_prompt))
                 self.next_patch_base_version = base_version_for_next_patch
                 self.logger.info("Next patch will be based on v%s due to guardrail block", base_version_for_next_patch)
                 self.logger.info("User prompt with guardrail feedback: %s", guardrail_prompt)
@@ -1340,11 +1353,11 @@ class DeveloperAgent:
                 next_instr = self._append_patch_directive(next_instr, base_version_for_next_patch)
 
                 if blacklist_flag and rollback_code:
-                    input_list.append({'role': 'user', 'content': 'The previous code has been blacklisted. Here is the most recent valid (successful and non-blacklisted) version for your reference (please start work from this version): \n' + rollback_code})
+                    input_list.append(append_message(provider, "user", 'The previous code has been blacklisted. Here is the most recent valid (successful and non-blacklisted) version for your reference (please start work from this version): \n' + rollback_code))
                 elif blacklist_flag:
                     self.logger.warning("Blacklist triggered but no valid rollback version available")
 
-                input_list.append({'role': 'user', 'content': next_instr})
+                input_list.append(append_message(provider, "user", next_instr))
                 self.next_patch_base_version = base_version_for_next_patch
                 self.logger.info("Next patch will be based on v%s (blacklist=%s)", base_version_for_next_patch, blacklist_flag)
 
@@ -1413,7 +1426,7 @@ class DeveloperAgent:
 
                 base_version_for_next_patch = version
                 next_instr = self._append_patch_directive(next_instr, base_version_for_next_patch)
-                input_list.append({'role': 'user', 'content': next_instr})
+                input_list.append(append_message(provider, "user", next_instr))
                 self.next_patch_base_version = base_version_for_next_patch
                 self.logger.info("Next patch will be based on v%s due to execution failure (timeout=%s)", base_version_for_next_patch, is_timeout)
 

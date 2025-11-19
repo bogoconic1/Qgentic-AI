@@ -12,8 +12,8 @@ import pandas as pd
 from concurrent.futures import ThreadPoolExecutor
 from utils.grade import run_grade
 from utils.code_utils import strip_header_from_code
-from tools.helpers import call_llm_with_retry, call_llm_with_retry_anthropic
-from utils.llm_utils import detect_provider, extract_text_from_response
+from tools.helpers import call_llm_with_retry, call_llm_with_retry_anthropic, call_llm_with_retry_google
+from utils.llm_utils import detect_provider, extract_text_from_response, append_message
 from project_config import get_config
 from schemas.ensembler import EnsembleStrategies
 from prompts.ensembler_agent import (
@@ -418,13 +418,14 @@ Produce a JSON object:
 
     # Detect provider and call appropriate API
     provider = detect_provider(_ENSEMBLER_MODEL)
+    messages = [append_message(provider, "user", user_prompt)]
 
     if provider == "openai":
         parsed = call_llm_with_retry(
             model=_ENSEMBLER_MODEL,
             instructions=system_prompt,
             tools=[],
-            messages=[{"role": "user", "content": user_prompt}],
+            messages=messages,
             web_search_enabled=True,
             text_format=EnsembleStrategies,
         )
@@ -433,8 +434,16 @@ Produce a JSON object:
             model=_ENSEMBLER_MODEL,
             instructions=system_prompt,
             tools=[],
-            messages=[{"role": "user", "content": user_prompt}],
+            messages=messages,
             web_search_enabled=True,
+            text_format=EnsembleStrategies,
+        )
+    elif provider == "google":
+        parsed = call_llm_with_retry_google(
+            model=_ENSEMBLER_MODEL,
+            system_instruction=system_prompt,
+            messages=messages,
+            enable_google_search=True,
             text_format=EnsembleStrategies,
         )
     else:
@@ -511,13 +520,14 @@ def generate_model_summary(
 
     # Detect provider and call appropriate API
     provider = detect_provider(_ENSEMBLER_MODEL)
+    messages = [append_message(provider, "user", user_prompt)]
 
     if provider == "openai":
         response = call_llm_with_retry(
             model=_ENSEMBLER_MODEL,
             instructions=system_prompt,
             tools=[],
-            messages=[{"role": "user", "content": user_prompt}]
+            messages=messages
         )
         return response.output_text
     elif provider == "anthropic":
@@ -525,7 +535,14 @@ def generate_model_summary(
             model=_ENSEMBLER_MODEL,
             instructions=system_prompt,
             tools=[],
-            messages=[{"role": "user", "content": user_prompt}]
+            messages=messages
+        )
+        return extract_text_from_response(response, provider)
+    elif provider == "google":
+        response = call_llm_with_retry_google(
+            model=_ENSEMBLER_MODEL,
+            system_instruction=system_prompt,
+            messages=messages
         )
         return extract_text_from_response(response, provider)
     else:

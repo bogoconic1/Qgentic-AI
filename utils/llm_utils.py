@@ -39,8 +39,8 @@ def extract_text_from_response(response, provider: str) -> str:
     Extract text from provider-specific response format.
 
     Args:
-        response: OpenAI or Anthropic response object
-        provider: "openai" or "anthropic"
+        response: OpenAI, Anthropic, or Google response object
+        provider: "openai", "anthropic", or "google"
 
     Returns:
         Extracted text string
@@ -54,6 +54,9 @@ def extract_text_from_response(response, provider: str) -> str:
 
         # Anthropic response
         >>> text = extract_text_from_response(anthropic_response, "anthropic")
+
+        # Google/Gemini response
+        >>> text = extract_text_from_response(gemini_response, "google")
     """
     if provider == "openai":
         return response.output_text
@@ -65,6 +68,10 @@ def extract_text_from_response(response, provider: str) -> str:
             if hasattr(block, 'text')
         ]
         return ''.join(text_blocks)
+
+    elif provider == "google":
+        # For Gemini, response.text contains the generated text
+        return response.text if hasattr(response, 'text') else str(response)
 
     else:
         raise ValueError(f"Unsupported provider: {provider}")

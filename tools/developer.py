@@ -11,8 +11,8 @@ import traceback
 from dotenv import load_dotenv
 from openai import OpenAI
 from project_config import get_config
-from tools.helpers import call_llm_with_retry, call_llm_with_retry_anthropic
-from utils.llm_utils import detect_provider, extract_text_from_response
+from tools.helpers import call_llm_with_retry, call_llm_with_retry_anthropic, call_llm_with_retry_google
+from utils.llm_utils import detect_provider, extract_text_from_response, append_message
 from prompts.tools_developer import (
     build_stack_trace_prompt as prompt_stack_trace,
     build_stack_trace_pseudo_prompt as prompt_stack_trace_pseudo,
@@ -92,11 +92,10 @@ def web_search_stack_trace(query: str) -> str:
     logger.info("Fine-tuned model cannot answer (response too short or failure message), falling back to web search workflow.")
     system_prompt = prompt_stack_trace()
 
-    messages = [{"role": "user", "content": "<query>\n" + query + "\n</query>"}]
-    logger.debug("Web search messages: %s", messages)
-
-    # Detect provider
+    # Detect provider and create messages in provider-specific format
     provider = detect_provider(_DEVELOPER_TOOL_MODEL)
+    messages = [append_message(provider, "user", "<query>\n" + query + "\n</query>")]
+    logger.debug("Web search messages: %s", messages)
 
     if provider == "openai":
         response = call_llm_with_retry(
@@ -141,6 +140,26 @@ def web_search_stack_trace(query: str) -> str:
         content = extract_text_from_response(response, provider)
         return query + "\n" + "This is how you can fix the error: \n" + content
 
+    elif provider == "google":
+        response = call_llm_with_retry_google(
+            model=_DEVELOPER_TOOL_MODEL,
+            system_instruction=system_prompt,
+            messages=messages,
+            enable_google_search=True,
+            text_format=StackTraceSolution,
+        )
+
+        # Response is already parsed Pydantic object
+        if response and hasattr(response, 'reasoning_and_solution'):
+            solution_text = response.reasoning_and_solution.strip()
+            logger.debug("Returning solution from Gemini structured output.")
+            return query + "\n" + "This is how you can fix the error: \n" + solution_text
+
+        # Fallback if not a Pydantic object (shouldn't happen with text_format)
+        logger.warning("Unexpected response type, attempting to extract text.")
+        content = extract_text_from_response(response, provider)
+        return query + "\n" + "This is how you can fix the error: \n" + content
+
     else:
         raise ValueError(f"Unsupported provider: {provider}")
 
@@ -169,12 +188,14 @@ def search_red_flags(
     # Detect provider and call appropriate API
     provider = detect_provider(_DEVELOPER_TOOL_MODEL)
 
+    messages = [append_message(provider, "user", user_prompt)]
+
     if provider == "openai":
         response = call_llm_with_retry(
             model=_DEVELOPER_TOOL_MODEL,
             instructions=system_prompt,
             tools=[],
-            messages=[{"role": "user", "content": user_prompt}],
+            messages=messages,
             web_search_enabled=True
         )
         final_content = response.output_text or ""
@@ -183,8 +204,17 @@ def search_red_flags(
             model=_DEVELOPER_TOOL_MODEL,
             instructions=system_prompt,
             tools=[],
-            messages=[{"role": "user", "content": user_prompt}],
+            messages=messages,
             web_search_enabled=True
+        )
+        final_content = extract_text_from_response(response, provider)
+    elif provider == "google":
+        response = call_llm_with_retry_google(
+            model=_DEVELOPER_TOOL_MODEL,
+            system_instruction=system_prompt,
+            function_declarations=[],
+            messages=messages,
+            enable_google_search=True
         )
         final_content = extract_text_from_response(response, provider)
     else:
@@ -196,80 +226,48 @@ def search_red_flags(
 def _get_sota_tools(provider: str = "openai") -> list:
     """Get tools available for SOTA suggestions (subset of researcher tools).
 
+    Reuses tool definitions from llm_utils.py and filters out run_ab_test
+    which is only used by ResearcherAgent, not for SOTA suggestions.
+
     Args:
-        provider: "openai" or "anthropic" for format conversion
+        provider: "openai", "anthropic", or "google" for format conversion
 
     Returns:
         List of tool definitions in provider-specific format
     """
-    # Define tools in OpenAI format first
-    openai_tools = [
-        {
-            "type": "function",
-            "name": "ask_eda",
-            "description": "Run exploratory data analysis to debug issues or validate hypotheses",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "question": {"type": "string", "description": "The EDA question to answer (e.g. Read train.csv and compute correlation between XXX and YYY, is the relationship really monotonic to justify adding monotonic constraints?)"}
-                },
-                "required": ['question']
-            },
-        },
-        {
-            "type": "function",
-            "name": "scrape_web_page",
-            "description": "Scrape web pages for implementation guides, documentation, or examples",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "url": {"type": "string", "description": "URL to scrape"}
-                },
-                "required": ["url"]
-            },
-        },
-        {
-            "type": "function",
-            "name": "read_research_paper",
-            "description": "Read research papers to understand techniques deeply",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "arxiv_link": {"type": "string", "description": "ArXiv paper ID or link"}
-                },
-                "required": ["arxiv_link"]
-            },
-        },
-        {
-            "type": "function",
-            "name": "download_external_datasets",
-            "description": "Search and download external datasets to augment training data",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "question_1": {"type": "string", "description": "First phrasing of the dataset query"},
-                    "question_2": {"type": "string", "description": "Second phrasing with different wording"},
-                    "question_3": {"type": "string", "description": "Third phrasing using alternative keywords"}
-                },
-                "required": ["question_1", "question_2", "question_3"]
-            },
-        },
+    from utils.llm_utils import get_tools_for_provider
+
+    # Get all researcher tools for this provider
+    all_tools = get_tools_for_provider(provider)
+
+    # Filter out run_ab_test (only used by ResearcherAgent, not SOTA)
+    sota_tools = [
+        tool for tool in all_tools
+        if _get_tool_name(tool, provider) != "run_ab_test"
     ]
 
+    return sota_tools
+
+
+def _get_tool_name(tool, provider: str) -> str:
+    """Extract tool name from tool definition based on provider format.
+
+    Args:
+        tool: Tool definition dict or FunctionDeclaration
+        provider: Provider type
+
+    Returns:
+        Tool name string
+    """
     if provider == "openai":
-        return openai_tools
+        return tool.get("name", "")
     elif provider == "anthropic":
-        # Convert to Anthropic format
-        anthropic_tools = []
-        for tool in openai_tools:
-            anthropic_tools.append({
-                "name": tool["name"],
-                "description": tool["description"],
-                "input_schema": tool["parameters"]
-            })
-        return anthropic_tools
+        return tool.get("name", "")
+    elif provider == "google":
+        # Gemini uses FunctionDeclaration objects
+        return tool.name if hasattr(tool, 'name') else ""
     else:
-        raise ValueError(f"Unsupported provider: {provider}")
+        return ""
 
 
 @weave.op()
@@ -371,7 +369,7 @@ def search_sota_suggestions(
     # Tool execution loop
     provider = detect_provider(_DEVELOPER_TOOL_MODEL)
     tools = _get_sota_tools(provider) if (slug and data_path) else []
-    input_list = [{"role": "user", "content": user_prompt}]
+    input_list = [append_message(provider, "user", user_prompt)]
 
     for step in range(max_tool_steps):
         logger.info("SOTA suggestion step %d/%d (tools: %s, provider: %s)", step + 1, max_tool_steps, "enabled" if tools else "disabled", provider)
@@ -497,6 +495,72 @@ def search_sota_suggestions(
                     )
                     return response  # Already parsed Pydantic object
 
+        elif provider == "google":
+            from google.genai import types
+
+            response = call_llm_with_retry_google(
+                model=_DEVELOPER_TOOL_MODEL,
+                system_instruction=system_prompt,
+                function_declarations=tools if tools else [],
+                messages=input_list,
+                enable_google_search=True,
+                text_format=SOTAResponse if step == max_tool_steps - 1 else None,
+            )
+
+            # Check if response has function calls
+            has_function_calls = False
+            if hasattr(response, 'candidates') and response.candidates:
+                parts = response.candidates[0].content.parts
+                has_function_calls = any(
+                    hasattr(part, 'function_call') and part.function_call
+                    for part in parts
+                )
+
+            if not has_function_calls:
+                # No function calls, check if we have structured output
+                if response and hasattr(response, 'suggestion'):
+                    logger.info("SOTA suggestions completed at step %d (no function calls, structured output present)", step + 1)
+                    return response  # Already parsed Pydantic object
+                else:
+                    # Need to get structured output - make final call
+                    logger.info("SOTA suggestions completed at step %d (no function calls), requesting structured output", step + 1)
+                    response = call_llm_with_retry_google(
+                        model=_DEVELOPER_TOOL_MODEL,
+                        system_instruction=system_prompt,
+                        messages=input_list,
+                        enable_google_search=True,
+                        text_format=SOTAResponse,
+                    )
+                    return response  # Already parsed Pydantic object
+
+            # Execute function calls
+            parts = response.candidates[0].content.parts
+            function_responses = []
+
+            for part in parts:
+                if hasattr(part, 'function_call') and part.function_call:
+                    tool_result_str = _execute_sota_tool_call(
+                        item=part.function_call,
+                        description=description,
+                        data_path=data_path,
+                        slug=slug,
+                        cpu_core_range=cpu_core_range,
+                        gpu_identifier=gpu_identifier,
+                        file_suffix=file_suffix,
+                        provider=provider,
+                    )
+                    function_responses.append(
+                        types.Part.from_function_response(
+                            name=part.function_call.name,
+                            response={"result": tool_result_str}
+                        )
+                    )
+
+            # Add assistant message and function results
+            input_list.append(append_message(provider, "assistant", response.text if hasattr(response, 'text') else ""))
+            if function_responses:
+                input_list.append(types.Content(role="function", parts=function_responses))
+
         else:
             raise ValueError(f"Unsupported provider: {provider}")
 
@@ -523,6 +587,15 @@ def search_sota_suggestions(
             text_format=SOTAResponse,
         )
         return response  # Already parsed Pydantic object
+    elif provider == "google":
+        response = call_llm_with_retry_google(
+            model=_DEVELOPER_TOOL_MODEL,
+            system_instruction=system_prompt + "\n\nYou have reached the maximum tool usage limit. Provide your final suggestion now based on the information gathered.",
+            messages=input_list,
+            enable_google_search=True,
+            text_format=SOTAResponse,
+        )
+        return response  # Already parsed Pydantic object
     else:
         raise ValueError(f"Unsupported provider: {provider}")
 
@@ -531,8 +604,8 @@ def _execute_sota_tool_call(item, description, data_path, slug, cpu_core_range, 
     """Execute a single SOTA tool call and return JSON result.
 
     Args:
-        item: Tool call item (OpenAI or Anthropic format)
-        provider: "openai" or "anthropic"
+        item: Tool call item (OpenAI, Anthropic, or Google format)
+        provider: "openai", "anthropic", or "google"
         ...other args...
 
     Returns:
@@ -552,6 +625,10 @@ def _execute_sota_tool_call(item, description, data_path, slug, cpu_core_range, 
     elif provider == "anthropic":
         tool_name = item.name
         args = item.input  # Already a dict
+    elif provider == "google":
+        tool_name = item.name
+        # Gemini function_call.args is already a dict
+        args = dict(item.args) if hasattr(item, 'args') else {}
     else:
         return json.dumps({"error": f"Unsupported provider: {provider}"})
 
