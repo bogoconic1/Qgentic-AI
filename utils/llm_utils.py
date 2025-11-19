@@ -24,12 +24,12 @@ def detect_provider(model_name: str) -> str:
         >>> detect_provider("gemini-2.5-pro")
         'gemini'
     """
-    if model_name.startswith("gpt-") or model_name.startswith("o1-"):
+    if model_name.startswith("gpt-") or model_name.startswith("o"):
         return "openai"
     elif model_name.startswith("claude-"):
         return "anthropic"
     elif model_name.startswith("gemini-"):
-        return "gemini"
+        return "google"
     else:
         raise ValueError(f"Unknown provider for model: {model_name}")
 
@@ -68,6 +68,36 @@ def extract_text_from_response(response, provider: str) -> str:
 
     else:
         raise ValueError(f"Unsupported provider: {provider}")
+
+def append_message(provider: str, role: str, message: str) -> dict:
+    """
+    Create a message in provider-specific format.
+
+    Args:
+        provider: "openai", "anthropic", or "google"
+        role: Message role ("user", "assistant", "model", etc.)
+        message: Message content (text string)
+
+    Returns:
+        Formatted message dict for the provider
+
+    Examples:
+        >>> append_message("openai", "user", "Hello")
+        {'role': 'user', 'content': 'Hello'}
+
+        >>> append_message("google", "user", "Hello")
+        {'role': 'user', 'parts': [{'text': 'Hello'}]}
+
+        >>> append_message("google", "assistant", "Hi")
+        {'role': 'model', 'parts': [{'text': 'Hi'}]}
+    """
+    if provider == "google":
+        # Gemini uses "model" instead of "assistant"
+        gemini_role = "model" if role == "assistant" else role
+        return {"role": gemini_role, "parts": [{"text": message}]}
+    else:
+        # OpenAI and Anthropic use same format
+        return {"role": role, "content": message}
 
 
 def get_tools_openai(max_parallel_workers: int = 1):
@@ -268,12 +298,107 @@ def get_tools_anthropic(max_parallel_workers: int = 1):
     ]
 
 
+def get_tools_gemini(max_parallel_workers: int = 1):
+    """
+    Get tools in Gemini format (FunctionDeclaration).
+
+    Args:
+        max_parallel_workers: Maximum parallel workers for run_ab_test
+
+    Returns:
+        List of FunctionDeclaration objects for Gemini
+    """
+    from google.genai import types
+
+    return [
+        types.FunctionDeclaration(
+            name="ask_eda",
+            description="Ask a question to the EDA expert for exploratory data analysis. Returns statistical insights, data quality assessments, and feature analysis based on the provided dataset.",
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "question": {
+                        "type": "string",
+                        "description": "The question to ask the EDA expert"
+                    }
+                },
+                "required": ["question"]
+            }
+        ),
+        types.FunctionDeclaration(
+            name="run_ab_test",
+            description=f"Run A/B tests to validate modeling or feature engineering choices by comparing their impact on performance. You can ask up to {max_parallel_workers} questions in parallel for efficiency.",
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "questions": {
+                        "type": "array",
+                        "description": f"List of A/B testing questions to run in parallel (max {max_parallel_workers}). Each question should be a comparison test",
+                        "items": {"type": "string"}
+                    }
+                },
+                "required": ["questions"]
+            }
+        ),
+        types.FunctionDeclaration(
+            name="download_external_datasets",
+            description="Download external datasets to augment your training data by searching with 3 different phrasings to maximize search coverage. Retrieves publicly available datasets from Kaggle and other sources.",
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "question_1": {
+                        "type": "string",
+                        "description": "First phrasing of the dataset query"
+                    },
+                    "question_2": {
+                        "type": "string",
+                        "description": "Second phrasing with different wording"
+                    },
+                    "question_3": {
+                        "type": "string",
+                        "description": "Third phrasing using alternative keywords"
+                    }
+                },
+                "required": ["question_1", "question_2", "question_3"]
+            }
+        ),
+        types.FunctionDeclaration(
+            name="read_research_paper",
+            description="Read and summarize academic research papers from arXiv relevant to the machine learning task. Returns structured markdown summary with Abstract, Introduction, Related Work, Method/Architecture, Experiments/Results, and Conclusion sections.",
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "arxiv_link": {
+                        "type": "string",
+                        "description": "ArXiv paper link (e.g., 'https://arxiv.org/pdf/2510.22916' or just '2510.22916')"
+                    }
+                },
+                "required": ["arxiv_link"]
+            }
+        ),
+        types.FunctionDeclaration(
+            name="scrape_web_page",
+            description="Scrape web pages and return markdown content from technical documentation, blog posts, and tutorials. Useful for accessing domain-specific knowledge, implementation guides, or best practices that complement academic papers.",
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "The webpage URL to scrape (e.g., 'https://developer.nvidia.com/blog/...')"
+                    }
+                },
+                "required": ["url"]
+            }
+        )
+    ]
+
+
 def get_tools_for_provider(provider: str, max_parallel_workers: int = 1):
     """
     Get tools in the appropriate format for the provider.
 
     Args:
-        provider: "openai" or "anthropic"
+        provider: "openai", "anthropic", or "google"
         max_parallel_workers: Maximum parallel workers for run_ab_test
 
     Returns:
@@ -286,5 +411,7 @@ def get_tools_for_provider(provider: str, max_parallel_workers: int = 1):
         return get_tools_openai(max_parallel_workers)
     elif provider == "anthropic":
         return get_tools_anthropic(max_parallel_workers)
+    elif provider == "google":
+        return get_tools_gemini(max_parallel_workers)
     else:
         raise ValueError(f"Unsupported provider: {provider}")
