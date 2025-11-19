@@ -11,8 +11,9 @@ import weave
 from weave.trace.util import ThreadPoolExecutor
 
 from project_config import get_config
-from tools.helpers import call_llm_with_retry, call_llm_with_retry_google
+from tools.helpers import call_llm_with_retry, call_llm_with_retry_anthropic, call_llm_with_retry_google
 from tools.generate_paper_summary import PaperSummaryClient
+from utils.llm_utils import detect_provider, extract_text_from_response
 from prompts.model_recommender_agent import (
     model_selector_system_prompt,
     model_refiner_system_prompt,
@@ -159,6 +160,60 @@ class ModelRecommenderAgent:
 
         return inputs
 
+    def _call_model_selector(self, system_prompt: str, messages: list, text_format=None):
+        """Call the model selector with automatic provider detection.
+
+        Args:
+            system_prompt: System instruction
+            messages: List of message dicts
+            text_format: Optional Pydantic model for structured outputs
+
+        Returns:
+            Tuple of (response, provider)
+        """
+        provider = detect_provider(_MODEL_SELECTOR_MODEL)
+
+        if provider == "openai":
+            response = call_llm_with_retry(
+                model=_MODEL_SELECTOR_MODEL,
+                instructions=system_prompt,
+                tools=[],
+                messages=messages,
+                web_search_enabled=_ENABLE_WEB_SEARCH,
+                text_format=text_format,
+            )
+        elif provider == "anthropic":
+            response = call_llm_with_retry_anthropic(
+                model=_MODEL_SELECTOR_MODEL,
+                instructions=system_prompt,
+                tools=[],
+                messages=messages,
+                web_search_enabled=_ENABLE_WEB_SEARCH,
+                text_format=text_format,
+            )
+        else:
+            raise ValueError(f"Unsupported provider: {provider}")
+
+        return response, provider
+
+    def _get_structured_output(self, response, provider):
+        """Extract structured output from response based on provider.
+
+        Args:
+            response: LLM response object
+            provider: "openai" or "anthropic"
+
+        Returns:
+            Pydantic model instance or None
+        """
+        if provider == "openai":
+            if hasattr(response, 'output_parsed') and response.output_parsed:
+                return response.output_parsed
+        elif provider == "anthropic":
+            if hasattr(response, 'parsed_output') and response.parsed_output:
+                return response.parsed_output
+        return None
+
     @weave.op()
     def _recommend_preprocessing(self, model_name: str) -> Dict[str, Any]:
         """Get preprocessing recommendations for a model."""
@@ -177,23 +232,19 @@ class ModelRecommenderAgent:
         messages = [{"role": "user", "content": user_prompt}]
 
         try:
-            response = call_llm_with_retry(
-                model=_MODEL_SELECTOR_MODEL,
-                instructions=system_prompt,
-                tools=[],
-                messages=messages,
-                web_search_enabled=_ENABLE_WEB_SEARCH,
-            )
+            response, provider = self._call_model_selector(system_prompt, messages)
+
+            # Extract text from response (works for both providers)
+            response_text = extract_text_from_response(response, provider)
 
             # Parse JSON from response text
-            if not response or not response.output_text:
+            if not response_text:
                 logger.warning("[%s] No response for preprocessing", model_name)
                 return {}
 
             # Extract JSON from code blocks
             import re
             import json
-            response_text = response.output_text
             json_pattern = r'```json\s*(.*?)\s*```'
             matches = re.findall(json_pattern, response_text, re.DOTALL)
 
@@ -221,24 +272,21 @@ class ModelRecommenderAgent:
             research_plan=self.inputs.get("plan"),
         )
 
-        system_prompt = loss_function_system_prompt()
+        time_limit_minutes = int(_BASELINE_CODE_TIMEOUT / 60)
+        system_prompt = loss_function_system_prompt(time_limit_minutes=time_limit_minutes)
         messages = [{"role": "user", "content": user_prompt}]
 
         try:
-            response = call_llm_with_retry(
-                model=_MODEL_SELECTOR_MODEL,
-                instructions=system_prompt,
-                tools=[],
-                messages=messages,
-                web_search_enabled=_ENABLE_WEB_SEARCH,
-                text_format=LossFunctionRecommendations,
+            response, provider = self._call_model_selector(
+                system_prompt, messages, text_format=LossFunctionRecommendations
             )
 
-            if not response or not hasattr(response, 'output_parsed') or not response.output_parsed:
+            parsed = self._get_structured_output(response, provider)
+            if not parsed:
                 logger.warning("[%s] No structured output for loss function", model_name)
                 return {}
 
-            result = response.output_parsed.model_dump()
+            result = parsed.model_dump()
             logger.info("[%s] Successfully parsed loss function recommendations", model_name)
             return result
 
@@ -257,24 +305,21 @@ class ModelRecommenderAgent:
             research_plan=self.inputs.get("plan"),
         )
 
-        system_prompt = hyperparameter_tuning_system_prompt()
+        time_limit_minutes = int(_BASELINE_CODE_TIMEOUT / 60)
+        system_prompt = hyperparameter_tuning_system_prompt(time_limit_minutes=time_limit_minutes)
         messages = [{"role": "user", "content": user_prompt}]
 
         try:
-            response = call_llm_with_retry(
-                model=_MODEL_SELECTOR_MODEL,
-                instructions=system_prompt,
-                tools=[],
-                messages=messages,
-                web_search_enabled=_ENABLE_WEB_SEARCH,
-                text_format=HyperparameterRecommendations,
+            response, provider = self._call_model_selector(
+                system_prompt, messages, text_format=HyperparameterRecommendations
             )
 
-            if not response or not hasattr(response, 'output_parsed') or not response.output_parsed:
+            parsed = self._get_structured_output(response, provider)
+            if not parsed:
                 logger.warning("[%s] No structured output for hyperparameters", model_name)
                 return {}
 
-            result = response.output_parsed.model_dump()
+            result = parsed.model_dump()
             logger.info("[%s] Successfully parsed hyperparameter recommendations", model_name)
             return result
 
@@ -293,24 +338,21 @@ class ModelRecommenderAgent:
             research_plan=self.inputs.get("plan"),
         )
 
-        system_prompt = inference_strategy_system_prompt()
+        inference_time_limit_minutes = int(_BASELINE_CODE_TIMEOUT / 60)
+        system_prompt = inference_strategy_system_prompt(inference_time_limit_minutes=inference_time_limit_minutes)
         messages = [{"role": "user", "content": user_prompt}]
 
         try:
-            response = call_llm_with_retry(
-                model=_MODEL_SELECTOR_MODEL,
-                instructions=system_prompt,
-                tools=[],
-                messages=messages,
-                web_search_enabled=_ENABLE_WEB_SEARCH,
-                text_format=InferenceStrategyRecommendations,
+            response, provider = self._call_model_selector(
+                system_prompt, messages, text_format=InferenceStrategyRecommendations
             )
 
-            if not response or not hasattr(response, 'output_parsed') or not response.output_parsed:
+            parsed = self._get_structured_output(response, provider)
+            if not parsed:
                 logger.warning("[%s] No structured output for inference strategies", model_name)
                 return {}
 
-            result = response.output_parsed.model_dump()
+            result = parsed.model_dump()
             logger.info("[%s] Successfully parsed inference strategy recommendations", model_name)
             return result
 
@@ -351,8 +393,8 @@ class ModelRecommenderAgent:
             List of 8 final selected model names
         """
         # STAGE 1: Select 16 candidate models
-        time_limit_hours = _BASELINE_CODE_TIMEOUT / 3600
-        system_prompt = model_selector_system_prompt(time_limit_hours=time_limit_hours)
+        time_limit_minutes = int(_BASELINE_CODE_TIMEOUT / 60)
+        system_prompt = model_selector_system_prompt(time_limit_minutes=time_limit_minutes)
 
         user_prompt = build_user_prompt(
             description=self.inputs["description"],
@@ -364,33 +406,27 @@ class ModelRecommenderAgent:
 
         messages = [{"role": "user", "content": user_prompt}]
 
-        response = call_llm_with_retry(
-            model=_MODEL_SELECTOR_MODEL,
-            instructions=system_prompt,
-            tools=[],
-            messages=messages,
-            web_search_enabled=_ENABLE_WEB_SEARCH,
-            text_format=ModelSelection,
+        response, provider = self._call_model_selector(
+            system_prompt, messages, text_format=ModelSelection
         )
 
         # Parse Stage 1 response
         try:
-            if not response or not hasattr(response, 'output_parsed') or not response.output_parsed:
+            parsed = self._get_structured_output(response, provider)
+            if not parsed:
                 logger.warning("No structured output received, using default models")
-                return _DEFAULT_MODELS
-
-            parsed = response.output_parsed
+                return []
 
             if not parsed.recommended_models:
                 logger.warning("No models in recommended_models array, using default models")
-                return _DEFAULT_MODELS
+                return []
 
             # Extract candidate model names (should be 16)
             candidate_models = [model.name.strip() for model in parsed.recommended_models if model.name.strip()]
 
             if not candidate_models:
                 logger.warning("No valid model names extracted, using default models")
-                return _DEFAULT_MODELS
+                return []
 
             logger.info("Stage 1: Selected %d candidate models", len(candidate_models))
 
@@ -432,7 +468,7 @@ class ModelRecommenderAgent:
 
         except Exception as e:
             logger.error("Error in model selection: %s, using default models", e)
-            return _DEFAULT_MODELS
+            return []
 
     @weave.op()
     def _fetch_paper_summaries(self, model_names: list[str]) -> Dict[str, str]:
@@ -502,6 +538,8 @@ class ModelRecommenderAgent:
         """
         logger.info("Starting model refinement: %d candidates -> 8 final models", len(candidate_models))
 
+        time_limit_minutes = int(_BASELINE_CODE_TIMEOUT / 60)
+
         # Build prompts from prompts module
         user_prompt = build_refiner_user_prompt(
             description=self.inputs["description"],
@@ -510,9 +548,10 @@ class ModelRecommenderAgent:
             research_plan=self.inputs.get("plan"),
             candidate_models=candidate_models,
             summaries=summaries,
+            time_limit_minutes=time_limit_minutes,
         )
 
-        system_instruction = model_refiner_system_prompt()
+        system_instruction = model_refiner_system_prompt(time_limit_minutes=time_limit_minutes)
 
         # Call Gemini 2.5 Pro with structured output
         try:

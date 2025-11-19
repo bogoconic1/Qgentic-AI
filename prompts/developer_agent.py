@@ -26,11 +26,27 @@ def _get_hard_constraints(model_name: str, allow_multi_fold: bool = False) -> st
     )
 
 
-def build_system(description: str, directory_listing: str, model_name: str, model_recommendations: str, slug: str, cpu_core_range: list[int] | None = None, gpu_identifier: str | None = None, gpu_isolation_mode: str = "none", allow_multi_fold: bool = False) -> str:
+def build_system(description: str, directory_listing: str, model_name: str, slug: str, cpu_core_range: list[int] | None = None, gpu_identifier: str | None = None, gpu_isolation_mode: str = "none", allow_multi_fold: bool = False, hitl_instructions: list[str] | None = None) -> str:
     # Build resource allocation info
     resource_info = ""
     if cpu_core_range is not None:
         resource_info = f"\nNumber of CPUs: {len(cpu_core_range)} cores"
+
+    # Build HITL instructions section if provided
+    hitl_section = ""
+    if hitl_instructions and len(hitl_instructions) > 0:
+        hitl_items = "\n".join([f"{i+1}. {instr}" for i, instr in enumerate(hitl_instructions)])
+        hitl_section = f"""
+# Human-In-The-Loop Instructions
+
+You have been provided with the following guidance for code implementation:
+
+{hitl_items}
+
+**These instructions should guide your implementation choices, model configuration, and training strategies. Incorporate them while following all hard constraints.**
+
+---
+"""
 
     constraints = _get_hard_constraints(model_name, allow_multi_fold=allow_multi_fold)
 
@@ -42,15 +58,12 @@ You should perform web searches to determine how to set up and configure `{model
 
 ---
 **Training and Inference Environment:**
-Single GPU (24GB VRAM) {resource_info}
+Single GPU (40GB VRAM) {resource_info}
 
 **Model Name:**
 `{model_name}`
 
-**Model Recommendations:**
-{model_recommendations}
-
-{constraints}
+{hitl_section}{constraints}
 ---
 
 Before any significant tool call or external library use, state the purpose and minimal inputs required, and validate actions after key steps with a 1-2 line summary. If a step fails (e.g., CUDA unavailable), state the limitation clearly and proceed conservatively where allowed.
@@ -108,10 +121,20 @@ def build_user(
     submission_path: str | Path,
     threshold_directive: str = "",
     version: int = 1,
+    model_recommendations: str = "",
 ) -> str:
     models_dir = f"{outputs_dir}/models_{version}"
-    base = f"""
-Project structure:
+
+    # Build model recommendations section (only for version 1)
+    recommendations_section = ""
+    if version == 1 and model_recommendations:
+        recommendations_section = f"""
+**Model Recommendations:**
+{model_recommendations}
+
+"""
+
+    base = f"""{recommendations_section}Project structure:
 - Base data dir: {base_dir}
 - Outputs dir: {outputs_dir}
 - The logs should be written to a file named {log_path}
@@ -179,6 +202,3 @@ def execution_failure_suffix(next_log_path: str | Path, next_submission_path: st
         f"- save validation predictions to {models_dir}/valid_preds.csv\n"
         f"- save models to {models_dir}/"
     )
-
-
-

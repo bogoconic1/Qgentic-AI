@@ -14,7 +14,8 @@ import yaml
 import pandas as pd
 import weave
 from project_config import get_config
-from tools.helpers import call_llm_with_retry, _build_directory_listing
+from tools.helpers import call_llm_with_retry, call_llm_with_retry_anthropic, _build_directory_listing
+from utils.llm_utils import detect_provider, extract_text_from_response
 from tools.generate_paper_summary import PaperSummaryClient
 from prompts.tools_researcher import (
     ask_eda_template as prompt_ask_eda,
@@ -87,17 +88,40 @@ def ask_eda(question: str, description: str, data_path: str, max_attempts: int |
     # Add the current question
     input_list.append({"role": "user", "content": "Question: " + question})
 
+    # Detect provider from model name
+    provider = detect_provider(_RESEARCHER_TOOL_OFFLINE_MODEL)
+
     for attempt in range(1, attempts + 1):
         logger.info("ask_eda attempt %s/%s", attempt, attempts)
-        response = call_llm_with_retry(
-            model=_RESEARCHER_TOOL_OFFLINE_MODEL,
-            instructions=PROMPT,
-            tools=[],
-            messages=input_list,
-            web_search_enabled=True,
-        )
-        response_text = response.output_text or ""
-        input_list += response.output
+
+        if provider == "openai":
+            response = call_llm_with_retry(
+                model=_RESEARCHER_TOOL_OFFLINE_MODEL,
+                instructions=PROMPT,
+                tools=[],
+                messages=input_list,
+                web_search_enabled=True,
+            )
+            response_text = response.output_text or ""
+            input_list += response.output
+
+        elif provider == "anthropic":
+            response = call_llm_with_retry_anthropic(
+                model=_RESEARCHER_TOOL_OFFLINE_MODEL,
+                instructions=PROMPT,
+                tools=[],
+                messages=input_list,
+                web_search_enabled=True,
+            )
+            # Extract text from Anthropic response
+            response_text = extract_text_from_response(response, provider)
+            # Add assistant response to conversation history
+            # IMPORTANT: Keep ALL content blocks including web_search_result
+            # (needed for citations to work, even though they increase token usage)
+            input_list.append({"role": "assistant", "content": response.content})
+
+        else:
+            raise ValueError(f"Unsupported provider for ask_eda: {provider}")
 
         code = extract_python_code(response_text)
         logger.debug("ask_eda generated code (truncated): %s", code[:200] if code else "")
@@ -178,6 +202,9 @@ def download_external_datasets(question_1: str, question_2: str, question_3: str
     PROMPT = prompt_datasets()
     relevant_datasets = []
 
+    # Detect provider from model name
+    provider = detect_provider(_RESEARCHER_TOOL_ONLINE_MODEL)
+
     # Loop through 3 different query phrasings
     for q_idx, query in enumerate([question_1, question_2, question_3], start=1):
         logger.info("Processing query phrasing %s/3: %s", q_idx, query)
@@ -186,24 +213,47 @@ def download_external_datasets(question_1: str, question_2: str, question_3: str
         # For each query, retry up to 'attempts' times
         for attempt in range(1, attempts + 1):
             logger.info("Dataset discovery attempt %s/%s for query %s", attempt, attempts, q_idx)
-            response = call_llm_with_retry(
-                model=_RESEARCHER_TOOL_ONLINE_MODEL,
-                instructions=PROMPT,
-                tools=[],
-                messages=input_list,
-                web_search_enabled=True,
-                text_format=DatasetDiscovery,
-            )
 
-            # Use structured output parsing
-            if response and hasattr(response, 'output_parsed') and response.output_parsed:
-                new_datasets = response.output_parsed.datasets
-                logger.info("Query %s found %s datasets: %s", q_idx, len(new_datasets), new_datasets)
-                relevant_datasets.extend(new_datasets)
-                break  # Success, move to next query
+            if provider == "openai":
+                response = call_llm_with_retry(
+                    model=_RESEARCHER_TOOL_ONLINE_MODEL,
+                    instructions=PROMPT,
+                    tools=[],
+                    messages=input_list,
+                    web_search_enabled=True,
+                    text_format=DatasetDiscovery,
+                )
+                # Use structured output parsing
+                if response and hasattr(response, 'output_parsed') and response.output_parsed:
+                    new_datasets = response.output_parsed.datasets
+                    logger.info("Query %s found %s datasets: %s", q_idx, len(new_datasets), new_datasets)
+                    relevant_datasets.extend(new_datasets)
+                    break  # Success, move to next query
+                else:
+                    logger.warning("No valid structured output for query %s attempt %s.", q_idx, attempt)
+                    continue
+
+            elif provider == "anthropic":
+                response = call_llm_with_retry_anthropic(
+                    model=_RESEARCHER_TOOL_ONLINE_MODEL,
+                    instructions=PROMPT,
+                    tools=[],
+                    messages=input_list,
+                    web_search_enabled=True,
+                    text_format=DatasetDiscovery,
+                )
+                # Use structured output parsing (Anthropic has .parsed_output)
+                if response and hasattr(response, 'parsed_output') and response.parsed_output:
+                    new_datasets = response.parsed_output.datasets
+                    logger.info("Query %s found %s datasets: %s", q_idx, len(new_datasets), new_datasets)
+                    relevant_datasets.extend(new_datasets)
+                    break  # Success, move to next query
+                else:
+                    logger.warning("No valid structured output for query %s attempt %s.", q_idx, attempt)
+                    continue
+
             else:
-                logger.warning("No valid structured output for query %s attempt %s.", q_idx, attempt)
-                continue
+                raise ValueError(f"Unsupported provider for download_external_datasets: {provider}")
 
     # Deduplicate datasets
     relevant_datasets = list(set(relevant_datasets))
@@ -327,79 +377,3 @@ def scrape_web_page(url: str) -> str:
     except Exception as e:
         logger.exception("Failed to scrape web page: %s", url)
         return f"Error scraping page: {str(e)}"
-
-
-def get_tools(max_parallel_workers: int = 1):
-    return [
-        {
-            "type": "function",
-            "name": "ask_eda",
-            "description": "Ask a question to the EDA expert",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "question": {"type": "string", "description": "The question to ask the EDA expert"}
-                },
-            },
-            "additionalProperties": False,
-            "required": ['question']
-        },
-        {
-            "type": "function",
-            "name": "run_ab_test",
-            "description": f"Run A/B tests to validate modeling or feature engineering choices by comparing their impact on performance. You can ask up to {max_parallel_workers} questions in parallel for efficiency.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "questions": {
-                        "type": "array",
-                        "description": f"List of A/B testing questions to run in parallel (max {max_parallel_workers}). Each question should be a comparison test",
-                        "items": {"type": "string"},
-                    }
-                },
-            },
-            "additionalProperties": False,
-            "required": ['questions']
-        },
-        {
-            "type": "function",
-            "name": "download_external_datasets",
-            "description": "Download external data to working directory by searching with 3 different phrasings to maximize search coverage",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "question_1": {"type": "string", "description": "First phrasing of the dataset query"},
-                    "question_2": {"type": "string", "description": "Second phrasing with different wording"},
-                    "question_3": {"type": "string", "description": "Third phrasing using alternative keywords"}
-                },
-            },
-            "additionalProperties": False,
-            "required": ["question_1", "question_2", "question_3"],
-        },
-        {
-            "type": "function",
-            "name": "read_research_paper",
-            "description": "Read and summarize a research paper from arxiv. Returns structured markdown summary with Abstract, Introduction, Related Work, Method/Architecture, Experiments/Results, and Conclusion sections.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "arxiv_link": {"type": "string", "description": "ArXiv paper link (e.g., 'https://arxiv.org/pdf/2510.22916' or just '2510.22916')"}
-                },
-            },
-            "additionalProperties": False,
-            "required": ["arxiv_link"],
-        },
-        {
-            "type": "function",
-            "name": "scrape_web_page",
-            "description": "Scrape a web page and return markdown content. Useful for reading blog posts, documentation, technical tutorials, and other domain-specific web content that complements arxiv papers.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "url": {"type": "string", "description": "The webpage URL to scrape (e.g., 'https://developer.nvidia.com/blog/...')"}
-                },
-            },
-            "additionalProperties": False,
-            "required": ["url"],
-        },
-    ]

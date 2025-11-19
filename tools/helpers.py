@@ -146,6 +146,218 @@ def call_llm_with_retry(
     return result
 
 @weave.op()
+def call_llm_with_retry_anthropic_helper(
+    model: str,
+    instructions: str,
+    tools: list,
+    messages: list,
+    max_retries: int | None = None,
+    web_search_enabled: bool = False,
+    text_format = None,
+    max_tokens: int = 16384,
+):
+    """Helper function to call Anthropic API with retry logic.
+
+    Args:
+        model: Anthropic model name (e.g., "claude-sonnet-4-5-20250929")
+        instructions: System instruction/prompt
+        tools: List of tools in Anthropic format
+        messages: List of message dicts with 'role' and 'content'
+        max_retries: Maximum number of retries (default from config)
+        web_search_enabled: Whether to enable web search tool
+        text_format: Optional Pydantic model for structured outputs
+        max_tokens: Maximum tokens to generate (default: 8192)
+
+    Returns:
+        Anthropic response object or None on failure
+        - Regular response: has .content, .stop_reason, .usage
+        - Structured response: also has .parsed_output
+    """
+    try:
+        from anthropic import Anthropic, APIError, RateLimitError, APIConnectionError, InternalServerError, APIStatusError
+    except ImportError as e:
+        logging.error(f"Failed to import anthropic: {e}")
+        return None
+
+    client = Anthropic(api_key=os.environ.get('ANTHROPIC_API_KEY'))
+    cfg = get_config()
+    runtime_cfg = cfg.get("runtime")
+    retries = max_retries or runtime_cfg.get("llm_max_retries")
+    if retries < 1:
+        retries = 1
+
+    # Add web search tool if enabled (don't mutate caller's tools list)
+    if web_search_enabled:
+        WEB_SEARCH_TOOL = {
+            "type": "web_search_20250305",
+            "name": "web_search",
+            "max_uses": 20
+        }
+        tools = tools + [WEB_SEARCH_TOOL]
+
+    for attempt in range(retries):
+        try:
+            if text_format is not None:
+                # Use beta API for structured outputs
+                response = client.beta.messages.parse(
+                    model=model,
+                    betas=["structured-outputs-2025-11-13"],
+                    system=instructions,
+                    messages=messages,
+                    max_tokens=max_tokens,
+                    output_format=text_format,
+                    tools=tools if tools else [],
+                )
+            else:
+                # Use regular messages API
+                response = client.messages.create(
+                    model=model,
+                    system=instructions,
+                    messages=messages,
+                    max_tokens=max_tokens,
+                    tools=tools if tools else [],
+                )
+            return response
+
+        except RateLimitError as e:
+            if attempt < retries - 1:
+                wait_time = 2**attempt
+                logging.info(f"Anthropic rate limit. Retry {attempt + 1}/{retries} in {wait_time}s...")
+                time.sleep(wait_time)
+                continue
+            else:
+                logging.error(f"Anthropic rate limit exceeded: {e}")
+                return None
+
+        except APIConnectionError as e:
+            if attempt < retries - 1:
+                wait_time = 2**attempt
+                logging.info(f"Anthropic connection error. Retry {attempt + 1}/{retries} in {wait_time}s...")
+                time.sleep(wait_time)
+                continue
+            else:
+                logging.error(f"Anthropic connection failed: {e}")
+                return None
+
+        except InternalServerError as e:
+            if attempt < retries - 1:
+                wait_time = 2**attempt
+                logging.info(f"Anthropic server error. Retry {attempt + 1}/{retries} in {wait_time}s...")
+                time.sleep(wait_time)
+                continue
+            else:
+                logging.error(f"Anthropic server error: {e}")
+                return None
+
+        except APIStatusError as e:
+            # Other API errors (4xx, etc.)
+            logging.error(f"Anthropic API status error: {e}")
+            if attempt < retries - 1:
+                wait_time = 2**attempt
+                time.sleep(wait_time)
+                continue
+            return None
+
+        except APIError as e:
+            # General API errors
+            logging.error(f"Anthropic API error: {e}")
+            if attempt < retries - 1:
+                wait_time = 2**attempt
+                time.sleep(wait_time)
+                continue
+            return None
+
+        except Exception as e:
+            logging.error(f"Unexpected error calling Anthropic: {e}")
+            if attempt < retries - 1:
+                wait_time = 2**attempt
+                time.sleep(wait_time)
+                continue
+            return None
+
+    return None
+
+@weave.op()
+def call_llm_with_retry_anthropic(
+    model: str,
+    instructions: str,
+    tools: list,
+    messages: list,
+    max_retries: int | None = None,
+    web_search_enabled: bool = False,
+    text_format = None,
+    max_tokens: int = 16384,
+):
+    """Call Anthropic API with comprehensive retry logic.
+
+    This function wraps call_llm_with_retry_anthropic_helper with an outer retry loop,
+    attempting up to 40 times before giving up.
+
+    Args:
+        model: Anthropic model name (e.g., "claude-sonnet-4-5-20250929")
+        instructions: System instruction/prompt
+        tools: List of tools in Anthropic format
+        messages: List of message dicts with 'role' and 'content'
+        max_retries: Maximum number of retries per attempt (default from config)
+        web_search_enabled: Whether to enable web search tool
+        text_format: Optional Pydantic model for structured outputs
+        max_tokens: Maximum tokens to generate (default: 8192)
+
+    Returns:
+        Anthropic response object
+        - Regular response: has .content, .stop_reason, .usage
+        - Structured response: also has .parsed_output
+
+    Raises:
+        ValueError: If all retries fail after 40 attempts
+
+    Example:
+        # Regular call
+        response = call_llm_with_retry_anthropic(
+            model="claude-sonnet-4-5-20250929",
+            instructions="You are a helpful assistant.",
+            tools=[],
+            messages=[{"role": "user", "content": "Hello"}],
+        )
+        text = response.content[0].text
+
+        # Structured output call
+        from pydantic import BaseModel
+        class Output(BaseModel):
+            answer: str
+
+        response = call_llm_with_retry_anthropic(
+            model="claude-sonnet-4-5-20250929",
+            instructions="Extract the answer.",
+            tools=[],
+            messages=[{"role": "user", "content": "What is 2+2?"}],
+            text_format=Output,
+        )
+        result = response.parsed_output
+        print(result.answer)
+    """
+    result = None
+
+    for _ in range(40):
+        result = call_llm_with_retry_anthropic_helper(
+            model=model,
+            instructions=instructions,
+            tools=tools,
+            messages=messages,
+            max_retries=max_retries,
+            web_search_enabled=web_search_enabled,
+            text_format=text_format,
+            max_tokens=max_tokens,
+        )
+        if result is not None:
+            break
+
+    if result is None:
+        raise ValueError("Anthropic call failed after 40 retries")
+
+    return result
+
+@weave.op()
 def call_llm_with_retry_google_helper(
     model: str,
     system_instruction: str,

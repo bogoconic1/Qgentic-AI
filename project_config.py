@@ -51,6 +51,9 @@ _DEFAULT_CONFIG: dict[str, Any] = {
         "hitl_models": [],
         "enable_web_search": True,
     },
+    "developer": {
+        "hitl_instructions": [],
+    },
 }
 
 

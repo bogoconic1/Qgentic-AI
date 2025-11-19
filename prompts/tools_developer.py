@@ -366,4 +366,3 @@ def sota_user(
 
 {context}
 """
-
