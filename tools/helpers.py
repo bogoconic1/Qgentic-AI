@@ -381,12 +381,11 @@ def call_llm_with_retry_anthropic(
 def call_llm_with_retry_google_helper(
     model: str,
     system_instruction: str,
-    user_prompt: str | list = None,
+    messages: str | list = None,
     text_format = None,
     temperature: float = 1.0,
     max_retries: int | None = None,
     enable_google_search: bool = False,
-    enable_url_context: bool = False,
     top_p: float = 1.0,
     thinking_budget: int | None = None,
     thinking_level: str | None = None,
@@ -398,12 +397,11 @@ def call_llm_with_retry_google_helper(
     Args:
         model: Gemini model name (e.g., "gemini-3-pro-preview", "gemini-2.5-pro")
         system_instruction: System instruction text
-        user_prompt: User prompt text (str) or multi-turn conversation (list of dicts)
+        messages: User prompt text (str) or multi-turn conversation (list of dicts)
         text_format: Optional Pydantic model for structured output schema. If None, returns raw text.
         temperature: Temperature for generation (default: 1.0)
         max_retries: Maximum number of retries
         enable_google_search: Enable Google Search tool
-        enable_url_context: Enable URL context tool for reading web pages
         top_p: Nucleus sampling parameter (default: 1.0)
         thinking_budget: Thinking budget in tokens for Gemini 2.5 (128-32768, -1 for dynamic)
         thinking_level: Thinking level for Gemini 3 ("low" or "high")
@@ -438,14 +436,17 @@ def call_llm_with_retry_google_helper(
         try:
             client = genai.Client()
 
-            # Build tools list
+            # Build tools list - combine into single Tool object
             tools = []
+            tool_params = {}
             if enable_google_search:
-                tools.append(types.Tool(google_search=types.GoogleSearch()))
-            if enable_url_context:
-                tools.append(types.Tool(url_context=types.UrlContext()))
+                tool_params["google_search"] = types.GoogleSearch()
             if function_declarations:
-                tools.append(types.Tool(function_declarations=function_declarations))
+                tool_params["function_declarations"] = function_declarations
+
+            # Create single Tool object with all tools combined
+            if tool_params:
+                tools = [types.Tool(**tool_params)]
 
             # Build config params
             config_params = {
@@ -471,17 +472,9 @@ def call_llm_with_retry_google_helper(
                 config_params["response_mime_type"] = "application/json"
                 config_params["response_json_schema"] = text_format.model_json_schema()
 
-            # Handle user_prompt: can be string or list (multi-turn)
-            if isinstance(user_prompt, str):
-                contents = user_prompt
-            elif isinstance(user_prompt, list):
-                contents = user_prompt
-            else:
-                contents = user_prompt
-
             response = client.models.generate_content(
                 model=model,
-                contents=contents,
+                contents=messages,
                 config=types.GenerateContentConfig(**config_params),
             )
 
@@ -498,8 +491,8 @@ def call_llm_with_retry_google_helper(
                     parsed_result = text_format.model_validate_json(cleaned_text)
                     return parsed_result
             else:
-                # Unstructured output - return raw text
-                return response.text
+                # Return full response object (needed for function calling)
+                return response
 
         except Exception as e:
             if attempt < retries - 1:
@@ -517,12 +510,11 @@ def call_llm_with_retry_google_helper(
 def call_llm_with_retry_google(
     model: str,
     system_instruction: str,
-    user_prompt: str | list = None,
+    messages: str | list = None,
     text_format = None,
     temperature: float = 1.0,
     max_retries: int | None = None,
     enable_google_search: bool = False,
-    enable_url_context: bool = False,
     top_p: float = 1.0,
     thinking_budget: int | None = None,
     thinking_level: str | None = None,
@@ -542,12 +534,11 @@ def call_llm_with_retry_google(
     Args:
         model: Gemini model name (e.g., "gemini-3-pro-preview", "gemini-2.5-pro")
         system_instruction: System instruction text
-        user_prompt: User prompt text (str) or multi-turn conversation (list)
+        messages: User prompt text (str) or multi-turn conversation (list)
         text_format: Optional Pydantic model for structured output. If None, returns raw text.
         temperature: Temperature for generation (default: 1.0)
         max_retries: Maximum number of retries per attempt
         enable_google_search: Enable Google Search tool (Gemini native)
-        enable_url_context: Enable URL context tool for reading web pages (Gemini native)
         top_p: Nucleus sampling parameter (default: 1.0)
         thinking_budget: Thinking budget in tokens for Gemini 2.5 (128-32768, -1 for dynamic)
         thinking_level: Thinking level for Gemini 3 ("low" or "high")
@@ -560,47 +551,6 @@ def call_llm_with_retry_google(
 
     Raises:
         ValueError: If all retries fail after 40 attempts
-
-    Examples:
-        # Basic text generation
-        response = call_llm_with_retry_google(
-            model="gemini-3-pro-preview",
-            system_instruction="You are a helpful assistant.",
-            user_prompt="Explain quantum computing."
-        )
-
-        # With Google Search
-        response = call_llm_with_retry_google(
-            model="gemini-3-pro-preview",
-            system_instruction="Research assistant",
-            user_prompt="What are the latest AI developments in 2025?",
-            enable_google_search=True,
-            enable_url_context=True,
-        )
-
-        # With thinking mode (Gemini 3)
-        response = call_llm_with_retry_google(
-            model="gemini-3-pro-preview",
-            system_instruction="Math tutor",
-            user_prompt="Solve this complex problem...",
-            thinking_level="high",
-            include_thoughts=True,
-        )
-
-        # Structured output
-        from pydantic import BaseModel
-        class Analysis(BaseModel):
-            summary: str
-            score: float
-
-        result = call_llm_with_retry_google(
-            model="gemini-3-pro-preview",
-            system_instruction="Analyze this data",
-            user_prompt="...",
-            text_format=Analysis,
-            enable_google_search=True,
-        )
-        print(result.summary, result.score)
     """
     result = None
 
@@ -608,12 +558,11 @@ def call_llm_with_retry_google(
         result = call_llm_with_retry_google_helper(
             model=model,
             system_instruction=system_instruction,
-            user_prompt=user_prompt,
+            messages=messages,
             text_format=text_format,
             temperature=temperature,
             max_retries=max_retries,
             enable_google_search=enable_google_search,
-            enable_url_context=enable_url_context,
             top_p=top_p,
             thinking_budget=thinking_budget,
             thinking_level=thinking_level,
