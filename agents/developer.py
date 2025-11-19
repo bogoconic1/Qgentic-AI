@@ -233,7 +233,6 @@ class DeveloperAgent:
             description=self.description,
             directory_listing=directory_listing,
             model_name=self.model_name,
-            model_recommendations=self.model_recommendations,
             slug=self.slug,
             cpu_core_range=self.cpu_core_range,
             gpu_identifier=self.gpu_identifier,
@@ -255,6 +254,7 @@ class DeveloperAgent:
             submission_path=submission_path_display,
             threshold_directive=self.threshold_directive,
             version=version,
+            model_recommendations=self.model_recommendations,
         )
 
     def _format_later_recommendations(self) -> str:
@@ -1134,7 +1134,6 @@ class DeveloperAgent:
             attempt += 1
 
             # Rebuild system prompt for attempt 2+ to enable multi-fold training (unless already enabled)
-            # Also removes model recommendations from attempt 2 onwards
             if attempt == 2 and not initial_allow_multi_fold:
                 self.logger.info("Rebuilding system prompt for attempt 2+ with multi-fold enabled")
                 system_prompt = self._compose_system(allow_multi_fold=True)

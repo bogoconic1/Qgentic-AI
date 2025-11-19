@@ -26,7 +26,7 @@ def _get_hard_constraints(model_name: str, allow_multi_fold: bool = False) -> st
     )
 
 
-def build_system(description: str, directory_listing: str, model_name: str, model_recommendations: str, slug: str, cpu_core_range: list[int] | None = None, gpu_identifier: str | None = None, gpu_isolation_mode: str = "none", allow_multi_fold: bool = False, hitl_instructions: list[str] | None = None) -> str:
+def build_system(description: str, directory_listing: str, model_name: str, slug: str, cpu_core_range: list[int] | None = None, gpu_identifier: str | None = None, gpu_isolation_mode: str = "none", allow_multi_fold: bool = False, hitl_instructions: list[str] | None = None) -> str:
     # Build resource allocation info
     resource_info = ""
     if cpu_core_range is not None:
@@ -62,9 +62,6 @@ Single GPU (40GB VRAM) {resource_info}
 
 **Model Name:**
 `{model_name}`
-
-**Model Recommendations:**
-{model_recommendations}
 
 {hitl_section}{constraints}
 ---
@@ -124,10 +121,20 @@ def build_user(
     submission_path: str | Path,
     threshold_directive: str = "",
     version: int = 1,
+    model_recommendations: str = "",
 ) -> str:
     models_dir = f"{outputs_dir}/models_{version}"
-    base = f"""
-Project structure:
+
+    # Build model recommendations section (only for version 1)
+    recommendations_section = ""
+    if version == 1 and model_recommendations:
+        recommendations_section = f"""
+**Model Recommendations:**
+{model_recommendations}
+
+"""
+
+    base = f"""{recommendations_section}Project structure:
 - Base data dir: {base_dir}
 - Outputs dir: {outputs_dir}
 - The logs should be written to a file named {log_path}
