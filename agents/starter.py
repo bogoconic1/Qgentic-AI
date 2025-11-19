@@ -91,10 +91,11 @@ class StarterAgent:
         # Use structured output parsing
         suggestions: Dict[str, Any] = {}
         try:
-            if not response or not hasattr(response, 'output_parsed') or not response.output_parsed:
+            if not response:
                 raise ValueError("No structured output received from model")
 
-            parsed = response.output_parsed
+            # Response is already parsed Pydantic object
+            parsed = response
 
             # Validate and normalize task_types (list)
             if not parsed.task_types:

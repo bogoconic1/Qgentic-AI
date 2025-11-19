@@ -420,7 +420,7 @@ Produce a JSON object:
     provider = detect_provider(_ENSEMBLER_MODEL)
 
     if provider == "openai":
-        response = call_llm_with_retry(
+        parsed = call_llm_with_retry(
             model=_ENSEMBLER_MODEL,
             instructions=system_prompt,
             tools=[],
@@ -428,9 +428,8 @@ Produce a JSON object:
             web_search_enabled=True,
             text_format=EnsembleStrategies,
         )
-        parsed = response.output_parsed if (response and hasattr(response, 'output_parsed') and response.output_parsed) else None
     elif provider == "anthropic":
-        response = call_llm_with_retry_anthropic(
+        parsed = call_llm_with_retry_anthropic(
             model=_ENSEMBLER_MODEL,
             instructions=system_prompt,
             tools=[],
@@ -438,7 +437,6 @@ Produce a JSON object:
             web_search_enabled=True,
             text_format=EnsembleStrategies,
         )
-        parsed = response.parsed_output if (response and hasattr(response, 'parsed_output') and response.parsed_output) else None
     else:
         raise ValueError(f"Unsupported provider: {provider}")
 

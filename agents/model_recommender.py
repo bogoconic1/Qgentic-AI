@@ -206,13 +206,8 @@ class ModelRecommenderAgent:
         Returns:
             Pydantic model instance or None
         """
-        if provider == "openai":
-            if hasattr(response, 'output_parsed') and response.output_parsed:
-                return response.output_parsed
-        elif provider == "anthropic":
-            if hasattr(response, 'parsed_output') and response.parsed_output:
-                return response.parsed_output
-        return None
+        # Response is already parsed Pydantic object when text_format is used
+        return response if response else None
 
     @weave.op()
     def _recommend_preprocessing(self, model_name: str) -> Dict[str, Any]:

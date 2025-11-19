@@ -92,6 +92,14 @@ def call_llm_with_retry_helper(
                     input=messages,
                     text_format=text_format,
                 )
+                # Return parsed Pydantic object directly
+                if hasattr(response, 'output_parsed') and response.output_parsed:
+                    return response.output_parsed
+                elif hasattr(response, 'parsed_output') and response.parsed_output:
+                    return response.parsed_output
+                else:
+                    logging.warning("OpenAI structured output response missing parsed object")
+                    return response
             else:
                 # Use regular responses API
                 response = client.responses.create(
@@ -100,7 +108,7 @@ def call_llm_with_retry_helper(
                     tools=tools,
                     input=messages,
                 )
-            return response
+                return response
         except openai.InternalServerError as e:
             if "504" in str(e) and attempt < retries - 1:
                 wait_time = 2**attempt
@@ -169,9 +177,9 @@ def call_llm_with_retry_anthropic_helper(
         max_tokens: Maximum tokens to generate (default: 8192)
 
     Returns:
-        Anthropic response object or None on failure
-        - Regular response: has .content, .stop_reason, .usage
-        - Structured response: also has .parsed_output
+        - If text_format provided: Parsed Pydantic model instance (direct object, not response.parsed_output)
+        - If text_format None: Anthropic response object with .content, .stop_reason, .usage
+        - On failure: None
     """
     try:
         from anthropic import Anthropic, APIError, RateLimitError, APIConnectionError, InternalServerError, APIStatusError
@@ -212,6 +220,12 @@ def call_llm_with_retry_anthropic_helper(
                         "budget_tokens": 4096
                     },
                 )
+                # Return parsed Pydantic object directly
+                if hasattr(response, 'parsed_output') and response.parsed_output:
+                    return response.parsed_output
+                else:
+                    logging.warning("Anthropic structured output response missing parsed_output")
+                    return response
             else:
                 # Use regular messages API
                 response = client.messages.create(
@@ -225,7 +239,7 @@ def call_llm_with_retry_anthropic_helper(
                         "budget_tokens": 4096
                     },
                 )
-            return response
+                return response
 
         except RateLimitError as e:
             if attempt < retries - 1:
@@ -312,9 +326,8 @@ def call_llm_with_retry_anthropic(
         max_tokens: Maximum tokens to generate (default: 8192)
 
     Returns:
-        Anthropic response object
-        - Regular response: has .content, .stop_reason, .usage
-        - Structured response: also has .parsed_output
+        - If text_format provided: Parsed Pydantic model instance (direct object)
+        - If text_format None: Anthropic response object with .content, .stop_reason, .usage
 
     Raises:
         ValueError: If all retries fail after 40 attempts
@@ -334,15 +347,14 @@ def call_llm_with_retry_anthropic(
         class Output(BaseModel):
             answer: str
 
-        response = call_llm_with_retry_anthropic(
+        result = call_llm_with_retry_anthropic(
             model="claude-sonnet-4-5-20250929",
             instructions="Extract the answer.",
             tools=[],
             messages=[{"role": "user", "content": "What is 2+2?"}],
             text_format=Output,
         )
-        result = response.parsed_output
-        print(result.answer)
+        print(result.answer)  # Direct access - result is already the Pydantic object!
     """
     result = None
 

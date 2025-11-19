@@ -223,9 +223,9 @@ def download_external_datasets(question_1: str, question_2: str, question_3: str
                     web_search_enabled=True,
                     text_format=DatasetDiscovery,
                 )
-                # Use structured output parsing
-                if response and hasattr(response, 'output_parsed') and response.output_parsed:
-                    new_datasets = response.output_parsed.datasets
+                # Response is already parsed Pydantic object
+                if response and hasattr(response, 'datasets'):
+                    new_datasets = response.datasets
                     logger.info("Query %s found %s datasets: %s", q_idx, len(new_datasets), new_datasets)
                     relevant_datasets.extend(new_datasets)
                     break  # Success, move to next query
@@ -242,9 +242,9 @@ def download_external_datasets(question_1: str, question_2: str, question_3: str
                     web_search_enabled=True,
                     text_format=DatasetDiscovery,
                 )
-                # Use structured output parsing (Anthropic has .parsed_output)
-                if response and hasattr(response, 'parsed_output') and response.parsed_output:
-                    new_datasets = response.parsed_output.datasets
+                # Response is already parsed Pydantic object
+                if response and hasattr(response, 'datasets'):
+                    new_datasets = response.datasets
                     logger.info("Query %s found %s datasets: %s", q_idx, len(new_datasets), new_datasets)
                     relevant_datasets.extend(new_datasets)
                     break  # Success, move to next query

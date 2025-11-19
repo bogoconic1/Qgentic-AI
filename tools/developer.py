@@ -108,11 +108,11 @@ def web_search_stack_trace(query: str) -> str:
             text_format=StackTraceSolution,
         )
 
-        # Use structured output
+        # Response is already parsed Pydantic object
         solution_text = ""
-        if response and hasattr(response, 'output_parsed') and response.output_parsed:
-            solution_text = response.output_parsed.reasoning_and_solution.strip()
-            logger.debug("Returning solution from structured output.")
+        if response and hasattr(response, 'reasoning_and_solution'):
+            solution_text = response.reasoning_and_solution.strip()
+            logger.debug("Returning solution from OpenAI structured output.")
             return query + "\n" + "This is how you can fix the error: \n" + solution_text
 
         # Fallback to raw output if structured parsing fails
@@ -130,16 +130,15 @@ def web_search_stack_trace(query: str) -> str:
             text_format=StackTraceSolution,
         )
 
-        # Use structured output
-        solution_text = ""
-        if response and hasattr(response, 'parsed_output') and response.parsed_output:
-            solution_text = response.parsed_output.reasoning_and_solution.strip()
+        # Response is already parsed Pydantic object
+        if response and hasattr(response, 'reasoning_and_solution'):
+            solution_text = response.reasoning_and_solution.strip()
             logger.debug("Returning solution from structured output.")
             return query + "\n" + "This is how you can fix the error: \n" + solution_text
 
-        # Fallback to raw output if structured parsing fails
+        # Fallback if not a Pydantic object (shouldn't happen with text_format)
+        logger.warning("Unexpected response type, attempting to extract text.")
         content = extract_text_from_response(response, provider)
-        logger.warning("Structured output parsing failed, falling back to raw content.")
         return query + "\n" + "This is how you can fix the error: \n" + content
 
     else:
@@ -398,9 +397,9 @@ def search_sota_suggestions(
 
             if not has_tool_calls:
                 # No tool calls, check if we have structured output
-                if hasattr(response, 'output_parsed') and response.output_parsed:
+                if response and hasattr(response, 'suggestion'):
                     logger.info("SOTA suggestions completed at step %d (no tool calls, structured output present)", step + 1)
-                    return response.output_parsed
+                    return response  # Already parsed Pydantic object
                 else:
                     # Need to get structured output - make final call
                     logger.info("SOTA suggestions completed at step %d (no tool calls), requesting structured output", step + 1)
@@ -412,7 +411,7 @@ def search_sota_suggestions(
                         web_search_enabled=True,
                         text_format=SOTAResponse,
                     )
-                    return response.output_parsed if (hasattr(response, 'output_parsed') and response.output_parsed) else None
+                    return response  # Already parsed Pydantic object
 
             # Execute tool calls
             for item in response.output:
@@ -482,9 +481,9 @@ def search_sota_suggestions(
 
             else:
                 # No tool use, check if we have structured output
-                if hasattr(response, 'parsed_output') and response.parsed_output:
+                if response and hasattr(response, 'suggestion'):
                     logger.info("SOTA suggestions completed at step %d (no tool use, structured output present)", step + 1)
-                    return response.parsed_output
+                    return response  # Already parsed Pydantic object
                 else:
                     # Need to get structured output - make final call
                     logger.info("SOTA suggestions completed at step %d (no tool use), requesting structured output", step + 1)
@@ -496,7 +495,7 @@ def search_sota_suggestions(
                         web_search_enabled=True,
                         text_format=SOTAResponse,
                     )
-                    return response.parsed_output if (hasattr(response, 'parsed_output') and response.parsed_output) else None
+                    return response  # Already parsed Pydantic object
 
         else:
             raise ValueError(f"Unsupported provider: {provider}")
@@ -513,7 +512,7 @@ def search_sota_suggestions(
             web_search_enabled=True,
             text_format=SOTAResponse,
         )
-        return response.output_parsed if (hasattr(response, 'output_parsed') and response.output_parsed) else None
+        return response  # Already parsed Pydantic object
     elif provider == "anthropic":
         response = call_llm_with_retry_anthropic(
             model=_DEVELOPER_TOOL_MODEL,
@@ -523,7 +522,7 @@ def search_sota_suggestions(
             web_search_enabled=True,
             text_format=SOTAResponse,
         )
-        return response.parsed_output if (hasattr(response, 'parsed_output') and response.parsed_output) else None
+        return response  # Already parsed Pydantic object
     else:
         raise ValueError(f"Unsupported provider: {provider}")
 
