@@ -216,8 +216,8 @@ class DeveloperAgent:
         self.is_lower_better = info.get("is_lower_better")
         self.logger.info("is_lower_better=%s", self.is_lower_better)
 
-    def _compose_system(self, allow_multi_fold: bool = False, version: int = 1) -> str:
-        self.logger.debug("Composing system prompt for slug=%s (allow_multi_fold=%s, version=%s)", self.slug, allow_multi_fold, version)
+    def _compose_system(self, allow_multi_fold: bool = False) -> str:
+        self.logger.debug("Composing system prompt for slug=%s (allow_multi_fold=%s)", self.slug, allow_multi_fold)
         with open(self.base_dir / "description.md", "r") as f:
             self.description = f.read()
         self.logger.debug("Description length: %s characters", len(self.description))
@@ -240,7 +240,6 @@ class DeveloperAgent:
             gpu_isolation_mode=self.gpu_isolation_mode,
             allow_multi_fold=allow_multi_fold,
             hitl_instructions=_HITL_INSTRUCTIONS,
-            version=version,
         )
 
     def _build_user_prompt(self, version: int) -> str:
@@ -1095,7 +1094,7 @@ class DeveloperAgent:
         initial_allow_multi_fold = _USE_VALIDATION_SCORE
         if initial_allow_multi_fold:
             self.logger.info("Multi-fold training enabled from start (use_validation_score=True)")
-        system_prompt = self._compose_system(allow_multi_fold=initial_allow_multi_fold, version=1)
+        system_prompt = self._compose_system(allow_multi_fold=initial_allow_multi_fold)
         user_prompt = self._build_user_prompt(version=1)
         input_list = [{"role": "user", "content": user_prompt}]
 
@@ -1137,11 +1136,8 @@ class DeveloperAgent:
             # Rebuild system prompt for attempt 2+ to enable multi-fold training (unless already enabled)
             # Also removes model recommendations from attempt 2 onwards
             if attempt == 2 and not initial_allow_multi_fold:
-                self.logger.info("Rebuilding system prompt for attempt 2+ with multi-fold enabled and recommendations removed")
-                system_prompt = self._compose_system(allow_multi_fold=True, version=attempt)
-            elif attempt == 2:
-                self.logger.info("Rebuilding system prompt for attempt 2+ to remove recommendations")
-                system_prompt = self._compose_system(allow_multi_fold=initial_allow_multi_fold, version=attempt)
+                self.logger.info("Rebuilding system prompt for attempt 2+ with multi-fold enabled")
+                system_prompt = self._compose_system(allow_multi_fold=True)
 
             artifact = wandb.Artifact(f'{self.iteration}-{self.slug}', type='files')
 

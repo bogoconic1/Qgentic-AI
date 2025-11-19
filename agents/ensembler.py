@@ -89,17 +89,17 @@ class EnsemblerAgent(DeveloperAgent):
             strategy_text[:100] + "..." if len(strategy_text) > 100 else strategy_text
         )
 
-    def _compose_system(self, allow_multi_fold: bool = False, version: int = 1) -> str:
+    def _compose_system(self, allow_multi_fold: bool = False) -> str:
         """
         Override to use ensemble-specific system prompt.
 
-        Note: allow_multi_fold and version parameters are ignored for ensembles (always True and no version-specific behavior),
-        but are accepted for compatibility with parent class signature.
+        Note: allow_multi_fold parameter is ignored for ensembles (always True),
+        but is accepted for compatibility with parent class signature.
 
         Returns:
             System prompt for ensemble agent
         """
-        self.logger.debug("Composing ensemble system prompt (multi-fold always enabled for ensembles, version=%s)", version)
+        self.logger.debug("Composing ensemble system prompt (multi-fold always enabled for ensembles)")
 
         # Load baseline code files based on models_needed for this strategy
         file_contents = {}
