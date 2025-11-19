@@ -207,6 +207,10 @@ def call_llm_with_retry_anthropic_helper(
                     max_tokens=max_tokens,
                     output_format=text_format,
                     tools=tools if tools else [],
+                    thinking={
+                        "type": "enabled",
+                        "budget_tokens": 4096
+                    },
                 )
             else:
                 # Use regular messages API
@@ -216,6 +220,10 @@ def call_llm_with_retry_anthropic_helper(
                     messages=messages,
                     max_tokens=max_tokens,
                     tools=tools if tools else [],
+                    thinking={
+                        "type": "enabled",
+                        "budget_tokens": 4096
+                    },
                 )
             return response
 
@@ -361,7 +369,7 @@ def call_llm_with_retry_anthropic(
 def call_llm_with_retry_google_helper(
     model: str,
     system_instruction: str,
-    user_prompt: str,
+    user_prompt: str | list = None,
     text_format = None,
     temperature: float = 1.0,
     max_retries: int | None = None,
@@ -369,23 +377,31 @@ def call_llm_with_retry_google_helper(
     enable_url_context: bool = False,
     top_p: float = 1.0,
     thinking_budget: int | None = None,
+    thinking_level: str | None = None,
+    include_thoughts: bool = False,
+    function_declarations: list = None,
 ):
-    """Helper function to call Gemini API with optional structured outputs and retry logic.
+    """Helper function to call Gemini API with full feature support and retry logic.
 
     Args:
-        model: Gemini model name (e.g., "gemini-2.5-pro")
+        model: Gemini model name (e.g., "gemini-3-pro-preview", "gemini-2.5-pro")
         system_instruction: System instruction text
-        user_prompt: User prompt text
+        user_prompt: User prompt text (str) or multi-turn conversation (list of dicts)
         text_format: Optional Pydantic model for structured output schema. If None, returns raw text.
-        temperature: Temperature for generation
+        temperature: Temperature for generation (default: 1.0)
         max_retries: Maximum number of retries
         enable_google_search: Enable Google Search tool
         enable_url_context: Enable URL context tool for reading web pages
-        top_p: Nucleus sampling parameter (default: None)
-        thinking_budget: Thinking budget for reasoning models (default: None)
+        top_p: Nucleus sampling parameter (default: 1.0)
+        thinking_budget: Thinking budget in tokens for Gemini 2.5 (128-32768, -1 for dynamic)
+        thinking_level: Thinking level for Gemini 3 ("low" or "high")
+        include_thoughts: Whether to return thought summaries (default: False)
+        function_declarations: List of function declarations for function calling
 
     Returns:
-        Parsed Pydantic model instance (if text_format provided) or raw text response, or None on failure
+        - If text_format provided: Parsed Pydantic model instance
+        - If text_format None: Raw text response string
+        - On failure: None
     """
     try:
         from google import genai
@@ -394,6 +410,7 @@ def call_llm_with_retry_google_helper(
         logging.error(f"Failed to import google.genai: {e}")
         return None
 
+    # Set location based on model
     if model.startswith("gemini"):
         os.environ['GOOGLE_CLOUD_LOCATION'] = 'global'
     else:
@@ -412,42 +429,62 @@ def call_llm_with_retry_google_helper(
             # Build tools list
             tools = []
             if enable_google_search:
-                tools.append(types.Tool(googleSearch=types.GoogleSearch()))
+                tools.append(types.Tool(google_search=types.GoogleSearch()))
             if enable_url_context:
                 tools.append(types.Tool(url_context=types.UrlContext()))
+            if function_declarations:
+                tools.append(types.Tool(function_declarations=function_declarations))
 
-            # Build config
+            # Build config params
             config_params = {
                 "temperature": temperature,
                 "top_p": top_p,
-                "system_instruction": [types.Part.from_text(text=system_instruction)],
+                "system_instruction": system_instruction,  # Direct string, not wrapped
                 "tools": tools if tools else None,
             }
 
-            if thinking_budget is not None:
-                config_params["thinking_config"] = types.ThinkingConfig(thinking_budget=thinking_budget)
+            # Add thinking configuration
+            if thinking_level is not None or thinking_budget is not None or include_thoughts:
+                thinking_config_params = {}
+                if thinking_level is not None:
+                    thinking_config_params["thinking_level"] = thinking_level
+                if thinking_budget is not None:
+                    thinking_config_params["thinking_budget"] = thinking_budget
+                if include_thoughts:
+                    thinking_config_params["include_thoughts"] = include_thoughts
+                config_params["thinking_config"] = types.ThinkingConfig(**thinking_config_params)
 
             # Add structured output params if text_format provided
             if text_format is not None:
                 config_params["response_mime_type"] = "application/json"
                 config_params["response_json_schema"] = text_format.model_json_schema()
 
+            # Handle user_prompt: can be string or list (multi-turn)
+            if isinstance(user_prompt, str):
+                contents = user_prompt
+            elif isinstance(user_prompt, list):
+                contents = user_prompt
+            else:
+                contents = user_prompt
+
             response = client.models.generate_content(
                 model=model,
-                contents=[
-                    types.Content(
-                        role="user",
-                        parts=[types.Part.from_text(text=user_prompt)],
-                    )
-                ],
+                contents=contents,
                 config=types.GenerateContentConfig(**config_params),
             )
 
             # Parse response based on format
             if text_format is not None:
-                # Structured output - parse as Pydantic model
-                parsed_result = text_format.model_validate_json(response.text)
-                return parsed_result
+                # Structured output - parse as Pydantic model with fallback
+                try:
+                    parsed_result = text_format.model_validate_json(response.text)
+                    return parsed_result
+                except Exception as parse_error:
+                    # Fallback: strip markdown code fences if present
+                    logging.warning(f"Initial JSON parsing failed, attempting to clean response: {parse_error}")
+                    cleaned_text = response.text.lstrip("```json").lstrip("```").rstrip("```").strip()
+                    parsed_result = text_format.model_validate_json(cleaned_text)
+                    return parsed_result
             else:
                 # Unstructured output - return raw text
                 return response.text
@@ -455,11 +492,11 @@ def call_llm_with_retry_google_helper(
         except Exception as e:
             if attempt < retries - 1:
                 wait_time = 2**attempt
-                logging.info(f"Retry {attempt + 1}/{retries} in {wait_time}s...")
+                logging.info(f"Gemini retry {attempt + 1}/{retries} in {wait_time}s... Error: {str(e)[:100]}")
                 time.sleep(wait_time)
                 continue
             else:
-                logging.error(f"Gemini call failed with error: {e}")
+                logging.error(f"Gemini call failed after {retries} attempts: {e}")
                 return None
 
     return None
@@ -468,7 +505,7 @@ def call_llm_with_retry_google_helper(
 def call_llm_with_retry_google(
     model: str,
     system_instruction: str,
-    user_prompt: str,
+    user_prompt: str | list = None,
     text_format = None,
     temperature: float = 1.0,
     max_retries: int | None = None,
@@ -476,30 +513,86 @@ def call_llm_with_retry_google(
     enable_url_context: bool = False,
     top_p: float = 1.0,
     thinking_budget: int | None = None,
+    thinking_level: str | None = None,
+    include_thoughts: bool = False,
+    function_declarations: list = None,
 ):
-    """Call Gemini API with optional structured outputs and comprehensive retry logic.
+    """Call Gemini API with full feature support and comprehensive retry logic.
+
+    This function provides access to all Gemini capabilities including:
+    - Text generation with system instructions
+    - Thinking/reasoning mode (Gemini 2.5 & 3)
+    - Structured output with Pydantic schemas
+    - Google Search and URL Context tools (unique to Gemini)
+    - Function calling
+    - Multi-turn conversations
 
     Args:
-        model: Gemini model name (e.g., "gemini-2.5-pro")
+        model: Gemini model name (e.g., "gemini-3-pro-preview", "gemini-2.5-pro")
         system_instruction: System instruction text
-        user_prompt: User prompt text
-        text_format: Optional Pydantic model for structured output schema. If None, returns raw text.
-        temperature: Temperature for generation
+        user_prompt: User prompt text (str) or multi-turn conversation (list)
+        text_format: Optional Pydantic model for structured output. If None, returns raw text.
+        temperature: Temperature for generation (default: 1.0)
         max_retries: Maximum number of retries per attempt
-        enable_google_search: Enable Google Search tool
-        enable_url_context: Enable URL context tool for reading web pages
-        top_p: Nucleus sampling parameter
-        thinking_budget: Thinking budget for reasoning models
+        enable_google_search: Enable Google Search tool (Gemini native)
+        enable_url_context: Enable URL context tool for reading web pages (Gemini native)
+        top_p: Nucleus sampling parameter (default: 1.0)
+        thinking_budget: Thinking budget in tokens for Gemini 2.5 (128-32768, -1 for dynamic)
+        thinking_level: Thinking level for Gemini 3 ("low" or "high")
+        include_thoughts: Whether to return thought summaries
+        function_declarations: List of function declarations for function calling
 
     Returns:
-        Parsed Pydantic model instance (if text_format provided) or raw text response
+        - If text_format provided: Parsed Pydantic model instance
+        - If text_format None: Raw text response string
 
     Raises:
-        ValueError: If all retries fail
+        ValueError: If all retries fail after 40 attempts
+
+    Examples:
+        # Basic text generation
+        response = call_llm_with_retry_google(
+            model="gemini-3-pro-preview",
+            system_instruction="You are a helpful assistant.",
+            user_prompt="Explain quantum computing."
+        )
+
+        # With Google Search
+        response = call_llm_with_retry_google(
+            model="gemini-3-pro-preview",
+            system_instruction="Research assistant",
+            user_prompt="What are the latest AI developments in 2025?",
+            enable_google_search=True,
+            enable_url_context=True,
+        )
+
+        # With thinking mode (Gemini 3)
+        response = call_llm_with_retry_google(
+            model="gemini-3-pro-preview",
+            system_instruction="Math tutor",
+            user_prompt="Solve this complex problem...",
+            thinking_level="high",
+            include_thoughts=True,
+        )
+
+        # Structured output
+        from pydantic import BaseModel
+        class Analysis(BaseModel):
+            summary: str
+            score: float
+
+        result = call_llm_with_retry_google(
+            model="gemini-3-pro-preview",
+            system_instruction="Analyze this data",
+            user_prompt="...",
+            text_format=Analysis,
+            enable_google_search=True,
+        )
+        print(result.summary, result.score)
     """
     result = None
 
-    for _ in range(5):
+    for _ in range(40):  # Match Anthropic's 40 retries
         result = call_llm_with_retry_google_helper(
             model=model,
             system_instruction=system_instruction,
@@ -511,12 +604,14 @@ def call_llm_with_retry_google(
             enable_url_context=enable_url_context,
             top_p=top_p,
             thinking_budget=thinking_budget,
+            thinking_level=thinking_level,
+            include_thoughts=include_thoughts,
+            function_declarations=function_declarations,
         )
         if result is not None:
             break
 
     if result is None:
-        raise ValueError("Gemini call failed after 5 retries")
+        raise ValueError("Gemini call failed after 40 retries")
 
     return result
-
