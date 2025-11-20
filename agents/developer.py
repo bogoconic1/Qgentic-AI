@@ -2,6 +2,7 @@ import logging
 import math
 import os
 import re
+import shutil
 import time
 import threading
 from pathlib import Path
@@ -26,7 +27,7 @@ from utils.diffs import (
     normalize_diff_payload,
     apply_patch as util_apply_patch,
 )
-from utils.grade import run_grade, parse_validation_score
+from utils.grade import run_grade
 from utils.code_utils import strip_header_from_code, extract_python_code
 from prompts.developer_agent import (
     build_system as prompt_build_system,
@@ -171,10 +172,23 @@ class DeveloperAgent:
         return _CODE_TEMPLATE.format(iteration=self.iteration, version=version)
 
     def _log_filename(self, version: int) -> str:
-        return _LOG_TEMPLATE.format(iteration=self.iteration, version=version)
+        """Return log path relative to outputs_dir (folder-based).
+
+        For folder-based structure: {version}/train.txt
+        e.g., "1/train.txt", "2/train.txt"
+
+        This captures stdout/stderr from train.py execution.
+        Structured training metadata is written by train.py to train_stats.json.
+        """
+        return f"{version}/train.txt"
 
     def _submission_filename(self, version: int) -> str:
-        return _SUBMISSION_TEMPLATE.format(iteration=self.iteration, version=version)
+        """Return submission path relative to outputs_dir (folder-based).
+
+        For folder-based structure: {version}/submission.csv
+        e.g., "1/submission.csv", "2/submission.csv"
+        """
+        return f"{version}/submission.csv"
 
     def _get_code_timeout(self) -> int:
         """
@@ -345,123 +359,248 @@ class DeveloperAgent:
 
         return "\n".join(sections) if sections else "No NICE_TO_HAVE recommendations available."
 
-    def _extract_code(self, content: str) -> str:
-        self.logger.debug("Extracting code from completion content. Content length: %s", len(content))
-        return extract_python_code(content)
-
     @staticmethod
     def _format_with_line_numbers(code: str) -> str:
         lines = code.splitlines()
         return "\n".join(f"{idx:04d}: {line}" for idx, line in enumerate(lines, start=1))
 
-    @staticmethod
-    def _extract_diff_block(content: str) -> str:
-        return extract_diff_block(content)
+    def _replace_last_message_with_code(self, messages: list[dict], version_folder: Path) -> None:
+        """Replace the last assistant message (diff) with full code (headers stripped).
+
+        Reads train.py and config.yaml from version folder, strips headers, and replaces
+        the last message in history.
+
+        Args:
+            messages: Message history list to modify in-place
+            version_folder: Path to version folder (e.g., outputs/16_2/1/)
+        """
+        if not messages or messages[-1].get("role") != "assistant":
+            self.logger.warning("Cannot replace last message - not an assistant message")
+            return
+
+        from utils.code_utils import strip_header_from_code
+
+        # Read and strip headers from train.py
+        train_py_path = version_folder / "train.py"
+        if train_py_path.exists():
+            train_py_stripped = strip_header_from_code(train_py_path)
+        else:
+            self.logger.warning("train.py not found in %s", version_folder)
+            train_py_stripped = ""
+
+        # Read config.yaml (no headers to strip)
+        config_yaml_path = version_folder / "config.yaml"
+        if config_yaml_path.exists():
+            config_yaml = config_yaml_path.read_text()
+        else:
+            self.logger.warning("config.yaml not found in %s", version_folder)
+            config_yaml = ""
+
+        # Reconstruct markdown with full code (headers stripped)
+        content = f"```yaml\n{config_yaml}\n```\n\n```python\n{train_py_stripped}\n```"
+
+        # Replace the content
+        messages[-1]["content"] = content
+        self.logger.debug("Replaced last message (diff) with full code from %s", version_folder)
 
     @weave.op()
-    def _generate_code(self, instructions: str, messages: list[dict[str, str]], expect_patch: bool = False) -> str:
+    def _generate_code(self, instructions: str, messages: list[dict[str, str]], expect_patch: bool = False) -> tuple[list[dict], dict[str, str]]:
+        """Generate code using structured output.
+
+        Returns:
+            Tuple of (message_history_entry, code_dict)
+            - message_history_entry: List with assistant message containing markdown
+            - code_dict: Dict with 'config_yaml' and 'train_py' keys
+        """
         self.logger.info("Requesting code generation from model for iteration %s", self.iteration)
+
+        # Choose schema based on patch mode
+        from schemas.developer import CodeGeneration, CodePatch
+        schema = CodePatch if expect_patch else CodeGeneration
+        self.logger.debug("Using schema: %s", schema.__name__)
 
         # Detect provider
         provider = detect_provider(_DEVELOPER_MODEL)
 
         if provider == "openai":
-            response = call_llm_with_retry(
+            result = call_llm_with_retry(
                 model=_DEVELOPER_MODEL,
                 instructions=instructions,
                 tools=[],
                 messages=messages,
-                web_search_enabled=True
+                web_search_enabled=True,
+                text_format=schema
             )
-            content = response.output_text
-            output = response.output
         elif provider == "anthropic":
-            response = call_llm_with_retry_anthropic(
+            result = call_llm_with_retry_anthropic(
                 model=_DEVELOPER_MODEL,
                 instructions=instructions,
                 tools=[],
                 messages=messages,
-                web_search_enabled=True
+                web_search_enabled=True,
+                text_format=schema
             )
-            content = extract_text_from_response(response, provider)
-            # For Anthropic, construct output format compatible with message history
-            output = [{"role": "assistant", "content": response.content}]
         elif provider == "google":
-            response = call_llm_with_retry_google(
+            result = call_llm_with_retry_google(
                 model=_DEVELOPER_MODEL,
                 system_instruction=instructions,
                 messages=messages,
-                enable_google_search=True
+                enable_google_search=True,
+                text_format=schema
             )
-            content = response.text if hasattr(response, 'text') else str(response)
-            # For Gemini, construct output format compatible with message history
-            output = [append_message(provider, "assistant", content)]
         else:
             raise ValueError(f"Unsupported provider: {provider}")
 
         self.logger.info("Model response received for iteration %s", self.iteration)
-        self.logger.debug("Completion content length: %s", len(content))
+
+        # Extract code dict from Pydantic model
+        code_dict = result.model_dump()
+        self.logger.debug("Generated code dict keys: %s", list(code_dict.keys()))
+
+        # Reconstruct markdown for message history
+        # For patches: show diffs, will be replaced with full code after successful application
+        # For full code: show yaml + python
         if expect_patch:
-            return content.strip()
-        return output, self._extract_code(content)
+            markdown_parts = []
+            if code_dict.get("config_yaml", "").strip():
+                markdown_parts.append(f"```diff\n{code_dict['config_yaml']}\n```")
+            if code_dict.get("train_py", "").strip():
+                markdown_parts.append(f"```diff\n{code_dict['train_py']}\n```")
+            content = "\n\n".join(markdown_parts) if markdown_parts else "No changes"
+        else:
+            content = f"```yaml\n{code_dict['config_yaml']}\n```\n\n```python\n{code_dict['train_py']}\n```"
+
+        # Create message history entry
+        output = [append_message(provider, "assistant", content)]
+
+        return output, code_dict
 
     @staticmethod
     def _normalize_diff_payload(base_path: Path, diff_text: str) -> Optional[str]:
         return normalize_diff_payload(base_path, diff_text)
 
-    def _apply_patch(self, base_version: int, diff_payload: str, target_version: int) -> Optional[str]:
-        """Apply diff payload to the previous source file and return updated code."""
+    def _apply_structured_patch(self, base_version: int, patch_dict: dict[str, str]) -> tuple[Optional[dict[str, str]], Optional[str]]:
+        """Apply separate diffs to config.yaml and/or train.py from base version folder.
+
+        Reads from base_version folder (e.g., 16_2/1/) and returns patched content
+        to be written to target version folder (e.g., 16_2/2/) by _write_code().
+
+        Args:
+            base_version: Version number to patch from
+            patch_dict: Dict with 'config_yaml' and 'train_py' keys containing diff strings
+                       (empty string means file unchanged)
+
+        Returns:
+            Tuple of (code_dict, error_msg):
+            - code_dict: Dict with 'config_yaml' and 'train_py' keys containing patched content.
+                        Empty string means file unchanged. None if patch application fails.
+            - error_msg: Error message describing patch failures, or None if all succeeded.
+        """
         if base_version <= 0:
             self.logger.warning("Patch requested but base version is invalid: %s", base_version)
-            return None
+            return None, f"Invalid base version: {base_version}"
 
-        base_filename = self._code_filename(base_version)
-        base_path = self.outputs_dir / base_filename
-        if not base_path.exists():
-            self.logger.warning("Patch requested but base file does not exist: %s", base_path)
-            return None
+        # Base version folder
+        base_folder = self.outputs_dir / str(base_version)
+        if not base_folder.exists():
+            self.logger.warning("Patch requested but base folder does not exist: %s", base_folder)
+            return None, f"Base folder not found: {base_folder}"
 
-        diff_text = self._extract_diff_block(diff_payload)
-        if not diff_text:
-            self.logger.warning("Patch payload was empty after extraction.")
-            return None
+        # Read previous version's files
+        config_path = base_folder / "config.yaml"
+        train_path = base_folder / "train.py"
 
-        output_filename = self._code_filename(target_version)
-        output_path = self.outputs_dir / output_filename
-        if output_path.exists():
-            try:
-                output_path.unlink()
-            except Exception:
-                self.logger.exception(
-                    "Failed to remove existing output file before applying patch: %s",
-                    output_path,
-                )
-                return None
+        base_config = config_path.read_text() if config_path.exists() else ""
+        base_train = train_path.read_text() if train_path.exists() else ""
 
-        attempts: list[tuple[str, str]] = []
-        normalized_payload = self._normalize_diff_payload(base_path, diff_text)
-        attempts.append(("normalized", normalized_payload))
+        # Extract diffs from patch_dict
+        config_diff = patch_dict.get("config_yaml", "").strip()
+        train_diff = patch_dict.get("train_py", "").strip()
 
-        for label, payload in attempts:
-            self.logger.debug("Attempting to apply %s diff for version %s", label, target_version)
-            self.logger.debug("Payload: %s", payload)
-            updated_code = util_apply_patch(
-                outputs_dir=self.outputs_dir,
-                base_filename=base_filename,
-                output_filename=output_filename,
-                payload=payload,
-            )
-            if updated_code is not None:
-                self.logger.info(
-                    "Successfully applied %s diff to generate version %s from base %s",
-                    label,
-                    target_version,
-                    base_version,
-                )
-                return updated_code
+        result = {"config_yaml": "", "train_py": ""}
+        errors = []
 
-        self.logger.warning("All patch attempts failed for target version %s", target_version)
-        return None
+        # Apply patch to config.yaml if diff provided
+        if config_diff:
+            import tempfile
+            import subprocess
+            import os
+
+            # Write base config to temp file
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+                f.write(base_config)
+                temp_config_path = Path(f.name)
+
+            # Normalize diff to fix incorrect line numbers
+            from utils.diffs import normalize_diff_payload
+            normalized_diff = normalize_diff_payload(temp_config_path, config_diff)
+
+            if normalized_diff is None:
+                error_msg = "Failed to normalize diff for config.yaml"
+                self.logger.error(error_msg)
+                errors.append(f"config.yaml: {error_msg}")
+                os.unlink(temp_config_path)
+            else:
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.patch', delete=False) as f:
+                    f.write(normalized_diff)
+                    temp_patch = f.name
+
+                try:
+                    proc = subprocess.run(['patch', str(temp_config_path), temp_patch], check=True, capture_output=True, text=True)
+                    with open(temp_config_path, 'r') as f:
+                        result["config_yaml"] = f.read()
+                    self.logger.info("Successfully patched config.yaml from version %d", base_version)
+                except subprocess.CalledProcessError as e:
+                    error_msg = f"Patch failed for config.yaml:\nSTDOUT: {e.stdout}\nSTDERR: {e.stderr}"
+                    self.logger.error(error_msg)
+                    errors.append(error_msg)
+                finally:
+                    os.unlink(temp_config_path)
+                    os.unlink(temp_patch)
+
+        # Apply patch to train.py if diff provided
+        if train_diff:
+            import tempfile
+            import subprocess
+            import os
+
+            # Write base train.py to temp file
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+                f.write(base_train)
+                temp_train_path = Path(f.name)
+
+            # Normalize diff to fix incorrect line numbers
+            from utils.diffs import normalize_diff_payload
+            normalized_diff = normalize_diff_payload(temp_train_path, train_diff)
+
+            if normalized_diff is None:
+                error_msg = "Failed to normalize diff for train.py"
+                self.logger.error(error_msg)
+                errors.append(f"train.py: {error_msg}")
+                os.unlink(temp_train_path)
+            else:
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.patch', delete=False) as f:
+                    f.write(normalized_diff)
+                    temp_patch = f.name
+
+                try:
+                    proc = subprocess.run(['patch', str(temp_train_path), temp_patch], check=True, capture_output=True, text=True)
+                    with open(temp_train_path, 'r') as f:
+                        result["train_py"] = f.read()
+                    self.logger.info("Successfully patched train.py from version %d", base_version)
+                except subprocess.CalledProcessError as e:
+                    error_msg = f"Patch failed for train.py:\nSTDOUT: {e.stdout}\nSTDERR: {e.stderr}"
+                    self.logger.error(error_msg)
+                    errors.append(error_msg)
+                finally:
+                    os.unlink(temp_train_path)
+                    os.unlink(temp_patch)
+
+        # Return result and error message
+        if errors:
+            error_summary = "\n\n".join(errors)
+            return result if any(result.values()) else None, error_summary
+        return result, None
 
     def _append_patch_directive(self, instruction: str, version: int) -> str:
         if not self.patch_mode_enabled:
@@ -515,24 +654,90 @@ class DeveloperAgent:
         # Insert header at the top of the code
         return header + "\n" + code, num_header_lines
 
-    def _write_code(self, code: str, version: int) -> Path:
-        code_path = self.outputs_dir / self._code_filename(version)
-        self.logger.info("Writing generated code to %s", code_path)
+    def _get_parent_iteration_folder(self) -> Path:
+        """Get parent iteration folder for copying shared files.
 
-        # Postprocess code to insert resource allocation
-        postprocessed_code, num_header_lines = self._postprocess_code(code)
+        For example:
+        - If self.iteration is "16_2", returns outputs/16
+        - If self.iteration is "16", returns outputs/16
 
-        with open(code_path, "w") as f:
-            f.write(postprocessed_code)
-        self.logger.debug("Written code size: %s characters", len(postprocessed_code))
+        Returns:
+            Path to parent iteration folder (e.g., task/csiro-biomass/outputs/16)
+        """
+        iteration_str = str(self.iteration)
+        # Extract base iteration number (before any underscore)
+        base_iteration = iteration_str.split('_')[0]
+        return self.base_dir / self.outputs_dirname / base_iteration
 
-        # Save metadata with header line count
-        metadata_path = code_path.with_suffix('.json')
-        with open(metadata_path, "w") as f:
-            json.dump({"num_header_lines": num_header_lines}, f)
-        self.logger.debug("Written metadata to %s", metadata_path)
+    def _write_code(self, code_dict: dict[str, str], version: int) -> Path:
+        """Write code to version folder structure.
 
-        return code_path
+        Creates folder structure:
+        outputs/{iteration}/
+        ├── {version}/
+        │   ├── config.yaml
+        │   ├── train.py (with headers)
+        │   ├── train.json (metadata)
+        │   ├── cv_splits.json (copied from parent)
+        │   └── metric.py (copied from parent)
+
+        Args:
+            code_dict: Dict with 'config_yaml' and 'train_py' keys
+            version: Version number
+
+        Returns:
+            Path to the version folder
+        """
+        # Create version folder
+        version_folder = self.outputs_dir / str(version)
+        version_folder.mkdir(parents=True, exist_ok=True)
+        self.logger.info("Writing code to version folder: %s", version_folder)
+
+        # Write config.yaml (no postprocessing needed)
+        config_yaml = code_dict.get('config_yaml', '')
+        if config_yaml:
+            config_path = version_folder / 'config.yaml'
+            config_path.write_text(config_yaml)
+            self.logger.debug("Written config.yaml (%d characters)", len(config_yaml))
+
+        # Postprocess and write train.py
+        train_py = code_dict.get('train_py', '')
+        if not train_py:
+            raise ValueError("train_py is required in code_dict")
+
+        postprocessed_code, num_header_lines = self._postprocess_code(train_py)
+        train_path = version_folder / 'train.py'
+        train_path.write_text(postprocessed_code)
+        self.logger.debug("Written train.py (%d characters)", len(postprocessed_code))
+
+        # Write metadata with header line count
+        metadata_path = version_folder / 'train.json'
+        metadata_path.write_text(json.dumps({"num_header_lines": num_header_lines}))
+        self.logger.debug("Written train.json with %d header lines", num_header_lines)
+
+        # Copy shared files from parent iteration folder
+        # Determine parent iteration folder (e.g., outputs/16 if current is outputs/16_2)
+        parent_iteration = self._get_parent_iteration_folder()
+
+        # Copy cv_splits.json if it exists
+        cv_splits_src = parent_iteration / 'cv_splits.json'
+        if cv_splits_src.exists():
+            cv_splits_dst = version_folder / 'cv_splits.json'
+            shutil.copy2(cv_splits_src, cv_splits_dst)
+            self.logger.debug("Copied cv_splits.json from %s", cv_splits_src)
+        else:
+            self.logger.warning("cv_splits.json not found in parent iteration folder: %s", cv_splits_src)
+
+        # Copy metric.py if it exists
+        metric_src = parent_iteration / 'metric.py'
+        if metric_src.exists():
+            metric_dst = version_folder / 'metric.py'
+            shutil.copy2(metric_src, metric_dst)
+            self.logger.debug("Copied metric.py from %s", metric_src)
+        else:
+            self.logger.warning("metric.py not found in parent iteration folder: %s", metric_src)
+
+        return version_folder
 
     @staticmethod
     def _read_code_metadata(code_path: Path) -> dict:
@@ -591,39 +796,32 @@ class DeveloperAgent:
             return "N/A"
         return f"{value}"
 
-    def _execute_and_read_log(self, code_path: Path, version: int) -> tuple[str, str]:
-        """Execute code and read execution log.
+    def _execute_code(self, code_path: Path, version: int) -> str:
+        """Execute code and return execution output.
 
         Args:
-            code_path: Path to the code file to execute
+            code_path: Path to the code file to execute (e.g., outputs/16_2/1/train.py)
             version: Version number for logging
 
         Returns:
-            Tuple of (execution_output, log_content)
+            Execution output string
         """
         timeout_seconds = self._get_code_timeout()
+
+        # Set working directory to version folder so train.py can access cv_splits.json, metric.py
+        # and write outputs (train_stats.json, submission.csv) to the correct location
+        version_folder = self.outputs_dir / str(version)
+
         output = execute_code(
             str(code_path),
             timeout_seconds=timeout_seconds,
-            conda_env=self.conda_env
+            conda_env=self.conda_env,
+            cwd=str(version_folder)
         )
         self.logger.info("Execution output captured for version v%s", version)
         self.logger.debug("Execution output: %s", output)
 
-        log_path = self.outputs_dir / self._log_filename(version)
-        log_content = ""
-        try:
-            if log_path.exists():
-                log_content = log_path.read_text().strip()
-                self.logger.debug(
-                    "Loaded execution log from %s (length=%s)",
-                    log_path,
-                    len(log_content),
-                )
-        except Exception:
-            self.logger.exception("Failed to read execution log at %s", log_path)
-
-        return output, log_content
+        return output
 
     def _format_suggestion_entry(self, suggestion: str, previous_score: Optional[float], current_score: Optional[float]) -> str:
         """Format a suggestion entry with score impact information.
@@ -710,37 +908,62 @@ class DeveloperAgent:
             return DeveloperAgent._shared_suggestions.copy()
 
     def _find_most_recent_valid_version(self, current_version: int) -> tuple[int, Optional[str]]:
-        """Find the most recent version that is valid for rollback.
+        """Find the most recent version that is valid for rollback (folder-based).
 
         A version is valid if:
-        1. It executed successfully (generated a submission file)
-        2. It was NOT blacklisted by SOTA suggestions
+        1. Version folder exists
+        2. submission.csv exists in the version folder (successful execution)
+        3. Version was NOT blacklisted by SOTA suggestions
 
         Args:
             current_version: The current version number
 
         Returns:
-            Tuple of (version_number, code_content)
+            Tuple of (version_number, code_content_markdown)
+            - code_content_markdown contains both config.yaml and train.py (headers stripped)
             Returns (1, None) if no valid version found
         """
         # Iterate backwards from current_version-1 to find most recent valid version
         for v in range(current_version - 1, 0, -1):
-            is_successful = v in self.successful_versions
-            is_blacklisted = v in self.blacklisted_versions
+            # Check if version folder exists
+            version_folder = self.outputs_dir / str(v)
+            if not version_folder.exists():
+                continue
 
-            if is_successful and not is_blacklisted:
-                self.logger.info(f"Found most recent valid version for rollback: v{v}")
-                code_path = self.outputs_dir / self._code_filename(v)
-                if code_path.exists():
-                    try:
-                        code = strip_header_from_code(code_path)
-                        return v, code
-                    except Exception as e:
-                        self.logger.error(f"Failed to read code from v{v}: {e}")
-                        continue
+            # Check if submission.csv exists (indicates successful execution)
+            submission_path = version_folder / 'submission.csv'
+            if not submission_path.exists():
+                self.logger.debug(f"v{v} skipped: no submission.csv in {version_folder}")
+                continue
+
+            # Check if blacklisted
+            is_blacklisted = v in self.blacklisted_versions
+            if is_blacklisted:
+                self.logger.debug(f"v{v} skipped: blacklisted")
+                continue
+
+            # Valid version found - read both config.yaml and train.py
+            self.logger.info(f"Found most recent valid version for rollback: v{v}")
+
+            try:
+                # Read config.yaml
+                config_path = version_folder / 'config.yaml'
+                config_yaml = config_path.read_text() if config_path.exists() else "# config.yaml not found"
+
+                # Read train.py with headers stripped
+                train_path = version_folder / 'train.py'
+                if train_path.exists():
+                    train_py = strip_header_from_code(train_path)
                 else:
-                    self.logger.warning(f"Code file for v{v} not found at {code_path}")
-                    continue
+                    train_py = "# train.py not found"
+
+                # Construct markdown with both files
+                code_content = f"config.yaml:\n```yaml\n{config_yaml}\n```\n\ntrain.py:\n```python\n{train_py}\n```"
+
+                return v, code_content
+            except Exception as e:
+                self.logger.error(f"Failed to read code from v{v}: {e}")
+                continue
 
         # No valid version found
         self.logger.warning("No valid rollback version found; falling back to v1 (initial version)")
@@ -864,7 +1087,6 @@ class DeveloperAgent:
     def _evaluate_submission(
         self,
         code_clean: str,
-        log_content: str,
         version: int,
         attempt: int
     ) -> tuple[str, float, Optional[int], Optional[float], bool]:
@@ -872,22 +1094,19 @@ class DeveloperAgent:
 
         Args:
             code_clean: Clean code without markdown fences
-            log_content: Execution log content
             version: Version number
             attempt: Attempt number
 
         Returns:
-            Tuple of (code_with_logs, run_score, previous_successful_version, base_score, submission_exists)
-            - code_with_logs: Code with execution logs, score, and analysis
+            Tuple of (code_context, run_score, previous_successful_version, base_score, submission_exists)
+            - code_context: Code with score and analysis
             - run_score: Score from grading (or inf/-inf if no submission)
             - previous_successful_version: Most recent successful version before this one
             - base_score: Score of the previous successful version
             - submission_exists: True if submission file exists for THIS version
         """
         submission_path = self.outputs_dir / self._submission_filename(version)
-        code_with_logs = "<code>\n" + code_clean + "\n</code>\n"
-        if log_content:
-            code_with_logs += f"<validation_log>\n{log_content[-30000:]}\n</validation_log>\n"  # to avoid token limit issues
+        code_context = "<code>\n" + code_clean + "\n</code>\n"
 
         run_score = float("inf") if self.is_lower_better else float("-inf")
 
@@ -907,22 +1126,34 @@ class DeveloperAgent:
             previous_successful_version = self.last_successful_version  # Initialize before try
 
             if _USE_VALIDATION_SCORE:
-                # Use validation score from logs instead of MLE-bench grading
-                self.logger.info("Using validation score from logs (use_validation_score=True)")
+                # Use validation score from train_stats.json instead of parsing logs
+                self.logger.info("Using validation score from train_stats.json (use_validation_score=True)")
                 try:
-                    run_score = parse_validation_score(log_content)
-                    if run_score is not None:
-                        self._log_attempt_score(attempt, run_score)
-                        self.logger.info("Your validation score is %s", run_score)
-                        # Store score for this version and track for comparison
-                        self.version_scores[version] = run_score
-                        self.last_successful_version = version
-                    else:
-                        self.logger.warning("Failed to extract validation score from logs for version %s", version)
-                except Exception as exc:
-                    self.logger.exception("Failed to parse validation score: %s", exc)
+                    # Read train_stats.json from version folder
+                    version_folder = self.outputs_dir / str(version)
+                    train_stats_path = version_folder / 'train_stats.json'
 
-                code_with_logs += f"<validation_score>\n{run_score}\n</validation_score>\n"
+                    if train_stats_path.exists():
+                        with open(train_stats_path, 'r') as f:
+                            train_stats = json.load(f)
+
+                        # Extract cv_mean as the validation score
+                        run_score = train_stats.get('cv_mean')
+
+                        if run_score is not None:
+                            self._log_attempt_score(attempt, run_score)
+                            self.logger.info("Your validation score is %s", run_score)
+                            # Store score for this version and track for comparison
+                            self.version_scores[version] = run_score
+                            self.last_successful_version = version
+                        else:
+                            self.logger.warning("cv_mean not found in train_stats.json for version %s", version)
+                    else:
+                        self.logger.warning("train_stats.json not found for version %s", version)
+                except Exception as exc:
+                    self.logger.exception("Failed to read train_stats.json: %s", exc)
+
+                code_context += f"<validation_score>\n{run_score}\n</validation_score>\n"
             else:
                 # Use MLE-bench grading (original behavior)
                 grade_feedback = ""
@@ -951,7 +1182,7 @@ class DeveloperAgent:
                     grade_feedback = f"Failed to run grading tool: {exc}"
                     self.logger.exception("Grading command failed for version %s", version)
 
-                code_with_logs += f"<leaderboard_score>\n{run_score}\n</leaderboard_score>\n"
+                code_context += f"<leaderboard_score>\n{run_score}\n</leaderboard_score>\n"
 
             # Compare against most recent successful version (with a score)
             if previous_successful_version is not None:
@@ -1018,18 +1249,18 @@ class DeveloperAgent:
             else:
                 analysis_msg += " Let's push further to reach an even stronger result."
 
-            code_with_logs += f"<analysis>\n{analysis_msg}\n</analysis>\n"
+            code_context += f"<analysis>\n{analysis_msg}\n</analysis>\n"
             self.previous_runs.append((code_clean, run_score))
 
         # Return previous_successful_version and base_score for use in run() method
         # These are None if no submission was generated or if this is the first successful version
-        return code_with_logs, run_score, previous_successful_version, base_score, submission_exists
+        return code_context, run_score, previous_successful_version, base_score, submission_exists
 
-    def _gather_sota_feedback(self, code_with_logs: str, version: int, attempt_number: int = 1):
+    def _gather_sota_feedback(self, code_context: str, version: int, attempt_number: int = 1):
         """Gather SOTA feedback through red flags analysis and SOTA suggestions.
 
         Args:
-            code_with_logs: Code with execution logs and analysis
+            code_context: Code with execution logs and analysis
             version: Current version number to include models_{version}/ in directory listing
             attempt_number: Which attempt this is (1, 2, 3, ...) for interleaving strategy
 
@@ -1045,9 +1276,33 @@ class DeveloperAgent:
 
             # STAGE 1: Identify red flags via direct analysis
             self.logger.info("Stage 1: Identifying red flags via direct analysis...")
+
+            # Collect training visualizations and stats from version folder
+            version_folder = self.outputs_dir / str(version)
+            training_images = []
+            for img_name in ['loss_curve.png', 'metric_curve.png']:
+                img_path = version_folder / img_name
+                if img_path.exists():
+                    training_images.append(img_path)
+                else:
+                    self.logger.debug(f"Training image not found: {img_path}")
+
+            # Read train_stats.json if available
+            train_stats_path = version_folder / 'train_stats.json'
+            train_stats = None
+            if train_stats_path.exists():
+                try:
+                    with open(train_stats_path, 'r') as f:
+                        train_stats = json.load(f)
+                    self.logger.info("Loaded train_stats.json with %d keys", len(train_stats))
+                except Exception as e:
+                    self.logger.warning(f"Failed to read train_stats.json: {e}")
+
             red_flags_response = search_red_flags(
                 description=self.description,
-                context=code_with_logs,
+                context=code_context,
+                images=training_images if training_images else None,
+                train_stats=train_stats,
             )
             self.logger.info("Red flags response length: %d chars", len(red_flags_response))
 
@@ -1065,7 +1320,7 @@ class DeveloperAgent:
 
             sota_response = self._call_sota_suggestions(
                 description=self.description,
-                context=code_with_logs,
+                context=code_context,
                 red_flags=final_summary,
                 executed_suggestion=self.last_suggestion,
                 failed_ideas=self.blacklisted_ideas,  # Keep instance-level for context
@@ -1079,6 +1334,8 @@ class DeveloperAgent:
                 cpu_core_range=self.cpu_core_range,
                 gpu_identifier=self.gpu_identifier,
                 file_suffix=str(self.iteration),  # Pass iteration as file suffix to prevent race conditions
+                images=training_images if training_images else None,
+                train_stats=train_stats,
             )
             return sota_response
         except Exception as exc:
@@ -1161,47 +1418,74 @@ class DeveloperAgent:
             version = attempt
             expect_patch = self.patch_mode_enabled and attempt > 1
 
+            patch_retry_count = 0
+            max_patch_retries = 2
+            code_dict = None
+
             while True:
                 response_output, generated = self._generate_code(instructions=system_prompt, messages=input_list, expect_patch=expect_patch)
                 input_list += response_output
+
                 if expect_patch:
-                    # Choose the correct base version for patch application.
-                    # Prefer an explicitly set base from the previous step; fallback to previous attempt.
+                    # Determine base version for patch application
                     preferred_base = self.next_patch_base_version if self.next_patch_base_version else (version - 1)
-                    base_candidate_path = self.outputs_dir / self._code_filename(preferred_base)
-                    if not base_candidate_path.exists():
+                    base_folder = self.outputs_dir / str(preferred_base)
+                    if not base_folder.exists():
                         self.logger.warning(
-                            "Configured patch base v%s not found; falling back to previous attempt v%s",
+                            "Configured patch base v%s folder not found; falling back to previous version v%s",
                             preferred_base,
                             version - 1,
                         )
                         preferred_base = version - 1
                     base_version = preferred_base
                     self.logger.info("Applying patch relative to base v%s -> target v%s", base_version, version)
-                    code = self._apply_patch(base_version, generated, version)
-                    if code is not None:
+
+                    # Apply structured patch (separate diffs for config.yaml and train.py)
+                    code_dict, error_msg = self._apply_structured_patch(base_version, generated)
+
+                    if error_msg is None:
+                        # Patch succeeded
+                        self.logger.info("Patch applied successfully")
                         break
-                    self.logger.warning(
-                        "Patch generation failed for attempt %s; requesting full script instead.",
-                        attempt,
-                    )
-                    input_list.append(append_message(provider, "user", "Patch application failed. Ignore the diff request and return the complete updated script enclosed within ```python backticks."))
-                    expect_patch = False
-                    continue
+
+                    # Patch failed - error_msg contains detailed traceback
+                    patch_retry_count += 1
+                    self.logger.warning("Patch application failed (attempt %d/%d)", patch_retry_count, max_patch_retries)
+
+                    if patch_retry_count < max_patch_retries:
+                        # Retry once: pass actual error back to LLM to fix the patch
+                        retry_msg = f"Patch application failed with the following errors:\n\n{error_msg}\n\nPlease fix the diff syntax and regenerate the patch."
+                        input_list.append(append_message(provider, "user", retry_msg))
+                        # Still expect patch for retry
+                        continue
+                    else:
+                        # Second failure: fallback to full code generation
+                        self.logger.warning("Patch failed twice; requesting full code instead")
+                        fallback_msg = f"Patch application failed multiple times:\n\n{error_msg}\n\nPlease provide the complete config.yaml and train.py files instead of diffs."
+                        input_list.append(append_message(provider, "user", fallback_msg))
+                        expect_patch = False
+                        continue
                 else:
-                    code = generated
+                    # Full code generation (iteration 1 or after patch failures)
+                    code_dict = generated
                     break
 
-            code_path = self._write_code(code, version)
+            # Write code to folder structure (config.yaml + train.py)
+            version_folder = self._write_code(code_dict, version)
+
+            # If patch succeeded, replace the diff message with full code (headers stripped)
+            if expect_patch and patch_retry_count > 0 and error_msg is None:
+                self._replace_last_message_with_code(input_list, version_folder)
 
             # ---------------------------
             # Pre-exec guardrail checks
             # ---------------------------
-            with open(str(code_path), "r") as f:
+            train_py_path = version_folder / "train.py"
+            with open(str(train_py_path), "r") as f:
                 code_text = f.read()
 
             # Strip the header lines to get the clean LLM-generated code
-            code_clean = strip_header_from_code(code_path)
+            code_clean = strip_header_from_code(train_py_path)
 
             guard_report = evaluate_guardrails(
                 code_text=code_text,
@@ -1230,11 +1514,11 @@ class DeveloperAgent:
                 # continue to next attempt without execution
                 continue
 
-            # Execute the code and read log
-            output, log_content = self._execute_and_read_log(code_path, version)
+            # Execute the code
+            output = self._execute_code(train_py_path, version)
 
             # Evaluate submission and build enriched context
-            code_with_logs, run_score, previous_successful_version, base_score, submission_exists = self._evaluate_submission(code_clean, log_content, version, attempt)
+            code_context, run_score, previous_successful_version, base_score, submission_exists = self._evaluate_submission(code_clean, version, attempt)
 
             # Only continue gathering feedback if THIS attempt produced a submission
             if submission_exists:
@@ -1242,7 +1526,7 @@ class DeveloperAgent:
                 sota_suggestions_call_id += 1
                 # Gather SOTA feedback (red flags + suggestions)
                 # sota_response is now a parsed SOTAResponse object (or None)
-                sota_response = self._gather_sota_feedback(code_with_logs, version=version, attempt_number=sota_suggestions_call_id)
+                sota_response = self._gather_sota_feedback(code_context, version=version, attempt_number=sota_suggestions_call_id)
 
                 # Extract fields directly from parsed object
                 if sota_response:
@@ -1375,18 +1659,30 @@ class DeveloperAgent:
                     error_type = "Timeout" if is_timeout else "OOM"
                     self.logger.info(f"{error_type} detected - running red flags analysis on logs and code")
 
-                    # Add error context to code_with_logs for red flags analysis
+                    # Add error context to code_context for red flags analysis
                     if is_timeout:
                         error_context = "\n<timeout_error>\nThe script was not able to execute within 1 hour. Please investigate.\n</timeout_error>\n"
                     else:
                         error_context = "\n<oom_error>\nCUDA out of memory error detected. The model or batch size is too large for available GPU memory. Please investigate.\n</oom_error>\n"
 
-                    code_with_logs_error = code_with_logs + error_context
+                    code_context_error = code_context + error_context
+
+                    # Try to read train_stats.json if available (may not exist for timeout/OOM)
+                    train_stats_path = version_folder / 'train_stats.json'
+                    train_stats = None
+                    if train_stats_path.exists():
+                        try:
+                            with open(train_stats_path, 'r') as f:
+                                train_stats = json.load(f)
+                            self.logger.info("Loaded train_stats.json for error analysis (%d keys)", len(train_stats))
+                        except Exception as e:
+                            self.logger.warning(f"Failed to read train_stats.json: {e}")
 
                     try:
                         red_flags_response = search_red_flags(
                             description=self.description,
-                            context=code_with_logs_error,
+                            context=code_context_error,
+                            train_stats=train_stats,
                         )
                         self.logger.info(f"Red flags analysis complete for {error_type} (length: %d chars)", len(red_flags_response))
 

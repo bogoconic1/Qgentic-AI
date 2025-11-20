@@ -83,6 +83,72 @@ def extract_python_code(content: str) -> str:
             return code_old
 
 
+def extract_structured_code(content: str) -> dict[str, str]:
+    """Extract config.yaml and train.py from markdown code blocks.
+
+    Supports two modes:
+    1. Full generation: ```yaml + ```python blocks
+    2. Patch mode: ```diff block (returns raw diff for later application)
+
+    Args:
+        content: Text content with markdown code blocks
+
+    Returns:
+        Dictionary with 'config_yaml', 'train_py', and optionally 'diff' keys
+        - For full generation: both config_yaml and train_py have content
+        - For patch mode: 'diff' key contains the diff block
+        - Empty strings mean no content for that key
+    """
+    # Extract YAML (config.yaml)
+    yaml_pattern_old = r'```yaml\s*(.*?)\s*```'
+    yaml_matches_old = re.findall(yaml_pattern_old, content, re.DOTALL | re.IGNORECASE)
+
+    yaml_pattern_new = r'```yaml\s*\n(.*?)\n^```'
+    yaml_matches_new = re.findall(yaml_pattern_new, content, re.DOTALL | re.MULTILINE | re.IGNORECASE)
+
+    # Use whichever pattern found content, prefer longer match
+    config_yaml = ""
+    if yaml_matches_old or yaml_matches_new:
+        yaml_old = "\n\n".join(yaml_matches_old).strip() if yaml_matches_old else ""
+        yaml_new = "\n\n".join(yaml_matches_new).strip() if yaml_matches_new else ""
+        config_yaml = yaml_new if len(yaml_new) >= len(yaml_old) else yaml_old
+
+    # Extract Python (train.py) - reuse existing function
+    train_py = extract_python_code(content)
+
+    # Extract diff (for patch mode)
+    diff_pattern_old = r'```diff\s*(.*?)\s*```'
+    diff_matches_old = re.findall(diff_pattern_old, content, re.DOTALL | re.IGNORECASE)
+
+    diff_pattern_new = r'```diff\s*\n(.*?)\n^```'
+    diff_matches_new = re.findall(diff_pattern_new, content, re.DOTALL | re.MULTILINE | re.IGNORECASE)
+
+    diff_content = ""
+    if diff_matches_old or diff_matches_new:
+        diff_old = "\n\n".join(diff_matches_old).strip() if diff_matches_old else ""
+        diff_new = "\n\n".join(diff_matches_new).strip() if diff_matches_new else ""
+        diff_content = diff_new if len(diff_new) >= len(diff_old) else diff_old
+
+    # Build result
+    result = {
+        "config_yaml": config_yaml,
+        "train_py": train_py
+    }
+
+    # If diff found, add it to result (will be processed separately for patch application)
+    if diff_content:
+        result["diff"] = diff_content
+        logger.debug("Found diff block (%d chars) for patch mode", len(diff_content))
+    else:
+        # Logging for full generation mode
+        if not config_yaml:
+            logger.warning("No YAML config block found in generated content")
+        if not train_py:
+            logger.warning("No Python code block found in generated content")
+
+    return result
+
+
 def strip_header_from_code(code_path: Path) -> str:
     """Read code file and strip the header lines based on metadata.
 
