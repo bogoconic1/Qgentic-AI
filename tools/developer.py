@@ -800,14 +800,13 @@ def _execute_sota_tool_call(item, description, data_path, slug, cpu_core_range, 
 
 
 @weave.op()
-def execute_code(filepath: str, timeout_seconds: int | None = None, conda_env: str | None = None, cwd: str | None = None) -> str:
+def execute_code(filepath: str, timeout_seconds: int | None = None, conda_env: str | None = None) -> str:
     """Execute a generated Python file and enrich errors with search guidance.
 
     Args:
         filepath: Path to the Python file to execute
         timeout_seconds: Timeout in seconds (default: baseline_time_limit // 4 from config)
         conda_env: Conda environment name to use for execution (None = use current env)
-        cwd: Working directory for execution (None = use current directory)
 
     Returns:
         Execution output or error message
@@ -820,12 +819,10 @@ def execute_code(filepath: str, timeout_seconds: int | None = None, conda_env: s
 
     if conda_env:
         cmd = [conda_exe, "run", "--no-capture-output", "-n", conda_env, "python", filepath]
-        cwd_info = f" (cwd: {cwd})" if cwd else ""
-        logger.info("Executing in conda environment '%s': %s%s (timeout: %d seconds)", conda_env, filepath, cwd_info, timeout_seconds)
+        logger.info("Executing in conda environment '%s': %s (timeout: %d seconds)", conda_env, filepath, timeout_seconds)
     else:
         cmd = ["python", filepath]
-        cwd_info = f" (cwd: {cwd})" if cwd else ""
-        logger.info("Executing generated script: %s%s (timeout: %d seconds)", filepath, cwd_info, timeout_seconds)
+        logger.info("Executing generated script: %s (timeout: %d seconds)", filepath, timeout_seconds)
 
     try:
         logger.debug("Running subprocess command: %s", " ".join(cmd))
@@ -834,7 +831,6 @@ def execute_code(filepath: str, timeout_seconds: int | None = None, conda_env: s
             capture_output=True,
             text=True,
             timeout=timeout_seconds,
-            cwd=cwd,
         )
 
         if result.returncode == 0:

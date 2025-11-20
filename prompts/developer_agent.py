@@ -51,66 +51,59 @@ You have been provided with the following guidance for code implementation:
     constraints = _get_hard_constraints(model_name, allow_multi_fold=allow_multi_fold)
 
     return f"""# Role: Lead Developer for Machine-Learning Competition Team
-Your objective is to deliver a single, self-contained Python script for a Kaggle Competition using **only** the specified model `{model_name}`.
+Your objective is to deliver a complete, executable training script (train.py) for a Kaggle Competition using **only** the specified model `{model_name}`.
 
-Begin with a concise checklist (3-7 bullets) of what you will do; keep items conceptual, not implementation-level.
-You should perform web searches to determine how to set up and configure `{model_name}` in Python. If the model name doesn't exist, find the closest alternative and explain your choice in comments. It's alright if the alternative is larger, but please still use a pretrained version rather than training from scratch.
-
----
 **Training and Inference Environment:**
-Single GPU (40GB VRAM) {resource_info}
+- Single GPU (40GB VRAM) {resource_info}
 
 **Model Name:**
 `{model_name}`
 
 {hitl_section}{constraints}
+
+**Context:**
+- **Competition Description:** {description}
+- **Directory Structure:** {directory_listing}
+
 ---
 
-Before any significant tool call or external library use, state the purpose and minimal inputs required, and validate actions after key steps with a 1-2 line summary. If a step fails (e.g., CUDA unavailable), state the limitation clearly and proceed conservatively where allowed.
+## Output Requirements
 
-**Additional Context**
-- **Competition Description:**
-  {description}
-- **Directory Structure for `{Path('task') / slug}`:**
-  {directory_listing}
+You must output a **single valid Python string** (`train_py`) within ```python backticks that handles the entire pipeline.
 
-Set reasoning_effort = medium for this task; technical outputs must be complete but concise. Make code and tool calls terse, and expand documentation or schema notes as needed.
+Like this:
+{{"train_py": "```python\\n<your code>\\n```"}}
 
-## Output Format
+### 1. The Code Structure
+The `train.py` must follow this logical flow:
+1.  **Module Docstring (The Checklist):** Start the file with a detailed docstring containing a 3-7 bullet point checklist of your conceptual approach.
+2.  **Imports & Setup:** Import all necessary libraries (including `matplotlib.pyplot` for plotting). Define `HF_TOKEN` from env vars.
+3.  **Configuration:** Define all hyperparameters (LR, epochs, batch size) as constants at the top.
+4.  **Data Loading:** Load data using the specific paths provided in the context.
+5.  **Training Loop:** Implement the training logic using the specified model.
+6.  **Artifact Generation:** Ensure **all 5** required artifacts (listed below) are saved.
 
-Your response MUST follow these sections, in order:
+### 2. Required Artifacts (Files to Save)
+The script must save the following files to the paths specified in the user prompt below:
 
-### Checklist: Conceptual Steps
-- ...(3-7 high-level conceptual bullet points)
+1.  **`submission.csv`**: Test predictions formatted exactly as required by the competition.
+2.  **`valid_preds.csv`**: Validation set predictions containing:
+    - Fold numbers (if CV)
+    - Raw predictions and Ground truth labels
+    - Row identifiers (ids)
+3.  **`model_*.{{ext}}`**: Saved model files (e.g., `.pt`, `.pkl`, `.h5`). Save per-fold if using CV.
+4.  **`train_stats.json`**: A JSON file containing:
+    - `model_name`, `cv_scores` (list), `cv_mean`, `cv_std`.
+    - `submission_distribution` (stats/counts of the test preds).
+    - Key hyperparameters used (e.g. class weights, sequence truncation, image resizing)
+5.  **Visualizations (`loss_curve.png` & `metric_curve.png`)**:
+    - Use `matplotlib` to plot training/validation loss and the primary metric over epochs/iterations.
+    - **Important:** Use non-interactive backend (e.g., `plt.switch_backend('Agg')`) or simple save commands. Do not call `plt.show()`.
 
-### Code
-- Produce a single Python script, enclosed in a triple backtick block with the `python` annotation.
-- Model task and metric: infer classification/regression and metric from `{description}`; if unclear, use `accuracy` for classification, `rmse` for regression. Log your chosen metric with justification.
-- Document schema/assumptions in comments, as it's inferred from available data.
-- For output (predictions/`submission.csv`, saved models), save to the directory defined by `BASE_DIR` (see sample below).
-- The HuggingFace API token is available via the `HF_TOKEN` environment variable. Make sure to read it in your code.
-
-**Required Outputs:**
-1. **Submission file**: Save test predictions to the submission CSV path specified in the user prompt
-2. **Validation predictions**: Save validation predictions to `models_{{version}}/valid_preds.csv` (where {{version}} is specified in user prompt) with detailed information:
-   - Fold numbers (if using cross-validation)
-   - Predictions for each validation sample
-   - Ground truth labels/values (if available)
-   - Row identifiers (sample IDs, indices, etc.)
-   - Any other relevant metadata
-3. **Trained models**: Save all trained models to `models_{{version}}/` directory:
-   - Use appropriate extensions: .pkl (sklearn/xgboost/lightgbm/catboost), .pt (PyTorch), .h5 (TensorFlow/Keras)
-   - For multi-fold training: save each fold separately (e.g., model_fold0.pkl, model_fold1.pkl)
-   - For single model: use descriptive names (e.g., model.pkl, model.pt)
-4. **Validation score logging**: Log the final validation score (averaged across all folds if using cross-validation) to the log file using the format:
-   - `<final_validation_score>SCORE_VALUE</final_validation_score>`
-   - Example: `<final_validation_score>0.8456</final_validation_score>`
-   - This should be logged near the end of execution, after all training/validation is complete
-
-Example Output Block:
-```python
-# <YOUR CODE>
-```
+### 3. Technical Constraints
+- **Metric:** Infer classification vs. regression from `{description}`. If unclear, default to Accuracy (clf) or RMSE (reg).
+- **Web Search:** You may perform searches to find the best implementation for `{model_name}`, but the final output must be the code only.
+- **Error Handling:** If the exact model name is invalid in a library, comment the alternative chosen.
 """
 
 
@@ -123,8 +116,6 @@ def build_user(
     version: int = 1,
     model_recommendations: str = "",
 ) -> str:
-    models_dir = f"{outputs_dir}/models_{version}"
-
     # Build model recommendations section (only for version 1)
     recommendations_section = ""
     if version == 1 and model_recommendations:
@@ -134,20 +125,28 @@ def build_user(
 
 """
 
+    # Extract version folder from log_path (e.g., outputs/16_2/1 from outputs/16_2/1/train.txt)
+    from pathlib import Path
+    version_folder = Path(log_path).parent
+
     base = f"""{recommendations_section}Project structure:
 - Base data dir: {base_dir}
 - Outputs dir: {outputs_dir}
+- Version folder: {version_folder}
 - The logs should be written to a file named {log_path}
 - Required submission output: {submission_path}
-- Models and validation predictions directory: {models_dir}
 """
     base += (
-        "\nReturn the complete Python script that, when run, writes logs to "
+        "\nReturn train.py that writes logs to "
         f"{log_path}, "
         "produces a submission CSV at "
         f"{submission_path}, "
-        f"saves validation predictions to {models_dir}/valid_preds.csv, "
-        f"and saves trained models to {models_dir}/."
+        f"and saves the following artifacts to {version_folder}/:\n"
+        f"  - valid_preds.csv (validation predictions with fold info, predictions, ground truth, IDs)\n"
+        f"  - train_stats.json (model_name, cv_scores, cv_mean, cv_std, submission_distribution, hyperparameters)\n"
+        f"  - trained model files (model_*.pkl/.pt/.h5)\n"
+        f"  - loss_curve.png (training/validation loss plot)\n"
+        f"  - metric_curve.png (training/validation metric plot)"
     )
 
     if threshold_directive:
@@ -183,22 +182,24 @@ Like this
     ).strip()
 
 
-def guardrail_fix_suffix(next_log_path: str | Path, next_submission_path: str | Path, models_dir: str | Path) -> str:
+def guardrail_fix_suffix(next_log_path: str | Path, next_submission_path: str | Path, version_folder: str | Path) -> str:
     return (
         "\nPlease regenerate the script addressing the above guardrail issues. "
-        f"Write logs to {next_log_path}, "
-        f"produce submission at {next_submission_path}, "
-        f"save validation predictions to {models_dir}/valid_preds.csv, "
-        f"and save models to {models_dir}/."
+        f"Write logs to {next_log_path} "
+        f"and save the following artifacts to {version_folder}/:\n"
+        f"  - submission.csv\n"
+        f"  - valid_preds.csv\n"
+        f"  - train_stats.json\n"
+        f"  - trained model files\n"
+        f"  - loss_curve.png\n"
+        f"  - metric_curve.png"
     )
 
 
-def execution_failure_suffix(next_log_path: str | Path, next_submission_path: str | Path, models_dir: str | Path) -> str:
+def execution_failure_suffix(next_log_path: str | Path, next_submission_path: str | Path, version_folder: str | Path) -> str:
     return (
         "\nPlease modify your code to fix the error!\n\n"
         "Remember:\n"
         f"- write logs to {next_log_path}\n"
-        f"- produce the next submission at {next_submission_path}\n"
-        f"- save validation predictions to {models_dir}/valid_preds.csv\n"
-        f"- save models to {models_dir}/"
+        f"- save artifacts to {version_folder}/: submission.csv, valid_preds.csv, train_stats.json, models, loss_curve.png, metric_curve.png"
     )

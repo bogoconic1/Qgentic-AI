@@ -20,20 +20,17 @@ class SOTAResponse(BaseModel):
 
 
 class CodeGeneration(BaseModel):
-    """Schema for generating training code and configuration in folder structure.
+    """Schema for generating training code in folder structure.
 
-    Both fields should contain full file contents.
+    The train_py field should contain the complete training script.
     """
-    config_yaml: str
     train_py: str
 
 
 class CodePatch(BaseModel):
-    """Schema for patching existing training code and configuration.
+    """Schema for patching existing training code.
 
-    Each field contains a diff string for that specific file, or empty string if unchanged.
-    - config_yaml: diff for config.yaml (e.g., '--- a/config.yaml\\n+++ b/config.yaml\\n...') or ""
+    The train_py field contains a diff string for train.py, or empty string if unchanged.
     - train_py: diff for train.py (e.g., '--- a/train.py\\n+++ b/train.py\\n...') or ""
     """
-    config_yaml: str
     train_py: str

@@ -28,7 +28,7 @@ from utils.diffs import (
     apply_patch as util_apply_patch,
 )
 from utils.grade import run_grade
-from utils.code_utils import strip_header_from_code, extract_python_code
+from utils.code_utils import strip_header_from_code, extract_structured_code
 from prompts.developer_agent import (
     build_system as prompt_build_system,
     build_user as prompt_build_user,
@@ -61,12 +61,11 @@ _TASK_ROOT = Path(_PATH_CFG.get("task_root"))
 _OUTPUTS_DIRNAME = _PATH_CFG.get("outputs_dirname")
 
 class DeveloperAgent:
-    """Turns the Researcher plan into a runnable single-file solution.
+    """Turns the Researcher plan into a runnable training script.
 
-    - Generates a single python file: code_{iteration}_v{version}.py
+    - Generates train.py in version folder: outputs/{iteration}/{version}/train.py
     - Executes it and iterates while within a time budget
-    - Success condition: writes submission.csv at
-      <task_root>/<slug>/<outputs_dir>/<iteration>/submission.csv
+    - Success condition: writes submission.csv at outputs/{iteration}/{version}/submission.csv
     """
 
     # Class-level shared state across all parallel DeveloperAgent instances
@@ -369,7 +368,7 @@ class DeveloperAgent:
     def _replace_last_message_with_code(self, messages: list[dict], version_folder: Path) -> None:
         """Replace the last assistant message (diff) with full code (headers stripped).
 
-        Reads train.py and config.yaml from version folder, strips headers, and replaces
+        Reads train.py from version folder, strips headers, and replaces
         the last message in history.
 
         Args:
@@ -390,16 +389,8 @@ class DeveloperAgent:
             self.logger.warning("train.py not found in %s", version_folder)
             train_py_stripped = ""
 
-        # Read config.yaml (no headers to strip)
-        config_yaml_path = version_folder / "config.yaml"
-        if config_yaml_path.exists():
-            config_yaml = config_yaml_path.read_text()
-        else:
-            self.logger.warning("config.yaml not found in %s", version_folder)
-            config_yaml = ""
-
         # Reconstruct markdown with full code (headers stripped)
-        content = f"```yaml\n{config_yaml}\n```\n\n```python\n{train_py_stripped}\n```"
+        content = f"```python\n{train_py_stripped}\n```"
 
         # Replace the content
         messages[-1]["content"] = content
@@ -412,7 +403,7 @@ class DeveloperAgent:
         Returns:
             Tuple of (message_history_entry, code_dict)
             - message_history_entry: List with assistant message containing markdown
-            - code_dict: Dict with 'config_yaml' and 'train_py' keys
+            - code_dict: Dict with 'train_py' key
         """
         self.logger.info("Requesting code generation from model for iteration %s", self.iteration)
 
@@ -459,18 +450,22 @@ class DeveloperAgent:
         code_dict = result.model_dump()
         self.logger.debug("Generated code dict keys: %s", list(code_dict.keys()))
 
+        # Extract code from markdown backticks (handles both full code and patch modes)
+        raw_content = code_dict.get('train_py', '')
+        if raw_content:
+            extracted = extract_structured_code(raw_content)
+            if extracted and extracted != raw_content:
+                code_dict['train_py'] = extracted
+                self.logger.debug("Extracted code from markdown (%d chars -> %d chars)", len(raw_content), len(extracted))
+
         # Reconstruct markdown for message history
-        # For patches: show diffs, will be replaced with full code after successful application
-        # For full code: show yaml + python
+        # For patches: show diff, will be replaced with full code after successful application
+        # For full code: show python
         if expect_patch:
-            markdown_parts = []
-            if code_dict.get("config_yaml", "").strip():
-                markdown_parts.append(f"```diff\n{code_dict['config_yaml']}\n```")
-            if code_dict.get("train_py", "").strip():
-                markdown_parts.append(f"```diff\n{code_dict['train_py']}\n```")
-            content = "\n\n".join(markdown_parts) if markdown_parts else "No changes"
+            train_py_diff = code_dict.get("train_py", "").strip()
+            content = f"```diff\n{train_py_diff}\n```" if train_py_diff else "No changes"
         else:
-            content = f"```yaml\n{code_dict['config_yaml']}\n```\n\n```python\n{code_dict['train_py']}\n```"
+            content = f"```python\n{code_dict['train_py']}\n```"
 
         # Create message history entry
         output = [append_message(provider, "assistant", content)]
@@ -482,19 +477,19 @@ class DeveloperAgent:
         return normalize_diff_payload(base_path, diff_text)
 
     def _apply_structured_patch(self, base_version: int, patch_dict: dict[str, str]) -> tuple[Optional[dict[str, str]], Optional[str]]:
-        """Apply separate diffs to config.yaml and/or train.py from base version folder.
+        """Apply diff to train.py from base version folder.
 
         Reads from base_version folder (e.g., 16_2/1/) and returns patched content
         to be written to target version folder (e.g., 16_2/2/) by _write_code().
 
         Args:
             base_version: Version number to patch from
-            patch_dict: Dict with 'config_yaml' and 'train_py' keys containing diff strings
+            patch_dict: Dict with 'train_py' key containing diff string
                        (empty string means file unchanged)
 
         Returns:
             Tuple of (code_dict, error_msg):
-            - code_dict: Dict with 'config_yaml' and 'train_py' keys containing patched content.
+            - code_dict: Dict with 'train_py' key containing patched content.
                         Empty string means file unchanged. None if patch application fails.
             - error_msg: Error message describing patch failures, or None if all succeeded.
         """
@@ -508,57 +503,15 @@ class DeveloperAgent:
             self.logger.warning("Patch requested but base folder does not exist: %s", base_folder)
             return None, f"Base folder not found: {base_folder}"
 
-        # Read previous version's files
-        config_path = base_folder / "config.yaml"
+        # Read previous version's train.py
         train_path = base_folder / "train.py"
-
-        base_config = config_path.read_text() if config_path.exists() else ""
         base_train = train_path.read_text() if train_path.exists() else ""
 
-        # Extract diffs from patch_dict
-        config_diff = patch_dict.get("config_yaml", "").strip()
+        # Extract diff from patch_dict
         train_diff = patch_dict.get("train_py", "").strip()
 
-        result = {"config_yaml": "", "train_py": ""}
+        result = {"train_py": ""}
         errors = []
-
-        # Apply patch to config.yaml if diff provided
-        if config_diff:
-            import tempfile
-            import subprocess
-            import os
-
-            # Write base config to temp file
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-                f.write(base_config)
-                temp_config_path = Path(f.name)
-
-            # Normalize diff to fix incorrect line numbers
-            from utils.diffs import normalize_diff_payload
-            normalized_diff = normalize_diff_payload(temp_config_path, config_diff)
-
-            if normalized_diff is None:
-                error_msg = "Failed to normalize diff for config.yaml"
-                self.logger.error(error_msg)
-                errors.append(f"config.yaml: {error_msg}")
-                os.unlink(temp_config_path)
-            else:
-                with tempfile.NamedTemporaryFile(mode='w', suffix='.patch', delete=False) as f:
-                    f.write(normalized_diff)
-                    temp_patch = f.name
-
-                try:
-                    proc = subprocess.run(['patch', str(temp_config_path), temp_patch], check=True, capture_output=True, text=True)
-                    with open(temp_config_path, 'r') as f:
-                        result["config_yaml"] = f.read()
-                    self.logger.info("Successfully patched config.yaml from version %d", base_version)
-                except subprocess.CalledProcessError as e:
-                    error_msg = f"Patch failed for config.yaml:\nSTDOUT: {e.stdout}\nSTDERR: {e.stderr}"
-                    self.logger.error(error_msg)
-                    errors.append(error_msg)
-                finally:
-                    os.unlink(temp_config_path)
-                    os.unlink(temp_patch)
 
         # Apply patch to train.py if diff provided
         if train_diff:
@@ -677,14 +630,13 @@ class DeveloperAgent:
         Creates folder structure:
         outputs/{iteration}/
         ├── {version}/
-        │   ├── config.yaml
         │   ├── train.py (with headers)
         │   ├── train.json (metadata)
         │   ├── cv_splits.json (copied from parent)
         │   └── metric.py (copied from parent)
 
         Args:
-            code_dict: Dict with 'config_yaml' and 'train_py' keys
+            code_dict: Dict with 'train_py' key
             version: Version number
 
         Returns:
@@ -694,13 +646,6 @@ class DeveloperAgent:
         version_folder = self.outputs_dir / str(version)
         version_folder.mkdir(parents=True, exist_ok=True)
         self.logger.info("Writing code to version folder: %s", version_folder)
-
-        # Write config.yaml (no postprocessing needed)
-        config_yaml = code_dict.get('config_yaml', '')
-        if config_yaml:
-            config_path = version_folder / 'config.yaml'
-            config_path.write_text(config_yaml)
-            self.logger.debug("Written config.yaml (%d characters)", len(config_yaml))
 
         # Postprocess and write train.py
         train_py = code_dict.get('train_py', '')
@@ -917,7 +862,7 @@ class DeveloperAgent:
 
         Returns:
             Tuple of (version_number, code_content_markdown)
-            - code_content_markdown contains both config.yaml and train.py (headers stripped)
+            - code_content_markdown contains train.py (headers stripped)
             Returns (1, None) if no valid version found
         """
         # Iterate backwards from current_version-1 to find most recent valid version
@@ -939,14 +884,10 @@ class DeveloperAgent:
                 self.logger.debug(f"v{v} skipped: blacklisted")
                 continue
 
-            # Valid version found - read both config.yaml and train.py
+            # Valid version found - read train.py
             self.logger.info(f"Found most recent valid version for rollback: v{v}")
 
             try:
-                # Read config.yaml
-                config_path = version_folder / 'config.yaml'
-                config_yaml = config_path.read_text() if config_path.exists() else "# config.yaml not found"
-
                 # Read train.py with headers stripped
                 train_path = version_folder / 'train.py'
                 if train_path.exists():
@@ -954,8 +895,8 @@ class DeveloperAgent:
                 else:
                     train_py = "# train.py not found"
 
-                # Construct markdown with both files
-                code_content = f"config.yaml:\n```yaml\n{config_yaml}\n```\n\ntrain.py:\n```python\n{train_py}\n```"
+                # Construct markdown
+                code_content = f"train.py:\n```python\n{train_py}\n```"
 
                 return v, code_content
             except Exception as e:
@@ -1437,7 +1378,7 @@ class DeveloperAgent:
                     base_version = preferred_base
                     self.logger.info("Applying patch relative to base v%s -> target v%s", base_version, version)
 
-                    # Apply structured patch (separate diffs for config.yaml and train.py)
+                    # Apply structured patch (diff for train.py)
                     code_dict, error_msg = self._apply_structured_patch(base_version, generated)
 
                     if error_msg is None:
@@ -1458,7 +1399,7 @@ class DeveloperAgent:
                     else:
                         # Second failure: fallback to full code generation
                         self.logger.warning("Patch failed twice; requesting full code instead")
-                        fallback_msg = f"Patch application failed multiple times:\n\n{error_msg}\n\nPlease provide the complete config.yaml and train.py files instead of diffs."
+                        fallback_msg = f"Patch application failed multiple times:\n\n{error_msg}\n\nPlease provide the complete train.py file instead of a diff."
                         input_list.append(append_message(provider, "user", fallback_msg))
                         expect_patch = False
                         continue
@@ -1467,7 +1408,7 @@ class DeveloperAgent:
                     code_dict = generated
                     break
 
-            # Write code to folder structure (config.yaml + train.py)
+            # Write code to folder structure (train.py)
             version_folder = self._write_code(code_dict, version)
 
             # If patch succeeded, replace the diff message with full code (headers stripped)
@@ -1627,9 +1568,7 @@ class DeveloperAgent:
                     f"{suggestion_block}\n"
                     f"Remember:\n"
                     f"- write logs to {next_log_path}\n"
-                    f"- produce the next submission at {next_submission_path}\n"
-                    f"- save validation predictions to {next_version_folder}/valid_preds.csv\n"
-                    f"- save models to {next_version_folder}/"
+                    f"- save artifacts to {next_version_folder}/: submission.csv, valid_preds.csv, train_stats.json, models, loss_curve.png, metric_curve.png"
                 )
                 next_instr = self._append_patch_directive(next_instr, base_version_for_next_patch)
 
