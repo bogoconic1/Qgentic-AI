@@ -13,7 +13,7 @@ from weave.trace.util import ThreadPoolExecutor
 from project_config import get_config
 from tools.helpers import call_llm_with_retry, call_llm_with_retry_anthropic, call_llm_with_retry_google
 from tools.generate_paper_summary import PaperSummaryClient
-from utils.llm_utils import detect_provider, extract_text_from_response
+from utils.llm_utils import detect_provider, extract_text_from_response, append_message
 from prompts.model_recommender_agent import (
     model_selector_system_prompt,
     model_refiner_system_prompt,
@@ -191,6 +191,14 @@ class ModelRecommenderAgent:
                 web_search_enabled=_ENABLE_WEB_SEARCH,
                 text_format=text_format,
             )
+        elif provider == "google":
+            response = call_llm_with_retry_google(
+                model=_MODEL_SELECTOR_MODEL,
+                system_instruction=system_prompt,
+                messages=messages,
+                text_format=text_format,
+                enable_google_search=_ENABLE_WEB_SEARCH,
+            )
         else:
             raise ValueError(f"Unsupported provider: {provider}")
 
@@ -206,13 +214,8 @@ class ModelRecommenderAgent:
         Returns:
             Pydantic model instance or None
         """
-        if provider == "openai":
-            if hasattr(response, 'output_parsed') and response.output_parsed:
-                return response.output_parsed
-        elif provider == "anthropic":
-            if hasattr(response, 'parsed_output') and response.parsed_output:
-                return response.parsed_output
-        return None
+        # Response is already parsed Pydantic object when text_format is used
+        return response if response else None
 
     @weave.op()
     def _recommend_preprocessing(self, model_name: str) -> Dict[str, Any]:
@@ -229,7 +232,8 @@ class ModelRecommenderAgent:
         # Call LLM
         time_limit_minutes = int(_BASELINE_CODE_TIMEOUT / 60)
         system_prompt = preprocessing_system_prompt(time_limit_minutes=time_limit_minutes)
-        messages = [{"role": "user", "content": user_prompt}]
+        provider = detect_provider(_MODEL_SELECTOR_MODEL)
+        messages = [append_message(provider, "user", user_prompt)]
 
         try:
             response, provider = self._call_model_selector(system_prompt, messages)
@@ -274,7 +278,8 @@ class ModelRecommenderAgent:
 
         time_limit_minutes = int(_BASELINE_CODE_TIMEOUT / 60)
         system_prompt = loss_function_system_prompt(time_limit_minutes=time_limit_minutes)
-        messages = [{"role": "user", "content": user_prompt}]
+        provider = detect_provider(_MODEL_SELECTOR_MODEL)
+        messages = [append_message(provider, "user", user_prompt)]
 
         try:
             response, provider = self._call_model_selector(
@@ -307,7 +312,8 @@ class ModelRecommenderAgent:
 
         time_limit_minutes = int(_BASELINE_CODE_TIMEOUT / 60)
         system_prompt = hyperparameter_tuning_system_prompt(time_limit_minutes=time_limit_minutes)
-        messages = [{"role": "user", "content": user_prompt}]
+        provider = detect_provider(_MODEL_SELECTOR_MODEL)
+        messages = [append_message(provider, "user", user_prompt)]
 
         try:
             response, provider = self._call_model_selector(
@@ -340,7 +346,8 @@ class ModelRecommenderAgent:
 
         inference_time_limit_minutes = int(_BASELINE_CODE_TIMEOUT / 60)
         system_prompt = inference_strategy_system_prompt(inference_time_limit_minutes=inference_time_limit_minutes)
-        messages = [{"role": "user", "content": user_prompt}]
+        provider = detect_provider(_MODEL_SELECTOR_MODEL)
+        messages = [append_message(provider, "user", user_prompt)]
 
         try:
             response, provider = self._call_model_selector(
@@ -404,7 +411,8 @@ class ModelRecommenderAgent:
             research_plan=self.inputs.get("plan"),
         )
 
-        messages = [{"role": "user", "content": user_prompt}]
+        provider = detect_provider(_MODEL_SELECTOR_MODEL)
+        messages = [append_message(provider, "user", user_prompt)]
 
         response, provider = self._call_model_selector(
             system_prompt, messages, text_format=ModelSelection
@@ -555,12 +563,12 @@ class ModelRecommenderAgent:
 
         # Call Gemini 2.5 Pro with structured output
         try:
+            messages = [append_message("google", "user", user_prompt)]
             refined_selection = call_llm_with_retry_google(
                 model=_MODEL_RECOMMENDER_MODEL,
                 system_instruction=system_instruction,
-                user_prompt=user_prompt,
+                messages=messages,
                 text_format=RefinedModelSelection,
-                temperature=0.3,
             )
 
             final_models = [model.name for model in refined_selection.final_models]
