@@ -810,15 +810,10 @@ class DeveloperAgent:
         """
         timeout_seconds = self._get_code_timeout()
 
-        # Set working directory to version folder so train.py can access cv_splits.json, metric.py
-        # and write outputs (train_stats.json, submission.csv) to the correct location
-        version_folder = self.outputs_dir / str(version)
-
         output = execute_code(
             str(code_path),
             timeout_seconds=timeout_seconds,
-            conda_env=self.conda_env,
-            cwd=str(version_folder)
+            conda_env=self.conda_env
         )
         self.logger.info("Execution output captured for version v%s", version)
         self.logger.debug("Execution output: %s", output)
