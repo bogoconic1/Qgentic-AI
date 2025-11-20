@@ -59,9 +59,6 @@ _HITL_INSTRUCTIONS = _DEVELOPER_CFG.get("hitl_instructions", [])
 
 _TASK_ROOT = Path(_PATH_CFG.get("task_root"))
 _OUTPUTS_DIRNAME = _PATH_CFG.get("outputs_dirname")
-_CODE_TEMPLATE = "code_{iteration}_v{version}.py"
-_LOG_TEMPLATE = "code_{iteration}_v{version}.txt"
-_SUBMISSION_TEMPLATE = "submission_{version}.csv"
 
 class DeveloperAgent:
     """Turns the Researcher plan into a runnable single-file solution.
@@ -169,7 +166,12 @@ class DeveloperAgent:
         self.logger.propagate = False
 
     def _code_filename(self, version: int) -> str:
-        return _CODE_TEMPLATE.format(iteration=self.iteration, version=version)
+        """Return code path relative to outputs_dir (folder-based).
+
+        For folder-based structure: {version}/train.py
+        e.g., "1/train.py", "2/train.py"
+        """
+        return f"{version}/train.py"
 
     def _log_filename(self, version: int) -> str:
         """Return log path relative to outputs_dir (folder-based).
@@ -1502,8 +1504,8 @@ class DeveloperAgent:
                 summary_text = build_block_summary(guard_report)
                 next_log_path = self.outputs_dir / self._log_filename(version + 1)
                 next_submission_path = self.outputs_dir / self._submission_filename(version + 1)
-                next_models_dir = self.outputs_dir / f"models_{version + 1}"
-                fix_instr = prompt_guardrail_fix_suffix(next_log_path, next_submission_path, next_models_dir)
+                next_version_folder = self.outputs_dir / str(version + 1)
+                fix_instr = prompt_guardrail_fix_suffix(next_log_path, next_submission_path, next_version_folder)
                 guardrail_prompt = summary_text + fix_instr
                 base_version_for_next_patch = version
                 guardrail_prompt = self._append_patch_directive(guardrail_prompt, base_version_for_next_patch)
@@ -1604,7 +1606,7 @@ class DeveloperAgent:
 
                 next_log_path = self.outputs_dir / self._log_filename(version + 1)
                 next_submission_path = self.outputs_dir / self._submission_filename(version + 1)
-                next_models_dir = self.outputs_dir / f"models_{version + 1}"
+                next_version_folder = self.outputs_dir / str(version + 1)
 
                 suggestion_block = ""
                 if suggestion_text:
@@ -1631,8 +1633,8 @@ class DeveloperAgent:
                     f"Remember:\n"
                     f"- write logs to {next_log_path}\n"
                     f"- produce the next submission at {next_submission_path}\n"
-                    f"- save validation predictions to {next_models_dir}/valid_preds.csv\n"
-                    f"- save models to {next_models_dir}/"
+                    f"- save validation predictions to {next_version_folder}/valid_preds.csv\n"
+                    f"- save models to {next_version_folder}/"
                 )
                 next_instr = self._append_patch_directive(next_instr, base_version_for_next_patch)
 
@@ -1648,7 +1650,7 @@ class DeveloperAgent:
             else:
                 next_log_path = self.outputs_dir / self._log_filename(version + 1)
                 next_submission_path = self.outputs_dir / self._submission_filename(version + 1)
-                next_models_dir = self.outputs_dir / f"models_{version + 1}"
+                next_version_folder = self.outputs_dir / str(version + 1)
 
                 # Check if this is a timeout or OOM error
                 is_timeout = "Code execution timed out after" in output
@@ -1697,7 +1699,7 @@ class DeveloperAgent:
                         Performance analysis:
                         {final_summary}
 
-                        {prompt_execution_failure_suffix(next_log_path, next_submission_path, next_models_dir)}
+                        {prompt_execution_failure_suffix(next_log_path, next_submission_path, next_version_folder)}
                         """
                     except Exception:
                         self.logger.exception(f"Failed to run red flags analysis for {error_type}")
@@ -1708,7 +1710,7 @@ class DeveloperAgent:
                         This is the stack trace and advice on how to fix the error:
                         {output}
 
-                        {prompt_execution_failure_suffix(next_log_path, next_submission_path, next_models_dir)}
+                        {prompt_execution_failure_suffix(next_log_path, next_submission_path, next_version_folder)}
                         """
                 else:
                     # For regular bugs/errors, just show the error (web search already done in execute_code)
@@ -1717,7 +1719,7 @@ class DeveloperAgent:
                     This is the stack trace and advice on how to fix the error:
                     {output}
 
-                    {prompt_execution_failure_suffix(next_log_path, next_submission_path, next_models_dir)}
+                    {prompt_execution_failure_suffix(next_log_path, next_submission_path, next_version_folder)}
                     """
 
                 base_version_for_next_patch = version
