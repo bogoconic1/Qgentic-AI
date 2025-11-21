@@ -1,8 +1,87 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from prompts.shared_constraints import get_hard_constraints
+
+
+def _limit_list_items(data, max_items=5):
+    """Recursively limit list items to max_items for display purposes."""
+    if isinstance(data, dict):
+        return {k: _limit_list_items(v, max_items) for k, v in data.items()}
+    elif isinstance(data, list):
+        if len(data) > max_items:
+            limited = data[:max_items]
+            return limited + [f"... ({len(data) - max_items} more items)"]
+        return [_limit_list_items(item, max_items) for item in data]
+    else:
+        return data
+
+
+def _read_helper_files(slug: str, iteration: str | int | None = None) -> str:
+    """Read cv_splits.json and metric.py from task directory and format for prompt.
+
+    Args:
+        slug: Competition slug (e.g., "test-demo")
+        iteration: Iteration number (e.g., "17" or "16_2"). If provided, looks in outputs/{base_iteration}/
+
+    Returns:
+        Formatted string with helper file schemas and contents, or empty string if no files found
+    """
+    # Determine base directory
+    if iteration is not None:
+        # Extract base iteration (e.g., "16" from "16_2")
+        iteration_str = str(iteration)
+        base_iteration = iteration_str.split('_')[0]
+        base_dir = Path(f"task/{slug}/outputs/{base_iteration}")
+    else:
+        base_dir = Path(f"task/{slug}")
+
+    helper_sections = []
+
+    # Check for cv_splits.json
+    cv_splits_path = base_dir / "cv_splits.json"
+    if cv_splits_path.exists():
+        try:
+            with open(cv_splits_path, 'r') as f:
+                cv_data = json.load(f)
+
+            # Limit lists to 5 items for display
+            cv_data_limited = _limit_list_items(cv_data, max_items=5)
+
+            cv_section = f"""
+**cv_splits.json** is available in the base directory with pre-defined cross-validation splits. Please read from here and DO NOT generate your own splits.
+```json
+{json.dumps(cv_data_limited, indent=2)}
+```
+"""
+            helper_sections.append(cv_section)
+        except Exception:
+            pass  # Skip if file can't be read
+
+    # Check for metric.py
+    metric_path = base_dir / "metric.py"
+    if metric_path.exists():
+        try:
+            with open(metric_path, 'r') as f:
+                metric_content = f.read()
+
+            metric_section = f"""
+**metric.py** is available in the base directory with the competition-specific evaluation metric. Please use this metric for evaluation. DO NOT generate your own metric.
+
+File contents:
+```python
+{metric_content}
+```
+"""
+            helper_sections.append(metric_section)
+        except Exception:
+            pass  # Skip if file can't be read
+
+    if helper_sections:
+        return "\n### 3. Available Helper Files\n" + "\n".join(helper_sections)
+    return ""
 
 
 def _get_hard_constraints(model_name: str, allow_multi_fold: bool = False) -> str:
@@ -26,7 +105,7 @@ def _get_hard_constraints(model_name: str, allow_multi_fold: bool = False) -> st
     )
 
 
-def build_system(description: str, directory_listing: str, model_name: str, slug: str, cpu_core_range: list[int] | None = None, gpu_identifier: str | None = None, gpu_isolation_mode: str = "none", allow_multi_fold: bool = False, hitl_instructions: list[str] | None = None) -> str:
+def build_system(description: str, directory_listing: str, model_name: str, slug: str, iteration: str | int | None = None, cpu_core_range: list[int] | None = None, gpu_identifier: str | None = None, gpu_isolation_mode: str = "none", allow_multi_fold: bool = False, hitl_instructions: list[str] | None = None) -> str:
     # Build resource allocation info
     resource_info = ""
     if cpu_core_range is not None:
@@ -50,6 +129,9 @@ You have been provided with the following guidance for code implementation:
 
     constraints = _get_hard_constraints(model_name, allow_multi_fold=allow_multi_fold)
 
+    # Read helper files (cv_splits.json, metric.py) if they exist
+    helper_files_section = _read_helper_files(slug, iteration)
+
     return f"""# Role: Lead Developer for Machine-Learning Competition Team
 Your objective is to deliver a complete, executable training script (train.py) for a Kaggle Competition using **only** the specified model `{model_name}`.
 
@@ -64,7 +146,7 @@ Your objective is to deliver a complete, executable training script (train.py) f
 **Context:**
 - **Competition Description:** {description}
 - **Directory Structure:** {directory_listing}
-
+{helper_files_section}
 ---
 
 ## Output Requirements
@@ -97,11 +179,11 @@ The script must save the following files to the paths specified in the user prom
     - `submission_distribution` (stats/counts of the test preds).
     - Key hyperparameters used (e.g. class weights, sequence truncation, image resizing)
 5.  **Visualizations (`loss_curve.png` & `metric_curve.png`)**:
-    - Use `matplotlib` to plot training/validation loss and the primary metric over epochs/iterations.
+    - Use `matplotlib` to plot training/validation loss and the primary metric (both training and validation) over epochs/iterations. 
+    - Ensure 1 plot is created per cross-validation fold.
     - **Important:** Use non-interactive backend (e.g., `plt.switch_backend('Agg')`) or simple save commands. Do not call `plt.show()`.
 
 ### 3. Technical Constraints
-- **Metric:** Infer classification vs. regression from `{description}`. If unclear, default to Accuracy (clf) or RMSE (reg).
 - **Web Search:** You may perform searches to find the best implementation for `{model_name}`, but the final output must be the code only.
 - **Error Handling:** If the exact model name is invalid in a library, comment the alternative chosen.
 """
