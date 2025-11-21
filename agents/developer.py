@@ -249,6 +249,7 @@ class DeveloperAgent:
             directory_listing=directory_listing,
             model_name=self.model_name,
             slug=self.slug,
+            iteration=self.iteration,
             cpu_core_range=self.cpu_core_range,
             gpu_identifier=self.gpu_identifier,
             gpu_isolation_mode=self.gpu_isolation_mode,
@@ -1412,7 +1413,7 @@ class DeveloperAgent:
             version_folder = self._write_code(code_dict, version)
 
             # If patch succeeded, replace the diff message with full code (headers stripped)
-            if expect_patch and patch_retry_count > 0 and error_msg is None:
+            if expect_patch and error_msg is None:
                 self._replace_last_message_with_code(input_list, version_folder)
 
             # ---------------------------
