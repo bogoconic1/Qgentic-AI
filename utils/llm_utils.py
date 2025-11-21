@@ -2,6 +2,95 @@
 LLM utility functions for provider detection and response handling.
 """
 
+import base64
+import logging
+import mimetypes
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+
+def encode_image_to_data_url(image_path: str | Path, resize_for_anthropic: bool = False) -> str:
+    """
+    Encode an image file to a data URL.
+
+    Args:
+        image_path: Path to the image file
+        resize_for_anthropic: Whether to resize image to max 2000px per dimension (for Anthropic API)
+
+    Returns:
+        Data URL string in format: data:{mime};base64,{data}
+        Empty string if encoding fails
+
+    Examples:
+        >>> encode_image_to_data_url("chart.png")
+        'data:image/png;base64,iVBORw0KGgo...'
+
+        >>> encode_image_to_data_url("large_chart.jpg", resize_for_anthropic=True)
+        'data:image/jpeg;base64,/9j/4AAQSkZJRg...'
+    """
+    path = Path(image_path) if isinstance(image_path, str) else image_path
+
+    # Determine MIME type
+    mime, _ = mimetypes.guess_type(path.name)
+    if mime is None:
+        suffix = path.suffix.lower()
+        if suffix in {".jpg", ".jpeg"}:
+            mime = "image/jpeg"
+        elif suffix == ".png":
+            mime = "image/png"
+        elif suffix == ".webp":
+            mime = "image/webp"
+        elif suffix == ".gif":
+            mime = "image/gif"
+        else:
+            return ""
+
+    try:
+        image_bytes = path.read_bytes()
+
+        # Resize image if needed for Anthropic (max 2000px per dimension for multi-image requests)
+        if resize_for_anthropic:
+            try:
+                from PIL import Image
+                import io
+
+                img = Image.open(io.BytesIO(image_bytes))
+                width, height = img.size
+
+                # Check if resizing is needed
+                if width > 2000 or height > 2000:
+                    # Calculate new dimensions maintaining aspect ratio
+                    if width > height:
+                        new_width = 2000
+                        new_height = int(height * (2000 / width))
+                    else:
+                        new_height = 2000
+                        new_width = int(width * (2000 / height))
+
+                    # Resize the image
+                    img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+                    # Save to bytes
+                    output = io.BytesIO()
+                    # Preserve format, default to PNG if format is unknown
+                    img_format = img.format if img.format else 'PNG'
+                    img.save(output, format=img_format)
+                    image_bytes = output.getvalue()
+
+                    logger.info(f"Resized image {path.name} from {width}x{height} to {new_width}x{new_height} for Anthropic API")
+            except ImportError:
+                logger.warning("PIL not available for image resizing. Image may fail if dimensions exceed 2000px.")
+            except Exception as e:
+                logger.warning(f"Failed to resize image {path.name}: {e}. Using original.")
+
+        data = base64.b64encode(image_bytes).decode("utf-8")
+    except Exception as e:
+        logger.error(f"Failed to encode image {path}: {e}")
+        return ""
+
+    return f"data:{mime};base64,{data}"
+
 
 def detect_provider(model_name: str) -> str:
     """
