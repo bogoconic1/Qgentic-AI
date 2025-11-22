@@ -128,6 +128,13 @@ class DeveloperAgent:
         self.external_data_listing: str = external_data_listing or "No external data directories found."
         self.plan_content: str = plan_content or "No plan.md found."
 
+        # Set external data directory for download_external_datasets tool
+        # Use parent iteration folder (e.g., outputs/17 for iteration 17_2)
+        parent_iteration_folder = self._get_parent_iteration_folder()
+        self.external_dir = parent_iteration_folder / "external_data_1"
+        self.external_dir.mkdir(parents=True, exist_ok=True)
+        os.environ["EXTERNAL_DATA_DIR"] = str(self.external_dir)
+
         os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
         # Patch mode configuration
