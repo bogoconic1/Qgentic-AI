@@ -51,7 +51,7 @@ def _read_helper_files(slug: str, iteration: str | int | None = None) -> str:
             cv_data_limited = _limit_list_items(cv_data, max_items=5)
 
             cv_section = f"""
-**cv_splits.json** is available in the base directory with pre-defined cross-validation splits. Please read from here and DO NOT generate your own splits.
+**cv_splits.json**: pre-defined cross-validation splits. Please read from here and DO NOT generate your own splits.
 ```json
 {json.dumps(cv_data_limited, indent=2)}
 ```
@@ -68,7 +68,13 @@ def _read_helper_files(slug: str, iteration: str | int | None = None) -> str:
                 metric_content = f.read()
 
             metric_section = f"""
-**metric.py** is available in the base directory with the competition-specific evaluation metric. Please use this metric for evaluation. DO NOT generate your own metric.
+**metric.py**: competition-specific evaluation metric. Please use this metric for evaluation. DO NOT generate your own metric.
+
+You should write the line
+```
+from metric import score
+```
+to import the metric function.
 
 File contents:
 ```python
@@ -80,7 +86,7 @@ File contents:
             pass  # Skip if file can't be read
 
     if helper_sections:
-        return "\n### 3. Available Helper Files\n" + "\n".join(helper_sections)
+        return f"\n### 3. Available Helper Files in `{base_dir}`\n" + "\n".join(helper_sections)
     return ""
 
 
@@ -144,8 +150,11 @@ Your objective is to deliver a complete, executable training script (train.py) f
 {hitl_section}{constraints}
 
 **Context:**
-- **Competition Description:** {description}
-- **Directory Structure:** {directory_listing}
+- **Competition Description:** 
+  {description}
+- **Directory Structure for `{Path('task') / slug}`:
+  {directory_listing}
+
 {helper_files_section}
 ---
 
@@ -177,10 +186,11 @@ The script must save the following files to the paths specified in the user prom
 4.  **`train_stats.json`**: A JSON file containing:
     - `model_name`, `cv_scores` (list), `cv_mean`, `cv_std`.
     - `submission_distribution` (stats/counts of the test preds).
-    - Key hyperparameters used (e.g. class weights, sequence truncation, image resizing)
-5.  **Visualizations (`loss_curve.png` & `metric_curve.png`)**:
-    - Use `matplotlib` to plot training/validation loss and the primary metric (both training and validation) over epochs/iterations. 
-    - Ensure 1 plot is created per cross-validation fold.
+    - Key hyperparameters used (e.g. class weights, sequence truncation, image resizing).
+    - `errors`: A list of any errors/exceptions encountered during training (e.g., file not found, data loading errors). Capture error messages from try/except blocks.
+5.  **Visualizations**:
+    - `loss_curve.png`: 1 file with N subplots (use `plt.subplots(1, N)` where N = number of folds). Each subplot shows train/val loss for one fold.
+    - `metric_curve.png`: 1 file with N subplots. Each subplot shows train/val metric for one fold.
     - **Important:** Use non-interactive backend (e.g., `plt.switch_backend('Agg')`) or simple save commands. Do not call `plt.show()`.
 
 ### 3. Technical Constraints
