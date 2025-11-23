@@ -6,46 +6,29 @@ competitions with minimal human intervention. Two collaborating LLM-driven agent
 technical plan, generate code, run it locally, analyse the results, and keep refining the
 solution. Guardrails and supporting tools keep the loop grounded, reproducible, and safe.
 
+![CSIRO Leaderboard Position](docs/assets/csiro_lb.jpeg)
+
 ---
 ## News
 
+**[2025/11/23]** 📊 **Qgentic-AI achieves 0.68 Public LB for CSIRO-Biomass competition, placing it 20th/1400 teams (as of today) in the top 1.5%!**
+
 **[2025/11/13]** 📊 **Qgentic-AI achieves 94.82% weighted mean percentile across 7 MLE-Bench competitions** - outperforming FM-Agent (93.91%), InternAgent (76.25%), MLE-STAR-PRO (72.74%), Operand (69.81%), and R&D-Agent (62.46%). Results reported as percentiles with 74:1 weighting to match MLE-Bench's 75-competition benchmark.
 
-**[2025/11/10]** 🔬 **Enhanced Researcher with Domain-First Discovery** - example research plan for CSIRO competition [here](https://www.kaggle.com/code/yeoyunsianggeremie/csiro-agentic-ai-solution-mobilenet-v4/comments#3315336)
-
-**[2025/11/04]** 🏆 **Qgentic-AI achieves #1 single-model public notebook on [PS5E11](https://www.kaggle.com/competitions/playground-series-s5e11)** (Top 6%, 40/700) with fully
-  autonomous A/B testing!
-
-**[2025/11/02]** Added Ensembling agent
-
-**[2025/10/31]** Qgentic-AI supports flexible GPU configurations (Multi-GPU, Single-GPU, and MIG), automatically creating isolated conda environments for parallel model execution! You can execute up till 7x2 = 14 baseline model experiments in parallel on 2x A100 80GB GPUs! 🚀
-
-**[2025/10/29]** Added thread-safe cross-model learning: parallel DeveloperAgent instances now share successful and failed suggestions in real-time, eliminating duplicate exploration and reducing wasted GPU compute. Suggestions include model attribution and score impact for intelligent pattern recognition.
-
-**[2025/10/25]** Added first stage to identify red flags in code/logs/submission and CPU/GPU (NVIDIA MIG) parallelism support
-
-**[2025/10/22]** Added ModelRecommender agent - recommend candidate models, preprocessing/architecture, etc
-
-**[2025/10/17]** Updated evals for recent SOTA submissions to MLE-Bench repo. Chose competitions where the variation between the latest solutions are high.
-
-**[2025/10/14]** Updated results of ongoing competition evaluation
-
 ## Preliminary Results
-
-The competitions were evaluated on 4x A100 80GB GPUs (splitted into 8 instances of 40GB using MIG). The average runtime is 8-9 hours per competition (1 hour researcher + 3 hours baseline + 4 hours ensemble + buffers).
 
 ## Present Competitions
 
 | Kaggle Competition | LB score | Ranking | Notebook |
 | --- | --- | --- | --- |
-| csiro-biomass | TBC | TBC | TBC |
-| playground-series-s5e11 | 0.92684 | Top 6% (40/700) - **Best Single Model Public Notebook** 🚀 | [Notebook 1](https://www.kaggle.com/code/yeoyunsianggeremie/ps5e11-agentic-ai-solution-single-xgb) |
-| playground-series-s5e10 | 0.05576 | Top 15% (606/4082) | [Notebook 1](https://www.kaggle.com/code/yeoyunsianggeremie/ps5e10-agentic-ai-solution), [Notebook 2](https://www.kaggle.com/code/yeoyunsianggeremie/ps5e10-agentic-ai-xgb) |
-
-For present competitions, it is strongly recommended to increase the baseline and ensemble time limit to 2 days and 3 days respectively for optimal results.
+| csiro-biomass | 0.68 | Top 1.5% (20/1400) - Nov 23, 2025 | Released after deadline |
+| playground-series-s5e11 | 0.92684 | Top 6% (40/700) - **Best Single Model Public Notebook** 🚀 - Nov 4, 2025 | [Notebook 1](https://www.kaggle.com/code/yeoyunsianggeremie/ps5e11-agentic-ai-solution-single-xgb) |
+| playground-series-s5e10 | 0.05576 | Top 15% (606/4082) - Oct 31, 2025 | [Notebook 1](https://www.kaggle.com/code/yeoyunsianggeremie/ps5e10-agentic-ai-solution), [Notebook 2](https://www.kaggle.com/code/yeoyunsianggeremie/ps5e10-agentic-ai-xgb) |
 
 
 ## Past Competitions
+
+The competitions were evaluated on 4x A100 80GB GPUs (splitted into 8 instances of 40GB using MIG). The average runtime is 8-9 hours per competition (1 hour researcher + 3 hours baseline + 4 hours ensemble + buffers).
 
 Results are reported as **raw score (percentile%)** where percentile = % of leaderboard submissions beaten. The weighted mean uses a 74:1 ratio (weight 12.33 for each of 6 competitions, weight 1.0 for Statoil) to match MLE-Bench's 75-competition benchmark and prevent the Statoil outlier from dominating the overall metric.
 
@@ -53,19 +36,110 @@ Results are reported as **raw score (percentile%)** where percentile = % of lead
 
 | Kaggle Competition | Difficulty | Type | Metric | Qgentic-AI | FM Agent | InternAgent | Operand | R&D-Agent | MLE-STAR-PRO |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| us-patent-phrase-to-phrase-matching | Medium | Information Retrieval | PCC (higher) | 0.858 (74.01%) | 0.862 (90.26%) | **0.868 (98.99%)** | 0.692 (15.19%) | 0.801 (21.81%) | 0.753 (17.31%) |
-| learning-agency-lab-automated-essay-scoring-2 | Medium | Text | QWK (higher) | **0.847 (100.00%)** | **0.845 (100.00%)** | 0.830 (63.18%) | 0.830 (64.40%) | 0.825 (46.90%) | 0.832 (68.91%) |
-| tabular-playground-series-dec-2021 | Easy | Tabular | Accuracy % (higher) | **0.963 (100.00%)** | **0.960 (100.00%)** | **0.963 (100.00%)** | **0.963 (100.00%)** | **0.963 (100.00%)** | **0.963 (100.00%)** |
-| statoil-iceberg-classifier-challenge | Medium | Image Classification | Logloss (lower) | **0.160 (83.18%)** | 1.258 (3.54%) | 0.203 (50.30%) | Failed (0.00%) | Failed (0.00%) | 0.246 (33.69%) |
-| denoising-dirty-documents | Medium | Computer Vision | RMSE (lower) | **0.012 (98.15%)** | 0.020 (93.21%) | 0.023 (89.51%) | 0.023 (89.51%) | **0.011 (98.15%)** | **0.011 (98.15%)** |
-| whale-categorization-playground | Medium | Computer Vision | MAP@5 (higher) | **0.557 (97.73%)** | 0.466 (93.01%) | 0.183 (10.40%) | 0.361 (60.11%) | 0.262 (14.37%) | 0.360 (60.11%) |
-| google-quest-challenge | Medium | Text | Spearman Correlation (higher) | **0.445 (100.00%)** | 0.394 (94.34%) | 0.409 (97.52%) | 0.398 (95.29%) | 0.415 (98.60%) | 0.396 (95.10%) |
-| **Weighted Mean Percentile** | | | | **94.82%** | 93.91% | 76.25% | 69.81% | 62.46% | 72.74% |
+| us-patent-phrase-to-phrase-matching | Medium | Information Retrieval | PCC (higher) | 0.858<br>(74.01%) | 0.862<br>(90.26%) 🥉 | **0.868**<br>**(98.99%)** 🥈 | 0.692<br>(15.19%) | 0.801<br>(21.81%) | 0.753<br>(17.31%) |
+| learning-agency-lab-automated-essay-scoring-2 | Medium | Text | QWK (higher) | **0.847**<br>**(100.00%)** 🥇 | **0.845**<br>**(100.00%)** 🥇 | 0.830<br>(63.18%) | 0.830<br>(64.40%) | 0.825<br>(46.90%) | 0.832<br>(68.91%) |
+| tabular-playground-series-dec-2021 | Easy | Tabular | Accuracy % (higher) | **0.963**<br>**(100.00%)** 🥇 | **0.960**<br>**(100.00%)** 🥇 | **0.963**<br>**(100.00%)** 🥇 | **0.963**<br>**(100.00%)** 🥇 | **0.963**<br>**(100.00%)** 🥇 | **0.963**<br>**(100.00%)** 🥇 |
+| statoil-iceberg-classifier-challenge | Medium | Image Classification | Logloss (lower) | **0.160**<br>**(83.18%)** | 1.258<br>(3.54%) | 0.203<br>(50.30%) | Failed<br>(0.00%) | Failed<br>(0.00%) | 0.246<br>(33.69%) |
+| denoising-dirty-documents | Medium | Computer Vision | RMSE (lower) | **0.012**<br>**(98.15%)** 🥇 | 0.020<br>(93.21%) 🥈 | 0.023<br>(89.51%) 🥈 | 0.023<br>(89.51%) 🥈 | **0.011**<br>**(98.15%)** 🥇 | **0.011**<br>**(98.15%)** 🥇 |
+| whale-categorization-playground | Medium | Computer Vision | MAP@5 (higher) | **0.557**<br>**(97.73%)** 🥇 | 0.466<br>(93.01%) 🥈 | 0.183<br>(10.40%) | 0.361<br>(60.11%) | 0.262<br>(14.37%) | 0.360<br>(60.11%) |
+| google-quest-challenge | Medium | Text | Spearman Correlation (higher) | **0.445**<br>**(100.00%)** 🥇 | 0.394<br>(94.34%) 🥉 | 0.409<br>(97.52%) 🥈 | 0.398<br>(95.29%) 🥈 | 0.415<br>(98.60%) 🥈 | 0.396<br>(95.10%) 🥈 |
+| **Weighted Mean Percentile** | | | | **94.82%**<br>(4🥇 1🥈 0🥉) | 93.91%<br>(2🥇 2🥈 2🥉) | 76.25%<br>(1🥇 3🥈 0🥉) | 69.81%<br>(1🥇 2🥈 0🥉) | 62.46%<br>(2🥇 1🥈 0🥉) | 72.74%<br>(2🥇 1🥈 0🥉) |
 --- 
 
 ## Architecture at a Glance
 
-![Architecture diagram showing the Researcher and Developer flow](docs/assets/architecture_v4.png)
+![Architecture diagram showing the Researcher and Developer flow](docs/assets/architecture_v5.png)
+
+# Sample Logs
+
+![Screenshot of wandb run metrics for the pipeline](docs/assets/wandb_sample_log.png)
+
+## Getting Started
+
+### 1. Prerequisites
+
+- Python 3.12.
+- CUDA-enabled GPU.
+
+```
+conda create --name qgentic-ai python=3.12 -y
+conda activate qgentic-ai
+
+git clone https://github.com/bogoconic1/Qgentic-AI.git
+cd Qgentic-AI
+pip install uv
+bash install.sh
+```
+
+Add your ```kaggle.json``` file in the Qgentic-AI directory
+
+If you want to download MLE-Bench Data for another competition, modify ```install.sh``` ```TASK_NAME``` and only execute ```prepare_data``` and ```copy_task_data```
+
+### 2. Configure API Keys & Environment
+
+Create a `.env` file in the project root (or export directly):
+
+```
+GOOGLE_API_KEY=...
+OPENAI_API_KEY=...
+ANTHROPIC_API_KEY=...
+FIRECRAWL_API_KEY=...
+HF_TOKEN=...
+GOOGLE_CLOUD_PROJECT=...
+GOOGLE_CLOUD_LOCATION=global
+GOOGLE_GENAI_USE_VERTEXAI=True
+KAGGLE_USERNAME=
+KAGGLE_KEY=
+```
+
+These keys are loaded via `python-dotenv`. Adjust the environment variables listed in
+`config.yaml` if you need custom names or endpoints.
+
+### 3. Download Meta Kaggle from Kaggle Datasets
+```
+sudo apt-get install unzip
+curl -L -o /workspace/meta-kaggle.zip https://www.kaggle.com/api/v1/datasets/download/kaggle/meta-kaggle
+
+unzip meta-kaggle.zip -d /workspace/meta-kaggle
+```
+
+Then run
+```
+python create_metadata.py --competition-slug "enter slug"
+```
+
+You will see something like this
+
+```
+task/
+└─ "enter slug"/
+   ├─ description.md
+   ├─ public_insights.md
+   ├─ sample_submission.csv
+   ├─ comp_metadata.yaml   
+   └─ train files/test files
+```
+
+### 4. Launch an Iteration
+
+```bash
+python launch_agent.py --slug "enter slug" --iteration 1
+```
+
+Time limits are controlled via `config.yaml` (`runtime.baseline_time_limit`).
+
+### 5. Monitoring & Artefacts
+
+- `researcher.txt` / `developer.txt` capture detailed logs for each iteration.
+- `code_{iteration}_v{version}.py` are the generated scripts; corresponding logs sit under
+  `code_{iteration}_v{version}.txt`.
+- Weights & Biases and Weave projects are initialised in `launch_agent.py`; supply
+  `--wandb-entity/--wandb-project`, export `WANDB_ENTITY/WANDB_PROJECT`, or define them
+  in `config.yaml` under `tracking.wandb`.
+
+---
+
+## Components
 
 - **Starter Agent (`agents/starter.py`)**
   - Proposes 5 starter model ideas with short example code by referencing the competition description and `docs/state_of_competitions_2024.md`.
@@ -129,7 +203,18 @@ Results are reported as **raw score (percentile%)** where percentile = % of lead
   - Multi-fold ensembling enabled by default for robust performance.
   - Uses ensemble-specific system prompts and naming conventions: `code_{iteration}_{strategy_index}_ens_v{version}.py`
 
-- **Guardrails (`guardrails/`), Tools (`tools/`) & Shared Config (`project_config.py`)**
+- **Guardrails (`guardrails/`, `utils/guardrails.py`)**
+  - **Code Safety Check** (`guardrails/code_safety.py`): LLM-based security analysis using Gemini 2.5 Flash
+    - Blocks critical issues: `eval()`/`exec()`, command injection, hardcoded secrets
+    - Explicitly allows: file operations, network requests, standard imports (lenient by design)
+    - Returns structured output with decision, confidence, violations, and suggested fixes
+  - **Data Leakage Review** (`guardrails/developer.py`): LLM-based train/test contamination detection
+    - Detects: fit on combined data, test label usage, improper CV, time series leaks
+    - Returns findings with rule IDs, code snippets, rationale, and suggested fixes
+  - **Logging Order Check**: AST-based static analysis ensuring `logging.basicConfig()` precedes usage
+  - All guardrails run before code execution; blocking decisions prevent unsafe code from running
+
+- **Tools (`tools/`) & Shared Config (`project_config.py`)**
   - `tools.developer` wraps code execution, stack-trace web search, and SOTA suggestions:
     - `execute_code()`: Runs generated Python files with dynamic timeout (`baseline_time_limit // 4`)
     - `execute_code_with_oom_retry()`: Automatic OOM retry logic with configurable polling
@@ -150,102 +235,10 @@ Results are reported as **raw score (percentile%)** where percentile = % of lead
   - Expected layout: Kaggle metadata, `description.md`, `plan.md`, `outputs/<iteration>/`
     (logs, generated code, submissions), baseline artifacts (`baseline_results.json`),
     and per-baseline outputs under `outputs/<iteration>_<k>/`.
+  - **Required user-defined files**:
+    - `cv_splits.json`: Cross-validation fold indices for reproducible train/val splits
+    - `metric.py`: Competition-specific evaluation metric implementation
 
-# Sample Logs
-
-![Screenshot of wandb run metrics for the pipeline](docs/assets/wandb_sample_log.png)
-
-## Getting Started
-
-### 1. Prerequisites
-
-- Python 3.12.
-- CUDA-enabled GPU.
-
-```
-conda create --name qgentic-ai python=3.12 -y
-conda activate qgentic-ai
-
-git clone https://github.com/bogoconic1/Qgentic-AI.git
-cd Qgentic-AI
-pip install uv
-bash install.sh
-```
-
-Add your ```kaggle.json``` file in the Qgentic-AI directory
-
-If you want to download MLE-Bench Data for another competition, modify ```install.sh``` ```TASK_NAME``` and only execute ```prepare_data``` and ```copy_task_data```
-
-### 2. Install Dependencies
-
-```bash
-pip install vllm
-```
-This is an additional dependency not in requirements.txt, as running it together with others causes errors.
-
-### 3. Configure API Keys & Environment
-
-Create a `.env` file in the project root (or export directly):
-
-```
-GOOGLE_API_KEY=...
-OPENAI_API_KEY=...
-ANTHROPIC_API_KEY=...
-EXA_API_KEY=...
-OPENROUTER_API_KEY=...
-E2B_API_KEY=...
-FIRECRAWL_API_KEY=...
-S2_API_KEY=...
-HF_TOKEN=...
-GOOGLE_CLOUD_PROJECT=...
-GOOGLE_CLOUD_LOCATION=global
-GOOGLE_GENAI_USE_VERTEXAI=True
-```
-
-These keys are loaded via `python-dotenv`. Adjust the environment variables listed in
-`config.yaml` if you need custom names or endpoints.
-
-### 4. Download Meta Kaggle from Kaggle Datasets
-```
-sudo apt-get install unzip
-curl -L -o /workspace/meta-kaggle.zip https://www.kaggle.com/api/v1/datasets/download/kaggle/meta-kaggle
-
-unzip meta-kaggle.zip -d /workspace/meta-kaggle
-```
-
-Then run
-```
-python create_metadata.py --competition-slug "enter slug"
-```
-
-You will see something like this
-
-```
-task/
-└─ "enter slug"/
-   ├─ description.md
-   ├─ public_insights.md
-   ├─ sample_submission.csv
-   ├─ comp_metadata.yaml   
-   └─ train files/test files
-```
-
-### 5. Launch an Iteration
-
-```bash
-python launch_agent.py --slug "enter slug" --iteration 1
-```
-
-Time limits are controlled via `config.yaml` (`runtime.baseline_time_limit`).
-
-### 6. Monitoring & Artefacts
-
-- `researcher.txt` / `developer.txt` capture detailed logs for each iteration.
-- `code_{iteration}_v{version}.py` are the generated scripts; corresponding logs sit under
-  `code_{iteration}_v{version}.txt`.
-- Weights & Biases and Weave projects are initialised in `launch_agent.py`; supply
-  `--wandb-entity/--wandb-project`, export `WANDB_ENTITY/WANDB_PROJECT`, or define them
-  in `config.yaml` under `tracking.wandb`.
 
 ---
 
@@ -281,7 +274,10 @@ Key settings live in `config.yaml` (merged with `project_config.py` defaults):
 
 - **paths**: Root directories and naming templates for generated artifacts.
 
-- **guardrails**: Toggles for logging order checks, debug/NaN guard, and leakage reviews.
+- **guardrails**: Security and quality checks before code execution:
+  - `enable_code_safety`: LLM-based critical security check using Gemini 2.5 Flash (default: true)
+  - `leakage_review`: LLM-based data leakage detection (default: true)
+  - `logging_basicconfig_order`: AST-based logging order check (default: true)
 
 - **researcher**: Researcher agent settings:
   - `hitl_instructions`: Human-In-The-Loop instructions list. If non-empty, these instructions are added to the researcher's system prompt to guide research direction (default: `[]`). Example: `["Focus on time-series cross-validation", "Analyze seasonality patterns", "Consider external weather data"]`
