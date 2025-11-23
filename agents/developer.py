@@ -50,6 +50,8 @@ _GUARDRAIL_CFG = _CONFIG.get("guardrails")
 _DEVELOPER_CFG = _CONFIG.get("developer")
 
 _ENABLE_LOGGING_GUARD = bool(_GUARDRAIL_CFG.get("logging_basicconfig_order"))
+_ENABLE_LEAKAGE_GUARD = bool(_GUARDRAIL_CFG.get("leakage_review"))
+_ENABLE_CODE_SAFETY = bool(_GUARDRAIL_CFG.get("enable_code_safety"))
 
 _PATCH_MODE_ENABLED = bool(_RUNTIME_CFG.get("patch_mode_enabled"))
 _USE_VALIDATION_SCORE = bool(_RUNTIME_CFG.get("use_validation_score"))
@@ -1433,6 +1435,8 @@ class DeveloperAgent:
             guard_report = evaluate_guardrails(
                 code_text=code_text,
                 enable_logging_guard=_ENABLE_LOGGING_GUARD,
+                enable_leakage_guard=_ENABLE_LEAKAGE_GUARD,
+                enable_code_safety=_ENABLE_CODE_SAFETY,
             )
 
             try:

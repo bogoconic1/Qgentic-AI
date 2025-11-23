@@ -24,7 +24,7 @@ kaggle>=1.6.0
 kagglehub>=0.2.0
 
 # Google/Gemini (used in researcher tools)
-google-generativeai>=0.8.0
+google-genai
 
 # Utilities
 PyYAML>=6.0
