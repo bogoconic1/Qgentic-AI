@@ -1,14 +1,15 @@
 llm:
   developer_model: "gpt-5"
-  developer_tool_model: "claude-sonnet-4-5-20250929"
-  researcher_model: "claude-sonnet-4-5-20250929"
-  researcher_tool_offline_model: "claude-sonnet-4-5-20250929"
-  researcher_tool_online_model: "claude-sonnet-4-5-20250929"
-  model_selector_model: "claude-sonnet-4-5-20250929"
-  model_recommender_model: "claude-sonnet-4-5-20250929"
-  paper_summary_model: "claude-sonnet-4-5-20250929"
-  starter_model: "gpt-5"
-  ensembler_model: "gpt-5"
+  developer_tool_model: "gemini-3-pro-preview"
+  researcher_model: "claude-sonnet-4-5"
+  researcher_tool_offline_model: "gemini-3-pro-preview"
+  researcher_tool_online_model: "gemini-3-pro-preview"
+  model_selector_model: "gemini-3-pro-preview"
+  model_recommender_model: "gemini-3-pro-preview"
+  paper_summary_model: "gemini-3-pro-preview"
+  starter_model: "gemini-3-pro-preview"
+  ensembler_model: "gemini-3-pro-preview"
+  leakage_review_model: "gemini-3-pro-preview"
   finetuned_code_api_model: "projects/134356426507/locations/us-central1/endpoints/7532524363963170816"
 runtime:
   ask_eda_max_attempts: 5
@@ -30,7 +31,7 @@ runtime:
   # Time limits (in seconds)
   baseline_time_limit: 432000  # 3 hours for baseline development
   ensemble_time_limit: 14400  # 4 hours for ensemble phase
-  baseline_code_timeout: 86400 # 1.5 hours for baseline code execution
+  baseline_code_timeout: 43200 # 1.5 hours for baseline code execution
   ensemble_code_timeout: 10800  # 3 hours for ensemble code execution
   # Grading strategy
   use_validation_score: true  # If true, use validation score from logs instead of MLE-bench grading (faster, no ground truth needed)
@@ -40,6 +41,7 @@ paths:
   external_data_dirname: "external-data"
 guardrails:
   logging_basicconfig_order: true
+  leakage_review: true
 tracking:
   wandb:
     entity: bogoconic1 # replace with your W&B entity

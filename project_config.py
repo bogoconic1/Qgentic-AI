@@ -37,6 +37,7 @@ _DEFAULT_CONFIG: dict[str, Any] = {
     },
     "guardrails": {
         "logging_basicconfig_order": True,
+        "leakage_review": True,
     },
     "tracking": {
         "wandb": {
