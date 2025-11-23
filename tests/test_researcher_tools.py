@@ -21,6 +21,9 @@ def test_data_dir():
 
 def test_ask_eda_timeout(test_data_dir, monkeypatch):
     """Test that ask_eda times out for long-running operations."""
+    # Force OpenAI provider path
+    monkeypatch.setattr("tools.researcher.detect_provider", lambda x: "openai")
+
     # Mock the LLM to generate code that sleeps
     def fake_call_llm(*args, **kwargs):
         mock_response = MagicMock()
@@ -54,6 +57,9 @@ def test_ask_eda_timeout(test_data_dir, monkeypatch):
 
 def test_ask_eda_success(test_data_dir, monkeypatch):
     """Test that ask_eda succeeds with quick code."""
+    # Force OpenAI provider path
+    monkeypatch.setattr("tools.researcher.detect_provider", lambda x: "openai")
+
     # Mock the LLM to generate simple code
     def fake_call_llm(*args, **kwargs):
         mock_response = MagicMock()
@@ -91,6 +97,9 @@ def test_ask_eda_success(test_data_dir, monkeypatch):
 
 def test_ask_eda_retry_on_no_code_block(test_data_dir, monkeypatch):
     """Test that ask_eda retries when LLM doesn't return code block."""
+    # Force OpenAI provider path
+    monkeypatch.setattr("tools.researcher.detect_provider", lambda x: "openai")
+
     attempt_count = [0]
 
     def fake_call_llm(*args, **kwargs):
@@ -132,6 +141,9 @@ def test_ask_eda_retry_on_no_code_block(test_data_dir, monkeypatch):
 
 def test_ask_eda_no_false_positive_on_error_word(test_data_dir, monkeypatch):
     """Test that output containing 'Error' as a word doesn't trigger retry."""
+    # Force OpenAI provider path
+    monkeypatch.setattr("tools.researcher.detect_provider", lambda x: "openai")
+
     attempt_count = [0]
 
     def fake_call_llm(*args, **kwargs):
@@ -168,6 +180,9 @@ def test_ask_eda_no_false_positive_on_error_word(test_data_dir, monkeypatch):
 
 def test_download_external_datasets(monkeypatch):
     """Test download_external_datasets with mocked Kaggle API."""
+    # Force OpenAI provider path
+    monkeypatch.setattr("tools.researcher.detect_provider", lambda x: "openai")
+
     # Create temporary directory with comp_metadata.yaml
     with tempfile.TemporaryDirectory() as tmpdir:
         task_root = Path(tmpdir)
