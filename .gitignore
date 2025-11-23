@@ -97,6 +97,9 @@ code_16_v2.py
 code_abc.py
 kaggle.json
 unit_test.md
+test.py
+submit*.py
+CLAUDE.md
 web_search/
 logs/
 demo/

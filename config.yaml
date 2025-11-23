@@ -42,6 +42,7 @@ paths:
 guardrails:
   logging_basicconfig_order: true
   leakage_review: true
+  enable_code_safety: true
 tracking:
   wandb:
     entity: bogoconic1 # replace with your W&B entity
