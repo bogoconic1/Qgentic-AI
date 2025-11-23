@@ -1,8 +1,8 @@
-import json
 import logging
 from typing import Any, Dict
 
 from guardrails.developer import check_logging_basicconfig_order, llm_leakage_review
+from schemas.guardrails import LeakageReviewResponse
 
 
 logger = logging.getLogger(__name__)
@@ -32,21 +32,16 @@ def evaluate_guardrails(
     guard_report["logging_check"] = log_check
 
     # 2) Leakage review (LLM)
-    leakage_json_text: str | Dict[str, Any] = {"status": "skipped", "reason": "disabled in config"}
+    leakage_result: LeakageReviewResponse | Dict[str, Any] = {"status": "skipped", "reason": "disabled in config"}
     if enable_leakage_guard:
         try:
-            leakage_json_text = llm_leakage_review(code_text)
-        except Exception:
-            logger.exception("LLM leakage review call failed")
-            leakage_json_text = '{"severity":"warn","findings":[{"rule_id":"llm_error","snippet":"N/A","rationale":"LLM call failed","suggestion":"Proceed with caution"}]}'
-        try:
-            parsed = json.loads(leakage_json_text) if isinstance(leakage_json_text, str) else leakage_json_text
-            if parsed.get("severity") == "block":
+            leakage_result = llm_leakage_review(code_text)
+            if leakage_result.severity == "block":
                 guard_report["decision"] = "block"
         except Exception:
-            # ignore malformed JSON for decision
-            pass
-    guard_report["leakage_check"] = leakage_json_text
+            logger.exception("LLM leakage review call failed")
+            leakage_result = {"status": "error", "error": "LLM call failed"}
+    guard_report["leakage_check"] = leakage_result
 
     return guard_report
 
@@ -65,28 +60,20 @@ def build_block_summary(guard_report: Dict[str, Any]) -> str:
 
     # Leakage
     try:
-        raw_leak = guard_report.get("leakage_check", "{}")
-        parsed_leak = json.loads(raw_leak.strip()) if isinstance(raw_leak, str) else (raw_leak or {})
-        sev = parsed_leak.get("severity")
-        if sev == "block":
-            lines.append("- Potential data leakage risks detected. Please fix as suggested.")
-            findings = parsed_leak.get("findings", [])
-            if findings:
-                lines.append("\nLeakage reviewer findings:")
-                for idx, f in enumerate(findings, start=1):
-                    rule_id = f.get("rule_id", "unknown")
-                    snippet = f.get("snippet", "")
-                    rationale = f.get("rationale", "")
-                    suggestion = f.get("suggestion", "")
-                    lines.append(
-                        f"{idx}. rule_id={rule_id}\n   - snippet: {snippet}\n   - rationale: {rationale}\n   - suggestion: {suggestion}"
-                    )
+        leakage_check = guard_report.get("leakage_check")
+        if isinstance(leakage_check, LeakageReviewResponse):
+            if leakage_check.severity == "block":
+                lines.append("- Potential data leakage risks detected. Please fix as suggested.")
+                if leakage_check.findings:
+                    lines.append("\nLeakage reviewer findings:")
+                    for idx, f in enumerate(leakage_check.findings, start=1):
+                        lines.append(
+                            f"{idx}. rule_id={f.rule_id}\n   - snippet: {f.snippet}\n   - rationale: {f.rationale}\n   - suggestion: {f.suggestion}"
+                        )
+        elif isinstance(leakage_check, dict) and leakage_check.get("status") == "error":
+            lines.append("- Data leakage review failed: " + leakage_check.get("error", "unknown error"))
     except Exception:
-        try:
-            lines.append("- Data leakage reviewer returned non-JSON content:")
-            lines.append(str(guard_report.get("leakage_check")))
-        except Exception:
-            pass
+        pass
 
     return "\n".join(lines)
 

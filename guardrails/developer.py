@@ -8,6 +8,7 @@ from project_config import get_config
 from tools.helpers import call_llm_with_retry, call_llm_with_retry_anthropic, call_llm_with_retry_google
 from prompts.guardrails import leakage_review as prompt_leakage_review
 from utils.llm_utils import detect_provider, append_message
+from schemas.guardrails import LeakageReviewResponse
 
 
 load_dotenv()
@@ -138,38 +139,38 @@ def check_logging_basicconfig_order(code: str) -> Dict[str, Any]:
 # ----------------------------------------------
 # Guardrails: LLM-based data leakage risk review
 # ----------------------------------------------
-def llm_leakage_review(code: str) -> str:
+def llm_leakage_review(code: str) -> LeakageReviewResponse:
     """
     Ask an LLM to review potential data leakage risks in the generated code.
-    Uses the configured leakage review model. Returns raw model text (JSON).
+    Uses the configured leakage review model. Returns structured LeakageReviewResponse.
     """
     system_prompt = prompt_leakage_review()
     provider = detect_provider(_LEAKAGE_REVIEW_MODEL)
     messages = [append_message(provider, "user", "Python Training Script: \n\n" + code)]
 
     if provider == "openai":
-        response = call_llm_with_retry(
+        return call_llm_with_retry(
             model=_LEAKAGE_REVIEW_MODEL,
             instructions=system_prompt,
             tools=[],
             messages=messages,
+            text_format=LeakageReviewResponse,
         )
-        return response.output_text or ""
     elif provider == "anthropic":
-        response = call_llm_with_retry_anthropic(
+        return call_llm_with_retry_anthropic(
             model=_LEAKAGE_REVIEW_MODEL,
             instructions=system_prompt,
             tools=[],
             messages=messages,
+            text_format=LeakageReviewResponse,
         )
-        return response.content[0].text if response.content else ""
     elif provider == "google":
-        response = call_llm_with_retry_google(
+        return call_llm_with_retry_google(
             model=_LEAKAGE_REVIEW_MODEL,
             system_instruction=system_prompt,
             function_declarations=[],
             messages=messages,
+            text_format=LeakageReviewResponse,
         )
-        return response.text if hasattr(response, 'text') else ""
     else:
         raise ValueError(f"Unsupported provider: {provider}")
