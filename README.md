@@ -15,6 +15,8 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
 
 **[2025/11/13]** 📊 **Qgentic-AI achieves 94.82% weighted mean percentile across 7 MLE-Bench competitions** - outperforming FM-Agent (93.91%), InternAgent (76.25%), MLE-STAR-PRO (72.74%), Operand (69.81%), and R&D-Agent (62.46%). Results reported as percentiles with 74:1 weighting to match MLE-Bench's 75-competition benchmark.
 
+---
+
 ## Preliminary Results
 
 ## Present Competitions
@@ -24,7 +26,6 @@ solution. Guardrails and supporting tools keep the loop grounded, reproducible, 
 | csiro-biomass | 0.68 | Top 1.5% (20/1400) - Nov 23, 2025 | Released after deadline |
 | playground-series-s5e11 | 0.92684 | Top 6% (40/700) - **Best Single Model Public Notebook** 🚀 - Nov 4, 2025 | [Notebook 1](https://www.kaggle.com/code/yeoyunsianggeremie/ps5e11-agentic-ai-solution-single-xgb) |
 | playground-series-s5e10 | 0.05576 | Top 15% (606/4082) - Oct 31, 2025 | [Notebook 1](https://www.kaggle.com/code/yeoyunsianggeremie/ps5e10-agentic-ai-solution), [Notebook 2](https://www.kaggle.com/code/yeoyunsianggeremie/ps5e10-agentic-ai-xgb) |
-
 
 ## Past Competitions
 
@@ -48,11 +49,9 @@ Results are reported as **raw score (percentile%)** where percentile = % of lead
 
 ## Architecture at a Glance
 
-![Architecture diagram showing the Researcher and Developer flow](docs/assets/architecture_v5.png)
+![Architecture diagram showing the Researcher and Developer flow](docs/assets/architecture_v6.png)
 
-# Sample Logs
-
-![Screenshot of wandb run metrics for the pipeline](docs/assets/wandb_sample_log.png)
+---
 
 ## Getting Started
 
@@ -116,11 +115,23 @@ task/
    ├─ description.md
    ├─ public_insights.md
    ├─ sample_submission.csv
-   ├─ comp_metadata.yaml   
+   ├─ comp_metadata.yaml
    └─ train files/test files
 ```
 
-### 4. Launch an Iteration
+### 4. Create Required Files
+
+Before running the agent, create these files in `task/<slug>/`:
+
+- **`cv_splits.json`**: Cross-validation fold indices for reproducible train/val splits
+- **`metric.py`**: Competition-specific evaluation metric implementation
+
+Optionally, configure Human-In-The-Loop (HITL) instructions in `config.yaml`:
+- `researcher.hitl_instructions`: Guide research direction
+- `model_recommender.hitl_models`: Override model selection with specific models
+- `developer.hitl_instructions`: Guide code implementation
+
+### 5. Launch an Iteration
 
 ```bash
 python launch_agent.py --slug "enter slug" --iteration 1
@@ -128,7 +139,7 @@ python launch_agent.py --slug "enter slug" --iteration 1
 
 Time limits are controlled via `config.yaml` (`runtime.baseline_time_limit`).
 
-### 5. Monitoring & Artefacts
+### 6. Monitoring & Artefacts
 
 - `researcher.txt` / `developer.txt` capture detailed logs for each iteration.
 - `code_{iteration}_v{version}.py` are the generated scripts; corresponding logs sit under
@@ -136,109 +147,6 @@ Time limits are controlled via `config.yaml` (`runtime.baseline_time_limit`).
 - Weights & Biases and Weave projects are initialised in `launch_agent.py`; supply
   `--wandb-entity/--wandb-project`, export `WANDB_ENTITY/WANDB_PROJECT`, or define them
   in `config.yaml` under `tracking.wandb`.
-
----
-
-## Components
-
-- **Starter Agent (`agents/starter.py`)**
-  - Proposes 5 starter model ideas with short example code by referencing the competition description and `docs/state_of_competitions_2024.md`.
-  - Persists `starter_suggestions.txt` and `starter_suggestions.json` in `task/<slug>/outputs/<iteration>/`.
-
-- **Researcher Agent (`agents/researcher.py`)**
-  - **Domain-First Discovery**: Implements mandatory Phase 0 (30-40 min budget) to deeply understand domain context before analysis:
-    - Identifies real-world domain and stakeholders
-    - Searches for dataset papers and domain literature using Gemini API with Google Search
-    - Reads and summarizes research papers with `read_research_paper()` tool (powered by `PaperSummaryClient`)
-    - Formulates 5-10 domain-specific hypotheses grounded in literature
-    - Outputs structured domain context summary
-  - **Hypothesis-Driven Exploration**: Tests domain-specific hypotheses with quantitative validation (correlations, distributions, A/B tests)
-  - **Task-Specific Guides**: Provides tailored exploration strategies for tabular, NLP, computer vision, and time series tasks
-  - **A/B Testing**: Runs controlled experiments comparing modeling approaches with automatic code generation and execution
-  - **Research Paper Reading**: Integrates `PaperSummaryClient` with Google Search + URL Context tools to:
-    - Find and read dataset papers via arXiv IDs
-    - Search for model papers and technical documentation
-    - Generate structured 6-section summaries (Abstract, Introduction, Related Work, Method/Architecture, Experiments/Results, Conclusion)
-  - Tracks A/B test history (last 8 tests) to avoid redundant experiments and inform future tests
-  - Self-critique loops ensure domain-specificity and reject generic approaches
-  - Logs every step to `task/<slug>/outputs/<iteration>/researcher/`
-  - Persists the final plan in `plan.md` – consumed verbatim by downstream stages
-
-- **Model Recommender Agent (`agents/model_recommender.py`)**
-  - Recommends up to 8 suitable models with detailed strategies for preprocessing, architecture, loss functions, hyperparameters, and inference.
-  - **Multimodal Support**: For competitions with multiple data modalities (e.g., CV + tabular), recommends multi-stage pipelines where models work together (e.g., "EfficientNet (stage 1) + XGBoost (stage 2)").
-  - Splits recommendations into NOW (MUST_HAVE) and LATER (NICE_TO_HAVE) categories for iterative development.
-  - Supports fold split strategy recommendations and web search for SOTA techniques.
-
-- **Developer Agent (`agents/developer.py`)**
-  - Implements a two-stage approach for each iteration:
-    1. **Stage 1 (Red Flags)**: Uses `search_red_flags()` with web search to identify issues in code/logs/submissions.
-    2. **Stage 2 (SOTA Suggestions)**: Uses `search_sota_suggestions()` based on red flags to generate improvements.
-  - Tracks global best score across all versions and provides detailed feedback:
-    - Compares current score against the most recent non-blacklisted version
-    - Shows previous score context in feedback messages: "Your score before implementing this suggestion was X"
-    - Always updates global best regardless of base comparison (fixes first-version tracking)
-  - Tracks both blacklisted ideas (failed strategies) and successful ideas (working strategies) for knowledge accumulation.
-  - Supports dynamic resource allocation with CPU affinity and NVIDIA MIG GPU isolation for parallel execution.
-  - Dynamic timeout: Code execution timeout automatically scales as `baseline_time_limit // 4` from config.
-  - Each baseline run returns `(best_score, best_code_file, blacklisted_ideas, successful_ideas)`.
-  - Results are merged into `baseline_results.json` with full metadata including recommendations and strategy outcomes.
-
-- **Parallel Baseline Execution (`agents/orchestrator.py`)**
-  - Launches multiple baseline `DeveloperAgent` runs concurrently using `ThreadPoolExecutor`.
-  - **Dynamic Resource Allocation**: Uses Queue-based pools for CPU cores and MIG instances.
-    - Processes grab resources when available and return them upon completion.
-    - Prevents cyclic pre-assignment issues and resource contention.
-  - **CPU Affinity**: Pins each process to specific CPU cores using `psutil` to prevent interference.
-  - **NVIDIA MIG Support**: Auto-detects MIG instances and isolates each baseline to a dedicated GPU partition.
-  - Configuration in `config.yaml`:
-    - `enable_cpu_affinity`: Enable CPU core pinning
-    - `enable_mig`: Enable MIG GPU isolation (auto-detects worker count from available MIG instances)
-    - `baseline_max_parallel_workers`: Fallback worker count when MIG is disabled
-
-- **Ensembling Agent (`agents/ensembler.py`)**
-  - Combines multiple baseline models using diverse ensemble strategies (stacking, blending, weighted averaging, etc.).
-  - Inherits from DeveloperAgent and follows the same two-stage flow (red flags + SOTA suggestions).
-  - Operates in parallel with one agent per strategy for efficient exploration.
-  - Multi-fold ensembling enabled by default for robust performance.
-  - Uses ensemble-specific system prompts and naming conventions: `code_{iteration}_{strategy_index}_ens_v{version}.py`
-
-- **Guardrails (`guardrails/`, `utils/guardrails.py`)**
-  - **Code Safety Check** (`guardrails/code_safety.py`): LLM-based security analysis using Gemini 2.5 Flash
-    - Blocks critical issues: `eval()`/`exec()`, command injection, hardcoded secrets
-    - Explicitly allows: file operations, network requests, standard imports (lenient by design)
-    - Returns structured output with decision, confidence, violations, and suggested fixes
-  - **Data Leakage Review** (`guardrails/developer.py`): LLM-based train/test contamination detection
-    - Detects: fit on combined data, test label usage, improper CV, time series leaks
-    - Returns findings with rule IDs, code snippets, rationale, and suggested fixes
-  - **Logging Order Check**: AST-based static analysis ensuring `logging.basicConfig()` precedes usage
-  - All guardrails run before code execution; blocking decisions prevent unsafe code from running
-
-- **Tools (`tools/`) & Shared Config (`project_config.py`)**
-  - `tools.developer` wraps code execution, stack-trace web search, and SOTA suggestions:
-    - `execute_code()`: Runs generated Python files with dynamic timeout (`baseline_time_limit // 4`)
-    - `execute_code_with_oom_retry()`: Automatic OOM retry logic with configurable polling
-    - `search_red_flags()`: Stage 1 red flag identification with web search
-    - `search_sota_suggestions()`: Stage 2 SOTA improvements based on red flags and shared suggestions
-  - `tools.researcher` exposes the EDA runtime, dataset downloader, and research paper reading:
-    - `ask_eda()`: Execute exploratory data analysis code snippets
-    - `download_datasets()`: Search and download external datasets
-    - `read_research_paper()`: Read and summarize research papers via arXiv ID using Gemini API
-  - `tools.generate_paper_summary` provides `PaperSummaryClient`:
-    - Supports both arXiv paper IDs and model names
-    - Uses Gemini API with Google Search + URL Context tools for paper discovery and reading
-    - Generates structured 6-section summaries with domain-specific insights
-    - Centralized retry logic via `call_llm_with_retry_google()` helper
-  - `config.yaml` overrides project defaults (model endpoints, runtime limits, etc.).
-
-- **Task Bundles (`task/<slug>/`)**
-  - Expected layout: Kaggle metadata, `description.md`, `plan.md`, `outputs/<iteration>/`
-    (logs, generated code, submissions), baseline artifacts (`baseline_results.json`),
-    and per-baseline outputs under `outputs/<iteration>_<k>/`.
-  - **Required user-defined files**:
-    - `cv_splits.json`: Cross-validation fold indices for reproducible train/val splits
-    - `metric.py`: Competition-specific evaluation metric implementation
-
 
 ---
 
@@ -289,15 +197,19 @@ Key settings live in `config.yaml` (merged with `project_config.py` defaults):
 - **developer**: Developer agent settings:
   - `hitl_instructions`: Human-In-The-Loop instructions list. If non-empty, these instructions are added to the developer's system prompt to guide code implementation (default: `[]`). Example: `["Use gradient clipping to prevent exploding gradients", "Implement mixed precision training", "Focus on domain-specific data augmentation"]`
 
-> **Patch Mode (Experimental)** – The developer supports a token-efficient diff workflow.
-> Toggle `runtime.patch_mode_enabled: true` to request unified diffs (with line numbers)
-> from the model instead of full files. This feature is still being tuned.
+> **Patch Mode** – The developer supports a token-efficient diff workflow. Toggle `runtime.patch_mode_enabled: true` to request unified diffs (with line numbers). DO NOTE this feature is unstable and can break!
 
 > **Parallel Execution** – Supports flexible GPU configurations (Multi-GPU, Single-GPU, and MIG):
 > - **MIG Mode** (`enable_mig: true`): Auto-detects available MIG instances and isolates each baseline to a dedicated GPU partition. H100 80GB supports up to 7 MIG instances (1g.10gb profile).
 > - **Multi-GPU Mode** (`enable_multi_gpu: true`): Distributes baselines across multiple physical GPUs.
 > - **Single-GPU Mode**: Sequential execution using `baseline_max_parallel_workers` to control concurrency.
 > - Each baseline runs in an isolated conda environment (`qgentic-model-{idx}`) with dedicated CPU cores when `enable_cpu_affinity: true`.
+
+---
+
+# Sample Logs
+
+![Screenshot of wandb run metrics for the pipeline](docs/assets/wandb_sample_log.png)
 
 ---
 
