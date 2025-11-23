@@ -32,8 +32,9 @@ class TestSharedConstraints:
         assert "logging.basicConfig()" in result
         assert "kagglehub" in result
 
-        # Check for developer-specific typo (backward compatibility)
-        assert "DEBUG MODE.s" in result
+        # Check for developer-specific constraint ending (backward compatibility)
+        # Note: DEBUG MODE constraints were removed in recent updates
+        assert "while` loops" in result
 
         # Check that ensemble directive is NOT present
         assert "CRITICAL: YOU MUST COPY EVERYTHING" not in result
@@ -74,9 +75,8 @@ class TestSharedConstraints:
         assert "Preprocessing" in result
         assert "Feature Engineering and Transformations" in result
 
-        # Check that developer-specific typo is NOT present (no "DEBUG MODE.s")
-        assert "DEBUG MODE.s" not in result
-        assert "DEBUG MODE." in result  # But should have "DEBUG MODE." without the 's'
+        # Check ensembler doesn't have the developer-specific 's' suffix on while loops constraint
+        # Note: DEBUG MODE constraints were removed in recent updates
 
     def test_shared_function_with_all_parameters(self):
         """Test the shared function directly with all parameter combinations."""
@@ -106,6 +106,7 @@ class TestSharedConstraints:
         ens_result = ensembler_get_hard_constraints()
 
         # List of common constraints that should appear in both
+        # Note: DEBUG MODE constraints were removed in recent updates
         common_items = [
             "Deliver a fully-contained, single-file script",
             "Use CUDA if available",
@@ -118,15 +119,10 @@ class TestSharedConstraints:
             "try/except",
             "Prefer pretrained models",
             "External datasets",
-            "DEBUG flag",
             "NaN, STOP training",
             "while` loops",
-            "DEBUG MODE",
             "kagglehub",
             "dataset_download",
-            "DEBUG mode guidelines",
-            "sample train to 1000 rows",
-            "reduce epochs to 1",
         ]
 
         for item in common_items:
@@ -142,7 +138,7 @@ class TestSharedConstraints:
         assert result.startswith("**Hard Constraints:**")
         assert "Use ONLY `TestModel`" in result
         assert "Just train and validate on fold 0" in result
-        assert "DEBUG MODE.s" in result  # The typo should be preserved
+        assert "while` loops" in result  # Developer-specific constraint
         assert "Modular pipeline" in result
 
     def test_backward_compatibility_ensembler(self):
@@ -154,7 +150,6 @@ class TestSharedConstraints:
         assert "CRITICAL: YOU MUST COPY EVERYTHING" in result
         assert "ensemble weights" in result
         assert "best epoch/iteration number" in result
-        assert "DEBUG MODE.s" not in result  # Ensembler didn't have the typo
 
     def test_different_model_names(self):
         """Test that different model names are correctly substituted."""

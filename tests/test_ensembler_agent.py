@@ -45,6 +45,12 @@ def test_task_dir():
         # Create dummy plan.md
         (outputs_dir / "plan.md").write_text("# Research Plan\nTest plan content.")
 
+        # Create required helper files (cv_splits.json and metric.py)
+        import json
+        cv_splits = {"fold_0": {"train": [0, 1, 2], "val": [3, 4]}}
+        (task_dir / "cv_splits.json").write_text(json.dumps(cv_splits))
+        (task_dir / "metric.py").write_text("def score(y_true, y_pred): return 0.5")
+
         yield {
             'task_root': task_root,
             'slug': slug,
@@ -93,10 +99,10 @@ def test_agent_initialization(test_task_dir, monkeypatch):
     # Check iteration naming (should be "1_1_ens")
     assert "_ens" in str(agent.iteration)
 
-    # Check file naming includes strategy index
+    # Check file naming includes strategy index (folder-based: {version}/train.py)
     code_file = agent._code_filename(1)
-    assert "1_1_ens" in code_file
-    assert "v1.py" in code_file
+    assert "train.py" in code_file
+    assert "1/" in code_file
 
     print(f"✅ EnsemblerAgent initialized successfully:")
     print(f"   - Slug: {agent.slug}")

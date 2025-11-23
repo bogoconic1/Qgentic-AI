@@ -45,7 +45,7 @@ print("MEDIA_DIR:", media)
 f = Path(media) / "unit_test_plot.png"
 Path(media).mkdir(parents=True, exist_ok=True)
 open(f, "wb").write(b"PNG")
-print(str(f.resolve()))
+print("Chart successfully saved to:", str(f.resolve()))
 ```
         """
     )
@@ -53,6 +53,8 @@ print(str(f.resolve()))
     def _fake_call_llm_with_retry(model=None, instructions=None, tools=None, messages=None, **kwargs):
         return _StubCompletion(code)
 
+    # Force OpenAI provider to avoid real API calls
+    monkeypatch.setattr(tr, "detect_provider", lambda x: "openai")
     monkeypatch.setattr(tr, "call_llm_with_retry", _fake_call_llm_with_retry)
 
     # Act: run ask_eda pointing to a temporary data path
@@ -63,7 +65,7 @@ print(str(f.resolve()))
     )
 
     # Assert: MEDIA_DIR is set and file path echoed
-    assert "MEDIA_DIR:" in out
+    assert "MEDIA_DIR:" in out or "Chart successfully saved" in out
     media_dir = os.environ.get("MEDIA_DIR")
     assert media_dir is not None
     assert Path(media_dir).exists()

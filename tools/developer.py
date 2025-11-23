@@ -1,5 +1,6 @@
 """Utility helpers for executing generated code with rich logging."""
 
+import base64
 import json
 import logging
 import os
@@ -7,6 +8,7 @@ import re
 import subprocess
 import time
 import traceback
+from pathlib import Path
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -54,7 +56,7 @@ def web_search_stack_trace(query: str) -> str:
     logger.debug("Stack trace query: %s", query)
 
     # Step 1: Try fine-tuned model first (no web search capability)
-    '''logger.info("Attempting fine-tuned model endpoint first...")
+    logger.info("Attempting fine-tuned model endpoint first...")
     from tools.helpers import call_llm_with_retry_google
 
     try:
@@ -86,7 +88,7 @@ def web_search_stack_trace(query: str) -> str:
             return query + "\n" + "This is how you can fix the error: \n" + solution_text
 
     except Exception as e:
-        logger.warning(f"Fine-tuned model call failed with error: {e}. Falling back to web search workflow.")'''
+        logger.warning(f"Fine-tuned model call failed with error: {e}. Falling back to web search workflow.")
 
     # Step 2: Fallback to current workflow with web search
     logger.info("Fine-tuned model cannot answer (response too short or failure message), falling back to web search workflow.")
@@ -163,32 +165,116 @@ def web_search_stack_trace(query: str) -> str:
     else:
         raise ValueError(f"Unsupported provider: {provider}")
 
+def _ingest_images_for_llm(images: list[Path], provider: str) -> list[dict] | None:
+    """Encode and format images for LLM messages (shared helper for red flags and SOTA tools).
+
+    Args:
+        images: List of image paths to ingest
+        provider: Provider type ("openai", "anthropic", or "google")
+
+    Returns:
+        List of formatted image messages ready to append, or None if no valid images
+    """
+    from utils.llm_utils import encode_image_to_data_url
+
+    image_content = []
+    for img_path in images:
+        if not img_path.exists():
+            logger.warning(f"Image not found: {img_path}")
+            continue
+
+        # Encode image to data URL (with compression for Anthropic's 5MB limit)
+        resize_flag = (provider == "anthropic")
+        data_url = encode_image_to_data_url(str(img_path), resize_for_anthropic=resize_flag)
+        if not data_url:
+            logger.warning(f"Failed to encode image: {img_path}")
+            continue
+
+        # Format based on provider
+        if provider == "anthropic":
+            if ";base64," in data_url:
+                mime_part, b64_data = data_url.split(";base64,", 1)
+                mime_type = mime_part.replace("data:", "")
+                image_content.append({
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": mime_type,
+                        "data": b64_data
+                    }
+                })
+        elif provider == "google":
+            from google.genai import types
+            if ";base64," in data_url:
+                mime_part, b64_data = data_url.split(";base64,", 1)
+                mime_type = mime_part.replace("data:", "")
+                image_content.append(
+                    types.Part(
+                        inline_data=types.Blob(
+                            mime_type=mime_type,
+                            data=base64.b64decode(b64_data)
+                        )
+                    )
+                )
+        else:  # OpenAI
+            image_content.append({"type": "input_image", "image_url": data_url})
+
+    if not image_content:
+        return None
+
+    # Return in provider-specific format
+    if provider == "google":
+        return [{"role": "user", "parts": image_content}]
+    else:
+        return [{"role": "user", "content": image_content}]
+
+
 @weave.op()
 def search_red_flags(
     description: str,
     context: str,
+    images: list[Path] | None = None,
+    train_stats: dict | None = None,
 ) -> str:
     """Stage 1: Direct analysis to identify red flags in the current approach.
 
     Args:
         description: Competition description
         context: Current code and logs
+        images: Optional list of image paths (e.g., loss_curve.png, metric_curve.png)
+        train_stats: Optional training statistics dict from train_stats.json
+                    (must include: model_name, cv_scores, cv_mean, cv_std)
 
     Returns:
         Red flags response text (markdown format with structured analysis)
     """
     logger.info("Dispatching red flags identification via direct analysis")
 
+    # Include train_stats in context if provided
+    context_with_stats = context
+    if train_stats:
+        stats_text = "## Training Statistics (from train_stats.json)\n\n"
+        stats_text += f"```json\n{json.dumps(train_stats, indent=2)}\n```\n\n"
+        context_with_stats = stats_text + context
+        logger.info("Added train_stats to context (%d keys)", len(train_stats))
+
     system_prompt = prompt_red_flags_system()
     user_prompt = prompt_red_flags_user(
         description=description,
-        context=context,
+        context=context_with_stats,
     )
 
     # Detect provider and call appropriate API
     provider = detect_provider(_DEVELOPER_TOOL_MODEL)
 
+    # Start with text message
     messages = [append_message(provider, "user", user_prompt)]
+
+    # Add images if provided
+    if images:
+        image_messages = _ingest_images_for_llm(images, provider)
+        if image_messages:
+            messages.extend(image_messages)
 
     if provider == "openai":
         response = call_llm_with_retry(
@@ -289,6 +375,8 @@ def search_sota_suggestions(
     gpu_identifier: str | None = None,
     file_suffix: str | None = None,
     max_tool_steps: int = 10,
+    images: list[Path] | None = None,
+    train_stats: dict | None = None,
 ) -> str:
     """Stage 2: Use web search and tools to generate SOTA suggestions based on red flags.
 
@@ -311,12 +399,23 @@ def search_sota_suggestions(
         gpu_identifier: GPU for ask_eda execution
         file_suffix: Suffix for temporary files to prevent race conditions (e.g., "1_1", "1_2")
         max_tool_steps: Maximum tool call iterations before forcing final answer
+        images: Optional list of image paths (e.g., loss_curve.png, metric_curve.png)
+        train_stats: Optional training statistics dict from train_stats.json
+                    (must include: model_name, cv_scores, cv_mean, cv_std)
 
     Returns:
         Parsed SOTAResponse object with suggestion, blacklist, blacklist_reason, and suggestion_code fields.
         Returns None if parsing fails.
     """
     logger.info("Dispatching SOTA suggestions (Stage 2) with web search (attempt #%d)", attempt_number)
+
+    # Include train_stats in context if provided
+    context_with_stats = context
+    if train_stats:
+        stats_text = "## Training Statistics (from train_stats.json)\n\n"
+        stats_text += f"```json\n{json.dumps(train_stats, indent=2)}\n```\n\n"
+        context_with_stats = stats_text + context
+        logger.info("Added train_stats to context (%d keys)", len(train_stats))
     executed_suggestion_text = executed_suggestion or "No previous suggestion executed; this is the first attempt."
     failed_ideas_text = "\n".join(f"- {idea}" for idea in failed_ideas) if failed_ideas else "No prior ideas are blacklisted."
 
@@ -361,7 +460,7 @@ def search_sota_suggestions(
         red_flags=red_flags,
         failed_ideas_text=failed_ideas_text,
         executed_suggestion_text=executed_suggestion_text,
-        context=context,
+        context=context_with_stats,
         shared_suggestions_text=shared_suggestions_text,
         external_data_listing=external_data_listing or "No external data directories found.",
     )
@@ -370,6 +469,12 @@ def search_sota_suggestions(
     provider = detect_provider(_DEVELOPER_TOOL_MODEL)
     tools = _get_sota_tools(provider) if (slug and data_path) else []
     input_list = [append_message(provider, "user", user_prompt)]
+
+    # Add images if provided
+    if images:
+        image_messages = _ingest_images_for_llm(images, provider)
+        if image_messages:
+            input_list.extend(image_messages)
 
     for step in range(max_tool_steps):
         logger.info("SOTA suggestion step %d/%d (tools: %s, provider: %s)", step + 1, max_tool_steps, "enabled" if tools else "disabled", provider)

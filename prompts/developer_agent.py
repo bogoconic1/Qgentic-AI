@@ -1,8 +1,86 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from prompts.shared_constraints import get_hard_constraints
+
+
+def _limit_list_items(data, max_items=5):
+    """Recursively limit list items to max_items for display purposes."""
+    if isinstance(data, dict):
+        return {k: _limit_list_items(v, max_items) for k, v in data.items()}
+    elif isinstance(data, list):
+        if len(data) > max_items:
+            limited = data[:max_items]
+            return limited + [f"... ({len(data) - max_items} more items)"]
+        return [_limit_list_items(item, max_items) for item in data]
+    else:
+        return data
+
+
+def _read_helper_files(slug: str) -> str:
+    """Read cv_splits.json and metric.py from task/{slug} directory and format for prompt.
+
+    Args:
+        slug: Competition slug (e.g., "test-demo")
+
+    Returns:
+        Formatted string with helper file schemas and contents, or empty string if no files found
+    """
+    # Read from task root directory
+    base_dir = Path(f"task/{slug}")
+
+    helper_sections = []
+
+    # Check for cv_splits.json
+    cv_splits_path = base_dir / "cv_splits.json"
+    if cv_splits_path.exists():
+        try:
+            with open(cv_splits_path, 'r') as f:
+                cv_data = json.load(f)
+
+            # Limit lists to 5 items for display
+            cv_data_limited = _limit_list_items(cv_data, max_items=5)
+
+            cv_section = f"""
+**cv_splits.json**: pre-defined cross-validation splits. Please read from here and DO NOT generate your own splits.
+```json
+{json.dumps(cv_data_limited, indent=2)}
+```
+"""
+            helper_sections.append(cv_section)
+        except Exception:
+            pass  # Skip if file can't be read
+
+    # Check for metric.py
+    metric_path = base_dir / "metric.py"
+    if metric_path.exists():
+        try:
+            with open(metric_path, 'r') as f:
+                metric_content = f.read()
+
+            metric_section = f"""
+**metric.py**: competition-specific evaluation metric. Please use this metric for evaluation. DO NOT generate your own metric.
+
+You should write the line
+```
+from metric import score
+```
+to import the metric function.
+
+File contents:
+```python
+{metric_content}
+```
+"""
+            helper_sections.append(metric_section)
+        except Exception:
+            pass  # Skip if file can't be read
+
+    if helper_sections:
+        return f"\n### 3. Available Helper Files in `{base_dir}`\n" + "\n".join(helper_sections)
+    return ""
 
 
 def _get_hard_constraints(model_name: str, allow_multi_fold: bool = False) -> str:
@@ -50,67 +128,67 @@ You have been provided with the following guidance for code implementation:
 
     constraints = _get_hard_constraints(model_name, allow_multi_fold=allow_multi_fold)
 
+    # Read helper files (cv_splits.json, metric.py) if they exist
+    helper_files_section = _read_helper_files(slug)
+
     return f"""# Role: Lead Developer for Machine-Learning Competition Team
-Your objective is to deliver a single, self-contained Python script for a Kaggle Competition using **only** the specified model `{model_name}`.
+Your objective is to deliver a complete, executable training script (train.py) for a Kaggle Competition using **only** the specified model `{model_name}`.
 
-Begin with a concise checklist (3-7 bullets) of what you will do; keep items conceptual, not implementation-level.
-You should perform web searches to determine how to set up and configure `{model_name}` in Python. If the model name doesn't exist, find the closest alternative and explain your choice in comments. It's alright if the alternative is larger, but please still use a pretrained version rather than training from scratch.
-
----
 **Training and Inference Environment:**
-Single GPU (40GB VRAM) {resource_info}
+- Single GPU (40GB VRAM) {resource_info}
 
 **Model Name:**
 `{model_name}`
 
 {hitl_section}{constraints}
----
 
-Before any significant tool call or external library use, state the purpose and minimal inputs required, and validate actions after key steps with a 1-2 line summary. If a step fails (e.g., CUDA unavailable), state the limitation clearly and proceed conservatively where allowed.
-
-**Additional Context**
-- **Competition Description:**
+**Context:**
+- **Competition Description:** 
   {description}
-- **Directory Structure for `{Path('task') / slug}`:**
+- **Directory Structure for `{Path('task') / slug}`:
   {directory_listing}
 
-Set reasoning_effort = medium for this task; technical outputs must be complete but concise. Make code and tool calls terse, and expand documentation or schema notes as needed.
+{helper_files_section}
+---
 
-## Output Format
+## Output Requirements
 
-Your response MUST follow these sections, in order:
+You must output a **single valid Python string** (`train_py`) within ```python backticks that handles the entire pipeline.
 
-### Checklist: Conceptual Steps
-- ...(3-7 high-level conceptual bullet points)
+Like this:
+{{"train_py": "```python\\n<your code>\\n```"}}
 
-### Code
-- Produce a single Python script, enclosed in a triple backtick block with the `python` annotation.
-- Model task and metric: infer classification/regression and metric from `{description}`; if unclear, use `accuracy` for classification, `rmse` for regression. Log your chosen metric with justification.
-- Document schema/assumptions in comments, as it's inferred from available data.
-- For output (predictions/`submission.csv`, saved models), save to the directory defined by `BASE_DIR` (see sample below).
-- The HuggingFace API token is available via the `HF_TOKEN` environment variable. Make sure to read it in your code.
+### 1. The Code Structure
+The `train.py` must follow this logical flow:
+1.  **Module Docstring (The Checklist):** Start the file with a detailed docstring containing a 3-7 bullet point checklist of your conceptual approach.
+2.  **Imports & Setup:** Import all necessary libraries (including `matplotlib.pyplot` for plotting). Define `HF_TOKEN` from env vars.
+3.  **Configuration:** Define all hyperparameters (LR, epochs, batch size) as constants at the top.
+4.  **Data Loading:** Load data using the specific paths provided in the context.
+5.  **Training Loop:** Implement the training logic using the specified model.
+6.  **Artifact Generation:** Ensure **all 5** required artifacts (listed below) are saved.
 
-**Required Outputs:**
-1. **Submission file**: Save test predictions to the submission CSV path specified in the user prompt
-2. **Validation predictions**: Save validation predictions to `models_{{version}}/valid_preds.csv` (where {{version}} is specified in user prompt) with detailed information:
-   - Fold numbers (if using cross-validation)
-   - Predictions for each validation sample
-   - Ground truth labels/values (if available)
-   - Row identifiers (sample IDs, indices, etc.)
-   - Any other relevant metadata
-3. **Trained models**: Save all trained models to `models_{{version}}/` directory:
-   - Use appropriate extensions: .pkl (sklearn/xgboost/lightgbm/catboost), .pt (PyTorch), .h5 (TensorFlow/Keras)
-   - For multi-fold training: save each fold separately (e.g., model_fold0.pkl, model_fold1.pkl)
-   - For single model: use descriptive names (e.g., model.pkl, model.pt)
-4. **Validation score logging**: Log the final validation score (averaged across all folds if using cross-validation) to the log file using the format:
-   - `<final_validation_score>SCORE_VALUE</final_validation_score>`
-   - Example: `<final_validation_score>0.8456</final_validation_score>`
-   - This should be logged near the end of execution, after all training/validation is complete
+### 2. Required Artifacts (Files to Save)
+The script must save the following files to the paths specified in the user prompt below:
 
-Example Output Block:
-```python
-# <YOUR CODE>
-```
+1.  **`submission.csv`**: Test predictions formatted exactly as required by the competition.
+2.  **`valid_preds.csv`**: Validation set predictions containing:
+    - Fold numbers (if CV)
+    - Raw predictions and Ground truth labels
+    - Row identifiers (ids)
+3.  **`model_*.{{ext}}`**: Saved model files (e.g., `.pt`, `.pkl`, `.h5`). Save per-fold if using CV.
+4.  **`train_stats.json`**: A JSON file containing:
+    - `model_name`, `cv_scores` (list), `cv_mean`, `cv_std`.
+    - `submission_distribution` (stats/counts of the test preds).
+    - Key hyperparameters used (e.g. class weights, sequence truncation, image resizing).
+    - `errors`: A list of any errors/exceptions encountered during training (e.g., file not found, data loading errors). Capture error messages from try/except blocks.
+5.  **Visualizations**:
+    - `loss_curve.png`: 1 file with N subplots (use `plt.subplots(1, N)` where N = number of folds). Each subplot shows train/val loss for one fold.
+    - `metric_curve.png`: 1 file with N subplots. Each subplot shows train/val metric for one fold.
+    - **Important:** Use non-interactive backend (e.g., `plt.switch_backend('Agg')`) or simple save commands. Do not call `plt.show()`.
+
+### 3. Technical Constraints
+- **Web Search:** You may perform searches to find the best implementation for `{model_name}`, but the final output must be the code only.
+- **Error Handling:** If the exact model name is invalid in a library, comment the alternative chosen.
 """
 
 
@@ -123,8 +201,6 @@ def build_user(
     version: int = 1,
     model_recommendations: str = "",
 ) -> str:
-    models_dir = f"{outputs_dir}/models_{version}"
-
     # Build model recommendations section (only for version 1)
     recommendations_section = ""
     if version == 1 and model_recommendations:
@@ -134,20 +210,28 @@ def build_user(
 
 """
 
+    # Extract version folder from log_path (e.g., outputs/16_2/1 from outputs/16_2/1/train.txt)
+    from pathlib import Path
+    version_folder = Path(log_path).parent
+
     base = f"""{recommendations_section}Project structure:
 - Base data dir: {base_dir}
 - Outputs dir: {outputs_dir}
+- Version folder: {version_folder}
 - The logs should be written to a file named {log_path}
 - Required submission output: {submission_path}
-- Models and validation predictions directory: {models_dir}
 """
     base += (
-        "\nReturn the complete Python script that, when run, writes logs to "
+        "\nReturn train.py that writes logs to "
         f"{log_path}, "
         "produces a submission CSV at "
         f"{submission_path}, "
-        f"saves validation predictions to {models_dir}/valid_preds.csv, "
-        f"and saves trained models to {models_dir}/."
+        f"and saves the following artifacts to {version_folder}/:\n"
+        f"  - valid_preds.csv (validation predictions with fold info, predictions, ground truth, IDs)\n"
+        f"  - train_stats.json (model_name, cv_scores, cv_mean, cv_std, submission_distribution, hyperparameters)\n"
+        f"  - trained model files (model_*.pkl/.pt/.h5)\n"
+        f"  - loss_curve.png (training/validation loss plot)\n"
+        f"  - metric_curve.png (training/validation metric plot)"
     )
 
     if threshold_directive:
@@ -183,22 +267,24 @@ Like this
     ).strip()
 
 
-def guardrail_fix_suffix(next_log_path: str | Path, next_submission_path: str | Path, models_dir: str | Path) -> str:
+def guardrail_fix_suffix(next_log_path: str | Path, next_submission_path: str | Path, version_folder: str | Path) -> str:
     return (
         "\nPlease regenerate the script addressing the above guardrail issues. "
-        f"Write logs to {next_log_path}, "
-        f"produce submission at {next_submission_path}, "
-        f"save validation predictions to {models_dir}/valid_preds.csv, "
-        f"and save models to {models_dir}/."
+        f"Write logs to {next_log_path} "
+        f"and save the following artifacts to {version_folder}/:\n"
+        f"  - submission.csv\n"
+        f"  - valid_preds.csv\n"
+        f"  - train_stats.json\n"
+        f"  - trained model files\n"
+        f"  - loss_curve.png\n"
+        f"  - metric_curve.png"
     )
 
 
-def execution_failure_suffix(next_log_path: str | Path, next_submission_path: str | Path, models_dir: str | Path) -> str:
+def execution_failure_suffix(next_log_path: str | Path, next_submission_path: str | Path, version_folder: str | Path) -> str:
     return (
         "\nPlease modify your code to fix the error!\n\n"
         "Remember:\n"
         f"- write logs to {next_log_path}\n"
-        f"- produce the next submission at {next_submission_path}\n"
-        f"- save validation predictions to {models_dir}/valid_preds.csv\n"
-        f"- save models to {models_dir}/"
+        f"- save artifacts to {version_folder}/: submission.csv, valid_preds.csv, train_stats.json, models, loss_curve.png, metric_curve.png"
     )

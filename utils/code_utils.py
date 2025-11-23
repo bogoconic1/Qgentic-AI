@@ -83,6 +83,46 @@ def extract_python_code(content: str) -> str:
             return code_old
 
 
+def extract_structured_code(content: str) -> str:
+    """Extract Python code or diff from markdown code blocks.
+
+    Tries to extract in this order:
+    1. ```diff blocks (for patch mode)
+    2. ```python blocks (for full code)
+    3. Returns original content if no blocks found
+
+    Args:
+        content: Text content with markdown code blocks
+
+    Returns:
+        Extracted code/diff as string, or original content if no blocks found
+    """
+    # First try to extract diff (patch mode has priority)
+    diff_pattern_old = r'```diff\s*(.*?)\s*```'
+    diff_matches_old = re.findall(diff_pattern_old, content, re.DOTALL | re.IGNORECASE)
+
+    diff_pattern_new = r'```diff\s*\n(.*?)\n^```'
+    diff_matches_new = re.findall(diff_pattern_new, content, re.DOTALL | re.MULTILINE | re.IGNORECASE)
+
+    if diff_matches_old or diff_matches_new:
+        diff_old = "\n\n".join(diff_matches_old).strip() if diff_matches_old else ""
+        diff_new = "\n\n".join(diff_matches_new).strip() if diff_matches_new else ""
+        result = diff_new if len(diff_new) >= len(diff_old) else diff_old
+        if result:
+            logger.debug("Extracted diff from markdown (%d chars)", len(result))
+            return result
+
+    # Otherwise try to extract Python code
+    python_code = extract_python_code(content)
+    if python_code:
+        logger.debug("Extracted Python code from markdown (%d chars)", len(python_code))
+        return python_code
+
+    # No markdown blocks found, return original content
+    logger.debug("No markdown code blocks found, returning original content")
+    return content
+
+
 def strip_header_from_code(code_path: Path) -> str:
     """Read code file and strip the header lines based on metadata.
 

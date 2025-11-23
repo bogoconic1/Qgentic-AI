@@ -2,6 +2,130 @@
 LLM utility functions for provider detection and response handling.
 """
 
+import base64
+import logging
+import mimetypes
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+
+def encode_image_to_data_url(image_path: str | Path, resize_for_anthropic: bool = False, max_size_bytes: int = 4_500_000) -> str:
+    """
+    Encode an image file to a data URL.
+
+    Args:
+        image_path: Path to the image file
+        resize_for_anthropic: Whether to resize image to max 2000px per dimension (for Anthropic API)
+        max_size_bytes: Maximum file size in bytes (default 4.5MB to stay under Anthropic's 5MB limit)
+
+    Returns:
+        Data URL string in format: data:{mime};base64,{data}
+        Empty string if encoding fails
+
+    Examples:
+        >>> encode_image_to_data_url("chart.png")
+        'data:image/png;base64,iVBORw0KGgo...'
+
+        >>> encode_image_to_data_url("large_chart.jpg", resize_for_anthropic=True)
+        'data:image/jpeg;base64,/9j/4AAQSkZJRg...'
+    """
+    path = Path(image_path) if isinstance(image_path, str) else image_path
+
+    # Determine MIME type
+    mime, _ = mimetypes.guess_type(path.name)
+    if mime is None:
+        suffix = path.suffix.lower()
+        if suffix in {".jpg", ".jpeg"}:
+            mime = "image/jpeg"
+        elif suffix == ".png":
+            mime = "image/png"
+        elif suffix == ".webp":
+            mime = "image/webp"
+        elif suffix == ".gif":
+            mime = "image/gif"
+        else:
+            return ""
+
+    try:
+        image_bytes = path.read_bytes()
+
+        # Resize/compress image if needed for Anthropic
+        if resize_for_anthropic:
+            try:
+                from PIL import Image
+                import io
+
+                img = Image.open(io.BytesIO(image_bytes))
+                width, height = img.size
+                original_size = len(image_bytes)
+                resized = False
+
+                # Check if resizing is needed (dimensions)
+                if width > 2000 or height > 2000:
+                    # Calculate new dimensions maintaining aspect ratio
+                    if width > height:
+                        new_width = 2000
+                        new_height = int(height * (2000 / width))
+                    else:
+                        new_height = 2000
+                        new_width = int(width * (2000 / height))
+
+                    # Resize the image
+                    img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                    resized = True
+                    logger.info(f"Resized image {path.name} from {width}x{height} to {new_width}x{new_height}")
+
+                # Save to bytes (convert PNG to JPEG if too large)
+                output = io.BytesIO()
+
+                # Try saving as original format first
+                if img.mode == 'RGBA':
+                    # Convert RGBA to RGB for JPEG
+                    img = img.convert('RGB')
+
+                # Save as JPEG with quality adjustment to meet size limit
+                quality = 95
+                while quality >= 20:
+                    output = io.BytesIO()
+                    img.save(output, format='JPEG', quality=quality, optimize=True)
+                    image_bytes = output.getvalue()
+
+                    if len(image_bytes) <= max_size_bytes:
+                        if quality < 95 or resized:
+                            logger.info(f"Compressed image {path.name}: {original_size/1024/1024:.2f}MB -> {len(image_bytes)/1024/1024:.2f}MB (quality={quality})")
+                        mime = "image/jpeg"  # Update mime type since we converted to JPEG
+                        break
+                    quality -= 10
+                else:
+                    # Still too large after max compression, resize further
+                    current_width, current_height = img.size
+                    new_width = int(current_width * 0.5)
+                    new_height = int(current_height * 0.5)
+                    img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                    output = io.BytesIO()
+                    img.save(output, format='JPEG', quality=50, optimize=True)
+                    image_bytes = output.getvalue()
+                    mime = "image/jpeg"
+                    logger.warning(f"Aggressively compressed image {path.name} to {len(image_bytes)/1024/1024:.2f}MB")
+
+            except ImportError:
+                logger.warning("PIL not available for image resizing. Image may fail if too large.")
+            except Exception as e:
+                logger.warning(f"Failed to resize image {path.name}: {e}. Using original.")
+
+        # Final size check
+        if len(image_bytes) > max_size_bytes:
+            logger.error(f"Image {path.name} exceeds size limit ({len(image_bytes)/1024/1024:.2f}MB > {max_size_bytes/1024/1024:.2f}MB). Skipping.")
+            return ""
+
+        data = base64.b64encode(image_bytes).decode("utf-8")
+    except Exception as e:
+        logger.error(f"Failed to encode image {path}: {e}")
+        return ""
+
+    return f"data:{mime};base64,{data}"
+
 
 def detect_provider(model_name: str) -> str:
     """
