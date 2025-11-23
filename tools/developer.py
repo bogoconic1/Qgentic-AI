@@ -183,8 +183,9 @@ def _ingest_images_for_llm(images: list[Path], provider: str) -> list[dict] | No
             logger.warning(f"Image not found: {img_path}")
             continue
 
-        # Encode image to data URL
-        data_url = encode_image_to_data_url(str(img_path))
+        # Encode image to data URL (with compression for Anthropic's 5MB limit)
+        resize_flag = (provider == "anthropic")
+        data_url = encode_image_to_data_url(str(img_path), resize_for_anthropic=resize_flag)
         if not data_url:
             logger.warning(f"Failed to encode image: {img_path}")
             continue
