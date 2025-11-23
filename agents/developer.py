@@ -256,7 +256,6 @@ class DeveloperAgent:
             directory_listing=directory_listing,
             model_name=self.model_name,
             slug=self.slug,
-            iteration=self.iteration,
             cpu_core_range=self.cpu_core_range,
             gpu_identifier=self.gpu_identifier,
             gpu_isolation_mode=self.gpu_isolation_mode,
@@ -670,27 +669,25 @@ class DeveloperAgent:
         metadata_path.write_text(json.dumps({"num_header_lines": num_header_lines}))
         self.logger.debug("Written train.json with %d header lines", num_header_lines)
 
-        # Copy shared files from parent iteration folder
-        # Determine parent iteration folder (e.g., outputs/16 if current is outputs/16_2)
-        parent_iteration = self._get_parent_iteration_folder()
+        # Copy shared files from task root directory (task/{slug}/)
+        # These files are REQUIRED - throw error if not found
+        task_root = self.base_dir
 
-        # Copy cv_splits.json if it exists
-        cv_splits_src = parent_iteration / 'cv_splits.json'
-        if cv_splits_src.exists():
-            cv_splits_dst = version_folder / 'cv_splits.json'
-            shutil.copy2(cv_splits_src, cv_splits_dst)
-            self.logger.debug("Copied cv_splits.json from %s", cv_splits_src)
-        else:
-            self.logger.warning("cv_splits.json not found in parent iteration folder: %s", cv_splits_src)
+        # Copy cv_splits.json (required)
+        cv_splits_src = task_root / 'cv_splits.json'
+        if not cv_splits_src.exists():
+            raise FileNotFoundError(f"cv_splits.json not found in task root: {cv_splits_src}. This file is required.")
+        cv_splits_dst = version_folder / 'cv_splits.json'
+        shutil.copy2(cv_splits_src, cv_splits_dst)
+        self.logger.debug("Copied cv_splits.json from %s", cv_splits_src)
 
-        # Copy metric.py if it exists
-        metric_src = parent_iteration / 'metric.py'
-        if metric_src.exists():
-            metric_dst = version_folder / 'metric.py'
-            shutil.copy2(metric_src, metric_dst)
-            self.logger.debug("Copied metric.py from %s", metric_src)
-        else:
-            self.logger.warning("metric.py not found in parent iteration folder: %s", metric_src)
+        # Copy metric.py (required)
+        metric_src = task_root / 'metric.py'
+        if not metric_src.exists():
+            raise FileNotFoundError(f"metric.py not found in task root: {metric_src}. This file is required.")
+        metric_dst = version_folder / 'metric.py'
+        shutil.copy2(metric_src, metric_dst)
+        self.logger.debug("Copied metric.py from %s", metric_src)
 
         return version_folder
 

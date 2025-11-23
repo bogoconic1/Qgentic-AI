@@ -19,24 +19,17 @@ def _limit_list_items(data, max_items=5):
         return data
 
 
-def _read_helper_files(slug: str, iteration: str | int | None = None) -> str:
-    """Read cv_splits.json and metric.py from task directory and format for prompt.
+def _read_helper_files(slug: str) -> str:
+    """Read cv_splits.json and metric.py from task/{slug} directory and format for prompt.
 
     Args:
         slug: Competition slug (e.g., "test-demo")
-        iteration: Iteration number (e.g., "17" or "16_2"). If provided, looks in outputs/{base_iteration}/
 
     Returns:
         Formatted string with helper file schemas and contents, or empty string if no files found
     """
-    # Determine base directory
-    if iteration is not None:
-        # Extract base iteration (e.g., "16" from "16_2")
-        iteration_str = str(iteration)
-        base_iteration = iteration_str.split('_')[0]
-        base_dir = Path(f"task/{slug}/outputs/{base_iteration}")
-    else:
-        base_dir = Path(f"task/{slug}")
+    # Read from task root directory
+    base_dir = Path(f"task/{slug}")
 
     helper_sections = []
 
@@ -111,7 +104,7 @@ def _get_hard_constraints(model_name: str, allow_multi_fold: bool = False) -> st
     )
 
 
-def build_system(description: str, directory_listing: str, model_name: str, slug: str, iteration: str | int | None = None, cpu_core_range: list[int] | None = None, gpu_identifier: str | None = None, gpu_isolation_mode: str = "none", allow_multi_fold: bool = False, hitl_instructions: list[str] | None = None) -> str:
+def build_system(description: str, directory_listing: str, model_name: str, slug: str, cpu_core_range: list[int] | None = None, gpu_identifier: str | None = None, gpu_isolation_mode: str = "none", allow_multi_fold: bool = False, hitl_instructions: list[str] | None = None) -> str:
     # Build resource allocation info
     resource_info = ""
     if cpu_core_range is not None:
@@ -136,7 +129,7 @@ You have been provided with the following guidance for code implementation:
     constraints = _get_hard_constraints(model_name, allow_multi_fold=allow_multi_fold)
 
     # Read helper files (cv_splits.json, metric.py) if they exist
-    helper_files_section = _read_helper_files(slug, iteration)
+    helper_files_section = _read_helper_files(slug)
 
     return f"""# Role: Lead Developer for Machine-Learning Competition Team
 Your objective is to deliver a complete, executable training script (train.py) for a Kaggle Competition using **only** the specified model `{model_name}`.
