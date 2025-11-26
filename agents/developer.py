@@ -1082,17 +1082,17 @@ class DeveloperAgent:
                         with open(train_stats_path, 'r') as f:
                             train_stats = json.load(f)
 
-                        # Extract cv_mean as the validation score
-                        run_score = train_stats.get('cv_mean')
+                        # Extract cv_worst as the validation score (worst fold score)
+                        run_score = train_stats.get('cv_worst')
 
                         if run_score is not None:
                             self._log_attempt_score(attempt, run_score)
-                            self.logger.info("Your validation score is %s", run_score)
+                            self.logger.info("Your validation score (cv_worst) is %s", run_score)
                             # Store score for this version and track for comparison
                             self.version_scores[version] = run_score
                             self.last_successful_version = version
                         else:
-                            self.logger.warning("cv_mean not found in train_stats.json for version %s", version)
+                            self.logger.warning("cv_worst not found in train_stats.json for version %s", version)
                     else:
                         self.logger.warning("train_stats.json not found for version %s", version)
                 except Exception as exc:
@@ -1325,11 +1325,11 @@ class DeveloperAgent:
                 self.logger.info("Time budget exhausted (%.2f minutes)", (deadline - start_time) / 60.0)
                 break
 
-            # Trim to keep at most 60 messages, ensuring first message is from "user"
+            # Trim to keep at most 40 messages, ensuring first message is from "user"
             try:
-                if len(input_list) > 60:
+                if len(input_list) > 40:
                     # Trim from the front
-                    input_list = input_list[-60:]
+                    input_list = input_list[-40:]
                     # Ensure first message is from user (required by API)
                     while input_list:
                         try:
@@ -1340,7 +1340,7 @@ class DeveloperAgent:
                             self.logger.exception("Message has no attribute role: %s", e)
                             input_list.pop(0)
 
-                    self.logger.info("Trimmed input messages to last 60 for attempt %s", attempt + 1)
+                    self.logger.info("Trimmed input messages to last 40 for attempt %s", attempt + 1)
 
             except Exception as e:
                 self.logger.exception("Failed to trim input messages: %s", e)

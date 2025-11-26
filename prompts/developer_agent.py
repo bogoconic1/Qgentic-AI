@@ -177,7 +177,7 @@ The script must save the following files to the paths specified in the user prom
     - Row identifiers (ids)
 3.  **`model_*.{{ext}}`**: Saved model files (e.g., `.pt`, `.pkl`, `.h5`). Save per-fold if using CV.
 4.  **`train_stats.json`**: A JSON file containing:
-    - `model_name`, `cv_scores` (list), `cv_mean`, `cv_std`.
+    - `model_name`, `cv_scores` (list), `cv_mean`, `cv_std`, `cv_worst` (worst fold score - use min if higher is better, max if lower is better).
     - `submission_distribution` (stats/counts of the test preds).
     - Key hyperparameters used (e.g. class weights, sequence truncation, image resizing).
     - `errors`: A list of any errors/exceptions encountered during training (e.g., file not found, data loading errors). Capture error messages from try/except blocks.
@@ -228,7 +228,7 @@ def build_user(
         f"{submission_path}, "
         f"and saves the following artifacts to {version_folder}/:\n"
         f"  - valid_preds.csv (validation predictions with fold info, predictions, ground truth, IDs)\n"
-        f"  - train_stats.json (model_name, cv_scores, cv_mean, cv_std, submission_distribution, hyperparameters)\n"
+        f"  - train_stats.json (model_name, cv_scores, cv_mean, cv_std, cv_worst, submission_distribution, hyperparameters)\n"
         f"  - trained model files (model_*.pkl/.pt/.h5)\n"
         f"  - loss_curve.png (training/validation loss plot)\n"
         f"  - metric_curve.png (training/validation metric plot)"
