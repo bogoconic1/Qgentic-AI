@@ -10,7 +10,7 @@ from typing import Optional
 import json
 
 from dotenv import load_dotenv
-from project_config import get_config
+from project_config import get_config, get_config_value
 import weave
 import wandb
 
