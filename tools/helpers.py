@@ -69,6 +69,7 @@ def call_llm_with_retry_helper(
     max_retries: int | None = None,
     web_search_enabled: bool = False,
     text_format = None,
+    include_usage: bool = False,
 ):
 
     client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
@@ -92,14 +93,21 @@ def call_llm_with_retry_helper(
                     input=messages,
                     text_format=text_format,
                 )
+                # Extract input tokens if requested
+                input_tokens = None
+                if include_usage and hasattr(response, 'usage') and response.usage:
+                    input_tokens = getattr(response.usage, 'input_tokens', None)
+
                 # Return parsed Pydantic object directly
                 if hasattr(response, 'output_parsed') and response.output_parsed:
-                    return response.output_parsed
+                    result = response.output_parsed
                 elif hasattr(response, 'parsed_output') and response.parsed_output:
-                    return response.parsed_output
+                    result = response.parsed_output
                 else:
                     logging.warning("OpenAI structured output response missing parsed object")
-                    return response
+                    result = response
+
+                return (result, input_tokens) if include_usage else result
             else:
                 # Use regular responses API
                 response = client.responses.create(
@@ -108,6 +116,11 @@ def call_llm_with_retry_helper(
                     tools=tools,
                     input=messages,
                 )
+                if include_usage:
+                    input_tokens = None
+                    if hasattr(response, 'usage') and response.usage:
+                        input_tokens = getattr(response.usage, 'input_tokens', None)
+                    return (response, input_tokens)
                 return response
         except openai.InternalServerError as e:
             if "504" in str(e) and attempt < retries - 1:
@@ -121,7 +134,7 @@ def call_llm_with_retry_helper(
         except Exception as e:
             logging.error(f"Error calling LLM: {e}")
             continue
-    return None
+    return (None, None) if include_usage else None
 
 @weave.op()
 def call_llm_with_retry(
@@ -132,11 +145,13 @@ def call_llm_with_retry(
     max_retries: int | None = None,
     web_search_enabled: bool = False,
     text_format = None,
+    include_usage: bool = False,
 ):
     result = None
+    input_tokens = None
 
     for _ in range(40):
-        result = call_llm_with_retry_helper(
+        helper_result = call_llm_with_retry_helper(
             model=model,
             instructions=instructions,
             tools=tools,
@@ -144,14 +159,19 @@ def call_llm_with_retry(
             max_retries=max_retries,
             web_search_enabled=web_search_enabled,
             text_format=text_format,
+            include_usage=include_usage,
         )
+        if include_usage:
+            result, input_tokens = helper_result if helper_result else (None, None)
+        else:
+            result = helper_result
         if result is not None:
             break
 
     if result is None:
         raise ValueError("LLM call failed after 40 retries") # most likely severe issues like token limit exceeded, should not continue
 
-    return result
+    return (result, input_tokens) if include_usage else result
 
 @weave.op()
 def call_llm_with_retry_anthropic_helper(
@@ -163,6 +183,7 @@ def call_llm_with_retry_anthropic_helper(
     web_search_enabled: bool = False,
     text_format = None,
     max_tokens: int = 16384,
+    include_usage: bool = False,
 ):
     """Helper function to call Anthropic API with retry logic.
 
@@ -175,17 +196,19 @@ def call_llm_with_retry_anthropic_helper(
         web_search_enabled: Whether to enable web search tool
         text_format: Optional Pydantic model for structured outputs
         max_tokens: Maximum tokens to generate (default: 8192)
+        include_usage: Whether to return input token count alongside result
 
     Returns:
+        - If include_usage=True: Tuple of (result, input_tokens)
         - If text_format provided: Parsed Pydantic model instance (direct object, not response.parsed_output)
         - If text_format None: Anthropic response object with .content, .stop_reason, .usage
-        - On failure: None
+        - On failure: None (or (None, None) if include_usage=True)
     """
     try:
         from anthropic import Anthropic, APIError, RateLimitError, APIConnectionError, InternalServerError, APIStatusError
     except ImportError as e:
         logging.error(f"Failed to import anthropic: {e}")
-        return None
+        return (None, None) if include_usage else None
 
     client = Anthropic(api_key=os.environ.get('ANTHROPIC_API_KEY'))
     cfg = get_config()
@@ -220,12 +243,18 @@ def call_llm_with_retry_anthropic_helper(
                         "budget_tokens": 4096
                     },
                 )
+                # Extract input tokens if requested
+                input_tokens = None
+                if include_usage and hasattr(response, 'usage') and response.usage:
+                    input_tokens = getattr(response.usage, 'input_tokens', None)
+
                 # Return parsed Pydantic object directly
                 if hasattr(response, 'parsed_output') and response.parsed_output:
-                    return response.parsed_output
+                    result = response.parsed_output
                 else:
                     logging.warning("Anthropic structured output response missing parsed_output")
-                    return response
+                    result = response
+                return (result, input_tokens) if include_usage else result
             else:
                 # Use regular messages API
                 response = client.messages.create(
@@ -239,6 +268,11 @@ def call_llm_with_retry_anthropic_helper(
                         "budget_tokens": 4096
                     },
                 )
+                if include_usage:
+                    input_tokens = None
+                    if hasattr(response, 'usage') and response.usage:
+                        input_tokens = getattr(response.usage, 'input_tokens', None)
+                    return (response, input_tokens)
                 return response
 
         except RateLimitError as e:
@@ -249,7 +283,7 @@ def call_llm_with_retry_anthropic_helper(
                 continue
             else:
                 logging.error(f"Anthropic rate limit exceeded: {e}")
-                return None
+                return (None, None) if include_usage else None
 
         except APIConnectionError as e:
             if attempt < retries - 1:
@@ -259,7 +293,7 @@ def call_llm_with_retry_anthropic_helper(
                 continue
             else:
                 logging.error(f"Anthropic connection failed: {e}")
-                return None
+                return (None, None) if include_usage else None
 
         except InternalServerError as e:
             if attempt < retries - 1:
@@ -269,7 +303,7 @@ def call_llm_with_retry_anthropic_helper(
                 continue
             else:
                 logging.error(f"Anthropic server error: {e}")
-                return None
+                return (None, None) if include_usage else None
 
         except APIStatusError as e:
             # Other API errors (4xx, etc.)
@@ -278,7 +312,7 @@ def call_llm_with_retry_anthropic_helper(
                 wait_time = 2**attempt
                 time.sleep(wait_time)
                 continue
-            return None
+            return (None, None) if include_usage else None
 
         except APIError as e:
             # General API errors
@@ -287,7 +321,7 @@ def call_llm_with_retry_anthropic_helper(
                 wait_time = 2**attempt
                 time.sleep(wait_time)
                 continue
-            return None
+            return (None, None) if include_usage else None
 
         except Exception as e:
             logging.error(f"Unexpected error calling Anthropic: {e}")
@@ -295,9 +329,9 @@ def call_llm_with_retry_anthropic_helper(
                 wait_time = 2**attempt
                 time.sleep(wait_time)
                 continue
-            return None
+            return (None, None) if include_usage else None
 
-    return None
+    return (None, None) if include_usage else None
 
 @weave.op()
 def call_llm_with_retry_anthropic(
@@ -309,6 +343,7 @@ def call_llm_with_retry_anthropic(
     web_search_enabled: bool = False,
     text_format = None,
     max_tokens: int = 16384,
+    include_usage: bool = False,
 ):
     """Call Anthropic API with comprehensive retry logic.
 
@@ -324,8 +359,10 @@ def call_llm_with_retry_anthropic(
         web_search_enabled: Whether to enable web search tool
         text_format: Optional Pydantic model for structured outputs
         max_tokens: Maximum tokens to generate (default: 8192)
+        include_usage: Whether to return input token count alongside result
 
     Returns:
+        - If include_usage=True: Tuple of (result, input_tokens)
         - If text_format provided: Parsed Pydantic model instance (direct object)
         - If text_format None: Anthropic response object with .content, .stop_reason, .usage
 
@@ -357,9 +394,10 @@ def call_llm_with_retry_anthropic(
         print(result.answer)  # Direct access - result is already the Pydantic object!
     """
     result = None
+    input_tokens = None
 
     for _ in range(40):
-        result = call_llm_with_retry_anthropic_helper(
+        helper_result = call_llm_with_retry_anthropic_helper(
             model=model,
             instructions=instructions,
             tools=tools,
@@ -368,14 +406,19 @@ def call_llm_with_retry_anthropic(
             web_search_enabled=web_search_enabled,
             text_format=text_format,
             max_tokens=max_tokens,
+            include_usage=include_usage,
         )
+        if include_usage:
+            result, input_tokens = helper_result if helper_result else (None, None)
+        else:
+            result = helper_result
         if result is not None:
             break
 
     if result is None:
         raise ValueError("Anthropic call failed after 40 retries")
 
-    return result
+    return (result, input_tokens) if include_usage else result
 
 @weave.op()
 def call_llm_with_retry_google_helper(
@@ -391,6 +434,7 @@ def call_llm_with_retry_google_helper(
     thinking_level: str | None = None,
     include_thoughts: bool = False,
     function_declarations: list = None,
+    include_usage: bool = False,
 ):
     """Helper function to call Gemini API with full feature support and retry logic.
 
@@ -407,18 +451,20 @@ def call_llm_with_retry_google_helper(
         thinking_level: Thinking level for Gemini 3 ("low" or "high")
         include_thoughts: Whether to return thought summaries (default: False)
         function_declarations: List of function declarations for function calling
+        include_usage: Whether to return input token count alongside result
 
     Returns:
+        - If include_usage=True: Tuple of (result, input_tokens)
         - If text_format provided: Parsed Pydantic model instance
         - If text_format None: Raw text response string
-        - On failure: None
+        - On failure: None (or (None, None) if include_usage=True)
     """
     try:
         from google import genai
         from google.genai import types
     except ImportError as e:
         logging.error(f"Failed to import google.genai: {e}")
-        return None
+        return (None, None) if include_usage else None
 
     # Set location based on model
     if model.startswith("gemini"):
@@ -478,21 +524,26 @@ def call_llm_with_retry_google_helper(
                 config=types.GenerateContentConfig(**config_params),
             )
 
+            # Extract input tokens if requested
+            input_tokens = None
+            if include_usage and hasattr(response, 'usage_metadata') and response.usage_metadata:
+                input_tokens = getattr(response.usage_metadata, 'prompt_token_count', None)
+
             # Parse response based on format
             if text_format is not None:
                 # Structured output - parse as Pydantic model with fallback
                 try:
                     parsed_result = text_format.model_validate_json(response.text)
-                    return parsed_result
+                    return (parsed_result, input_tokens) if include_usage else parsed_result
                 except Exception as parse_error:
                     # Fallback: strip markdown code fences if present
                     logging.warning(f"Initial JSON parsing failed, attempting to clean response: {parse_error}")
                     cleaned_text = response.text.lstrip("```json").lstrip("```").rstrip("```").strip()
                     parsed_result = text_format.model_validate_json(cleaned_text)
-                    return parsed_result
+                    return (parsed_result, input_tokens) if include_usage else parsed_result
             else:
                 # Return full response object (needed for function calling)
-                return response
+                return (response, input_tokens) if include_usage else response
 
         except Exception as e:
             if attempt < retries - 1:
@@ -502,9 +553,9 @@ def call_llm_with_retry_google_helper(
                 continue
             else:
                 logging.error(f"Gemini call failed after {retries} attempts: {e}")
-                return None
+                return (None, None) if include_usage else None
 
-    return None
+    return (None, None) if include_usage else None
 
 @weave.op()
 def call_llm_with_retry_google(
@@ -520,6 +571,7 @@ def call_llm_with_retry_google(
     thinking_level: str | None = None,
     include_thoughts: bool = False,
     function_declarations: list = None,
+    include_usage: bool = False,
 ):
     """Call Gemini API with full feature support and comprehensive retry logic.
 
@@ -544,8 +596,10 @@ def call_llm_with_retry_google(
         thinking_level: Thinking level for Gemini 3 ("low" or "high")
         include_thoughts: Whether to return thought summaries
         function_declarations: List of function declarations for function calling
+        include_usage: Whether to return input token count alongside result
 
     Returns:
+        - If include_usage=True: Tuple of (result, input_tokens)
         - If text_format provided: Parsed Pydantic model instance
         - If text_format None: Raw text response string
 
@@ -553,9 +607,10 @@ def call_llm_with_retry_google(
         ValueError: If all retries fail after 40 attempts
     """
     result = None
+    input_tokens = None
 
     for _ in range(40):  # Match Anthropic's 40 retries
-        result = call_llm_with_retry_google_helper(
+        helper_result = call_llm_with_retry_google_helper(
             model=model,
             system_instruction=system_instruction,
             messages=messages,
@@ -568,11 +623,16 @@ def call_llm_with_retry_google(
             thinking_level=thinking_level,
             include_thoughts=include_thoughts,
             function_declarations=function_declarations,
+            include_usage=include_usage,
         )
+        if include_usage:
+            result, input_tokens = helper_result if helper_result else (None, None)
+        else:
+            result = helper_result
         if result is not None:
             break
 
     if result is None:
         raise ValueError("Gemini call failed after 40 retries")
 
-    return result
+    return (result, input_tokens) if include_usage else result
