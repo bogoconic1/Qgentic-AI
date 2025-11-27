@@ -10,7 +10,7 @@ from typing import Optional
 import json
 
 from dotenv import load_dotenv
-from project_config import get_config
+from project_config import get_config, get_config_value
 import weave
 import wandb
 
@@ -406,13 +406,14 @@ class DeveloperAgent:
         self.logger.debug("Replaced last message (diff) with full code from %s", version_folder)
 
     @weave.op()
-    def _generate_code(self, instructions: str, messages: list[dict[str, str]], expect_patch: bool = False) -> tuple[list[dict], dict[str, str]]:
+    def _generate_code(self, instructions: str, messages: list[dict[str, str]], expect_patch: bool = False) -> tuple[list[dict], dict[str, str], int | None]:
         """Generate code using structured output.
 
         Returns:
-            Tuple of (message_history_entry, code_dict)
+            Tuple of (message_history_entry, code_dict, input_tokens)
             - message_history_entry: List with assistant message containing markdown
             - code_dict: Dict with 'train_py' key
+            - input_tokens: Number of input tokens used in this API call (for adaptive trimming)
         """
         self.logger.info("Requesting code generation from model for iteration %s", self.iteration)
 
@@ -423,32 +424,36 @@ class DeveloperAgent:
 
         # Detect provider
         provider = detect_provider(_DEVELOPER_MODEL)
+        input_tokens = None
 
         if provider == "openai":
-            result = call_llm_with_retry(
+            result, input_tokens = call_llm_with_retry(
                 model=_DEVELOPER_MODEL,
                 instructions=instructions,
                 tools=[],
                 messages=messages,
                 web_search_enabled=True,
-                text_format=schema
+                text_format=schema,
+                include_usage=True
             )
         elif provider == "anthropic":
-            result = call_llm_with_retry_anthropic(
+            result, input_tokens = call_llm_with_retry_anthropic(
                 model=_DEVELOPER_MODEL,
                 instructions=instructions,
                 tools=[],
                 messages=messages,
                 web_search_enabled=True,
-                text_format=schema
+                text_format=schema,
+                include_usage=True
             )
         elif provider == "google":
-            result = call_llm_with_retry_google(
+            result, input_tokens = call_llm_with_retry_google(
                 model=_DEVELOPER_MODEL,
                 system_instruction=instructions,
                 messages=messages,
                 enable_google_search=True,
-                text_format=schema
+                text_format=schema,
+                include_usage=True
             )
         else:
             raise ValueError(f"Unsupported provider: {provider}")
@@ -479,7 +484,11 @@ class DeveloperAgent:
         # Create message history entry
         output = [append_message(provider, "assistant", content)]
 
-        return output, code_dict
+        # Log input tokens for debugging
+        if input_tokens:
+            self.logger.info("API call used %d input tokens", input_tokens)
+
+        return output, code_dict, input_tokens
 
     @staticmethod
     def _normalize_diff_payload(base_path: Path, diff_text: str) -> Optional[str]:
@@ -1301,6 +1310,7 @@ class DeveloperAgent:
         deadline = start_time + max_time_seconds
 
         run_score = 0
+        last_input_tokens = None  # Track input tokens from previous API call for adaptive trimming
 
         # Enable multi-fold from start if using validation scores (need proper CV for reliable scores)
         initial_allow_multi_fold = _USE_VALIDATION_SCORE
@@ -1325,22 +1335,31 @@ class DeveloperAgent:
                 self.logger.info("Time budget exhausted (%.2f minutes)", (deadline - start_time) / 60.0)
                 break
 
-            # Trim to keep at most 40 messages, ensuring first message is from "user"
+            # Adaptive trimming: if previous call used >80% of token limit, remove 4 messages
             try:
-                if len(input_list) > 40:
-                    # Trim from the front
-                    input_list = input_list[-40:]
+                max_input_tokens = get_config_value("runtime", "max_developer_input_tokens", default=250000)
+                threshold = max_input_tokens * 0.8
+
+                if last_input_tokens and last_input_tokens > threshold:
+                    self.logger.info(
+                        "Token threshold exceeded: %d > %d (80%% of %d), removing messages",
+                        last_input_tokens, int(threshold), max_input_tokens
+                    )
+                    # Remove 4 messages from the front
+                    for _ in range(min(4, len(input_list) - 1)):
+                        input_list.pop(0)
+
                     # Ensure first message is from user (required by API)
                     while input_list:
                         try:
                             if input_list[0].get("role") == "user":
-                                break  # Found user message, stop trimming
+                                break
                             input_list.pop(0)
                         except Exception as e:
                             self.logger.exception("Message has no attribute role: %s", e)
                             input_list.pop(0)
 
-                    self.logger.info("Trimmed input messages to last 40 for attempt %s", attempt + 1)
+                    self.logger.info("Trimmed to %d messages for attempt %s", len(input_list), attempt + 1)
 
             except Exception as e:
                 self.logger.exception("Failed to trim input messages: %s", e)
@@ -1368,7 +1387,7 @@ class DeveloperAgent:
             code_dict = None
 
             while True:
-                response_output, generated = self._generate_code(instructions=system_prompt, messages=input_list, expect_patch=expect_patch)
+                response_output, generated, last_input_tokens = self._generate_code(instructions=system_prompt, messages=input_list, expect_patch=expect_patch)
                 input_list += response_output
 
                 if expect_patch:

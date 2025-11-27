@@ -25,6 +25,7 @@ _DEFAULT_CONFIG: dict[str, Any] = {
         "download_datasets_max_attempts": 1,
         "researcher_max_steps": 512,
         "llm_max_retries": 3,
+        "max_developer_input_tokens": 250000,
         "directory_listing_max_files": 10,
         "researcher_parallel_runs": 1,
         "patch_mode_enabled": False,
