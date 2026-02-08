@@ -56,6 +56,7 @@ _DEFAULT_CONFIG: dict[str, Any] = {
     },
     "developer": {
         "hitl_instructions": [],
+        "hitl_sota": False,
     },
 }
 

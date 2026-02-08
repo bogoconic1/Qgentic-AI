@@ -58,6 +58,7 @@ _USE_VALIDATION_SCORE = bool(_RUNTIME_CFG.get("use_validation_score"))
 
 _DEVELOPER_MODEL = _LLM_CFG.get("developer_model")
 _HITL_INSTRUCTIONS = _DEVELOPER_CFG.get("hitl_instructions", [])
+_HITL_SOTA = bool(_DEVELOPER_CFG.get("hitl_sota"))
 
 _TASK_ROOT = Path(_PATH_CFG.get("task_root"))
 _OUTPUTS_DIRNAME = _PATH_CFG.get("outputs_dirname")
@@ -1288,6 +1289,30 @@ class DeveloperAgent:
                 images=training_images if training_images else None,
                 train_stats=train_stats,
             )
+
+            # HITL: Show suggestion and let user accept or override
+            if _HITL_SOTA and sota_response:
+                print(f"\n{'='*60}")
+                print(f"[HITL] Model: {self.model_name} | Version: {version}")
+                print(f"[HITL] Suggestion: {sota_response.suggestion}")
+                print(f"[HITL] Reason: {sota_response.suggestion_reason}")
+                print(f"[HITL] Blacklist previous: {sota_response.blacklist} ({sota_response.blacklist_reason})")
+                print(f"{'='*60}")
+                user_input = input("[HITL] Press Enter to accept, or type replacement: ").strip()
+                if user_input:
+                    user_code = input("[HITL] Enter code snippet (or press Enter to skip): ").strip()
+                    from schemas.developer import SOTAResponse
+                    sota_response = SOTAResponse(
+                        blacklist=sota_response.blacklist,
+                        blacklist_reason=sota_response.blacklist_reason,
+                        suggestion=user_input,
+                        suggestion_reason="Human override",
+                        suggestion_code=user_code,
+                    )
+                    self.logger.info("HITL: User overrode suggestion with: %s", user_input)
+                else:
+                    self.logger.info("HITL: User accepted automated suggestion")
+
             return sota_response
         except Exception as exc:
             self.logger.exception("Failed to fetch red flags or SOTA suggestions")
