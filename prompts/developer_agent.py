@@ -100,7 +100,6 @@ def _get_hard_constraints(model_name: str, allow_multi_fold: bool = False) -> st
     return get_hard_constraints(
         model_name=model_name,
         allow_multi_fold=allow_multi_fold,
-        include_ensemble_copy_directive=False,
     )
 
 

@@ -1,5 +1,5 @@
 """
-Tests for shared_constraints module to ensure refactoring maintains backward compatibility.
+Tests for shared_constraints module to ensure backward compatibility.
 """
 
 from __future__ import annotations
@@ -7,7 +7,6 @@ from __future__ import annotations
 import pytest
 
 from prompts.developer_agent import _get_hard_constraints as developer_get_hard_constraints
-from prompts.ensembler_agent import _get_hard_constraints as ensembler_get_hard_constraints
 from prompts.shared_constraints import get_hard_constraints
 
 
@@ -33,11 +32,7 @@ class TestSharedConstraints:
         assert "kagglehub" in result
 
         # Check for developer-specific constraint ending (backward compatibility)
-        # Note: DEBUG MODE constraints were removed in recent updates
         assert "while` loops" in result
-
-        # Check that ensemble directive is NOT present
-        assert "CRITICAL: YOU MUST COPY EVERYTHING" not in result
 
     def test_developer_constraints_multi_fold(self):
         """Test that developer constraints respect allow_multi_fold parameter."""
@@ -49,64 +44,20 @@ class TestSharedConstraints:
         # Model-specific constraints should still be present
         assert "Use ONLY `BERT`" in result
 
-    def test_ensembler_constraints_basic(self):
-        """Test that ensembler constraints are generated correctly."""
-        result = ensembler_get_hard_constraints()
-
-        # Check that model-specific constraints are NOT present (no model_name)
-        assert "Use ONLY `" not in result
-        assert "do not swap out `" not in result
-
-        # Check that fold constraint is NOT present (ensembler doesn't use multi-fold)
-        assert "Just train and validate on fold 0" not in result
-
-        # Check for common constraints
-        assert "Deliver a fully-contained, single-file script" in result
-        assert "Use CUDA if available" in result
-        assert "DO NOT** explicitly set `os.environ['CUDA_VISIBLE_DEVICES']`" in result
-
-        # Check for ensemble-specific additions
-        assert "ensemble weights" in result  # Should be in logging statement
-        assert "best epoch/iteration number" in result  # Should use "/iteration" suffix
-
-        # Check for ensemble-specific directive
-        assert "CRITICAL: YOU MUST COPY EVERYTHING" in result
-        assert "For each baseline model in your ensemble" in result
-        assert "Preprocessing" in result
-        assert "Feature Engineering and Transformations" in result
-
-        # Check ensembler doesn't have the developer-specific 's' suffix on while loops constraint
-        # Note: DEBUG MODE constraints were removed in recent updates
-
     def test_shared_function_with_all_parameters(self):
         """Test the shared function directly with all parameter combinations."""
         # Test developer-like configuration
         dev_result = get_hard_constraints(
             model_name="XGBoost",
             allow_multi_fold=False,
-            include_ensemble_copy_directive=False,
         )
         assert "Use ONLY `XGBoost`" in dev_result
         assert "Just train and validate on fold 0" in dev_result
-        assert "CRITICAL: YOU MUST COPY EVERYTHING" not in dev_result
 
-        # Test ensembler-like configuration
-        ens_result = get_hard_constraints(
-            model_name=None,
-            allow_multi_fold=False,
-            include_ensemble_copy_directive=True,
-        )
-        assert "Use ONLY `" not in ens_result
-        assert "CRITICAL: YOU MUST COPY EVERYTHING" in ens_result
-        assert "ensemble weights" in ens_result
-
-    def test_common_constraints_in_both(self):
-        """Test that common constraints appear in both developer and ensembler outputs."""
+    def test_common_constraints_present(self):
+        """Test that common constraints appear in developer output."""
         dev_result = developer_get_hard_constraints(model_name="RandomForest")
-        ens_result = ensembler_get_hard_constraints()
 
-        # List of common constraints that should appear in both
-        # Note: DEBUG MODE constraints were removed in recent updates
         common_items = [
             "Deliver a fully-contained, single-file script",
             "Use CUDA if available",
@@ -127,29 +78,16 @@ class TestSharedConstraints:
 
         for item in common_items:
             assert item in dev_result, f"Missing in developer: {item}"
-            assert item in ens_result, f"Missing in ensembler: {item}"
 
     def test_backward_compatibility_developer(self):
         """Test that the developer wrapper maintains exact backward compatibility."""
-        # The wrapper should produce identical output to what the old function would have
         result = developer_get_hard_constraints("TestModel", allow_multi_fold=False)
 
-        # Check all the key elements that the original function had
         assert result.startswith("**Hard Constraints:**")
         assert "Use ONLY `TestModel`" in result
         assert "Just train and validate on fold 0" in result
-        assert "while` loops" in result  # Developer-specific constraint
+        assert "while` loops" in result
         assert "Modular pipeline" in result
-
-    def test_backward_compatibility_ensembler(self):
-        """Test that the ensembler wrapper maintains exact backward compatibility."""
-        result = ensembler_get_hard_constraints()
-
-        # Check all the key elements that the original function had
-        assert result.startswith("**Hard Constraints:**")
-        assert "CRITICAL: YOU MUST COPY EVERYTHING" in result
-        assert "ensemble weights" in result
-        assert "best epoch/iteration number" in result
 
     def test_different_model_names(self):
         """Test that different model names are correctly substituted."""

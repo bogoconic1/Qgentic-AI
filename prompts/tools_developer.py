@@ -175,10 +175,10 @@ def red_flags_user(
 """
 
 
-def sota_system(is_ensemble: bool = False, time_limit_minutes: int = None) -> str:
-    # Default time limits if not provided
+def sota_system(time_limit_minutes: int = None) -> str:
+    # Default time limit if not provided
     if time_limit_minutes is None:
-        time_limit_minutes = 180 if is_ensemble else 90
+        time_limit_minutes = 90
 
     return f"""You will receive:
 - Kaggle competition description
@@ -265,9 +265,8 @@ You have access to the following tools to investigate issues and gather informat
 ## Hard Constraints
 - Do NOT look up or use actual winning solutions from this competition.
 - Do NOT rely on prior competition-specific solution knowledge.
-- {"You may suggest a new model or change the family if you feel is beneficial." if is_ensemble else "Do NOT change the model family used in the initial script; only suggest enhancements around it. (e.g. changing from deberta-v3-base to deberta-v3-large is ALLOWED. Similarly, increasing the model capacity (e.g. num_layers) is ALLOWED.)"}
+- Do NOT change the model family used in the initial script; only suggest enhancements around it. (e.g. changing from deberta-v3-base to deberta-v3-large is ALLOWED. Similarly, increasing the model capacity (e.g. num_layers) is ALLOWED.)
 - If code bugs are identified (including in <red_flags>), you MUST FIX THESE FIRST.
-{"- DO NOT make changes to Validation unless there are extremely severe issues." if is_ensemble else ""}
 
 ## Making Specific, Actionable Suggestions (ALL Task Types)
 Begin with a brief, high-level statement explaining your rationale for the chosen improvement areas before making specific recommendations.

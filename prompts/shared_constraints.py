@@ -1,8 +1,7 @@
 """
-Shared prompt utilities for Developer and Ensembler agents.
+Shared prompt utilities for the Developer agent.
 
-This module contains common constraint definitions to avoid code duplication
-between developer_agent.py and ensembler_agent.py.
+This module contains common constraint definitions used by developer_agent.py.
 """
 
 from __future__ import annotations
@@ -11,18 +10,14 @@ from __future__ import annotations
 def get_hard_constraints(
     model_name: str | None = None,
     allow_multi_fold: bool = False,
-    include_ensemble_copy_directive: bool = False,
 ) -> str:
     """
     Get the hard constraints section for system prompts.
 
     Args:
-        model_name: The model name to be used in constraints. If None, model-specific
-            constraints will be omitted (used for ensemble agent).
+        model_name: The model name to be used in constraints.
         allow_multi_fold: Whether to allow multi-fold training. If False, adds a
             constraint to only train on fold 0.
-        include_ensemble_copy_directive: Whether to include the ensemble-specific
-            directive about copying baseline code. Only used by EnsemblerAgent.
 
     Returns:
         Formatted hard constraints string ready for inclusion in system prompts.
@@ -44,26 +39,18 @@ def get_hard_constraints(
     if model_name:
         modular_pipeline_constraint = f"- Modular pipeline: update preprocessing/postprocessing or hyperparameters, but do not swap out `{model_name}`."
 
-    # Build common constraints (shared by both developer and ensembler)
+    # Build common constraints
     common_constraints = """- Deliver a fully-contained, single-file script.
 - Use CUDA if available.
 - **DO NOT** explicitly set `os.environ['CUDA_VISIBLE_DEVICES']` in your code.
 - Place all `logging.info` statements for validation results (per fold and overall) as well as model loading, train/test set size; only log data loading/setup if directly relevant to validation.
-- Also emit concise `logging.info` statements for any computed quantities that can go really wrong (e.g. class weights, thresholds{ensemble_weights_suffix}).
+- Also emit concise `logging.info` statements for any computed quantities that can go really wrong (e.g. class weights, thresholds).
 - Place `logging.basicConfig()` at the start of the script.
 - Deep learning: **no** gradient checkpointing. Do not code fallback methods.
 - **IMPORTANT:** If you're using XGBoost, LightGBM, or CatBoost, first train the model with the suggested parameters. Then, perform hyperparameter tuning using Optuna for up to 300 seconds. Finally, retrain the model using the best parameters from the tuning run and select the configuration with the best validation performance.
 - If you use `transformers.Trainer`, use eval_strategy instead of evaluation_strategy.
 - Do not use `try/except` to suppress errors.
-- Log final validation results, best epoch{iteration_suffix} number and total training time after training."""
-
-    # Add ensemble weights suffix if applicable
-    ensemble_weights_suffix = ", ensemble weights" if include_ensemble_copy_directive else ""
-    iteration_suffix = "/iteration" if include_ensemble_copy_directive else ""
-    common_constraints = common_constraints.format(
-        ensemble_weights_suffix=ensemble_weights_suffix,
-        iteration_suffix=iteration_suffix
-    )
+- Log final validation results, best epoch number and total training time after training."""
 
     # Continue with more common constraints
     additional_common_constraints = """- Prefer pretrained models if available. Set pretrained=True if applicable.
@@ -105,24 +92,5 @@ import kagglehub
 # Download latest version
 path = kagglehub.dataset_download("<author>/<dataset_name>")
 ```""")
-
-    # Add ensemble-specific copy directive
-    if include_ensemble_copy_directive:
-        ensemble_directive = """
-**CRITICAL: YOU MUST COPY EVERYTHING FROM EACH MODEL's BASELINE CODE! EVERYTHING!**
-For each baseline model in your ensemble, you MUST copy ALL of the following from the provided baseline code:
-1. **Preprocessing**
-2. **Feature Engineering and Transformations**
-3. **Loss functions**
-4. **Hyperparameters & Architecture**
-5. **Inference logic**
-
-The baseline models achieved their top-notch scores BECAUSE of these exact configurations. Your job is to:
-- Extract OOF predictions from these strong baseline models
-- Implement the ensemble logic on top of them
-
-DO NOT simplify, remove, or "clean up" the baseline code. DO NOT start from scratch with basic features. The baseline code already handles data leakage correctly via OOF encodings.
-"""
-        constraints_parts.append(ensemble_directive)
 
     return "\n".join(constraints_parts)
