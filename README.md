@@ -4,7 +4,7 @@ Qgentic-AI is an automated ML competition stack. Two LLM-driven agents -- a **Re
 
 ## Results
 
-![CSIRO Biomass Leaderboard](docs/assets/csiro.png)
+![CSIRO Biomass Leaderboard](docs/assets/csiro_lb.png)
 
 | Kaggle Competition | LB Score | Ranking |
 | --- | --- | --- |
