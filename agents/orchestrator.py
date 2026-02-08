@@ -18,9 +18,11 @@ import weave
 _CONFIG = get_config()
 _RUNTIME_CFG = _CONFIG.get("runtime")
 _PATH_CFG = _CONFIG.get("paths")
+_DEVELOPER_CFG = _CONFIG.get("developer")
 _TASK_ROOT = Path(_PATH_CFG.get("task_root"))
 _OUTPUTS_DIRNAME = _PATH_CFG.get("outputs_dirname")
 _DEFAULT_PARALLEL = int(_RUNTIME_CFG.get("researcher_parallel_runs"))
+_HITL_SOTA = bool(_DEVELOPER_CFG.get("hitl_sota"))
 
 def _get_mig_uuids() -> list[str]:
     """Parse MIG device UUIDs from nvidia-smi -L output for all GPUs.
@@ -602,6 +604,13 @@ class Orchestrator:
 
         # Get parallel execution configuration using shared helper functions
         max_parallel_workers, gpu_pool_list, gpu_isolation_mode = _calculate_max_parallel_workers_and_pools()
+
+        # Force single worker in HITL mode
+        if _HITL_SOTA and max_parallel_workers > 1:
+            print("[HITL] Warning: HITL mode enabled, overriding parallel workers to 1")
+            max_parallel_workers = 1
+            gpu_pool_list = gpu_pool_list[:1] if gpu_pool_list else []
+
         cpu_core_pool_list = _create_cpu_core_pool(max_parallel_workers)
 
         # Print configuration summary

@@ -52,3 +52,4 @@ model_recommender:
   enable_web_search: true  # Enable web search for finding SOTA strategies
 developer:
   hitl_instructions: []  # Human-In-The-Loop: If non-empty, these instructions are added to the developer's system prompt to guide implementation. Example: ["Use gradient clipping to prevent exploding gradients", "Implement mixed precision training", "Focus on domain-specific data augmentation"]
+  hitl_sota: false  # When true, pause after SOTA suggestion for human accept/override (forces single worker)
