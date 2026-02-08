@@ -21,7 +21,6 @@ _PATH_CFG = _CONFIG.get("paths")
 _DEVELOPER_CFG = _CONFIG.get("developer")
 _TASK_ROOT = Path(_PATH_CFG.get("task_root"))
 _OUTPUTS_DIRNAME = _PATH_CFG.get("outputs_dirname")
-_DEFAULT_PARALLEL = int(_RUNTIME_CFG.get("researcher_parallel_runs"))
 _HITL_SOTA = bool(_DEVELOPER_CFG.get("hitl_sota"))
 
 def _get_mig_uuids() -> list[str]:
@@ -228,13 +227,13 @@ def _ensure_conda_environments(num_workers: int) -> None:
 
 @weave.op()
 def _run_researcher_once(slug: str, iteration: int, run_id: int) -> tuple[int, str, int]:
-    # Calculate max_parallel_workers and resource pools for AB test parallelization
+    # Calculate resource pools for CPU affinity and GPU isolation
     max_parallel_workers, gpu_pool, _ = _calculate_max_parallel_workers_and_pools()
     cpu_core_pool = _create_cpu_core_pool(max_parallel_workers)
 
     print(f"Researcher Agent: max_parallel_workers={max_parallel_workers}, CPU pools={len(cpu_core_pool)}, GPU pools={len(gpu_pool)}")
 
-    agent = ResearcherAgent(slug, iteration, run_id=run_id, max_parallel_workers=max_parallel_workers, cpu_core_pool=cpu_core_pool, gpu_pool=gpu_pool)
+    agent = ResearcherAgent(slug, iteration, run_id=run_id, cpu_core_pool=cpu_core_pool, gpu_pool=gpu_pool)
     plan = agent.build_plan()
     outputs_dir = _TASK_ROOT / slug / _OUTPUTS_DIRNAME / str(iteration)
     outputs_dir.mkdir(parents=True, exist_ok=True)

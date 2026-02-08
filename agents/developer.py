@@ -131,7 +131,7 @@ class DeveloperAgent:
         self.external_data_listing: str = external_data_listing or "No external data directories found."
         self.plan_content: str = plan_content or "No plan.md found."
 
-        # Set external data directory for download_external_datasets tool
+        # Set external data directory for execute_python scripts
         # Use parent iteration folder (e.g., outputs/17 for iteration 17_2)
         parent_iteration_folder = self._get_parent_iteration_folder()
         self.external_dir = parent_iteration_folder / "external_data_1"
@@ -613,11 +613,7 @@ class DeveloperAgent:
 
         # GPU assignment (works for both MIG and multi-GPU)
         if self.gpu_identifier is not None:
-            gpu_device = self.gpu_identifier
-        else:
-            gpu_device = '0'  # Default to GPU 0
-
-        lines.append(f'os.environ["CUDA_VISIBLE_DEVICES"] = "{gpu_device}"')
+            lines.append(f'os.environ["CUDA_VISIBLE_DEVICES"] = "{self.gpu_identifier}"')
         lines.append(f'BASE_DIR = "task/{self.slug}" if not os.getenv(\'KAGGLE_KERNEL_RUN_TYPE\') else "/kaggle/input/{self.slug}"')
         lines.append("")
 
@@ -1286,6 +1282,7 @@ class DeveloperAgent:
                 cpu_core_range=self.cpu_core_range,
                 gpu_identifier=self.gpu_identifier,
                 file_suffix=str(self.iteration),  # Pass iteration as file suffix to prevent race conditions
+                version=version,
                 images=training_images if training_images else None,
                 train_stats=train_stats,
             )

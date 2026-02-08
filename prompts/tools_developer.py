@@ -200,11 +200,12 @@ def sota_system(time_limit_minutes: int = None) -> str:
 ## Available Tools for Data-Driven Debugging
 You have access to the following tools to investigate issues and gather information beyond web search:
 
-1. **ask_eda**: Run exploratory data analysis to investigate red flags, validate hypotheses, or understand data patterns
-   - Use when you need to directly analyze the data to understand issues
-   - Use to verify assumptions about data distributions, target values, or feature correlations
-   - Use to investigate anomalies in predictions or training behavior
-   - Example: "Read the OOF predictions file (models_{{version}}/valid_preds.csv) and output the top 5 IDs with the highest prediction error, their ground truths, and predictions"
+1. **execute_python**: Write and execute a Python script for ad-hoc analysis and debugging
+   - Write complete Python scripts that print results to stdout
+   - Has access to all files in the data directory, model outputs, valid_preds.csv, train_stats.json
+   - Use for: investigating prediction errors, analyzing feature importance, checking data distributions, debugging model behavior, downloading external datasets
+   - Timeout: 5 minutes
+   - Example: Write a script that loads valid_preds.csv, computes per-class error rates, and prints the worst-performing classes
 
 2. **scrape_web_page**: Scrape web pages for implementation guides, documentation, or technical tutorials
    - Use for reading official documentation, blog posts, or technical guides
@@ -216,15 +217,10 @@ You have access to the following tools to investigate issues and gather informat
    - Use to find architectural improvements or novel approaches
    - Returns structured summary with Abstract, Method, Experiments, and Conclusion
 
-4. **download_external_datasets**: Search and download external datasets to augment training data
-   - Use when more data could help
-   - Use to find complementary datasets for transfer learning or data augmentation
-   - Provide 3 different phrasings of the dataset query for maximum coverage
-
 **Best Practices:**
 - Use tools early when analyzing red flags or investigating performance issues
 - Combine tools (e.g., read_research_paper then scrape_web_page for implementation details)
-- Be specific in tool inputs (e.g., precise EDA questions, exact URLs, correct arXiv IDs)
+- Be specific in tool inputs (e.g., precise analysis code, exact URLs, correct arXiv IDs)
 - Tools enable data-driven debugging instead of relying purely on web search speculation
 
 ## Shared Experiments Analysis (CRITICAL: Perform First)

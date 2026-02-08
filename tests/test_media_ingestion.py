@@ -1,4 +1,3 @@
-import os
 import base64
 from pathlib import Path
 
@@ -17,58 +16,6 @@ def _write_min_png(path: Path) -> None:
         b"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII="
     )
     path.write_bytes(png_bytes)
-
-
-class _StubMsg:
-    def __init__(self, content: str):
-        self.content = content
-
-
-class _StubCompletion:
-    def __init__(self, content: str):
-        self.choices = [type("Ch", (), {"message": _StubMsg(content)})()]
-        self.output_text = content
-        self.output = [{"role": "assistant", "content": content}]
-
-
-def test_ask_eda_sets_media_dir_and_code_can_write(monkeypatch, tmp_path):
-    # Arrange: patch call_llm_with_retry to return trivial python that prints MEDIA_DIR and writes a file
-    import tools.researcher as tr
-
-    code = (
-        """
-```python
-import os
-from pathlib import Path
-media = os.environ.get("MEDIA_DIR")
-print("MEDIA_DIR:", media)
-f = Path(media) / "unit_test_plot.png"
-Path(media).mkdir(parents=True, exist_ok=True)
-open(f, "wb").write(b"PNG")
-print("Chart successfully saved to:", str(f.resolve()))
-```
-        """
-    )
-
-    def _fake_call_llm_with_retry(model=None, instructions=None, tools=None, messages=None, **kwargs):
-        return _StubCompletion(code)
-
-    # Force OpenAI provider to avoid real API calls
-    monkeypatch.setattr(tr, "detect_provider", lambda x: "openai")
-    monkeypatch.setattr(tr, "call_llm_with_retry", _fake_call_llm_with_retry)
-
-    # Act: run ask_eda pointing to a temporary data path
-    out = tr.ask_eda(
-        question="Generate a tiny chart",
-        description="desc",
-        data_path=str(tmp_path),
-    )
-
-    # Assert: MEDIA_DIR is set and file path echoed
-    assert "MEDIA_DIR:" in out or "Chart successfully saved" in out
-    media_dir = os.environ.get("MEDIA_DIR")
-    assert media_dir is not None
-    assert Path(media_dir).exists()
 
 
 def test_ingest_new_media_appends_multimodal_message(tmp_path, monkeypatch):

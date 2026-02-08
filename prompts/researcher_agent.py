@@ -43,7 +43,7 @@ Extract from any available source:
 **B. Domain Literature:**
 - Use `read_research_paper(arxiv_id)` for academic papers with theoretical foundations
 - Use `scrape_web_page(url)` for practical web content: technical blogs, documentation, tutorials, industry best practices
-- Use `download_external_datasets()` to find related datasets that can provide additional training data or domain insights
+- Use `execute_python()` to download related datasets (e.g., via Kaggle API) that can provide additional training data or domain insights
 
 **C. Terminology Deep Dive:**
 - For each unfamiliar domain term, understand: What does it measure? How is it collected? What are typical ranges?
@@ -157,7 +157,7 @@ Hypothesis-driven approach (GOOD):
 
 ## Execution Pattern
 
-**Stage 1: Initial Discovery (2-3 ask_eda calls)**
+**Stage 1: Initial Discovery (2-3 execute_python calls)**
 - Quick exploration to understand data structure
 - Validate domain hypotheses from Phase 0
 - Identify surprising patterns
@@ -173,7 +173,7 @@ Hypothesis-driven approach (GOOD):
 
 ## Self-Critique After Each Discovery
 
-After EVERY `ask_eda()` or `run_ab_test()` result, ask:
+After EVERY `execute_python()` result, ask:
 
 1. **Uniqueness Check:**
    - Did this reveal something UNIQUE to this domain?
@@ -705,13 +705,12 @@ Apply the domain-first principles:
 """
 
 
-def build_system(base_dir: str, task_type: str | list[str] = "tabular", max_parallel_workers: int = 1, hitl_instructions: list[str] | None = None) -> str:
+def build_system(base_dir: str, task_type: str | list[str] = "tabular", hitl_instructions: list[str] | None = None) -> str:
     """Build research system prompt with domain-aware, hypothesis-driven approach.
 
     Args:
         base_dir: Base directory path
         task_type: Single task type string or list of task types (for multimodal)
-        max_parallel_workers: Maximum number of parallel AB tests that can run
     """
 
     # Normalize task_type(s)
@@ -800,7 +799,7 @@ Identify domain-specific insights that confer a competitive advantage through sy
 4. Output a Domain Context Summary. If insufficient domain information is available, clearly state so and document the information sources you explored.
 
 ## Stage 2: Hypothesis Testing (Main exploration phase)
-1. Use `ask_eda()` to rigorously test each domain hypothesis (iterate and adapt based on findings).
+1. Use `execute_python()` to rigorously test each domain hypothesis (iterate and adapt based on findings).
 2. After each result, self-critique:
    - Was the approach domain-specific or generic?
    - Did this reveal a potential competitive edge?
@@ -808,7 +807,7 @@ Identify domain-specific insights that confer a competitive advantage through sy
 3. Continue until you generate 5-10 high-impact domain insights. If fewer than five emerge, specify documented attempts and barriers encountered.
 
 ## Stage 3: Quantitative Validation
-1. Use `run_ab_test()` to quantitatively validate top hypotheses when feasible.
+1. Use `execute_python()` to quantitatively validate top hypotheses when feasible.
 2. Focus efforts on high-impact, domain-relevant tests.
 3. Compare the effectiveness of domain-informed approaches against naive baselines.
 4. If validation is impossible due to inadequate metrics or data, annotate the relevant table rows as "Validation not possible" and provide a rationale.
@@ -821,11 +820,7 @@ Identify domain-specific insights that confer a competitive advantage through sy
 # Operating Instructions
 
 **Tool Usage:**
-- `ask_eda(question)`: Perform exploratory data analysis on the provided dataset.
-- `run_ab_test(questions)`: Conduct parallel A/B tests (up to {max_parallel_workers} in a batch).
-  - In your first call to run_ab_test(), you MUST ask only ONE question, following format: `[Baseline][Test #1] <description>` [only 1 test in parallel]
-  - Following calls: `[Category][Test #N] (A) Baseline vs (B) <change>` [up to {max_parallel_workers} tests in parallel]
-- `download_external_datasets(q1, q2, q3)`: Search and download external datasets to `{base_dir}/external_data/`
+- `execute_python(code)`: Write and execute a Python script. The script runs in the data directory with access to all data files. Print results to stdout.
 - `read_research_paper(arxiv_link)`: Read and summarize relevant research papers from arxiv.
 - `scrape_web_page(url)`: Scrape and read web pages (technical blogs, documentation, tutorials, domain-specific content).
 
@@ -919,9 +914,7 @@ External Datasets:
 
 # Available Tools
 
-- `ask_eda(question)`: Python-based EDA on the local dataset
-- `run_ab_test(questions)`: Runs multiple A/B tests in parallel (up to {max_parallel_workers})
-- `download_external_datasets(question_1, question_2, question_3)`: Finds and downloads external datasets to `{base_dir}/external_data/`
+- `execute_python(code)`: Write and execute a Python script. Print results to stdout.
 - `read_research_paper(arxiv_link)`: Reads and summarizes arXiv research
 - `scrape_web_page(url)`: Scrapes and reads web pages (technical blogs, documentation, tutorials, domain-specific content)
 
