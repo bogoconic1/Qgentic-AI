@@ -2,8 +2,6 @@ llm:
   developer_model: "gpt-5"
   developer_tool_model: "gemini-3-pro-preview"
   researcher_model: "claude-sonnet-4-5"
-  researcher_tool_offline_model: "gemini-3-pro-preview"
-  researcher_tool_online_model: "gemini-3-pro-preview"
   model_selector_model: "gemini-3-pro-preview"
   model_recommender_model: "gemini-3-pro-preview"
   paper_summary_model: "gemini-3-pro-preview"
@@ -11,13 +9,10 @@ llm:
   leakage_review_model: "gemini-3-pro-preview"
   finetuned_code_api_model: "projects/134356426507/locations/us-central1/endpoints/7532524363963170816"
 runtime:
-  ask_eda_max_attempts: 5
-  download_datasets_max_attempts: 1
   researcher_max_steps: 512
   llm_max_retries: 3
   max_developer_input_tokens: 250000  # Max input tokens before adaptive trimming (GPT-5 limit is 272K)
   directory_listing_max_files: 10
-  researcher_parallel_runs: 1
   patch_mode_enabled: false
   # Parallel baseline execution
   baseline_max_parallel_workers: 3  # Max baselines running in parallel when GPU isolation is disabled (ignored if enable_mig or enable_multi_gpu is true)

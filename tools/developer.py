@@ -43,6 +43,20 @@ _FINETUNED_CODE_API_MODEL = _LLM_CFG.get("finetuned_code_api_model")
 _RUNTIME_CFG = _CONFIG.get("runtime")
 _BASELINE_TIME_LIMIT = _RUNTIME_CFG.get("baseline_time_limit")
 _BASELINE_CODE_TIMEOUT = _RUNTIME_CFG.get("baseline_code_timeout")
+_PATH_CFG = _CONFIG.get("paths")
+_OUTPUTS_DIRNAME = _PATH_CFG.get("outputs_dirname")
+
+
+def _build_resource_header(cpu_core_range: list[int] | None, gpu_identifier: str | None) -> str:
+    """Build a Python header that sets CPU affinity and GPU assignment."""
+    lines = ["import os\n"]
+    if cpu_core_range:
+        lines.append("import psutil")
+        lines.append(f"psutil.Process().cpu_affinity({cpu_core_range})\n")
+    if gpu_identifier is not None:
+        lines.append(f'os.environ["CUDA_VISIBLE_DEVICES"] = "{gpu_identifier}"')
+    lines.append('os.environ["OPENBLAS_NUM_THREADS"] = "32"\n')
+    return "\n".join(lines) + "\n"
 
 @weave.op()
 def web_search_stack_trace(query: str) -> str:
@@ -307,10 +321,7 @@ def search_red_flags(
     return final_content
 
 def _get_sota_tools(provider: str = "openai") -> list:
-    """Get tools available for SOTA suggestions (subset of researcher tools).
-
-    Reuses tool definitions from llm_utils.py and filters out run_ab_test
-    which is only used by ResearcherAgent, not for SOTA suggestions.
+    """Get tools available for SOTA suggestions.
 
     Args:
         provider: "openai", "anthropic", or "google" for format conversion
@@ -319,17 +330,7 @@ def _get_sota_tools(provider: str = "openai") -> list:
         List of tool definitions in provider-specific format
     """
     from utils.llm_utils import get_tools_for_provider
-
-    # Get all researcher tools for this provider
-    all_tools = get_tools_for_provider(provider)
-
-    # Filter out run_ab_test (only used by ResearcherAgent, not SOTA)
-    sota_tools = [
-        tool for tool in all_tools
-        if _get_tool_name(tool, provider) != "run_ab_test"
-    ]
-
-    return sota_tools
+    return get_tools_for_provider(provider)
 
 
 def _get_tool_name(tool, provider: str) -> str:
@@ -370,7 +371,8 @@ def search_sota_suggestions(
     cpu_core_range: list[int] | None = None,
     gpu_identifier: str | None = None,
     file_suffix: str | None = None,
-    max_tool_steps: int = 10,
+    max_tool_steps: int = 20,
+    version: int = 1,
     images: list[Path] | None = None,
     train_stats: dict | None = None,
 ) -> str:
@@ -388,10 +390,10 @@ def search_sota_suggestions(
         external_data_listing: Directory listing of external_data_* folders
         plan_content: Content of plan.md file
         attempt_number: Which attempt this is (1, 2, 3, ...) for interleaving strategy
-        slug: Competition slug for download_external_datasets
-        data_path: Path to task data directory for ask_eda
-        cpu_core_range: CPU cores for ask_eda execution
-        gpu_identifier: GPU for ask_eda execution
+        slug: Competition slug
+        data_path: Path to task data directory
+        cpu_core_range: CPU cores for execute_python execution
+        gpu_identifier: GPU for execute_python execution
         file_suffix: Suffix for temporary files to prevent race conditions (e.g., "1_1", "1_2")
         max_tool_steps: Maximum tool call iterations before forcing final answer
         images: Optional list of image paths (e.g., loss_curve.png, metric_curve.png)
@@ -521,6 +523,8 @@ def search_sota_suggestions(
                         cpu_core_range=cpu_core_range,
                         gpu_identifier=gpu_identifier,
                         file_suffix=file_suffix,
+                        step=step,
+                        version=version,
                         provider=provider,
                     )
                     input_list.append({
@@ -558,6 +562,8 @@ def search_sota_suggestions(
                         cpu_core_range=cpu_core_range,
                         gpu_identifier=gpu_identifier,
                         file_suffix=file_suffix,
+                        step=step,
+                        version=version,
                         provider=provider,
                     )
                     tool_results.append({
@@ -646,6 +652,8 @@ def search_sota_suggestions(
                         cpu_core_range=cpu_core_range,
                         gpu_identifier=gpu_identifier,
                         file_suffix=file_suffix,
+                        step=step,
+                        version=version,
                         provider=provider,
                     )
                     function_responses.append(
@@ -699,18 +707,16 @@ def search_sota_suggestions(
         raise ValueError(f"Unsupported provider: {provider}")
 
 
-def _execute_sota_tool_call(item, description, data_path, slug, cpu_core_range, gpu_identifier, file_suffix, provider="openai"):
+def _execute_sota_tool_call(item, description, data_path, slug, cpu_core_range, gpu_identifier, file_suffix, step=0, version=1, provider="openai"):
     """Execute a single SOTA tool call and return JSON result.
 
     Args:
         item: Tool call item (OpenAI, Anthropic, or Google format)
+        step: Current tool loop step (for unique filenames)
+        version: Current developer version (for output directory)
         provider: "openai", "anthropic", or "google"
-        ...other args...
-
-    Returns:
-        JSON string with result
     """
-    from tools.researcher import ask_eda, scrape_web_page, read_research_paper, download_external_datasets
+    from tools.researcher import scrape_web_page, read_research_paper
     import json
 
     # Parse tool name and arguments based on provider
@@ -732,22 +738,23 @@ def _execute_sota_tool_call(item, description, data_path, slug, cpu_core_range, 
         return json.dumps({"error": f"Unsupported provider: {provider}"})
 
     try:
-        if item.name == "ask_eda":
-            question = args.get("question", "")
-            if not question:
-                return json.dumps({"error": "question parameter is required"})
+        if item.name == "execute_python":
+            code = args.get("code", "")
+            if not code:
+                return json.dumps({"error": "code parameter is required"})
 
-            logger.info("SOTA tool: ask_eda(%s)", question[:100])
-            result = ask_eda(
-                question=question,
-                description=description,
-                data_path=data_path,
-                previous_ab_tests=[],  # SOTA doesn't use AB test history
-                file_suffix=f"_sota_{file_suffix}" if file_suffix else "_sota",  # e.g., "_sota_1_1"
-                cpu_core_range=cpu_core_range,
-                gpu_identifier=gpu_identifier,
-            )
-            return json.dumps({"result": result})
+            logger.info("SOTA tool: execute_python (code_len=%d, step=%d)", len(code), step)
+
+            # Save to outputs/{iteration}/{version}/execute_python_{step}.py
+            version_dir = Path(data_path) / _OUTPUTS_DIRNAME / file_suffix / str(version)
+            version_dir.mkdir(parents=True, exist_ok=True)
+            script_file = version_dir / f"execute_python_{step}.py"
+
+            resource_header = _build_resource_header(cpu_core_range, gpu_identifier)
+            script_file.write_text(resource_header + code)
+
+            output = execute_code(str(script_file), timeout_seconds=300)
+            return json.dumps({"output": output})
 
         elif item.name == "scrape_web_page":
             url = args.get("url", "")
@@ -766,24 +773,6 @@ def _execute_sota_tool_call(item, description, data_path, slug, cpu_core_range, 
             logger.info("SOTA tool: read_research_paper(%s)", arxiv_link)
             result = read_research_paper(arxiv_link)
             return json.dumps({"summary": result})
-
-        elif item.name == "download_external_datasets":
-            question_1 = args.get("question_1", "")
-            question_2 = args.get("question_2", "")
-            question_3 = args.get("question_3", "")
-
-            if not (question_1 and question_2 and question_3):
-                return json.dumps({"error": "question_1, question_2, and question_3 are all required"})
-
-            logger.info("SOTA tool: download_external_datasets(%s, %s, %s)",
-                       question_1[:50], question_2[:50], question_3[:50])
-            result = download_external_datasets(
-                question_1=question_1,
-                question_2=question_2,
-                question_3=question_3,
-                slug=slug
-            )
-            return json.dumps({"result": result})
 
         else:
             logger.error("Unknown SOTA tool: %s", item.name)

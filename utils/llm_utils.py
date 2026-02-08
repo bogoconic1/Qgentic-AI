@@ -231,12 +231,9 @@ def append_message(provider: str, role: str, message: str) -> dict:
         return {"role": role, "content": message}
 
 
-def get_tools_openai(max_parallel_workers: int = 1):
+def get_tools_openai():
     """
     Get tools in OpenAI format.
-
-    Args:
-        max_parallel_workers: Maximum parallel workers for run_ab_test
 
     Returns:
         List of tool definitions in OpenAI format
@@ -244,48 +241,16 @@ def get_tools_openai(max_parallel_workers: int = 1):
     return [
         {
             "type": "function",
-            "name": "ask_eda",
-            "description": "Ask a question to the EDA expert",
+            "name": "execute_python",
+            "description": "Write and execute a Python script. The script runs in the task data directory with access to all data files, model outputs, and predictions. Print results to stdout.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "question": {"type": "string", "description": "The question to ask the EDA expert"}
+                    "code": {"type": "string", "description": "Complete Python script to execute."}
                 },
             },
             "additionalProperties": False,
-            "required": ['question']
-        },
-        {
-            "type": "function",
-            "name": "run_ab_test",
-            "description": f"Run A/B tests to validate modeling or feature engineering choices by comparing their impact on performance. You can ask up to {max_parallel_workers} questions in parallel for efficiency.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "questions": {
-                        "type": "array",
-                        "description": f"List of A/B testing questions to run in parallel (max {max_parallel_workers}). Each question should be a comparison test",
-                        "items": {"type": "string"},
-                    }
-                },
-            },
-            "additionalProperties": False,
-            "required": ['questions']
-        },
-        {
-            "type": "function",
-            "name": "download_external_datasets",
-            "description": "Download external data to working directory by searching with 3 different phrasings to maximize search coverage",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "question_1": {"type": "string", "description": "First phrasing of the dataset query"},
-                    "question_2": {"type": "string", "description": "Second phrasing with different wording"},
-                    "question_3": {"type": "string", "description": "Third phrasing using alternative keywords"}
-                },
-            },
-            "additionalProperties": False,
-            "required": ["question_1", "question_2", "question_3"],
+            "required": ['code']
         },
         {
             "type": "function",
@@ -316,7 +281,7 @@ def get_tools_openai(max_parallel_workers: int = 1):
     ]
 
 
-def get_tools_anthropic(max_parallel_workers: int = 1):
+def get_tools_anthropic():
     """
     Get tools in Anthropic format.
 
@@ -325,71 +290,24 @@ def get_tools_anthropic(max_parallel_workers: int = 1):
     - Uses "input_schema" instead of "parameters"
     - 3-4 sentence descriptions (Anthropic best practice)
 
-    Args:
-        max_parallel_workers: Maximum parallel workers for run_ab_test
-
     Returns:
         List of tool definitions in Anthropic format
     """
     return [
         {
-            "name": "ask_eda",
-            "description": """Ask a question to the EDA expert for exploratory data analysis.
-            Returns statistical insights, data quality assessments, and feature analysis based on
-            the provided dataset. Use this tool when you need to understand dataset characteristics,
-            distributions, correlations, or potential data issues before deciding on modeling approaches.""",
+            "name": "execute_python",
+            "description": """Write and execute a Python script. The script runs in the task data directory
+            with access to all data files, model outputs, and predictions. Use this for exploratory data analysis,
+            debugging, downloading external datasets, or any data investigation. Print results to stdout.""",
             "input_schema": {
                 "type": "object",
                 "properties": {
-                    "question": {
+                    "code": {
                         "type": "string",
-                        "description": "The question to ask the EDA expert"
+                        "description": "Complete Python script to execute."
                     }
                 },
-                "required": ["question"]
-            }
-        },
-        {
-            "name": "run_ab_test",
-            "description": f"""Run A/B tests to validate modeling or feature engineering choices by comparing
-            their impact on performance. You can ask up to {max_parallel_workers} questions in parallel for efficiency.
-            Returns performance comparisons with statistical significance. Use this when you need empirical
-            evidence to choose between different approaches or validate hypotheses about model improvements.""",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "questions": {
-                        "type": "array",
-                        "description": f"List of A/B testing questions to run in parallel (max {max_parallel_workers}). Each question should be a comparison test",
-                        "items": {"type": "string"}
-                    }
-                },
-                "required": ["questions"]
-            }
-        },
-        {
-            "name": "download_external_datasets",
-            "description": """Download external datasets to augment your training data by searching with
-            3 different phrasings to maximize search coverage. Retrieves publicly available datasets from
-            Kaggle and other sources. Use this when the current dataset is insufficient or you need additional
-            examples for specific classes, features, or data diversity to improve model generalization.""",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "question_1": {
-                        "type": "string",
-                        "description": "First phrasing of the dataset query"
-                    },
-                    "question_2": {
-                        "type": "string",
-                        "description": "Second phrasing with different wording"
-                    },
-                    "question_3": {
-                        "type": "string",
-                        "description": "Third phrasing using alternative keywords"
-                    }
-                },
-                "required": ["question_1", "question_2", "question_3"]
+                "required": ["code"]
             }
         },
         {
@@ -429,12 +347,9 @@ def get_tools_anthropic(max_parallel_workers: int = 1):
     ]
 
 
-def get_tools_gemini(max_parallel_workers: int = 1):
+def get_tools_gemini():
     """
     Get tools in Gemini format (FunctionDeclaration).
-
-    Args:
-        max_parallel_workers: Maximum parallel workers for run_ab_test
 
     Returns:
         List of FunctionDeclaration objects for Gemini
@@ -443,54 +358,17 @@ def get_tools_gemini(max_parallel_workers: int = 1):
 
     return [
         types.FunctionDeclaration(
-            name="ask_eda",
-            description="Ask a question to the EDA expert for exploratory data analysis. Returns statistical insights, data quality assessments, and feature analysis based on the provided dataset.",
+            name="execute_python",
+            description="Write and execute a Python script. The script runs in the task data directory with access to all data files, model outputs, and predictions. Print results to stdout.",
             parameters_json_schema={
                 "type": "object",
                 "properties": {
-                    "question": {
+                    "code": {
                         "type": "string",
-                        "description": "The question to ask the EDA expert"
+                        "description": "Complete Python script to execute."
                     }
                 },
-                "required": ["question"]
-            }
-        ),
-        types.FunctionDeclaration(
-            name="run_ab_test",
-            description=f"Run A/B tests to validate modeling or feature engineering choices by comparing their impact on performance. You can ask up to {max_parallel_workers} questions in parallel for efficiency.",
-            parameters_json_schema={
-                "type": "object",
-                "properties": {
-                    "questions": {
-                        "type": "array",
-                        "description": f"List of A/B testing questions to run in parallel (max {max_parallel_workers}). Each question should be a comparison test",
-                        "items": {"type": "string"}
-                    }
-                },
-                "required": ["questions"]
-            }
-        ),
-        types.FunctionDeclaration(
-            name="download_external_datasets",
-            description="Download external datasets to augment your training data by searching with 3 different phrasings to maximize search coverage. Retrieves publicly available datasets from Kaggle and other sources.",
-            parameters_json_schema={
-                "type": "object",
-                "properties": {
-                    "question_1": {
-                        "type": "string",
-                        "description": "First phrasing of the dataset query"
-                    },
-                    "question_2": {
-                        "type": "string",
-                        "description": "Second phrasing with different wording"
-                    },
-                    "question_3": {
-                        "type": "string",
-                        "description": "Third phrasing using alternative keywords"
-                    }
-                },
-                "required": ["question_1", "question_2", "question_3"]
+                "required": ["code"]
             }
         ),
         types.FunctionDeclaration(
@@ -524,13 +402,12 @@ def get_tools_gemini(max_parallel_workers: int = 1):
     ]
 
 
-def get_tools_for_provider(provider: str, max_parallel_workers: int = 1):
+def get_tools_for_provider(provider: str):
     """
     Get tools in the appropriate format for the provider.
 
     Args:
         provider: "openai", "anthropic", or "google"
-        max_parallel_workers: Maximum parallel workers for run_ab_test
 
     Returns:
         List of tool definitions in provider-specific format
@@ -539,10 +416,10 @@ def get_tools_for_provider(provider: str, max_parallel_workers: int = 1):
         ValueError: If provider is not supported
     """
     if provider == "openai":
-        return get_tools_openai(max_parallel_workers)
+        return get_tools_openai()
     elif provider == "anthropic":
-        return get_tools_anthropic(max_parallel_workers)
+        return get_tools_anthropic()
     elif provider == "google":
-        return get_tools_gemini(max_parallel_workers)
+        return get_tools_gemini()
     else:
         raise ValueError(f"Unsupported provider: {provider}")

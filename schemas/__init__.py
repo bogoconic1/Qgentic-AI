@@ -1,7 +1,6 @@
 """Pydantic schemas for structured outputs."""
 
 from schemas.starter import StarterSuggestions
-from schemas.researcher import DatasetDiscovery
 from schemas.model_recommender import (
     ModelSelection,
     PreprocessingRecommendations,
@@ -16,7 +15,6 @@ from schemas.developer import (
 
 __all__ = [
     "StarterSuggestions",
-    "DatasetDiscovery",
     "ModelSelection",
     "PreprocessingRecommendations",
     "LossFunctionRecommendations",
