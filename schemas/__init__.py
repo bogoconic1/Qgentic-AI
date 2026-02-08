@@ -13,10 +13,6 @@ from schemas.developer import (
     StackTraceSolution,
     SOTAResponse,
 )
-from schemas.ensembler import (
-    EnsembleStrategies,
-    EnsembleStrategy,
-)
 
 __all__ = [
     "StarterSuggestions",
@@ -28,6 +24,4 @@ __all__ = [
     "InferenceStrategyRecommendations",
     "StackTraceSolution",
     "SOTAResponse",
-    "EnsembleStrategies",
-    "EnsembleStrategy",
 ]

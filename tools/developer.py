@@ -42,10 +42,7 @@ _DEVELOPER_TOOL_MODEL = _LLM_CFG.get("developer_tool_model")
 _FINETUNED_CODE_API_MODEL = _LLM_CFG.get("finetuned_code_api_model")
 _RUNTIME_CFG = _CONFIG.get("runtime")
 _BASELINE_TIME_LIMIT = _RUNTIME_CFG.get("baseline_time_limit")
-_ENSEMBLE_TIME_LIMIT = _RUNTIME_CFG.get("ensemble_time_limit")
 _BASELINE_CODE_TIMEOUT = _RUNTIME_CFG.get("baseline_code_timeout")
-_ENSEMBLE_CODE_TIMEOUT = _RUNTIME_CFG.get("ensemble_code_timeout")
-_DEFAULT_CODE_TIMEOUT = _BASELINE_CODE_TIMEOUT  # Default to baseline timeout
 
 @weave.op()
 def web_search_stack_trace(query: str) -> str:
@@ -365,7 +362,6 @@ def search_sota_suggestions(
     failed_ideas: list[str],
     later_recommendations: str | None = None,
     shared_suggestions: list[str] | None = None,
-    is_ensemble: bool = False,
     external_data_listing: str | None = None,
     plan_content: str | None = None,
     attempt_number: int = 1,
@@ -389,7 +385,6 @@ def search_sota_suggestions(
         later_recommendations: LATER recommendations for progressive improvement
         shared_suggestions: List of all suggestions from all parallel models with outcomes
                           Format: "Model <model> tried <suggestion> (score improved/worsened/remained by X: A -> B)"
-        is_ensemble: If True, uses ensemble-specific prompts and constraints
         external_data_listing: Directory listing of external_data_* folders
         plan_content: Content of plan.md file
         attempt_number: Which attempt this is (1, 2, 3, ...) for interleaving strategy
@@ -449,10 +444,9 @@ def search_sota_suggestions(
         plans_section += f"\n<suggestions>\n{later_recommendations}\n</suggestions>\n"
 
     # Convert time limit from seconds to minutes for prompt
-    time_limit_seconds = _ENSEMBLE_CODE_TIMEOUT if is_ensemble else _BASELINE_CODE_TIMEOUT
-    time_limit_minutes = int(time_limit_seconds / 60)
+    time_limit_minutes = int(_BASELINE_CODE_TIMEOUT / 60)
 
-    system_prompt = prompt_sota_system(is_ensemble=is_ensemble, time_limit_minutes=time_limit_minutes)
+    system_prompt = prompt_sota_system(time_limit_minutes=time_limit_minutes)
 
     user_prompt = prompt_sota_user(
         description=description,

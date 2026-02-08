@@ -241,7 +241,6 @@ def test_search_sota_suggestions(monkeypatch):
         failed_ideas=["Idea 1", "Idea 2"],
         later_recommendations=None,
         shared_suggestions=None,
-        is_ensemble=False,
         external_data_listing=None,
         plan_content=None
     )
@@ -292,7 +291,6 @@ def test_search_sota_suggestions_with_plan_content(monkeypatch):
         failed_ideas=[],
         later_recommendations="Try feature engineering",
         shared_suggestions=None,
-        is_ensemble=False,
         external_data_listing=None,
         plan_content=plan_content
     )
@@ -313,52 +311,6 @@ def test_search_sota_suggestions_with_plan_content(monkeypatch):
     print("✅ search_sota_suggestions with plan content works:")
     print(f"   - Plan content included in prompt")
     print(f"   - Later recommendations included in prompt")
-
-
-def test_search_sota_suggestions_ensemble_mode(monkeypatch):
-    """Test search_sota_suggestions with ensemble mode."""
-    from schemas.developer import SOTAResponse
-
-    captured_kwargs = {}
-
-    def fake_call_llm(*args, **kwargs):
-        captured_kwargs.update(kwargs)
-        mock_response = MagicMock()
-        mock_response.output = []
-        mock_response.output_parsed = SOTAResponse(
-            blacklist=False,
-            blacklist_reason="Ensemble approach is promising",
-            suggestion="Ensemble the top models using stacking",
-            suggestion_reason="Stacking typically provides better generalization",
-            suggestion_code="# Ensemble code\nfrom sklearn.ensemble import StackingClassifier"
-        )
-        mock_response.output_text = "Mock ensemble response"
-        return mock_response
-
-    # Mock all provider-specific LLM calls
-    monkeypatch.setattr("tools.developer.call_llm_with_retry", fake_call_llm)
-    monkeypatch.setattr("tools.developer.call_llm_with_retry_anthropic", fake_call_llm)
-    monkeypatch.setattr("tools.developer.call_llm_with_retry_google", fake_call_llm)
-
-    result = search_sota_suggestions(
-        description="Test competition",
-        context="Current context",
-        red_flags="Red flags",
-        executed_suggestion="Previous suggestion",
-        failed_ideas=[],
-        later_recommendations=None,
-        shared_suggestions=None,
-        is_ensemble=True,  # Ensemble mode
-        external_data_listing=None,
-        plan_content=None
-    )
-
-    # Verify ensemble mode is handled
-    assert hasattr(result, 'output_parsed')
-    assert "ensemble" in result.output_parsed.suggestion.lower()
-
-    print("✅ search_sota_suggestions with ensemble mode works:")
-    print(f"   - Ensemble-specific suggestion generated")
 
 
 def test_search_sota_suggestions_with_tools(monkeypatch, test_data_dir):

@@ -8,7 +8,6 @@ llm:
   model_recommender_model: "gemini-3-pro-preview"
   paper_summary_model: "gemini-3-pro-preview"
   starter_model: "gemini-3-pro-preview"
-  ensembler_model: "gemini-3-pro-preview"
   leakage_review_model: "gemini-3-pro-preview"
   finetuned_code_api_model: "projects/134356426507/locations/us-central1/endpoints/7532524363963170816"
 runtime:
@@ -31,9 +30,7 @@ runtime:
   reset_conda_envs_per_run: true # If true, delete and recreate conda environments on each run for clean slate (slower startup). If false, reuse existing environments (faster but accumulates packages over time)
   # Time limits (in seconds)
   baseline_time_limit: 432000  # 5 days for baseline development
-  ensemble_time_limit: 432000  # 5 days for ensemble phase
   baseline_code_timeout: 43200  # 12 hours for baseline code execution
-  ensemble_code_timeout: 43200  # 12 hours for ensemble code execution
   # Grading strategy
   use_validation_score: true  # If true, use validation score from logs instead of MLE-bench grading (faster, no ground truth needed)
 paths:

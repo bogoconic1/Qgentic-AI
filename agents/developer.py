@@ -203,10 +203,9 @@ class DeveloperAgent:
     def _get_code_timeout(self) -> int:
         """
         Get the timeout for code execution in seconds.
-        Can be overridden by subclasses (e.g., EnsemblerAgent).
 
         Returns:
-            Timeout in seconds for code execution (5400 = 1.5 hours for baseline)
+            Timeout in seconds for code execution
         """
         from tools.developer import _BASELINE_CODE_TIMEOUT
         return _BASELINE_CODE_TIMEOUT
@@ -1026,8 +1025,6 @@ class DeveloperAgent:
     def _call_sota_suggestions(self, attempt_number: int = 1, **kwargs):
         """
         Call SOTA suggestions tool with appropriate parameters.
-
-        Can be overridden by subclasses to modify behavior (e.g., is_ensemble).
 
         Args:
             attempt_number: Which attempt this is (1, 2, 3, ...) for interleaving strategy
