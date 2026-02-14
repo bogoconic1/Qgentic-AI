@@ -663,8 +663,8 @@ def search_sota_suggestions(
                         )
                     )
 
-            # Add assistant message and function results
-            input_list.append(append_message(provider, "assistant", response.text if hasattr(response, 'text') else ""))
+            # Add model's full response (preserves function_call parts)
+            input_list.append(response.candidates[0].content)
             if function_responses:
                 input_list.append(types.Content(role="function", parts=function_responses))
 
