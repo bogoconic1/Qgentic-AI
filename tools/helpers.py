@@ -5,7 +5,6 @@ import time
 import anthropic
 from anthropic import Anthropic
 from google import genai
-from google.api_core import exceptions as google_exceptions
 from google.genai import errors as genai_errors
 from google.genai import types as genai_types
 import httpx
@@ -36,11 +35,6 @@ RETRYABLE_EXCEPTIONS = (
     anthropic.APITimeoutError,
     anthropic.RateLimitError,
     anthropic.InternalServerError,
-    google_exceptions.ServiceUnavailable,
-    google_exceptions.DeadlineExceeded,
-    google_exceptions.ResourceExhausted,
-    google_exceptions.Aborted,
-    google_exceptions.InternalServerError,
     genai_errors.ServerError,
     genai_errors.ClientError,
 )
