@@ -1,7 +1,9 @@
 from typing import Tuple
 from pathlib import Path
+from datetime import datetime
 import json
 import os
+import shutil
 import subprocess
 import re
 from queue import Queue
@@ -11,6 +13,7 @@ from agents.developer import DeveloperAgent
 from agents.starter import StarterAgent
 from agents.model_recommender import ModelRecommenderAgent
 from project_config import get_config, get_instructions
+from utils.checkpoint import create_db as _create_checkpoint_db, delete_checkpoints_after
 from weave.trace.util import ThreadPoolExecutor
 import weave
 
@@ -472,9 +475,10 @@ def _format_recommendations_for_developer(recommendations: dict) -> str:
     return "\n".join(details) if details else "No specific recommendations available."
 
 class Orchestrator:
-    def __init__(self, slug: str, iteration: int):
+    def __init__(self, slug: str, iteration: int, rollback_to_version: int | None = None):
         self.slug = slug
         self.iteration = iteration
+        self.rollback_to_version = rollback_to_version
         self.base_dir = _TASK_ROOT / slug
         self.outputs_dir = self.base_dir / _OUTPUTS_DIRNAME / str(iteration)
 
@@ -505,6 +509,67 @@ class Orchestrator:
             with open(plan_path, "r") as f:
                 return f.read()
         return "No plan.md found."
+
+    def _rollback(self, model_iterations: list[str]) -> None:
+        """Roll back all models to self.rollback_to_version.
+
+        Moves version folders beyond N into _trash/<timestamp>/ and deletes checkpoint rows beyond N.
+        Also removes baseline_results.json so affected models get re-run.
+        """
+        target = self.rollback_to_version
+        parent_outputs = self.base_dir / _OUTPUTS_DIRNAME
+
+        # Validate: at least one model has the target version folder
+        found = False
+        for iter_suffix in model_iterations:
+            model_dir = parent_outputs / iter_suffix
+            if (model_dir / str(target)).exists():
+                found = True
+                break
+        if not found:
+            raise ValueError(
+                f"Rollback failed: version {target} not found in any model outputs ({model_iterations})"
+            )
+
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+        conn = _create_checkpoint_db()
+
+        for iter_suffix in model_iterations:
+            model_dir = parent_outputs / iter_suffix
+            if not model_dir.exists():
+                continue
+
+            trash_dir = model_dir / "_trash" / timestamp
+            moved_any = False
+
+            # Move version folders > target into _trash/<timestamp>/
+            for entry in sorted(model_dir.iterdir()):
+                if not entry.is_dir() or entry.name.startswith("_"):
+                    continue
+                try:
+                    version_num = int(entry.name)
+                except ValueError:
+                    continue
+                if version_num > target:
+                    if not moved_any:
+                        trash_dir.mkdir(parents=True, exist_ok=True)
+                        moved_any = True
+                    dest = trash_dir / entry.name
+                    entry.rename(dest)
+                    print(f"Rollback: moved {entry} -> {dest}")
+
+            # Delete checkpoint rows beyond target
+            delete_checkpoints_after(conn, self.slug, iter_suffix, target)
+            print(f"Rollback: deleted checkpoints after v{target} for iteration {iter_suffix}")
+
+        # Remove baseline_results.json so models get re-queued
+        baseline_path = self.outputs_dir / "baseline_results.json"
+        if baseline_path.exists():
+            baseline_path.unlink()
+            print("Rollback: removed baseline_results.json")
+
+        conn.close()
+        print(f"Rollback to version {target} complete")
 
     @weave.op()
     def run(self) -> Tuple[bool, str]:
@@ -578,6 +643,15 @@ class Orchestrator:
             json.dump(later_recommendations_all, f, indent=2)
 
         # Phase 4: Baseline Developer Stage - Evaluate models in parallel with NOW recommendations
+
+        # Rollback: clean up version folders and checkpoints beyond target version
+        if self.rollback_to_version is not None:
+            model_iterations = [
+                f"{self.iteration}_{idx}"
+                for idx in range(1, len(now_recommendations_all) + 1)
+            ]
+            self._rollback(model_iterations)
+
         baseline_results = {}
 
         # Get parallel execution configuration using shared helper functions

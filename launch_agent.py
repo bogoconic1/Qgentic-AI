@@ -72,12 +72,18 @@ def main():
         type=str,
         help="Optional wandb run name override (defaults to '<iteration>-<slug>')",
     )
+    parser.add_argument(
+        "--rollback-to-version",
+        type=int,
+        default=None,
+        help="Rollback to a specific version: moves later version folders to _trash/ and deletes their checkpoints",
+    )
     args = parser.parse_args()
 
     os.environ["TASK_SLUG"] = args.slug
     _init_tracking(args)
 
-    orchestrator = Orchestrator(args.slug, args.iteration)
+    orchestrator = Orchestrator(args.slug, args.iteration, rollback_to_version=args.rollback_to_version)
     orchestrator.run()
 
     # Gracefully close tracking backends to avoid hanging background threads
