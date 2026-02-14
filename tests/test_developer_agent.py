@@ -130,46 +130,6 @@ def test_code_filename():
     print(f"   - Filename: {filename}")
 
 
-def test_extract_diff_block():
-    """Test diff block extraction using diffs utility."""
-    from utils.diffs import extract_diff_block
-
-    response_with_diff = (
-        "Here are the changes:\n\n"
-        "```diff\n"
-        "--- a/code.py\n"
-        "+++ b/code.py\n"
-        "@@ -1,3 +1,3 @@\n"
-        " import pandas as pd\n"
-        "-print('old')\n"
-        "+print('new')\n"
-        "```\n"
-    )
-
-    diff = extract_diff_block(response_with_diff)
-    assert diff is not None
-    assert "--- a/" in diff or "print('new')" in diff
-
-    print("✅ Diff extraction works:")
-    print(f"   - Extracted diff block")
-
-
-def test_format_with_line_numbers():
-    """Test line number formatting."""
-    code = "import pandas as pd\nprint('hello')\nprint('world')"
-
-    formatted = DeveloperAgent._format_with_line_numbers(code)
-
-    # Format is "0001: code"
-    assert "0001:" in formatted
-    assert "import pandas" in formatted
-    assert "0002:" in formatted
-    assert "0003:" in formatted
-
-    print("✅ Line number formatting works:")
-    print(f"   - Formatted {len(formatted)} chars")
-
-
 # NOTE: Full run() integration tests are too complex to mock reliably.
 # These will be tested after refactoring when methods are smaller.
 

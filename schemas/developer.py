@@ -25,12 +25,3 @@ class CodeGeneration(BaseModel):
     The train_py field should contain the complete training script.
     """
     train_py: str
-
-
-class CodePatch(BaseModel):
-    """Schema for patching existing training code.
-
-    The train_py field contains a diff string for train.py, or empty string if unchanged.
-    - train_py: diff for train.py (e.g., '--- a/train.py\\n+++ b/train.py\\n...') or ""
-    """
-    train_py: str

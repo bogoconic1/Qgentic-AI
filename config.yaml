@@ -13,7 +13,6 @@ runtime:
   llm_max_retries: 3
   max_developer_input_tokens: 250000  # Max input tokens before adaptive trimming (GPT-5 limit is 272K)
   directory_listing_max_files: 10
-  patch_mode_enabled: false
   # Parallel baseline execution
   baseline_max_parallel_workers: 3  # Max baselines running in parallel when GPU isolation is disabled (ignored if enable_mig or enable_multi_gpu is true)
   # GPU isolation strategy (choose ONE or neither):
