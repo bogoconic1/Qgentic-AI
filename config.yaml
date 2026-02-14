@@ -45,4 +45,4 @@ tracking:
 model_recommender:
   enable_web_search: true  # Enable web search for finding SOTA strategies
 developer:
-  hitl_sota: false  # When true, pause after SOTA suggestion for human accept/override (forces single worker)
+  hitl_sota: true  # When true, pause after SOTA suggestion for human accept/override (forces single worker)

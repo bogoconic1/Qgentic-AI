@@ -85,6 +85,8 @@ class ResearcherAgent:
             logging.basicConfig(
                 level=logging.DEBUG,
             )
+            for _noisy in ("httpcore", "httpx", "urllib3"):
+                logging.getLogger(_noisy).setLevel(logging.WARNING)
 
         # Prevent duplicate handlers
         existing_paths = {
