@@ -10,7 +10,7 @@ from agents.researcher import ResearcherAgent
 from agents.developer import DeveloperAgent
 from agents.starter import StarterAgent
 from agents.model_recommender import ModelRecommenderAgent
-from project_config import get_config
+from project_config import get_config, get_instructions
 from weave.trace.util import ThreadPoolExecutor
 import weave
 
@@ -549,7 +549,7 @@ class Orchestrator:
             model_rec_agent = ModelRecommenderAgent(self.slug, self.iteration)
 
             # Check if human provided models (HITL mode)
-            hitl_models = _CONFIG.get("model_recommender", {}).get("hitl_models", [])
+            hitl_models = get_instructions()["# Models"]
 
             if hitl_models and len(hitl_models) > 0:
                 # HITL mode: Use human-specified models, skip LLM selection

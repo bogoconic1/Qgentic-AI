@@ -10,7 +10,7 @@ from typing import Optional
 import json
 
 from dotenv import load_dotenv
-from project_config import get_config, get_config_value
+from project_config import get_config, get_config_value, get_instructions
 import weave
 import wandb
 
@@ -57,7 +57,7 @@ _PATCH_MODE_ENABLED = bool(_RUNTIME_CFG.get("patch_mode_enabled"))
 _USE_VALIDATION_SCORE = bool(_RUNTIME_CFG.get("use_validation_score"))
 
 _DEVELOPER_MODEL = _LLM_CFG.get("developer_model")
-_HITL_INSTRUCTIONS = _DEVELOPER_CFG.get("hitl_instructions", [])
+_HITL_INSTRUCTIONS = get_instructions()["# Developer Instructions"]
 _HITL_SOTA = bool(_DEVELOPER_CFG.get("hitl_sota"))
 
 _TASK_ROOT = Path(_PATH_CFG.get("task_root"))

@@ -68,10 +68,10 @@ Before running the agent, create these files in `task/<slug>/`:
 - **`cv_splits.json`**: Cross-validation fold indices
 - **`metric.py`**: Competition-specific evaluation metric
 
-Optionally, configure Human-In-The-Loop (HITL) instructions in `config.yaml`:
-- `researcher.hitl_instructions`: Guide research direction
-- `model_recommender.hitl_models`: Override model selection
-- `developer.hitl_instructions`: Guide code implementation
+Optionally, add Human-In-The-Loop (HITL) instructions in `INSTRUCTIONS.md`:
+- `# Researcher Instructions`: Guide research direction
+- `# Models`: Override model selection
+- `# Developer Instructions`: Guide code implementation
 
 ### 5. Launch
 
