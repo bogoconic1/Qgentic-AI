@@ -761,18 +761,14 @@ class Orchestrator:
             # Start with existing results (for incremental updates)
             baseline_results = existing_baseline_results.copy()
 
-            # Run developer agents in parallel using ThreadPoolExecutor
+            # Run developer agents — directly on main thread for HITL (stdin required),
+            # otherwise in parallel using ThreadPoolExecutor
             if tasks:
-                print(f"Running {len(tasks)} baseline task(s) in parallel")
-                with ThreadPoolExecutor(max_workers=max_parallel_workers) as executor:
-                    futures = [
-                        executor.submit(_run_developer_baseline, *task_args)
-                        for task_args in tasks
-                    ]
-
-                    for future in futures:
+                if _HITL_SOTA:
+                    print(f"Running {len(tasks)} baseline task(s) sequentially (HITL mode)")
+                    for task_args in tasks:
                         try:
-                            result_key, best_score, best_code_file, blacklisted_ideas, successful_ideas = future.result()
+                            result_key, best_score, best_code_file, blacklisted_ideas, successful_ideas = _run_developer_baseline(*task_args)
                             baseline_results[result_key] = {
                                 "model_name": result_key,
                                 "best_score": best_score,
@@ -782,13 +778,38 @@ class Orchestrator:
                                 "now_recommendations": now_recommendations_all.get(result_key, {}),
                                 "later_recommendations": later_recommendations_all.get(result_key, {})
                             }
-                            # Incrementally persist after each completion
                             baseline_path = self.outputs_dir / "baseline_results.json"
                             with open(baseline_path, "w") as f:
                                 json.dump(baseline_results, f, indent=2)
                         except Exception as e:
                             print(f"Error in baseline task: {e}")
                             continue
+                else:
+                    print(f"Running {len(tasks)} baseline task(s) in parallel")
+                    with ThreadPoolExecutor(max_workers=max_parallel_workers) as executor:
+                        futures = [
+                            executor.submit(_run_developer_baseline, *task_args)
+                            for task_args in tasks
+                        ]
+
+                        for future in futures:
+                            try:
+                                result_key, best_score, best_code_file, blacklisted_ideas, successful_ideas = future.result()
+                                baseline_results[result_key] = {
+                                    "model_name": result_key,
+                                    "best_score": best_score,
+                                    "best_code_file": best_code_file or "",
+                                    "blacklisted_ideas": blacklisted_ideas,
+                                    "successful_ideas": successful_ideas,
+                                    "now_recommendations": now_recommendations_all.get(result_key, {}),
+                                    "later_recommendations": later_recommendations_all.get(result_key, {})
+                                }
+                                baseline_path = self.outputs_dir / "baseline_results.json"
+                                with open(baseline_path, "w") as f:
+                                    json.dump(baseline_results, f, indent=2)
+                            except Exception as e:
+                                print(f"Error in baseline task: {e}")
+                                continue
             else:
                 print("No new baseline tasks to run (all models already completed)")
 
