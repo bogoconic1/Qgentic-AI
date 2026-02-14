@@ -1186,6 +1186,12 @@ class DeveloperAgent:
             if train_path.exists():
                 self.best_code = strip_header_from_code(train_path)
 
+        # Re-populate class-level shared suggestions from this model's history
+        with DeveloperAgent._lock:
+            for entry in self.global_suggestions:
+                if entry not in DeveloperAgent._shared_suggestions:
+                    DeveloperAgent._shared_suggestions.append(entry)
+
         return {
             "input_list": row["input_list"],
             "last_input_tokens": row["last_input_tokens"],
