@@ -279,12 +279,6 @@ def call_llm_with_retry_google(
     function_declarations: list = None,
     include_usage: bool = False,
 ):
-    # Set location based on model
-    if model.startswith("gemini"):
-        os.environ['GOOGLE_CLOUD_LOCATION'] = 'global'
-    else:
-        os.environ['GOOGLE_CLOUD_LOCATION'] = 'us-central1'
-
     runtime_cfg = get_config().get("runtime")
     retries = max_retries or runtime_cfg.get("llm_max_retries")
     backoff_seq = tuple(runtime_cfg.get("llm_backoff_sequence"))
