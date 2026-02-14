@@ -22,6 +22,7 @@ from tools.developer import (
 from utils.guardrails import evaluate_guardrails, build_block_summary
 from tools.helpers import call_llm_with_retry, call_llm_with_retry_anthropic, call_llm_with_retry_google, _build_directory_listing
 from utils.llm_utils import detect_provider, extract_text_from_response, append_message
+from utils.checkpoint import create_db as _create_checkpoint_db, save_checkpoint, load_latest_checkpoint
 from utils.grade import run_grade
 from schemas.developer import CodeGeneration
 from utils.code_utils import strip_header_from_code, extract_python_code
@@ -1145,6 +1146,262 @@ class DeveloperAgent:
             self.logger.exception("Failed to fetch red flags or SOTA suggestions")
             return None
 
+    def _get_checkpoint_db(self):
+        """Open (or return cached) checkpoint database connection."""
+        if not hasattr(self, '_checkpoint_conn') or self._checkpoint_conn is None:
+            self._checkpoint_conn = _create_checkpoint_db()
+        return self._checkpoint_conn
+
+    def _save_checkpoint(self, version, input_list, last_input_tokens, sota_suggestions_call_id):
+        """Save a per-version checkpoint to SQLite after step 5 (evaluate submission)."""
+        best_score = self.best_score
+        if best_score is not None and math.isinf(best_score):
+            best_score = None
+
+        state = {
+            "best_score": best_score,
+            "best_version": self.best_version,
+            "best_code_file": self.best_code_file,
+            "version_scores": {str(k): v for k, v in self.version_scores.items()},
+            "successful_versions": list(self.successful_versions),
+            "blacklisted_versions": list(self.blacklisted_versions),
+            "blacklisted_ideas": self.blacklisted_ideas,
+            "successful_ideas": self.successful_ideas,
+            "global_suggestions": self.global_suggestions,
+            "input_list": input_list,
+            "last_input_tokens": last_input_tokens,
+            "last_suggestion": self.last_suggestion,
+            "sota_suggestions_call_id": sota_suggestions_call_id,
+        }
+        conn = self._get_checkpoint_db()
+        save_checkpoint(conn, self.slug, str(self.iteration), self.model_name, version, state)
+        self.logger.info("Checkpoint saved for v%s", version)
+
+    def _load_latest_checkpoint(self):
+        """Load the most recent checkpoint and restore instance state.
+
+        Returns dict with run() locals (input_list, last_input_tokens,
+        sota_suggestions_call_id, version) or None if no checkpoint exists.
+        """
+        conn = self._get_checkpoint_db()
+        row = load_latest_checkpoint(conn, self.slug, str(self.iteration))
+        if row is None:
+            return None
+
+        best_score = row["best_score"]
+        if best_score is None:
+            best_score = float("inf") if self.is_lower_better else float("-inf")
+        self.best_score = best_score
+
+        self.best_version = row["best_version"]
+        self.best_code_file = row["best_code_file"]
+        self.version_scores = {int(k): v for k, v in row["version_scores"].items()}
+        self.successful_versions = set(row["successful_versions"])
+        self.blacklisted_versions = set(row["blacklisted_versions"])
+        self.blacklisted_ideas = row["blacklisted_ideas"]
+        self.successful_ideas = row["successful_ideas"]
+        self.global_suggestions = row["global_suggestions"]
+        self.last_suggestion = row["last_suggestion"]
+
+        # Reconstruct derived state
+        self.previous_runs = [(None, None)] * len(self.version_scores)
+        if self.version_scores:
+            self.last_successful_version = max(self.version_scores.keys())
+        if self.best_version and self.best_code_file:
+            train_path = self.outputs_dir / self.best_code_file
+            if train_path.exists():
+                self.best_code = strip_header_from_code(train_path)
+
+        return {
+            "input_list": row["input_list"],
+            "last_input_tokens": row["last_input_tokens"],
+            "sota_suggestions_call_id": row["sota_suggestions_call_id"],
+            "version": row["version"],
+        }
+
+    def _run_feedback_and_build_next_instruction(
+        self, version, code_context, run_score, previous_successful_version,
+        base_score, submission_exists, output, input_list, provider,
+        sota_suggestions_call_id
+    ):
+        """Run step 6: gather feedback and append next instruction to input_list.
+
+        Returns (updated_sota_suggestions_call_id, should_break).
+        """
+        if submission_exists:
+            sota_suggestions_call_id += 1
+            sota_response = self._gather_sota_feedback(
+                code_context, version=version, attempt_number=sota_suggestions_call_id
+            )
+
+            if sota_response:
+                suggestion_text = sota_response.suggestion.strip()
+                blacklist_flag = bool(sota_response.blacklist)
+                blacklist_reason = sota_response.blacklist_reason.strip()
+                suggestion_code = sota_response.suggestion_code.strip() if hasattr(sota_response, 'suggestion_code') else ""
+            else:
+                suggestion_text = ""
+                blacklist_flag = False
+                blacklist_reason = ""
+                suggestion_code = ""
+
+            self.logger.info("SOTA suggestion: %s (blacklist=%s, code_len=%d)", suggestion_text, blacklist_flag, len(suggestion_code))
+
+            if previous_successful_version is None:
+                initial_entry = f"Initial implementation (score: {self._format_score_value(run_score)})"
+                self.global_suggestions.append(initial_entry)
+                self.logger.info("Recorded initial implementation: %s", initial_entry)
+            elif self.last_suggestion:
+                current_score = run_score
+                suggestion_entry = self._format_suggestion_entry(self.last_suggestion, base_score, current_score)
+                self.global_suggestions.append(suggestion_entry)
+                self.logger.info("Recorded suggestion with impact: %s", suggestion_entry)
+                self._register_shared_suggestion(
+                    self.last_suggestion,
+                    base_score,
+                    current_score,
+                    is_blacklisted=blacklist_flag
+                )
+
+            if blacklist_flag and self.last_suggestion:
+                self._register_blacklist(self.last_suggestion, blacklist_reason)
+                self.blacklisted_versions.add(version)
+                self.logger.info(
+                    "Previous suggestion marked as blacklisted: %s (reason: %s) - marking v%s as blacklisted",
+                    self.last_suggestion,
+                    blacklist_reason or "N/A",
+                    version
+                )
+            elif not blacklist_flag and self.last_suggestion and version in self.successful_versions:
+                if self.last_suggestion not in self.successful_ideas:
+                    self.successful_ideas.append(self.last_suggestion)
+                    self.logger.info(
+                        "Previous suggestion marked as successful: %s (v%s executed successfully and not blacklisted)",
+                        self.last_suggestion,
+                        version
+                    )
+
+            if suggestion_text:
+                self.logger.info("Summary of SOTA suggestion: %s", suggestion_text)
+            else:
+                self.logger.info("SOTA response did not include a new suggestion summary.")
+
+            if suggestion_text and suggestion_text.strip() == "No suggestions.":
+                self.logger.info("Model indicated 'No suggestions.' - breaking out of loop and returning best result")
+                self.logger.info("Final best score: %s (version %s)", self.best_score, self.best_version)
+                return sota_suggestions_call_id, True
+
+            if suggestion_text:
+                self.last_suggestion = suggestion_text
+            elif blacklist_flag:
+                self.last_suggestion = None
+
+            next_log_path = self.outputs_dir / self._log_filename(version + 1)
+            next_submission_path = self.outputs_dir / self._submission_filename(version + 1)
+            next_version_folder = self.outputs_dir / str(version + 1)
+
+            suggestion_block = ""
+            if suggestion_text:
+                suggestion_block += f"<suggestion>\n{suggestion_text}\n</suggestion>\n"
+            else:
+                suggestion_block += "<suggestion>\nNo suggestion provided.\n</suggestion>\n"
+
+            if suggestion_code:
+                suggestion_block += "Suggested code snippet:\n```python\n" + suggestion_code + "\n```\n"
+            else:
+                suggestion_block += "Suggested code snippet: No code provided.\n"
+
+            rollback_code = None
+            if blacklist_flag:
+                _, rollback_code = self._find_most_recent_valid_version(version)
+
+            next_instr = (
+                f"{suggestion_block}\n"
+                f"Remember:\n"
+                f"- write logs to {next_log_path}\n"
+                f"- save artifacts to {next_version_folder}/: submission.csv, valid_preds.csv, train_stats.json, models, loss_curve.png, metric_curve.png"
+            )
+
+            if blacklist_flag and rollback_code:
+                input_list.append(append_message(provider, "user", 'The previous code has been blacklisted. Here is the most recent valid (successful and non-blacklisted) version for your reference (please start work from this version): \n' + rollback_code))
+            elif blacklist_flag:
+                self.logger.warning("Blacklist triggered but no valid rollback version available")
+
+            input_list.append(append_message(provider, "user", next_instr))
+
+        else:
+            next_log_path = self.outputs_dir / self._log_filename(version + 1)
+            next_submission_path = self.outputs_dir / self._submission_filename(version + 1)
+            next_version_folder = self.outputs_dir / str(version + 1)
+            version_folder = self.outputs_dir / str(version)
+
+            is_timeout = "Code execution timed out after" in output
+            is_oom = "CUDA out of memory" in output or "OutOfMemoryError" in output
+
+            if is_timeout or is_oom:
+                error_type = "Timeout" if is_timeout else "OOM"
+                self.logger.info(f"{error_type} detected - running red flags analysis on logs and code")
+
+                if is_timeout:
+                    error_context = "\n<timeout_error>\nThe script was not able to execute within 1 hour. Please investigate.\n</timeout_error>\n"
+                else:
+                    error_context = "\n<oom_error>\nCUDA out of memory error detected. The model or batch size is too large for available GPU memory. Please investigate.\n</oom_error>\n"
+
+                code_context_error = code_context + error_context
+
+                train_stats_path = version_folder / 'train_stats.json'
+                train_stats = None
+                if train_stats_path.exists():
+                    try:
+                        with open(train_stats_path, 'r') as f:
+                            train_stats = json.load(f)
+                        self.logger.info("Loaded train_stats.json for error analysis (%d keys)", len(train_stats))
+                    except Exception as e:
+                        self.logger.warning(f"Failed to read train_stats.json: {e}")
+
+                try:
+                    red_flags_response = search_red_flags(
+                        description=self.description,
+                        context=code_context_error,
+                        train_stats=train_stats,
+                    )
+                    self.logger.info(f"Red flags analysis complete for {error_type} (length: %d chars)", len(red_flags_response))
+
+                    final_summary = self._extract_final_summary(red_flags_response)
+
+                    error_message = "TIMEOUT" if is_timeout else "OUT OF MEMORY"
+                    next_instr = f"""
+Your code FAILED during execution due to {error_message}!
+{output}
+
+Performance analysis:
+{final_summary}
+
+{prompt_execution_failure_suffix(next_log_path, next_submission_path, next_version_folder)}
+"""
+                except Exception:
+                    self.logger.exception(f"Failed to run red flags analysis for {error_type}")
+                    error_message = "TIMEOUT" if is_timeout else "OUT OF MEMORY"
+                    next_instr = f"""
+Your code FAILED during execution due to {error_message}!
+This is the stack trace and advice on how to fix the error:
+{output}
+
+{prompt_execution_failure_suffix(next_log_path, next_submission_path, next_version_folder)}
+"""
+            else:
+                next_instr = f"""
+Your code FAILED during execution!
+This is the stack trace and advice on how to fix the error:
+{output}
+
+{prompt_execution_failure_suffix(next_log_path, next_submission_path, next_version_folder)}
+"""
+
+            input_list.append(append_message(provider, "user", next_instr))
+
+        return sota_suggestions_call_id, False
+
     @weave.op()
     def run(self, max_time_seconds: int = 6 * 3600) -> tuple[float, Optional[str], list[str], list[str]]:
         self.logger.info(
@@ -1162,18 +1419,41 @@ class DeveloperAgent:
         last_input_tokens = None  # Track input tokens from previous API call for adaptive trimming
 
         system_prompt = self._compose_system()
-        user_prompt = self._build_user_prompt(version=1)
-
-        # Detect provider early for consistent message formatting
         provider = detect_provider(_DEVELOPER_MODEL)
-        input_list = [append_message(provider, "user", user_prompt)]
 
         # Log external data listing and plan content (passed from orchestrator)
         self.logger.info("External data listing (%d chars): %s", len(self.external_data_listing), self.external_data_listing[:200] + "..." if len(self.external_data_listing) > 200 else self.external_data_listing)
         self.logger.info("Plan content (%d chars): %s", len(self.plan_content), self.plan_content[:200] + "..." if len(self.plan_content) > 200 else self.plan_content)
 
-        attempt = 0
-        sota_suggestions_call_id = 0
+        # Try to resume from checkpoint
+        checkpoint = self._load_latest_checkpoint()
+        if checkpoint:
+            input_list = checkpoint["input_list"]
+            last_input_tokens = checkpoint["last_input_tokens"]
+            sota_suggestions_call_id = checkpoint["sota_suggestions_call_id"]
+            attempt = checkpoint["version"]
+            self.logger.info("Resumed from checkpoint v%s (best_score=%s)", attempt, self.best_score)
+
+            # Replay step 6 for the checkpointed version (checkpoint is saved after step 5)
+            resumed_version = attempt
+            version_folder = self.outputs_dir / str(resumed_version)
+            train_py_path = version_folder / "train.py"
+            if train_py_path.exists():
+                code_clean = strip_header_from_code(train_py_path)
+                code_context, run_score, prev_ver, base_score, sub_exists = (
+                    self._evaluate_submission(code_clean, resumed_version, resumed_version)
+                )
+                sota_suggestions_call_id, _ = self._run_feedback_and_build_next_instruction(
+                    resumed_version, code_context, run_score, prev_ver,
+                    base_score, sub_exists, "", input_list, provider,
+                    sota_suggestions_call_id
+                )
+            self.logger.info("Step 6 replayed for v%s, entering main loop", resumed_version)
+        else:
+            user_prompt = self._build_user_prompt(version=1)
+            input_list = [append_message(provider, "user", user_prompt)]
+            attempt = 0
+            sota_suggestions_call_id = 0
         while True:
             now = time.time()
             if max_time_seconds is not None and now >= deadline:
@@ -1268,197 +1548,20 @@ class DeveloperAgent:
             # Evaluate submission and build enriched context
             code_context, run_score, previous_successful_version, base_score, submission_exists = self._evaluate_submission(code_clean, version, attempt)
 
-            # Only continue gathering feedback if THIS attempt produced a submission
-            if submission_exists:
-                # Increment SOTA suggestions call counter (separate from attempt counter)
-                sota_suggestions_call_id += 1
-                # Gather SOTA feedback (red flags + suggestions)
-                # sota_response is now a parsed SOTAResponse object (or None)
-                sota_response = self._gather_sota_feedback(code_context, version=version, attempt_number=sota_suggestions_call_id)
+            # Checkpoint after step 5 (before feedback)
+            try:
+                self._save_checkpoint(version, input_list, last_input_tokens, sota_suggestions_call_id)
+            except Exception as exc:
+                self.logger.exception("Failed to save checkpoint for v%s: %s", version, exc)
 
-                # Extract fields directly from parsed object
-                if sota_response:
-                    suggestion_text = sota_response.suggestion.strip()
-                    blacklist_flag = bool(sota_response.blacklist)
-                    blacklist_reason = sota_response.blacklist_reason.strip()
-                    suggestion_code = sota_response.suggestion_code.strip() if hasattr(sota_response, 'suggestion_code') else ""
-                else:
-                    suggestion_text = ""
-                    blacklist_flag = False
-                    blacklist_reason = ""
-                    suggestion_code = ""
-
-                self.logger.info("SOTA suggestion: %s (blacklist=%s, code_len=%d)", suggestion_text, blacklist_flag, len(suggestion_code))
-
-                # Record the previous suggestion with its score impact (before updating self.last_suggestion)
-                if previous_successful_version is None:
-                    # This is the first successful execution (no previous version to compare against)
-                    initial_entry = f"Initial implementation (score: {self._format_score_value(run_score)})"
-                    self.global_suggestions.append(initial_entry)
-                    self.logger.info("Recorded initial implementation: %s", initial_entry)
-                elif self.last_suggestion:
-                    # We have a previous suggestion and a previous successful version to compare against
-                    # base_score was already calculated above (from previous_successful_version)
-                    current_score = run_score
-
-                    suggestion_entry = self._format_suggestion_entry(self.last_suggestion, base_score, current_score)
-                    self.global_suggestions.append(suggestion_entry)
-                    self.logger.info("Recorded suggestion with impact: %s", suggestion_entry)
-
-                    # Register to shared pool with model name and score impact
-                    self._register_shared_suggestion(
-                        self.last_suggestion,
-                        base_score,
-                        current_score,
-                        is_blacklisted=blacklist_flag
-                    )
-
-                if blacklist_flag and self.last_suggestion:
-                    self._register_blacklist(self.last_suggestion, blacklist_reason)
-                    # Mark current version as blacklisted
-                    self.blacklisted_versions.add(version)
-                    self.logger.info(
-                        "Previous suggestion marked as blacklisted: %s (reason: %s) - marking v%s as blacklisted",
-                        self.last_suggestion,
-                        blacklist_reason or "N/A",
-                        version
-                    )
-                elif not blacklist_flag and self.last_suggestion and version in self.successful_versions:
-                    # Register as successful idea if: not blacklisted + executed successfully
-                    if self.last_suggestion not in self.successful_ideas:
-                        self.successful_ideas.append(self.last_suggestion)
-                        self.logger.info(
-                            "Previous suggestion marked as successful: %s (v%s executed successfully and not blacklisted)",
-                            self.last_suggestion,
-                            version
-                        )
-
-                if suggestion_text:
-                    self.logger.info("Summary of SOTA suggestion: %s", suggestion_text)
-                else:
-                    self.logger.info("SOTA response did not include a new suggestion summary.")
-
-                # Check if model indicates no further suggestions are possible
-                if suggestion_text and suggestion_text.strip() == "No suggestions.":
-                    self.logger.info("Model indicated 'No suggestions.' - breaking out of loop and returning best result")
-                    self.logger.info("Final best score: %s (version %s)", self.best_score, self.best_version)
-                    break
-
-                if suggestion_text:
-                    self.last_suggestion = suggestion_text
-                elif blacklist_flag:
-                    # if suggestion missing but blacklist decision made, reset last suggestion
-                    self.last_suggestion = None
-
-                next_log_path = self.outputs_dir / self._log_filename(version + 1)
-                next_submission_path = self.outputs_dir / self._submission_filename(version + 1)
-                next_version_folder = self.outputs_dir / str(version + 1)
-
-                suggestion_block = ""
-                if suggestion_text:
-                    suggestion_block += f"<suggestion>\n{suggestion_text}\n</suggestion>\n"
-                else:
-                    suggestion_block += "<suggestion>\nNo suggestion provided.\n</suggestion>\n"
-
-                if suggestion_code:
-                    suggestion_block += "Suggested code snippet:\n```python\n" + suggestion_code + "\n```\n"
-                else:
-                    suggestion_block += "Suggested code snippet: No code provided.\n"
-
-                rollback_code = None
-                if blacklist_flag:
-                    _, rollback_code = self._find_most_recent_valid_version(version)
-
-                next_instr = (
-                    f"{suggestion_block}\n"
-                    f"Remember:\n"
-                    f"- write logs to {next_log_path}\n"
-                    f"- save artifacts to {next_version_folder}/: submission.csv, valid_preds.csv, train_stats.json, models, loss_curve.png, metric_curve.png"
-                )
-
-                if blacklist_flag and rollback_code:
-                    input_list.append(append_message(provider, "user", 'The previous code has been blacklisted. Here is the most recent valid (successful and non-blacklisted) version for your reference (please start work from this version): \n' + rollback_code))
-                elif blacklist_flag:
-                    self.logger.warning("Blacklist triggered but no valid rollback version available")
-
-                input_list.append(append_message(provider, "user", next_instr))
-
-            else:
-                next_log_path = self.outputs_dir / self._log_filename(version + 1)
-                next_submission_path = self.outputs_dir / self._submission_filename(version + 1)
-                next_version_folder = self.outputs_dir / str(version + 1)
-
-                # Check if this is a timeout or OOM error
-                is_timeout = "Code execution timed out after" in output
-                is_oom = "CUDA out of memory" in output or "OutOfMemoryError" in output
-
-                if is_timeout or is_oom:
-                    # For timeout/OOM errors, run red flags analysis to diagnose issues
-                    error_type = "Timeout" if is_timeout else "OOM"
-                    self.logger.info(f"{error_type} detected - running red flags analysis on logs and code")
-
-                    # Add error context to code_context for red flags analysis
-                    if is_timeout:
-                        error_context = "\n<timeout_error>\nThe script was not able to execute within 1 hour. Please investigate.\n</timeout_error>\n"
-                    else:
-                        error_context = "\n<oom_error>\nCUDA out of memory error detected. The model or batch size is too large for available GPU memory. Please investigate.\n</oom_error>\n"
-
-                    code_context_error = code_context + error_context
-
-                    # Try to read train_stats.json if available (may not exist for timeout/OOM)
-                    train_stats_path = version_folder / 'train_stats.json'
-                    train_stats = None
-                    if train_stats_path.exists():
-                        try:
-                            with open(train_stats_path, 'r') as f:
-                                train_stats = json.load(f)
-                            self.logger.info("Loaded train_stats.json for error analysis (%d keys)", len(train_stats))
-                        except Exception as e:
-                            self.logger.warning(f"Failed to read train_stats.json: {e}")
-
-                    try:
-                        red_flags_response = search_red_flags(
-                            description=self.description,
-                            context=code_context_error,
-                            train_stats=train_stats,
-                        )
-                        self.logger.info(f"Red flags analysis complete for {error_type} (length: %d chars)", len(red_flags_response))
-
-                        # Extract Final Summary from red flags response
-                        final_summary = self._extract_final_summary(red_flags_response)
-
-                        error_message = "TIMEOUT" if is_timeout else "OUT OF MEMORY"
-                        next_instr = f"""
-                        Your code FAILED during execution due to {error_message}!
-                        {output}
-
-                        Performance analysis:
-                        {final_summary}
-
-                        {prompt_execution_failure_suffix(next_log_path, next_submission_path, next_version_folder)}
-                        """
-                    except Exception:
-                        self.logger.exception(f"Failed to run red flags analysis for {error_type}")
-                        # Fallback to basic error message
-                        error_message = "TIMEOUT" if is_timeout else "OUT OF MEMORY"
-                        next_instr = f"""
-                        Your code FAILED during execution due to {error_message}!
-                        This is the stack trace and advice on how to fix the error:
-                        {output}
-
-                        {prompt_execution_failure_suffix(next_log_path, next_submission_path, next_version_folder)}
-                        """
-                else:
-                    # For regular bugs/errors, just show the error (web search already done in execute_code)
-                    next_instr = f"""
-                    Your code FAILED during execution!
-                    This is the stack trace and advice on how to fix the error:
-                    {output}
-
-                    {prompt_execution_failure_suffix(next_log_path, next_submission_path, next_version_folder)}
-                    """
-
-                input_list.append(append_message(provider, "user", next_instr))
+            # Step 6: Gather feedback and build next instruction
+            sota_suggestions_call_id, should_break = self._run_feedback_and_build_next_instruction(
+                version, code_context, run_score, previous_successful_version,
+                base_score, submission_exists, output, input_list, provider,
+                sota_suggestions_call_id
+            )
+            if should_break:
+                break
 
             self.logger.info("previous runs count: %s", len(self.previous_runs))
 
