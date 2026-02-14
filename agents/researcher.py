@@ -5,7 +5,7 @@ import base64
 from pathlib import Path
 
 from dotenv import load_dotenv
-from project_config import get_config
+from project_config import get_config, get_instructions
 
 from tools.researcher import read_research_paper, scrape_web_page
 from tools.developer import execute_code, _build_resource_header
@@ -30,7 +30,7 @@ _TASK_ROOT = Path(_PATH_CFG.get("task_root"))
 _OUTPUTS_DIRNAME = _PATH_CFG.get("outputs_dirname")
 
 _DEFAULT_MAX_STEPS = _RUNTIME_CFG.get("researcher_max_steps")
-_HITL_INSTRUCTIONS = _RESEARCHER_CFG.get("hitl_instructions", [])
+_HITL_INSTRUCTIONS = get_instructions()["# Researcher Instructions"]
 
 # Media ingestion limits/types
 SUPPORTED_IMAGE_TYPES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}

@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 import weave
 from weave.trace.util import ThreadPoolExecutor
 
-from project_config import get_config
+from project_config import get_config, get_instructions
 from tools.helpers import call_llm_with_retry, call_llm_with_retry_anthropic, call_llm_with_retry_google
 from tools.generate_paper_summary import PaperSummaryClient
 from utils.llm_utils import detect_provider, extract_text_from_response, append_message
@@ -45,7 +45,7 @@ _RUNTIME_CFG = _CONFIG.get("runtime")
 
 _MODEL_SELECTOR_MODEL = _LLM_CFG.get("model_selector_model")
 _MODEL_RECOMMENDER_MODEL = _LLM_CFG.get("model_recommender_model")
-_HITL_MODELS = _MODEL_REC_CFG.get("hitl_models", [])
+_HITL_MODELS = get_instructions()["# Models"]
 _ENABLE_WEB_SEARCH = _MODEL_REC_CFG.get("enable_web_search", True)
 
 _TASK_ROOT = Path(_PATH_CFG.get("task_root"))
