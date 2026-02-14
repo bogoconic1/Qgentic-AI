@@ -238,34 +238,6 @@ def build_user(
     return base
 
 
-def patch_mode_directive(base_filename: str) -> str:
-    return (
-        f"""**IMPORTANT**: Please write a git diff (patch) within ```diff to fix the above issues!
-- Produce a unified diff (apply patch format) that updates {base_filename}. Do not include any prefixes in the diff other than {base_filename}.
-- Return only the diff enclosed in ```diff fences; do not resend the full script.
-- Ensure the diff applies cleanly with the `patch` utility using the file names above.
-- Use standard hunk headers with explicit line numbers, e.g. @@ -12,7 +12,9 @@.
-- Refer to the <previous_code_with_line_numbers> section above when calculating line numbers.
-
-Like this
-```diff
---- {base_filename}
-+++ {base_filename}
-@@ -1,3 +1,3 @@
- start
--first change
-+new first change
- middle
-@@ -7,4 +7,4 @@
- some content
--second change
-+new second change
- more content
- end
- ```"""
-    ).strip()
-
-
 def guardrail_fix_suffix(next_log_path: str | Path, next_submission_path: str | Path, version_folder: str | Path) -> str:
     return (
         "\nPlease regenerate the script addressing the above guardrail issues. "

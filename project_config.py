@@ -23,7 +23,6 @@ _DEFAULT_CONFIG: dict[str, Any] = {
         "llm_max_retries": 3,
         "max_developer_input_tokens": 250000,
         "directory_listing_max_files": 10,
-        "patch_mode_enabled": False,
         "use_validation_score": False,
     },
     "paths": {

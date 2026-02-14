@@ -22,17 +22,12 @@ from tools.developer import (
 from utils.guardrails import evaluate_guardrails, build_block_summary
 from tools.helpers import call_llm_with_retry, call_llm_with_retry_anthropic, call_llm_with_retry_google, _build_directory_listing
 from utils.llm_utils import detect_provider, extract_text_from_response, append_message
-from utils.diffs import (
-    extract_diff_block,
-    normalize_diff_payload,
-    apply_patch as util_apply_patch,
-)
 from utils.grade import run_grade
-from utils.code_utils import strip_header_from_code, extract_structured_code
+from schemas.developer import CodeGeneration
+from utils.code_utils import strip_header_from_code, extract_python_code
 from prompts.developer_agent import (
     build_system as prompt_build_system,
     build_user as prompt_build_user,
-    patch_mode_directive as prompt_patch_mode_directive,
     guardrail_fix_suffix as prompt_guardrail_fix_suffix,
     execution_failure_suffix as prompt_execution_failure_suffix,
 )
@@ -53,7 +48,6 @@ _ENABLE_LOGGING_GUARD = bool(_GUARDRAIL_CFG.get("logging_basicconfig_order"))
 _ENABLE_LEAKAGE_GUARD = bool(_GUARDRAIL_CFG.get("leakage_review"))
 _ENABLE_CODE_SAFETY = bool(_GUARDRAIL_CFG.get("enable_code_safety"))
 
-_PATCH_MODE_ENABLED = bool(_RUNTIME_CFG.get("patch_mode_enabled"))
 _USE_VALIDATION_SCORE = bool(_RUNTIME_CFG.get("use_validation_score"))
 
 _DEVELOPER_MODEL = _LLM_CFG.get("developer_model")
@@ -113,7 +107,6 @@ class DeveloperAgent:
         self.best_code: Optional[str] = None
         self.best_code_file: Optional[str] = None
         self.best_version: Optional[int] = None
-        self.next_patch_base_version: Optional[int] = None  # For patch mode: which file to diff against
         self.last_successful_version: Optional[int] = None  # For score comparison: most recent version with a score
 
         self._load_benchmark_info()
@@ -139,9 +132,6 @@ class DeveloperAgent:
         os.environ["EXTERNAL_DATA_DIR"] = str(self.external_dir)
 
         os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
-
-        # Patch mode configuration
-        self.patch_mode_enabled = _PATCH_MODE_ENABLED
 
         # Model-specific strategy recommendations for the developer system prompt
         self.model_name: Optional[str] = model_name
@@ -369,44 +359,8 @@ class DeveloperAgent:
 
         return "\n".join(sections) if sections else "No NICE_TO_HAVE recommendations available."
 
-    @staticmethod
-    def _format_with_line_numbers(code: str) -> str:
-        lines = code.splitlines()
-        return "\n".join(f"{idx:04d}: {line}" for idx, line in enumerate(lines, start=1))
-
-    def _replace_last_message_with_code(self, messages: list[dict], version_folder: Path) -> None:
-        """Replace the last assistant message (diff) with full code (headers stripped).
-
-        Reads train.py from version folder, strips headers, and replaces
-        the last message in history.
-
-        Args:
-            messages: Message history list to modify in-place
-            version_folder: Path to version folder (e.g., outputs/16_2/1/)
-        """
-        if not messages or messages[-1].get("role") != "assistant":
-            self.logger.warning("Cannot replace last message - not an assistant message")
-            return
-
-        from utils.code_utils import strip_header_from_code
-
-        # Read and strip headers from train.py
-        train_py_path = version_folder / "train.py"
-        if train_py_path.exists():
-            train_py_stripped = strip_header_from_code(train_py_path)
-        else:
-            self.logger.warning("train.py not found in %s", version_folder)
-            train_py_stripped = ""
-
-        # Reconstruct markdown with full code (headers stripped)
-        content = f"```python\n{train_py_stripped}\n```"
-
-        # Replace the content
-        messages[-1]["content"] = content
-        self.logger.debug("Replaced last message (diff) with full code from %s", version_folder)
-
     @weave.op()
-    def _generate_code(self, instructions: str, messages: list[dict[str, str]], expect_patch: bool = False) -> tuple[list[dict], dict[str, str], int | None]:
+    def _generate_code(self, instructions: str, messages: list[dict[str, str]]) -> tuple[list[dict], dict[str, str], int | None]:
         """Generate code using structured output.
 
         Returns:
@@ -417,10 +371,7 @@ class DeveloperAgent:
         """
         self.logger.info("Requesting code generation from model for iteration %s", self.iteration)
 
-        # Choose schema based on patch mode
-        from schemas.developer import CodeGeneration, CodePatch
-        schema = CodePatch if expect_patch else CodeGeneration
-        self.logger.debug("Using schema: %s", schema.__name__)
+        schema = CodeGeneration
 
         # Detect provider
         provider = detect_provider(_DEVELOPER_MODEL)
@@ -464,22 +415,15 @@ class DeveloperAgent:
         code_dict = result.model_dump()
         self.logger.debug("Generated code dict keys: %s", list(code_dict.keys()))
 
-        # Extract code from markdown backticks (handles both full code and patch modes)
+        # Extract code from markdown backticks
         raw_content = code_dict.get('train_py', '')
         if raw_content:
-            extracted = extract_structured_code(raw_content)
+            extracted = extract_python_code(raw_content)
             if extracted and extracted != raw_content:
                 code_dict['train_py'] = extracted
                 self.logger.debug("Extracted code from markdown (%d chars -> %d chars)", len(raw_content), len(extracted))
 
-        # Reconstruct markdown for message history
-        # For patches: show diff, will be replaced with full code after successful application
-        # For full code: show python
-        if expect_patch:
-            train_py_diff = code_dict.get("train_py", "").strip()
-            content = f"```diff\n{train_py_diff}\n```" if train_py_diff else "No changes"
-        else:
-            content = f"```python\n{code_dict['train_py']}\n```"
+        content = f"```python\n{code_dict['train_py']}\n```"
 
         # Create message history entry
         output = [append_message(provider, "assistant", content)]
@@ -490,116 +434,12 @@ class DeveloperAgent:
 
         return output, code_dict, input_tokens
 
-    @staticmethod
-    def _normalize_diff_payload(base_path: Path, diff_text: str) -> Optional[str]:
-        return normalize_diff_payload(base_path, diff_text)
-
-    def _apply_structured_patch(self, base_version: int, patch_dict: dict[str, str]) -> tuple[Optional[dict[str, str]], Optional[str]]:
-        """Apply diff to train.py from base version folder.
-
-        Reads from base_version folder (e.g., 16_2/1/) and returns patched content
-        to be written to target version folder (e.g., 16_2/2/) by _write_code().
-
-        Args:
-            base_version: Version number to patch from
-            patch_dict: Dict with 'train_py' key containing diff string
-                       (empty string means file unchanged)
-
-        Returns:
-            Tuple of (code_dict, error_msg):
-            - code_dict: Dict with 'train_py' key containing patched content.
-                        Empty string means file unchanged. None if patch application fails.
-            - error_msg: Error message describing patch failures, or None if all succeeded.
-        """
-        if base_version <= 0:
-            self.logger.warning("Patch requested but base version is invalid: %s", base_version)
-            return None, f"Invalid base version: {base_version}"
-
-        # Base version folder
-        base_folder = self.outputs_dir / str(base_version)
-        if not base_folder.exists():
-            self.logger.warning("Patch requested but base folder does not exist: %s", base_folder)
-            return None, f"Base folder not found: {base_folder}"
-
-        # Read previous version's train.py
-        train_path = base_folder / "train.py"
-        base_train = train_path.read_text() if train_path.exists() else ""
-
-        # Extract diff from patch_dict
-        train_diff = patch_dict.get("train_py", "").strip()
-
-        result = {"train_py": ""}
-        errors = []
-
-        # Apply patch to train.py if diff provided
-        if train_diff:
-            import tempfile
-            import subprocess
-            import os
-
-            # Write base train.py to temp file
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
-                f.write(base_train)
-                temp_train_path = Path(f.name)
-
-            # Normalize diff to fix incorrect line numbers
-            from utils.diffs import normalize_diff_payload
-            normalized_diff = normalize_diff_payload(temp_train_path, train_diff)
-
-            if normalized_diff is None:
-                error_msg = "Failed to normalize diff for train.py"
-                self.logger.error(error_msg)
-                errors.append(f"train.py: {error_msg}")
-                os.unlink(temp_train_path)
-            else:
-                with tempfile.NamedTemporaryFile(mode='w', suffix='.patch', delete=False) as f:
-                    f.write(normalized_diff)
-                    temp_patch = f.name
-
-                try:
-                    proc = subprocess.run(['patch', str(temp_train_path), temp_patch], check=True, capture_output=True, text=True)
-                    with open(temp_train_path, 'r') as f:
-                        result["train_py"] = f.read()
-                    self.logger.info("Successfully patched train.py from version %d", base_version)
-                except subprocess.CalledProcessError as e:
-                    error_msg = f"Patch failed for train.py:\nSTDOUT: {e.stdout}\nSTDERR: {e.stderr}"
-                    self.logger.error(error_msg)
-                    errors.append(error_msg)
-                finally:
-                    os.unlink(temp_train_path)
-                    os.unlink(temp_patch)
-
-        # Return result and error message
-        if errors:
-            error_summary = "\n\n".join(errors)
-            return result if any(result.values()) else None, error_summary
-        return result, None
-
-    def _append_patch_directive(self, instruction: str, version: int) -> str:
-        if not self.patch_mode_enabled:
-            return instruction
-        instruction = instruction.replace("Please modify your code to fix the error!", "Please write a git diff within ```diff to fix the error!")
-        instruction = instruction.replace("Please regenerate the script addressing the above guardrail issues.", "Please write a git diff within ```diff to fix the above issues.")
-        base_filename = self._code_filename(version)
-        directive = prompt_patch_mode_directive(base_filename)
-        return f"{instruction}\n\n{directive}"
-
     def _postprocess_code(self, code: str) -> tuple[str, int]:
         """Insert resource allocation and BASE_DIR setup at the top of generated code.
 
         Returns:
             Tuple of (postprocessed_code, num_header_lines_added)
         """
-        # Check if the code already has the resource allocation header (e.g., from patch mode)
-        # Must check for actual assignment of CUDA_VISIBLE_DEVICES, not just reading it
-        has_cpu_affinity = 'psutil.Process(os.getpid()).cpu_affinity' in code
-        has_cuda_assignment = 'os.environ["CUDA_VISIBLE_DEVICES"]' in code
-        has_base_dir = 'BASE_DIR = "task/' in code
-
-        if has_cpu_affinity and has_base_dir and has_cuda_assignment:
-            self.logger.debug("Code already contains resource allocation header, skipping postprocessing")
-            return code, 0
-
         # Build the resource allocation header
         lines = []
         lines.append("import os")
@@ -697,24 +537,6 @@ class DeveloperAgent:
         self.logger.debug("Copied metric.py from %s", metric_src)
 
         return version_folder
-
-    @staticmethod
-    def _read_code_metadata(code_path: Path) -> dict:
-        """Read metadata JSON for a code file.
-
-        Args:
-            code_path: Path to the .py code file
-
-        Returns:
-            Dict with metadata (e.g., {"num_header_lines": 5})
-            Returns {"num_header_lines": 0} if metadata file doesn't exist
-        """
-        metadata_path = code_path.with_suffix('.json')
-        if not metadata_path.exists():
-            return {"num_header_lines": 0}
-
-        with open(metadata_path, 'r') as f:
-            return json.load(f)
 
     def _log_attempt_score(self, attempt: int, score: Optional[float]) -> None:
         """Send attempt/score metrics to wandb while guarding against logging errors."""
@@ -1399,66 +1221,12 @@ class DeveloperAgent:
             except Exception:
                 self.logger.info("Attempt %s", attempt)
             version = attempt
-            expect_patch = self.patch_mode_enabled and attempt > 1
 
-            patch_retry_count = 0
-            max_patch_retries = 2
-            code_dict = None
-
-            while True:
-                response_output, generated, last_input_tokens = self._generate_code(instructions=system_prompt, messages=input_list, expect_patch=expect_patch)
-                input_list += response_output
-
-                if expect_patch:
-                    # Determine base version for patch application
-                    preferred_base = self.next_patch_base_version if self.next_patch_base_version else (version - 1)
-                    base_folder = self.outputs_dir / str(preferred_base)
-                    if not base_folder.exists():
-                        self.logger.warning(
-                            "Configured patch base v%s folder not found; falling back to previous version v%s",
-                            preferred_base,
-                            version - 1,
-                        )
-                        preferred_base = version - 1
-                    base_version = preferred_base
-                    self.logger.info("Applying patch relative to base v%s -> target v%s", base_version, version)
-
-                    # Apply structured patch (diff for train.py)
-                    code_dict, error_msg = self._apply_structured_patch(base_version, generated)
-
-                    if error_msg is None:
-                        # Patch succeeded
-                        self.logger.info("Patch applied successfully")
-                        break
-
-                    # Patch failed - error_msg contains detailed traceback
-                    patch_retry_count += 1
-                    self.logger.warning("Patch application failed (attempt %d/%d)", patch_retry_count, max_patch_retries)
-
-                    if patch_retry_count < max_patch_retries:
-                        # Retry once: pass actual error back to LLM to fix the patch
-                        retry_msg = f"Patch application failed with the following errors:\n\n{error_msg}\n\nPlease fix the diff syntax and regenerate the patch."
-                        input_list.append(append_message(provider, "user", retry_msg))
-                        # Still expect patch for retry
-                        continue
-                    else:
-                        # Second failure: fallback to full code generation
-                        self.logger.warning("Patch failed twice; requesting full code instead")
-                        fallback_msg = f"Patch application failed multiple times:\n\n{error_msg}\n\nPlease provide the complete train.py file instead of a diff."
-                        input_list.append(append_message(provider, "user", fallback_msg))
-                        expect_patch = False
-                        continue
-                else:
-                    # Full code generation (iteration 1 or after patch failures)
-                    code_dict = generated
-                    break
+            response_output, code_dict, last_input_tokens = self._generate_code(instructions=system_prompt, messages=input_list)
+            input_list += response_output
 
             # Write code to folder structure (train.py)
             version_folder = self._write_code(code_dict, version)
-
-            # If patch succeeded, replace the diff message with full code (headers stripped)
-            if expect_patch and error_msg is None:
-                self._replace_last_message_with_code(input_list, version_folder)
 
             # ---------------------------
             # Pre-exec guardrail checks
@@ -1490,11 +1258,7 @@ class DeveloperAgent:
                 next_version_folder = self.outputs_dir / str(version + 1)
                 fix_instr = prompt_guardrail_fix_suffix(next_log_path, next_submission_path, next_version_folder)
                 guardrail_prompt = summary_text + fix_instr
-                base_version_for_next_patch = version
-                guardrail_prompt = self._append_patch_directive(guardrail_prompt, base_version_for_next_patch)
                 input_list.append(append_message(provider, "user", guardrail_prompt))
-                self.next_patch_base_version = base_version_for_next_patch
-                self.logger.info("Next patch will be based on v%s due to guardrail block", base_version_for_next_patch)
                 self.logger.info("User prompt with guardrail feedback: %s", guardrail_prompt)
                 # continue to next attempt without execution
                 continue
@@ -1602,14 +1366,9 @@ class DeveloperAgent:
                 else:
                     suggestion_block += "Suggested code snippet: No code provided.\n"
 
-                # Choose consistent base for the next patch: use most recent valid when blacklisted, else current version.
                 rollback_code = None
-                rollback_version = None
                 if blacklist_flag:
-                    rollback_version, rollback_code = self._find_most_recent_valid_version(version)
-                    base_version_for_next_patch = rollback_version
-                else:
-                    base_version_for_next_patch = version
+                    _, rollback_code = self._find_most_recent_valid_version(version)
 
                 next_instr = (
                     f"{suggestion_block}\n"
@@ -1617,7 +1376,6 @@ class DeveloperAgent:
                     f"- write logs to {next_log_path}\n"
                     f"- save artifacts to {next_version_folder}/: submission.csv, valid_preds.csv, train_stats.json, models, loss_curve.png, metric_curve.png"
                 )
-                next_instr = self._append_patch_directive(next_instr, base_version_for_next_patch)
 
                 if blacklist_flag and rollback_code:
                     input_list.append(append_message(provider, "user", 'The previous code has been blacklisted. Here is the most recent valid (successful and non-blacklisted) version for your reference (please start work from this version): \n' + rollback_code))
@@ -1625,8 +1383,6 @@ class DeveloperAgent:
                     self.logger.warning("Blacklist triggered but no valid rollback version available")
 
                 input_list.append(append_message(provider, "user", next_instr))
-                self.next_patch_base_version = base_version_for_next_patch
-                self.logger.info("Next patch will be based on v%s (blacklist=%s)", base_version_for_next_patch, blacklist_flag)
 
             else:
                 next_log_path = self.outputs_dir / self._log_filename(version + 1)
@@ -1703,11 +1459,7 @@ class DeveloperAgent:
                     {prompt_execution_failure_suffix(next_log_path, next_submission_path, next_version_folder)}
                     """
 
-                base_version_for_next_patch = version
-                next_instr = self._append_patch_directive(next_instr, base_version_for_next_patch)
                 input_list.append(append_message(provider, "user", next_instr))
-                self.next_patch_base_version = base_version_for_next_patch
-                self.logger.info("Next patch will be based on v%s due to execution failure (timeout=%s)", base_version_for_next_patch, is_timeout)
 
             self.logger.info("previous runs count: %s", len(self.previous_runs))
 
