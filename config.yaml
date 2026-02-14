@@ -1,16 +1,17 @@
 llm:
-  developer_model: "gpt-5"
-  developer_tool_model: "gemini-3-pro-preview"
-  researcher_model: "claude-sonnet-4-5"
-  model_selector_model: "gemini-3-pro-preview"
-  model_recommender_model: "gemini-3-pro-preview"
-  paper_summary_model: "gemini-3-pro-preview"
-  starter_model: "gemini-3-pro-preview"
-  leakage_review_model: "gemini-3-pro-preview"
-  finetuned_code_api_model: "projects/134356426507/locations/us-central1/endpoints/7532524363963170816"
+  developer_model: "gemini-3-flash-preview"
+  developer_tool_model: "gemini-3-flash-preview"
+  researcher_model: "gemini-3-flash-preview"
+  model_selector_model: "gemini-3-flash-preview"
+  model_recommender_model: "gemini-3-flash-preview"
+  paper_summary_model: "gemini-3-flash-preview"
+  starter_model: "gemini-3-flash-preview"
+  leakage_review_model: "gemini-3-flash-preview"
+  finetuned_code_api_model: "gemini-3-flash-preview"
 runtime:
   researcher_max_steps: 512
-  llm_max_retries: 3
+  llm_max_retries: 5
+  llm_backoff_sequence: [1, 5, 10, 30, 60]
   max_developer_input_tokens: 250000  # Max input tokens before adaptive trimming (GPT-5 limit is 272K)
   directory_listing_max_files: 10
   # Parallel baseline execution

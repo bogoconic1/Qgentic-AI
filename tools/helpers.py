@@ -1,11 +1,85 @@
 import logging
 import os
 import time
-from openai import OpenAI
+
+import anthropic
+from anthropic import Anthropic
+from google import genai
+from google.api_core import exceptions as google_exceptions
+from google.genai import errors as genai_errors
+from google.genai import types as genai_types
+import httpx
 import openai
+from openai import OpenAI
 import weave
 
 from project_config import get_config
+
+RETRYABLE_HTTP_STATUS_CODES = {429, 500, 502, 503, 504}
+
+
+RETRYABLE_EXCEPTIONS = (
+    TimeoutError,
+    ConnectionError,
+    httpx.TimeoutException,
+    httpx.ConnectError,
+    httpx.ReadTimeout,
+    httpx.WriteTimeout,
+    httpx.ConnectTimeout,
+    httpx.PoolTimeout,
+    httpx.HTTPStatusError,
+    openai.APIConnectionError,
+    openai.APITimeoutError,
+    openai.RateLimitError,
+    openai.InternalServerError,
+    anthropic.APIConnectionError,
+    anthropic.APITimeoutError,
+    anthropic.RateLimitError,
+    anthropic.InternalServerError,
+    google_exceptions.ServiceUnavailable,
+    google_exceptions.DeadlineExceeded,
+    google_exceptions.ResourceExhausted,
+    google_exceptions.Aborted,
+    google_exceptions.InternalServerError,
+    genai_errors.ServerError,
+    genai_errors.ClientError,
+)
+
+
+def _is_non_retryable_http_status(exc):
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code not in RETRYABLE_HTTP_STATUS_CODES
+    return False
+
+
+def _retry_with_backoff(func, *, max_retries, backoff_sequence):
+    last_exception = None
+
+    for attempt in range(max_retries + 1):
+        try:
+            return func()
+        except RETRYABLE_EXCEPTIONS as e:
+            if _is_non_retryable_http_status(e):
+                raise
+            last_exception = e
+            if attempt < max_retries:
+                backoff = backoff_sequence[min(attempt, len(backoff_sequence) - 1)]
+                logging.warning(
+                    "API call failed (attempt %d/%d): %s: %s. Retrying in %.1fs...",
+                    attempt + 1, max_retries + 1, type(e).__name__, str(e), backoff,
+                )
+                time.sleep(backoff)
+            else:
+                logging.error(
+                    "API call failed after %d attempts: %s: %s",
+                    max_retries + 1, type(e).__name__, str(e),
+                )
+        except Exception as e:
+            logging.error("Non-retryable error: %s: %s", type(e).__name__, str(e))
+            raise
+
+    raise last_exception
+
 
 def _build_directory_listing(root: str, num_files: int | None = None) -> str:
     cfg = get_config()
@@ -61,82 +135,6 @@ def _build_directory_listing(root: str, num_files: int | None = None) -> str:
     return "\n".join(lines)
 
 @weave.op()
-def call_llm_with_retry_helper(
-    model: str,
-    instructions: str,
-    tools: list,
-    messages: list,
-    max_retries: int | None = None,
-    web_search_enabled: bool = False,
-    text_format = None,
-    include_usage: bool = False,
-):
-
-    client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
-    cfg = get_config()
-    runtime_cfg = cfg.get("runtime")
-    retries = max_retries or runtime_cfg.get("llm_max_retries")
-    if retries < 1: retries = 1
-
-    # Add web_search without mutating caller's tools list
-    if web_search_enabled:
-        tools = tools + [{"type": "web_search"}]
-
-    for attempt in range(retries):
-        try:
-            if text_format is not None:
-                # Use structured outputs with Pydantic model
-                response = client.responses.parse(
-                    model=model,
-                    instructions=instructions,
-                    tools=tools,
-                    input=messages,
-                    text_format=text_format,
-                )
-                # Extract input tokens if requested
-                input_tokens = None
-                if include_usage and hasattr(response, 'usage') and response.usage:
-                    input_tokens = getattr(response.usage, 'input_tokens', None)
-
-                # Return parsed Pydantic object directly
-                if hasattr(response, 'output_parsed') and response.output_parsed:
-                    result = response.output_parsed
-                elif hasattr(response, 'parsed_output') and response.parsed_output:
-                    result = response.parsed_output
-                else:
-                    logging.warning("OpenAI structured output response missing parsed object")
-                    result = response
-
-                return (result, input_tokens) if include_usage else result
-            else:
-                # Use regular responses API
-                response = client.responses.create(
-                    model=model,
-                    instructions=instructions,
-                    tools=tools,
-                    input=messages,
-                )
-                if include_usage:
-                    input_tokens = None
-                    if hasattr(response, 'usage') and response.usage:
-                        input_tokens = getattr(response.usage, 'input_tokens', None)
-                    return (response, input_tokens)
-                return response
-        except openai.InternalServerError as e:
-            if "504" in str(e) and attempt < retries - 1:
-                wait_time = 2**attempt
-                logging.info(f"Retry {attempt + 1}/{retries} in {wait_time}s...")
-                time.sleep(wait_time)
-                continue
-            else:
-                logging.error(f"LLM call failed with error: {e}")
-                continue
-        except Exception as e:
-            logging.error(f"Error calling LLM: {e}")
-            continue
-    return (None, None) if include_usage else None
-
-@weave.op()
 def call_llm_with_retry(
     model: str,
     instructions: str,
@@ -147,191 +145,52 @@ def call_llm_with_retry(
     text_format = None,
     include_usage: bool = False,
 ):
-    result = None
-    input_tokens = None
-
-    for _ in range(40):
-        helper_result = call_llm_with_retry_helper(
-            model=model,
-            instructions=instructions,
-            tools=tools,
-            messages=messages,
-            max_retries=max_retries,
-            web_search_enabled=web_search_enabled,
-            text_format=text_format,
-            include_usage=include_usage,
-        )
-        if include_usage:
-            result, input_tokens = helper_result if helper_result else (None, None)
-        else:
-            result = helper_result
-        if result is not None:
-            break
-
-    if result is None:
-        raise ValueError("LLM call failed after 40 retries") # most likely severe issues like token limit exceeded, should not continue
-
-    return (result, input_tokens) if include_usage else result
-
-@weave.op()
-def call_llm_with_retry_anthropic_helper(
-    model: str,
-    instructions: str,
-    tools: list,
-    messages: list,
-    max_retries: int | None = None,
-    web_search_enabled: bool = False,
-    text_format = None,
-    max_tokens: int = 16384,
-    include_usage: bool = False,
-):
-    """Helper function to call Anthropic API with retry logic.
-
-    Args:
-        model: Anthropic model name (e.g., "claude-sonnet-4-5-20250929")
-        instructions: System instruction/prompt
-        tools: List of tools in Anthropic format
-        messages: List of message dicts with 'role' and 'content'
-        max_retries: Maximum number of retries (default from config)
-        web_search_enabled: Whether to enable web search tool
-        text_format: Optional Pydantic model for structured outputs
-        max_tokens: Maximum tokens to generate (default: 8192)
-        include_usage: Whether to return input token count alongside result
-
-    Returns:
-        - If include_usage=True: Tuple of (result, input_tokens)
-        - If text_format provided: Parsed Pydantic model instance (direct object, not response.parsed_output)
-        - If text_format None: Anthropic response object with .content, .stop_reason, .usage
-        - On failure: None (or (None, None) if include_usage=True)
-    """
-    try:
-        from anthropic import Anthropic, APIError, RateLimitError, APIConnectionError, InternalServerError, APIStatusError
-    except ImportError as e:
-        logging.error(f"Failed to import anthropic: {e}")
-        return (None, None) if include_usage else None
-
-    client = Anthropic(api_key=os.environ.get('ANTHROPIC_API_KEY'))
-    cfg = get_config()
-    runtime_cfg = cfg.get("runtime")
+    client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
+    runtime_cfg = get_config().get("runtime")
     retries = max_retries or runtime_cfg.get("llm_max_retries")
-    if retries < 1:
-        retries = 1
+    backoff_seq = tuple(runtime_cfg.get("llm_backoff_sequence"))
 
-    # Add web search tool if enabled (don't mutate caller's tools list)
+    # Add web_search without mutating caller's tools list
     if web_search_enabled:
-        WEB_SEARCH_TOOL = {
-            "type": "web_search_20250305",
-            "name": "web_search",
-            "max_uses": 20
-        }
-        tools = tools + [WEB_SEARCH_TOOL]
+        tools = tools + [{"type": "web_search"}]
 
-    for attempt in range(retries):
-        try:
-            if text_format is not None:
-                # Use beta API for structured outputs
-                response = client.beta.messages.parse(
-                    model=model,
-                    betas=["structured-outputs-2025-11-13"],
-                    system=instructions,
-                    messages=messages,
-                    max_tokens=max_tokens,
-                    output_format=text_format,
-                    tools=tools if tools else [],
-                    thinking={
-                        "type": "enabled",
-                        "budget_tokens": 4096
-                    },
-                )
-                # Extract input tokens if requested
+    def _call():
+        if text_format is not None:
+            response = client.responses.parse(
+                model=model,
+                instructions=instructions,
+                tools=tools,
+                input=messages,
+                text_format=text_format,
+            )
+            input_tokens = None
+            if include_usage and hasattr(response, 'usage') and response.usage:
+                input_tokens = getattr(response.usage, 'input_tokens', None)
+
+            if hasattr(response, 'output_parsed') and response.output_parsed:
+                result = response.output_parsed
+            elif hasattr(response, 'parsed_output') and response.parsed_output:
+                result = response.parsed_output
+            else:
+                logging.warning("OpenAI structured output response missing parsed object")
+                result = response
+
+            return (result, input_tokens) if include_usage else result
+        else:
+            response = client.responses.create(
+                model=model,
+                instructions=instructions,
+                tools=tools,
+                input=messages,
+            )
+            if include_usage:
                 input_tokens = None
-                if include_usage and hasattr(response, 'usage') and response.usage:
+                if hasattr(response, 'usage') and response.usage:
                     input_tokens = getattr(response.usage, 'input_tokens', None)
+                return (response, input_tokens)
+            return response
 
-                # Return parsed Pydantic object directly
-                if hasattr(response, 'parsed_output') and response.parsed_output:
-                    result = response.parsed_output
-                else:
-                    logging.warning("Anthropic structured output response missing parsed_output")
-                    result = response
-                return (result, input_tokens) if include_usage else result
-            else:
-                # Use regular messages API
-                response = client.messages.create(
-                    model=model,
-                    system=instructions,
-                    messages=messages,
-                    max_tokens=max_tokens,
-                    tools=tools if tools else [],
-                    thinking={
-                        "type": "enabled",
-                        "budget_tokens": 4096
-                    },
-                )
-                if include_usage:
-                    input_tokens = None
-                    if hasattr(response, 'usage') and response.usage:
-                        input_tokens = getattr(response.usage, 'input_tokens', None)
-                    return (response, input_tokens)
-                return response
-
-        except RateLimitError as e:
-            if attempt < retries - 1:
-                wait_time = 2**attempt
-                logging.info(f"Anthropic rate limit. Retry {attempt + 1}/{retries} in {wait_time}s...")
-                time.sleep(wait_time)
-                continue
-            else:
-                logging.error(f"Anthropic rate limit exceeded: {e}")
-                return (None, None) if include_usage else None
-
-        except APIConnectionError as e:
-            if attempt < retries - 1:
-                wait_time = 2**attempt
-                logging.info(f"Anthropic connection error. Retry {attempt + 1}/{retries} in {wait_time}s...")
-                time.sleep(wait_time)
-                continue
-            else:
-                logging.error(f"Anthropic connection failed: {e}")
-                return (None, None) if include_usage else None
-
-        except InternalServerError as e:
-            if attempt < retries - 1:
-                wait_time = 2**attempt
-                logging.info(f"Anthropic server error. Retry {attempt + 1}/{retries} in {wait_time}s...")
-                time.sleep(wait_time)
-                continue
-            else:
-                logging.error(f"Anthropic server error: {e}")
-                return (None, None) if include_usage else None
-
-        except APIStatusError as e:
-            # Other API errors (4xx, etc.)
-            logging.error(f"Anthropic API status error: {e}")
-            if attempt < retries - 1:
-                wait_time = 2**attempt
-                time.sleep(wait_time)
-                continue
-            return (None, None) if include_usage else None
-
-        except APIError as e:
-            # General API errors
-            logging.error(f"Anthropic API error: {e}")
-            if attempt < retries - 1:
-                wait_time = 2**attempt
-                time.sleep(wait_time)
-                continue
-            return (None, None) if include_usage else None
-
-        except Exception as e:
-            logging.error(f"Unexpected error calling Anthropic: {e}")
-            if attempt < retries - 1:
-                wait_time = 2**attempt
-                time.sleep(wait_time)
-                continue
-            return (None, None) if include_usage else None
-
-    return (None, None) if include_usage else None
+    return _retry_with_backoff(_call, max_retries=retries, backoff_sequence=backoff_seq)
 
 @weave.op()
 def call_llm_with_retry_anthropic(
@@ -345,217 +204,64 @@ def call_llm_with_retry_anthropic(
     max_tokens: int = 16384,
     include_usage: bool = False,
 ):
-    """Call Anthropic API with comprehensive retry logic.
+    client = Anthropic(api_key=os.environ.get('ANTHROPIC_API_KEY'))
+    runtime_cfg = get_config().get("runtime")
+    retries = max_retries or runtime_cfg.get("llm_max_retries")
+    backoff_seq = tuple(runtime_cfg.get("llm_backoff_sequence"))
 
-    This function wraps call_llm_with_retry_anthropic_helper with an outer retry loop,
-    attempting up to 40 times before giving up.
+    # Add web search tool if enabled (don't mutate caller's tools list)
+    if web_search_enabled:
+        tools = tools + [{
+            "type": "web_search_20250305",
+            "name": "web_search",
+            "max_uses": 20,
+        }]
 
-    Args:
-        model: Anthropic model name (e.g., "claude-sonnet-4-5-20250929")
-        instructions: System instruction/prompt
-        tools: List of tools in Anthropic format
-        messages: List of message dicts with 'role' and 'content'
-        max_retries: Maximum number of retries per attempt (default from config)
-        web_search_enabled: Whether to enable web search tool
-        text_format: Optional Pydantic model for structured outputs
-        max_tokens: Maximum tokens to generate (default: 8192)
-        include_usage: Whether to return input token count alongside result
-
-    Returns:
-        - If include_usage=True: Tuple of (result, input_tokens)
-        - If text_format provided: Parsed Pydantic model instance (direct object)
-        - If text_format None: Anthropic response object with .content, .stop_reason, .usage
-
-    Raises:
-        ValueError: If all retries fail after 40 attempts
-
-    Example:
-        # Regular call
-        response = call_llm_with_retry_anthropic(
-            model="claude-sonnet-4-5-20250929",
-            instructions="You are a helpful assistant.",
-            tools=[],
-            messages=[{"role": "user", "content": "Hello"}],
-        )
-        text = response.content[0].text
-
-        # Structured output call
-        from pydantic import BaseModel
-        class Output(BaseModel):
-            answer: str
-
-        result = call_llm_with_retry_anthropic(
-            model="claude-sonnet-4-5-20250929",
-            instructions="Extract the answer.",
-            tools=[],
-            messages=[{"role": "user", "content": "What is 2+2?"}],
-            text_format=Output,
-        )
-        print(result.answer)  # Direct access - result is already the Pydantic object!
-    """
-    result = None
-    input_tokens = None
-
-    for _ in range(40):
-        helper_result = call_llm_with_retry_anthropic_helper(
-            model=model,
-            instructions=instructions,
-            tools=tools,
-            messages=messages,
-            max_retries=max_retries,
-            web_search_enabled=web_search_enabled,
-            text_format=text_format,
-            max_tokens=max_tokens,
-            include_usage=include_usage,
-        )
-        if include_usage:
-            result, input_tokens = helper_result if helper_result else (None, None)
-        else:
-            result = helper_result
-        if result is not None:
-            break
-
-    if result is None:
-        raise ValueError("Anthropic call failed after 40 retries")
-
-    return (result, input_tokens) if include_usage else result
-
-@weave.op()
-def call_llm_with_retry_google_helper(
-    model: str,
-    system_instruction: str,
-    messages: str | list = None,
-    text_format = None,
-    temperature: float = 1.0,
-    max_retries: int | None = None,
-    enable_google_search: bool = False,
-    top_p: float = 1.0,
-    thinking_budget: int | None = None,
-    thinking_level: str | None = None,
-    include_thoughts: bool = False,
-    function_declarations: list = None,
-    include_usage: bool = False,
-):
-    """Helper function to call Gemini API with full feature support and retry logic.
-
-    Args:
-        model: Gemini model name (e.g., "gemini-3-pro-preview", "gemini-2.5-pro")
-        system_instruction: System instruction text
-        messages: User prompt text (str) or multi-turn conversation (list of dicts)
-        text_format: Optional Pydantic model for structured output schema. If None, returns raw text.
-        temperature: Temperature for generation (default: 1.0)
-        max_retries: Maximum number of retries
-        enable_google_search: Enable Google Search tool
-        top_p: Nucleus sampling parameter (default: 1.0)
-        thinking_budget: Thinking budget in tokens for Gemini 2.5 (128-32768, -1 for dynamic)
-        thinking_level: Thinking level for Gemini 3 ("low" or "high")
-        include_thoughts: Whether to return thought summaries (default: False)
-        function_declarations: List of function declarations for function calling
-        include_usage: Whether to return input token count alongside result
-
-    Returns:
-        - If include_usage=True: Tuple of (result, input_tokens)
-        - If text_format provided: Parsed Pydantic model instance
-        - If text_format None: Raw text response string
-        - On failure: None (or (None, None) if include_usage=True)
-    """
-    try:
-        from google import genai
-        from google.genai import types
-    except ImportError as e:
-        logging.error(f"Failed to import google.genai: {e}")
-        return (None, None) if include_usage else None
-
-    # Set location based on model
-    if model.startswith("gemini"):
-        os.environ['GOOGLE_CLOUD_LOCATION'] = 'global'
-    else:
-        os.environ['GOOGLE_CLOUD_LOCATION'] = 'us-central1'
-
-    cfg = get_config()
-    runtime_cfg = cfg.get("runtime")
-    retries = max_retries or runtime_cfg.get("llm_max_retries", 3)
-    if retries < 1:
-        retries = 1
-
-    for attempt in range(retries):
-        try:
-            client = genai.Client()
-
-            # Build tools list - combine into single Tool object
-            tools = []
-            tool_params = {}
-            if enable_google_search:
-                tool_params["google_search"] = types.GoogleSearch()
-            if function_declarations:
-                tool_params["function_declarations"] = function_declarations
-
-            # Create single Tool object with all tools combined
-            if tool_params:
-                tools = [types.Tool(**tool_params)]
-
-            # Build config params
-            config_params = {
-                "temperature": temperature,
-                "top_p": top_p,
-                "system_instruction": system_instruction,  # Direct string, not wrapped
-                "tools": tools if tools else None,
-            }
-
-            # Add thinking configuration
-            if thinking_level is not None or thinking_budget is not None or include_thoughts:
-                thinking_config_params = {}
-                if thinking_level is not None:
-                    thinking_config_params["thinking_level"] = thinking_level
-                if thinking_budget is not None:
-                    thinking_config_params["thinking_budget"] = thinking_budget
-                if include_thoughts:
-                    thinking_config_params["include_thoughts"] = include_thoughts
-                config_params["thinking_config"] = types.ThinkingConfig(**thinking_config_params)
-
-            # Add structured output params if text_format provided
-            if text_format is not None:
-                config_params["response_mime_type"] = "application/json"
-                config_params["response_json_schema"] = text_format.model_json_schema()
-
-            response = client.models.generate_content(
+    def _call():
+        if text_format is not None:
+            response = client.beta.messages.parse(
                 model=model,
-                contents=messages,
-                config=types.GenerateContentConfig(**config_params),
+                betas=["structured-outputs-2025-11-13"],
+                system=instructions,
+                messages=messages,
+                max_tokens=max_tokens,
+                output_format=text_format,
+                tools=tools if tools else [],
+                thinking={
+                    "type": "enabled",
+                    "budget_tokens": 4096
+                },
             )
-
-            # Extract input tokens if requested
             input_tokens = None
-            if include_usage and hasattr(response, 'usage_metadata') and response.usage_metadata:
-                input_tokens = getattr(response.usage_metadata, 'prompt_token_count', None)
+            if include_usage and hasattr(response, 'usage') and response.usage:
+                input_tokens = getattr(response.usage, 'input_tokens', None)
 
-            # Parse response based on format
-            if text_format is not None:
-                # Structured output - parse as Pydantic model with fallback
-                try:
-                    parsed_result = text_format.model_validate_json(response.text)
-                    return (parsed_result, input_tokens) if include_usage else parsed_result
-                except Exception as parse_error:
-                    # Fallback: strip markdown code fences if present
-                    logging.warning(f"Initial JSON parsing failed, attempting to clean response: {parse_error}")
-                    cleaned_text = response.text.lstrip("```json").lstrip("```").rstrip("```").strip()
-                    parsed_result = text_format.model_validate_json(cleaned_text)
-                    return (parsed_result, input_tokens) if include_usage else parsed_result
+            if hasattr(response, 'parsed_output') and response.parsed_output:
+                result = response.parsed_output
             else:
-                # Return full response object (needed for function calling)
-                return (response, input_tokens) if include_usage else response
+                logging.warning("Anthropic structured output response missing parsed_output")
+                result = response
+            return (result, input_tokens) if include_usage else result
+        else:
+            response = client.messages.create(
+                model=model,
+                system=instructions,
+                messages=messages,
+                max_tokens=max_tokens,
+                tools=tools if tools else [],
+                thinking={
+                    "type": "enabled",
+                    "budget_tokens": 4096
+                },
+            )
+            if include_usage:
+                input_tokens = None
+                if hasattr(response, 'usage') and response.usage:
+                    input_tokens = getattr(response.usage, 'input_tokens', None)
+                return (response, input_tokens)
+            return response
 
-        except Exception as e:
-            if attempt < retries - 1:
-                wait_time = 2**attempt
-                logging.info(f"Gemini retry {attempt + 1}/{retries} in {wait_time}s... Error: {str(e)[:100]}")
-                time.sleep(wait_time)
-                continue
-            else:
-                logging.error(f"Gemini call failed after {retries} attempts: {e}")
-                return (None, None) if include_usage else None
-
-    return (None, None) if include_usage else None
+    return _retry_with_backoff(_call, max_retries=retries, backoff_sequence=backoff_seq)
 
 @weave.op()
 def call_llm_with_retry_google(
@@ -573,66 +279,71 @@ def call_llm_with_retry_google(
     function_declarations: list = None,
     include_usage: bool = False,
 ):
-    """Call Gemini API with full feature support and comprehensive retry logic.
+    # Set location based on model
+    if model.startswith("gemini"):
+        os.environ['GOOGLE_CLOUD_LOCATION'] = 'global'
+    else:
+        os.environ['GOOGLE_CLOUD_LOCATION'] = 'us-central1'
 
-    This function provides access to all Gemini capabilities including:
-    - Text generation with system instructions
-    - Thinking/reasoning mode (Gemini 2.5 & 3)
-    - Structured output with Pydantic schemas
-    - Google Search and URL Context tools (unique to Gemini)
-    - Function calling
-    - Multi-turn conversations
+    runtime_cfg = get_config().get("runtime")
+    retries = max_retries or runtime_cfg.get("llm_max_retries")
+    backoff_seq = tuple(runtime_cfg.get("llm_backoff_sequence"))
 
-    Args:
-        model: Gemini model name (e.g., "gemini-3-pro-preview", "gemini-2.5-pro")
-        system_instruction: System instruction text
-        messages: User prompt text (str) or multi-turn conversation (list)
-        text_format: Optional Pydantic model for structured output. If None, returns raw text.
-        temperature: Temperature for generation (default: 1.0)
-        max_retries: Maximum number of retries per attempt
-        enable_google_search: Enable Google Search tool (Gemini native)
-        top_p: Nucleus sampling parameter (default: 1.0)
-        thinking_budget: Thinking budget in tokens for Gemini 2.5 (128-32768, -1 for dynamic)
-        thinking_level: Thinking level for Gemini 3 ("low" or "high")
-        include_thoughts: Whether to return thought summaries
-        function_declarations: List of function declarations for function calling
-        include_usage: Whether to return input token count alongside result
+    def _call():
+        client = genai.Client()
 
-    Returns:
-        - If include_usage=True: Tuple of (result, input_tokens)
-        - If text_format provided: Parsed Pydantic model instance
-        - If text_format None: Raw text response string
+        # Build tools list - combine into single Tool object
+        tool_list = []
+        tool_params = {}
+        if enable_google_search:
+            tool_params["google_search"] = genai_types.GoogleSearch()
+        if function_declarations:
+            tool_params["function_declarations"] = function_declarations
 
-    Raises:
-        ValueError: If all retries fail after 40 attempts
-    """
-    result = None
-    input_tokens = None
+        if tool_params:
+            tool_list = [genai_types.Tool(**tool_params)]
 
-    for _ in range(40):  # Match Anthropic's 40 retries
-        helper_result = call_llm_with_retry_google_helper(
+        config_params = {
+            "temperature": temperature,
+            "top_p": top_p,
+            "system_instruction": system_instruction,
+            "tools": tool_list if tool_list else None,
+        }
+
+        if thinking_level is not None or thinking_budget is not None or include_thoughts:
+            thinking_config_params = {}
+            if thinking_level is not None:
+                thinking_config_params["thinking_level"] = thinking_level
+            if thinking_budget is not None:
+                thinking_config_params["thinking_budget"] = thinking_budget
+            if include_thoughts:
+                thinking_config_params["include_thoughts"] = include_thoughts
+            config_params["thinking_config"] = genai_types.ThinkingConfig(**thinking_config_params)
+
+        if text_format is not None:
+            config_params["response_mime_type"] = "application/json"
+            config_params["response_json_schema"] = text_format.model_json_schema()
+
+        response = client.models.generate_content(
             model=model,
-            system_instruction=system_instruction,
-            messages=messages,
-            text_format=text_format,
-            temperature=temperature,
-            max_retries=max_retries,
-            enable_google_search=enable_google_search,
-            top_p=top_p,
-            thinking_budget=thinking_budget,
-            thinking_level=thinking_level,
-            include_thoughts=include_thoughts,
-            function_declarations=function_declarations,
-            include_usage=include_usage,
+            contents=messages,
+            config=genai_types.GenerateContentConfig(**config_params),
         )
-        if include_usage:
-            result, input_tokens = helper_result if helper_result else (None, None)
+
+        input_tokens = None
+        if include_usage and hasattr(response, 'usage_metadata') and response.usage_metadata:
+            input_tokens = getattr(response.usage_metadata, 'prompt_token_count', None)
+
+        if text_format is not None:
+            try:
+                parsed_result = text_format.model_validate_json(response.text)
+                return (parsed_result, input_tokens) if include_usage else parsed_result
+            except Exception as parse_error:
+                logging.warning(f"Initial JSON parsing failed, attempting to clean response: {parse_error}")
+                cleaned_text = response.text.lstrip("```json").lstrip("```").rstrip("```").strip()
+                parsed_result = text_format.model_validate_json(cleaned_text)
+                return (parsed_result, input_tokens) if include_usage else parsed_result
         else:
-            result = helper_result
-        if result is not None:
-            break
+            return (response, input_tokens) if include_usage else response
 
-    if result is None:
-        raise ValueError("Gemini call failed after 40 retries")
-
-    return (result, input_tokens) if include_usage else result
+    return _retry_with_backoff(_call, max_retries=retries, backoff_sequence=backoff_seq)

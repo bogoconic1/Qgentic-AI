@@ -65,3 +65,4 @@ torchgeo
 scikit-image
 
 google-genai
+google-api-core
