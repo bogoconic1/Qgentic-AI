@@ -9,15 +9,12 @@ from __future__ import annotations
 
 def get_hard_constraints(
     model_name: str | None = None,
-    allow_multi_fold: bool = False,
 ) -> str:
     """
     Get the hard constraints section for system prompts.
 
     Args:
         model_name: The model name to be used in constraints.
-        allow_multi_fold: Whether to allow multi-fold training. If False, adds a
-            constraint to only train on fold 0.
 
     Returns:
         Formatted hard constraints string ready for inclusion in system prompts.
@@ -28,11 +25,6 @@ def get_hard_constraints(
         model_constraint_lines.append(
             f"- Use ONLY `{model_name}` (no substitutions or fallback models)."
         )
-
-    # Build fold constraint (only for developer with model_name)
-    fold_constraint = ""
-    if model_name and not allow_multi_fold:
-        fold_constraint = "- Just train and validate on fold 0. Skip other folds to save time. If suggested later, you can switch to multi-fold."
 
     # Build model substitution constraint (developer-specific)
     modular_pipeline_constraint = ""
@@ -68,10 +60,6 @@ def get_hard_constraints(
     # Add common constraints
     constraints_parts.append(common_constraints)
     constraints_parts.append(additional_common_constraints)
-
-    # Add fold constraint (if applicable)
-    if fold_constraint:
-        constraints_parts.append(fold_constraint)
 
     # Add modular pipeline constraint (if applicable)
     if modular_pipeline_constraint:

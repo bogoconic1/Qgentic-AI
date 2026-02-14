@@ -405,14 +405,6 @@ def _format_recommendations_for_developer(recommendations: dict) -> str:
     """
     details = []
 
-    # Fold split strategy
-    fold_split = recommendations.get("fold_split_strategy", {})
-    if fold_split:
-        strategy = fold_split.get("strategy", "")
-        if strategy:
-            details.append("## Cross-Validation Strategy")
-            details.append(f"- Use {strategy}")
-
     # Preprocessing
     preprocessing = recommendations.get("preprocessing", {})
     if preprocessing:
@@ -566,25 +558,12 @@ class Orchestrator:
             else:
                 raise RuntimeError("No model recommendations found")
 
-        # Load fold split strategy (single strategy for all models)
-        fold_split_strategy_path = self.outputs_dir / "fold_split_strategy.json"
-        fold_split_strategy = {}
-        if fold_split_strategy_path.exists():
-            try:
-                with open(fold_split_strategy_path, "r") as f:
-                    fold_split_strategy = json.load(f)
-            except Exception:
-                pass
-
         # Extract NOW and LATER recommendations for each model
         now_recommendations_all = {}
         later_recommendations_all = {}
 
         for model_name, recommendations in model_recommendations.items():
             now_recs = _extract_now_recommendations(recommendations)
-            # Add the fold split strategy to each model's recommendations
-            if fold_split_strategy:
-                now_recs["fold_split_strategy"] = fold_split_strategy
             now_recommendations_all[model_name] = now_recs
             later_recommendations_all[model_name] = _extract_later_recommendations(recommendations)
         
@@ -726,7 +705,6 @@ class Orchestrator:
                                 "best_code_file": best_code_file or "",
                                 "blacklisted_ideas": blacklisted_ideas,
                                 "successful_ideas": successful_ideas,
-                                "fold_split_strategy": fold_split_strategy,
                                 "now_recommendations": now_recommendations_all.get(result_key, {}),
                                 "later_recommendations": later_recommendations_all.get(result_key, {})
                             }

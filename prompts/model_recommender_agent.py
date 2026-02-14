@@ -34,8 +34,7 @@ Begin with a **concise checklist (3-7 conceptual bullets)** describing your reas
 
 ## Objective
 1. Review all inputs to understand **data characteristics, task type, and evaluation metric**.
-2. **Determine the single best fold splitting strategy** based on data characteristics in <research_plan>. Be SPECIFIC and include as many details as possible.
-3. **IMPORTANT: When performing web searches, add "2025" to your queries to find the most recent models and techniques.**
+2. **IMPORTANT: When performing web searches, add "2025" to your queries to find the most recent models and techniques.**
 4. Perform **targeted web searches** to identify **state-of-the-art models** relevant to the task, data, and metric.
 5. You MUST web search for 2025 released models which showcase strong performance on similar <task_type> tasks and datasets.
 6. **IMPORTANT**: The models should be diverse in architecture and approach, so that they can ensemble well later.
@@ -57,10 +56,7 @@ Begin with a **concise checklist (3-7 conceptual bullets)** describing your reas
 ## Output Format
 
 ### Checklist (3-7 bullets)
-High-level steps you will follow (conceptual only). MUST include determining the fold splitting strategy as one step.
-
-### Fold Split Strategy Analysis
-Analyze data characteristics and <research_plan> and explain why your chosen fold split is the best fit.
+High-level steps you will follow (conceptual only).
 
 ### Considered Models
 List up to **16 candidate models** briefly explaining why each was considered.
@@ -76,12 +72,7 @@ Model 2
 ...
 
 ### Final Recommendations
-Provide recommendations with **fold_split_strategy** and **recommended_models**.
-The **fold_split_strategy** must be a single, specific strategy.
-
-**fold_split_strategy**: An object with a "strategy" field containing the single specific CV fold splitting strategy
-
-**recommended_models**: A list of model recommendations, each with:
+Provide **recommended_models** as a list of model recommendations, each with:
 - "name": The model name
 - "reason": Why this model is recommended for this competition/data/metric
 """
@@ -134,7 +125,6 @@ Begin with a concise checklist (3-7 bullets) describing your *process* (conceptu
 - ❌ Do **not** search for or use actual winning solutions from this specific competition.
 - ❌ Do **not** mark untested strategies as MUST_HAVE (even if they're good ideas)
 - ❌ Do **not** ignore validated features from plan.md—they MUST appear in MUST_HAVE with explicit reference
-- ❌ Do **not** discuss CV/fold splitting strategies - this is handled elsewhere.
 - ❌ Anything under ensembling/stacking/calibration/blending MUST be in NICE_TO_HAVE.
 - ✅ Always reference plan.md when using validated findings: cite the strategy name and AUC impact
 
@@ -236,7 +226,6 @@ Begin with a **concise checklist (3-7 bullets)** summarizing your conceptual rea
 ## Hard Constraints
 - Do **not** search for or use actual winning solutions from this specific competition.
 - Do **not** rely on prior competition knowledge.
-- Do **not** discuss or recommend CV/fold splitting strategies - this is handled elsewhere.
 - Recommend exactly **one** primary loss for MUST_HAVE.
 - NICE_TO_HAVE may contain **multiple losses** (ensembled, multi-task, or joint).
 - Do **not** specify hyperparameters, architecture, or preprocessing choices here.
@@ -343,7 +332,6 @@ Begin with a **concise checklist (3-7 conceptual bullets)** describing your reas
 - ❌ Do **not** search for or use actual winning solutions from this specific competition.
 - ❌ Do **not** provide ranges in MUST_HAVE (ranges go in NICE_TO_HAVE)
 - ❌ Do **not** leave hyperparameters unspecified - baseline values are required
-- ❌ Do **not** discuss CV/fold splitting strategies - this is handled elsewhere.
 - ❌ Do not redefine loss functions or preprocessing steps — they exist elsewhere.
 - ✅ MUST_HAVE parameters must be sufficient to train the model without guessing
 - ✅ All recommendations must fit the {time_limit_minutes}-minute training budget.
@@ -443,7 +431,6 @@ All strategies must be **realistically executable** within these constraints.
 ## Hard Constraints
 - Do **not** search for or use actual winning solutions from this specific competition.
 - Do **not** rely on prior knowledge of the competition.
-- Do **not** discuss or recommend CV/fold splitting strategies - this is handled elsewhere.
 - Do **not** include training-time augmentations or losses.
 - Focus **strictly on inference-time logic** (prediction, calibration, or post-processing).
 - Anything under ensembling/stacking/calibration/blending MUST be in the NICE_TO_HAVE section.
@@ -468,7 +455,7 @@ When selecting inference strategies:
 1. **Metric alignment first** - Does it directly optimize leaderboard metric?
 2. **Runtime realism** - ≤ {inference_time_limit_minutes} minutes total inference time.
 3. **Implementation simplicity** - Prefer single-line or vectorized modifications.
-4. **Scalability** - Can extend to ensemble or multi-fold setups later.
+4. **Scalability** - Can extend to ensemble setups later.
 
 ---
 

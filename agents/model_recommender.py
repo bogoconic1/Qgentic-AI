@@ -438,15 +438,6 @@ class ModelRecommenderAgent:
 
             logger.info("Stage 1: Selected %d candidate models", len(candidate_models))
 
-            # Save fold split strategy
-            if parsed.fold_split_strategy:
-                fold_split_path = self.outputs_dir / "fold_split_strategy.json"
-                try:
-                    with open(fold_split_path, "w") as f:
-                        json.dump({"strategy": parsed.fold_split_strategy.strategy}, f, indent=2)
-                except Exception:
-                    pass
-
             # Save candidate models
             candidate_models_path = self.outputs_dir / "candidate_models.json"
             try:

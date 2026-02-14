@@ -279,18 +279,17 @@ Begin with a brief, high-level statement explaining your rationale for the chose
 
 ## Suggestion Categories (Select 3 most relevant):
 1. **Data/Feature Engineering/Preprocessing**
-2. **Validation Enhancement**
-3. **Architectural Enhancement**
-4. **Hyperparameter Enhancement**
-5. **Removing Unstable/Detrimental Components**
+2. **Architectural Enhancement**
+3. **Hyperparameter Enhancement**
+4. **Removing Unstable/Detrimental Components**
 
 **Priority by Task:**
-- **Tabular/Time Series:** #1 (Feature), #5 (Remove), then #4 (Hyperparam); only do #2 (Validation) for severe issues
-- **CV/NLP/Audio:** #1 (Data), #3 (Arch.), #4 (Hyperparam); #2 (Validation) is low priority
-- **Bugs/Detrimental Items:** Always include #5
-- **Far from target:** Focus on #1/#3, avoid micro-optimizing
-- **Close to target:** Include #4
-- **At/above target:** #4 and minor #1; avoid risky arch. changes
+- **Tabular/Time Series:** #1 (Feature), #4 (Remove), then #3 (Hyperparam)
+- **CV/NLP/Audio:** #1 (Data), #2 (Arch.), #3 (Hyperparam)
+- **Bugs/Detrimental Items:** Always include #4
+- **Far from target:** Focus on #1/#2, avoid micro-optimizing
+- **Close to target:** Include #3
+- **At/above target:** #3 and minor #1; avoid risky arch. changes
 
 Make exactly THREE suggestions from different categories (numbered, clear headers). Each:
 - Has one high-impact, complementary, non-overlapping suggestion (~100 words benefit)
