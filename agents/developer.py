@@ -1090,6 +1090,7 @@ class DeveloperAgent:
                 version=version,
                 images=training_images if training_images else None,
                 train_stats=train_stats,
+                hitl_sota=_HITL_SOTA,
             )
 
             # HITL: Show suggestion and let user accept or override

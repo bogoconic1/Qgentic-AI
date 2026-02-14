@@ -354,6 +354,31 @@ def _get_tool_name(tool, provider: str) -> str:
         return ""
 
 
+def _inject_user_guidance(input_list, guidance, provider):
+    text = f"[User guidance]: {guidance}"
+    if provider == "openai":
+        input_list.append({"role": "user", "content": text})
+    elif provider == "anthropic":
+        # Anthropic requires alternating roles — append to last user message
+        if input_list and input_list[-1].get("role") == "user":
+            content = input_list[-1]["content"]
+            if isinstance(content, list):
+                content.append({"type": "text", "text": text})
+            else:
+                input_list[-1]["content"] = [
+                    {"type": "text", "text": content},
+                    {"type": "text", "text": text},
+                ]
+        else:
+            input_list.append({"role": "user", "content": text})
+    elif provider == "google":
+        from google.genai import types as genai_types
+        input_list.append(genai_types.Content(
+            role="user",
+            parts=[genai_types.Part.from_text(text=text)],
+        ))
+
+
 @weave.op()
 def search_sota_suggestions(
     description: str,
@@ -375,6 +400,7 @@ def search_sota_suggestions(
     version: int = 1,
     images: list[Path] | None = None,
     train_stats: dict | None = None,
+    hitl_sota: bool = False,
 ) -> str:
     """Stage 2: Use web search and tools to generate SOTA suggestions based on red flags.
 
@@ -472,8 +498,10 @@ def search_sota_suggestions(
         if image_messages:
             input_list.extend(image_messages)
 
-    for step in range(max_tool_steps):
-        logger.info("SOTA suggestion step %d/%d (tools: %s, provider: %s)", step + 1, max_tool_steps, "enabled" if tools else "disabled", provider)
+    step_limit = None if hitl_sota else max_tool_steps
+    step = 0
+    while step_limit is None or step < step_limit:
+        logger.info("SOTA suggestion step %d/%s (tools: %s, provider: %s)", step + 1, "unlimited" if hitl_sota else str(step_limit), "enabled" if tools else "disabled", provider)
 
         if provider == "openai":
             response = call_llm_with_retry(
@@ -482,7 +510,7 @@ def search_sota_suggestions(
                 tools=tools,
                 messages=input_list,
                 web_search_enabled=True,
-                text_format=SOTAResponse if step == max_tool_steps - 1 else None,
+                text_format=SOTAResponse if (step_limit is not None and step == step_limit - 1) else None,
             )
 
             # Add response to conversation
@@ -540,7 +568,7 @@ def search_sota_suggestions(
                 tools=tools,
                 messages=input_list,
                 web_search_enabled=True,
-                text_format=SOTAResponse if step == max_tool_steps - 1 else None,
+                text_format=SOTAResponse if (step_limit is not None and step == step_limit - 1) else None,
             )
 
             # Check stop_reason
@@ -609,7 +637,7 @@ def search_sota_suggestions(
                 function_declarations=tools if tools else [],
                 messages=input_list,
                 enable_google_search=True,
-                text_format=SOTAResponse if step == max_tool_steps - 1 else None,
+                text_format=SOTAResponse if (step_limit is not None and step == step_limit - 1) else None,
             )
 
             # Check if response has function calls
@@ -671,8 +699,18 @@ def search_sota_suggestions(
         else:
             raise ValueError(f"Unsupported provider: {provider}")
 
-    # Reached max steps, force final structured answer
-    logger.warning("SOTA reached max_tool_steps=%d, forcing final answer", max_tool_steps)
+        # HITL: let user provide guidance for next step
+        if hitl_sota:
+            user_guidance = input(f"[HITL] Step {step + 1} | Enter to continue, guidance, or 'done': ").strip()
+            if user_guidance.lower() == "done":
+                break
+            if user_guidance:
+                _inject_user_guidance(input_list, user_guidance, provider)
+
+        step += 1
+
+    # Reached max steps (or user typed 'done'), force final structured answer
+    logger.warning("SOTA forcing final answer after %d steps", step)
 
     if provider == "openai":
         response = call_llm_with_retry(
