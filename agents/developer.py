@@ -100,10 +100,15 @@ class DeveloperAgent:
         self.gpu_isolation_mode = gpu_isolation_mode  # "mig", "multi-gpu", or "none"
         self.conda_env = conda_env  # Conda environment name for isolated package installation
 
-        # Metric-related defaults; overwritten once benchmark info is available
-        self.gold_threshold: Optional[float] = None
-        self.is_lower_better: bool = False
-        self.best_score: float = float("-inf")
+        # Metric direction and target from config
+        _is_lower_better = _RUNTIME_CFG.get("is_lower_better")
+        if _is_lower_better not in (True, False):
+            raise ValueError(
+                f"config runtime.is_lower_better must be true or false, got: {_is_lower_better!r}"
+            )
+        self.is_lower_better: bool = _is_lower_better
+        self.gold_threshold: Optional[float] = _RUNTIME_CFG.get("gold_threshold")
+        self.best_score: float = float("inf") if self.is_lower_better else float("-inf")
 
         # Iteration state
         self.previous_runs: list[tuple[str, float]] = []
@@ -119,12 +124,8 @@ class DeveloperAgent:
         self.best_version: Optional[int] = None
         self.last_successful_version: Optional[int] = None  # For score comparison: most recent version with a score
 
-        self._load_benchmark_info()
-        self.best_score = float("inf") if self.is_lower_better else float("-inf")
-
         # File targets
         self.latest_submission_path: Optional[Path] = None
-        self.benchmark_info: Optional[dict] = None
 
         # LATER recommendations for progressive enhancement
         self.later_recommendations: Optional[dict] = later_recommendations
@@ -212,33 +213,6 @@ class DeveloperAgent:
         return _BASELINE_CODE_TIMEOUT
 
 
-
-    def _load_benchmark_info(self) -> None:
-        self.benchmark_info = None
-        sample_submission = self.base_dir / "sample_submission.csv"
-        if not sample_submission.exists():
-            self.logger.warning(
-                "Sample submission not found at %s; skipping baseline grading",
-                sample_submission,
-            )
-            return
-
-        info, stdout, returncode, stderr = run_grade(str(sample_submission), self.slug)
-        try:
-            self.logger.info("Baseline grade feedback: %s", stdout)
-        except Exception:
-            self.logger.debug("Failed to log baseline grade feedback")
-        if returncode != 0:
-            self.logger.warning(
-                "Baseline grading command returned non-zero exit (%s). stderr=\n%s",
-                returncode,
-                stderr,
-            )
-            return
-        self.benchmark_info = info
-        self.gold_threshold = info.get("gold_threshold")
-        self.is_lower_better = info.get("is_lower_better")
-        self.logger.info("is_lower_better=%s", self.is_lower_better)
 
     def _compose_system(self) -> str:
         self.logger.debug("Composing system prompt for slug=%s", self.slug)

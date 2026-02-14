@@ -27,6 +27,8 @@ runtime:
   baseline_code_timeout: 43200  # 12 hours for baseline code execution
   # Grading strategy
   use_validation_score: true  # If true, use validation score from logs instead of MLE-bench grading (faster, no ground truth needed)
+  is_lower_better: false  # Metric direction: true if lower scores are better (e.g. MSE), false if higher is better (e.g. R²)
+  gold_threshold: null  # Target score to reach (null = no target)
 paths:
   task_root: "task"
   outputs_dirname: "outputs"
