@@ -5,11 +5,6 @@ from pydantic import BaseModel
 
 # Model Selection Schemas
 
-class FoldSplitStrategy(BaseModel):
-    """Fold split strategy recommendation."""
-    strategy: str
-
-
 class RecommendedModel(BaseModel):
     """Individual model recommendation."""
     name: str
@@ -18,7 +13,6 @@ class RecommendedModel(BaseModel):
 
 class ModelSelection(BaseModel):
     """Schema for model selection response."""
-    fold_split_strategy: FoldSplitStrategy
     recommended_models: list[RecommendedModel]
 
 

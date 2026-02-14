@@ -1,5 +1,5 @@
 """
-Tests for shared_constraints module to ensure backward compatibility.
+Tests for shared_constraints module.
 """
 
 from __future__ import annotations
@@ -15,14 +15,11 @@ class TestSharedConstraints:
 
     def test_developer_constraints_basic(self):
         """Test that developer constraints are generated correctly with basic params."""
-        result = developer_get_hard_constraints(model_name="ResNet50", allow_multi_fold=False)
+        result = developer_get_hard_constraints(model_name="ResNet50")
 
         # Check for model-specific constraints
         assert "Use ONLY `ResNet50`" in result
         assert "do not swap out `ResNet50`" in result
-
-        # Check for fold constraint (should be present when allow_multi_fold=False)
-        assert "Just train and validate on fold 0" in result
 
         # Check for common constraints
         assert "Deliver a fully-contained, single-file script" in result
@@ -34,25 +31,10 @@ class TestSharedConstraints:
         # Check for developer-specific constraint ending (backward compatibility)
         assert "while` loops" in result
 
-    def test_developer_constraints_multi_fold(self):
-        """Test that developer constraints respect allow_multi_fold parameter."""
-        result = developer_get_hard_constraints(model_name="BERT", allow_multi_fold=True)
-
-        # Fold constraint should NOT be present when allow_multi_fold=True
-        assert "Just train and validate on fold 0" not in result
-
-        # Model-specific constraints should still be present
-        assert "Use ONLY `BERT`" in result
-
     def test_shared_function_with_all_parameters(self):
         """Test the shared function directly with all parameter combinations."""
-        # Test developer-like configuration
-        dev_result = get_hard_constraints(
-            model_name="XGBoost",
-            allow_multi_fold=False,
-        )
+        dev_result = get_hard_constraints(model_name="XGBoost")
         assert "Use ONLY `XGBoost`" in dev_result
-        assert "Just train and validate on fold 0" in dev_result
 
     def test_common_constraints_present(self):
         """Test that common constraints appear in developer output."""
@@ -80,12 +62,11 @@ class TestSharedConstraints:
             assert item in dev_result, f"Missing in developer: {item}"
 
     def test_backward_compatibility_developer(self):
-        """Test that the developer wrapper maintains exact backward compatibility."""
-        result = developer_get_hard_constraints("TestModel", allow_multi_fold=False)
+        """Test that the developer wrapper produces expected output."""
+        result = developer_get_hard_constraints("TestModel")
 
         assert result.startswith("**Hard Constraints:**")
         assert "Use ONLY `TestModel`" in result
-        assert "Just train and validate on fold 0" in result
         assert "while` loops" in result
         assert "Modular pipeline" in result
 

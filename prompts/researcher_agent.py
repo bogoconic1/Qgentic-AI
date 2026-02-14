@@ -276,14 +276,13 @@ Hypothesis 2: Customer segments behave differently (business knowledge)
 Hypothesis 3: Seasonality affects churn (retail domain)
 → Test: Churn rate by month/quarter
 → Finding: +40% churn after holiday season (Jan-Feb)
-→ Recommendation: Seasonal features (cyclical encoding), time-aware validation
+→ Recommendation: Seasonal features (cyclical encoding)
 
 Plan:
 - RFM feature engineering (Recency, Frequency, Monetary value)
 - Customer lifetime value (CLV) calculation (business metric)
 - Segment identification and encoding (business-driven clustering)
 - Seasonal feature engineering (retail calendar-aware)
-- Validation strategy: Time-based split (avoid lookahead bias)
 ```
 **Why Good:** Business and e-commerce domain expertise. RFM framework from literature.
 
@@ -882,16 +881,13 @@ Respond in Markdown using this structure. For any section that cannot be complet
 # Technical Plan
 
 ## Data Strategy
-[Domain-guided data handling/preprocessing/validation. If not feasible, explain why.]
+[Domain-guided data handling/preprocessing. If not feasible, explain why.]
 
 ## Model Architecture Considerations
 [Domain-guided selection criteria—avoid naming specific models. Note if not addressed with reason.]
 
 ## Feature Engineering / Preprocessing Priorities
 [Ranked, domain-driven recommendations. State if undetermined.]
-
-## Evaluation Strategy
-[Specify domain-appropriate metrics/validation. Explain if unavailable, noting information sources.]
 
 ---
 

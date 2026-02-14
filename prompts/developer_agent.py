@@ -83,27 +83,20 @@ File contents:
     return ""
 
 
-def _get_hard_constraints(model_name: str, allow_multi_fold: bool = False) -> str:
+def _get_hard_constraints(model_name: str) -> str:
     """
     Get the hard constraints section for developer agent system prompts.
 
-    This is a wrapper around the shared get_hard_constraints function that
-    maintains backward compatibility with the existing developer agent interface.
-
     Args:
         model_name: The model name to be used in constraints
-        allow_multi_fold: Whether to allow multi-fold training
 
     Returns:
         Formatted hard constraints string
     """
-    return get_hard_constraints(
-        model_name=model_name,
-        allow_multi_fold=allow_multi_fold,
-    )
+    return get_hard_constraints(model_name=model_name)
 
 
-def build_system(description: str, directory_listing: str, model_name: str, slug: str, cpu_core_range: list[int] | None = None, gpu_identifier: str | None = None, gpu_isolation_mode: str = "none", allow_multi_fold: bool = False, hitl_instructions: list[str] | None = None) -> str:
+def build_system(description: str, directory_listing: str, model_name: str, slug: str, cpu_core_range: list[int] | None = None, gpu_identifier: str | None = None, gpu_isolation_mode: str = "none", hitl_instructions: list[str] | None = None) -> str:
     # Build resource allocation info
     resource_info = ""
     if cpu_core_range is not None:
@@ -125,7 +118,7 @@ You have been provided with the following guidance for code implementation:
 ---
 """
 
-    constraints = _get_hard_constraints(model_name, allow_multi_fold=allow_multi_fold)
+    constraints = _get_hard_constraints(model_name)
 
     # Read helper files (cv_splits.json, metric.py) if they exist
     helper_files_section = _read_helper_files(slug)

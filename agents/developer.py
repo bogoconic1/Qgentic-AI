@@ -79,6 +79,15 @@ class DeveloperAgent:
         self.task_root = _TASK_ROOT
         self.outputs_dirname = _OUTPUTS_DIRNAME
         self.base_dir = self.task_root / slug
+
+        # Fail fast if required helper files are missing
+        cv_splits_path = self.base_dir / "cv_splits.json"
+        metric_path = self.base_dir / "metric.py"
+        if not cv_splits_path.exists():
+            raise FileNotFoundError(f"Required file missing: {cv_splits_path}")
+        if not metric_path.exists():
+            raise FileNotFoundError(f"Required file missing: {metric_path}")
+
         self.outputs_dir = self.base_dir / self.outputs_dirname / str(iteration)
         self.outputs_dir.mkdir(parents=True, exist_ok=True)
         self.developer_log_path = self.outputs_dir / f"developer_{iteration}.txt"
@@ -230,8 +239,8 @@ class DeveloperAgent:
         self.is_lower_better = info.get("is_lower_better")
         self.logger.info("is_lower_better=%s", self.is_lower_better)
 
-    def _compose_system(self, allow_multi_fold: bool = False) -> str:
-        self.logger.debug("Composing system prompt for slug=%s (allow_multi_fold=%s)", self.slug, allow_multi_fold)
+    def _compose_system(self) -> str:
+        self.logger.debug("Composing system prompt for slug=%s", self.slug)
         with open(self.base_dir / "description.md", "r") as f:
             self.description = f.read()
         self.logger.debug("Description length: %s characters", len(self.description))
@@ -251,7 +260,6 @@ class DeveloperAgent:
             cpu_core_range=self.cpu_core_range,
             gpu_identifier=self.gpu_identifier,
             gpu_isolation_mode=self.gpu_isolation_mode,
-            allow_multi_fold=allow_multi_fold,
             hitl_instructions=_HITL_INSTRUCTIONS,
         )
 
@@ -1153,11 +1161,7 @@ class DeveloperAgent:
         run_score = 0
         last_input_tokens = None  # Track input tokens from previous API call for adaptive trimming
 
-        # Enable multi-fold from start if using validation scores (need proper CV for reliable scores)
-        initial_allow_multi_fold = _USE_VALIDATION_SCORE
-        if initial_allow_multi_fold:
-            self.logger.info("Multi-fold training enabled from start (use_validation_score=True)")
-        system_prompt = self._compose_system(allow_multi_fold=initial_allow_multi_fold)
+        system_prompt = self._compose_system()
         user_prompt = self._build_user_prompt(version=1)
 
         # Detect provider early for consistent message formatting
@@ -1207,11 +1211,6 @@ class DeveloperAgent:
                 break
 
             attempt += 1
-
-            # Rebuild system prompt for attempt 2+ to enable multi-fold training (unless already enabled)
-            if attempt == 2 and not initial_allow_multi_fold:
-                self.logger.info("Rebuilding system prompt for attempt 2+ with multi-fold enabled")
-                system_prompt = self._compose_system(allow_multi_fold=True)
 
             artifact = wandb.Artifact(f'{self.iteration}-{self.slug}', type='files')
 

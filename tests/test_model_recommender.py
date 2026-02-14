@@ -99,7 +99,6 @@ def patch_llm_calls(monkeypatch):
                 # For model selection, return empty to trigger default behavior
                 return text_format(
                     recommended_models=[],
-                    fold_split_strategy=None
                 )
             else:
                 # Generic fallback
