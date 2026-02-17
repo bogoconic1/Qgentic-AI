@@ -5,7 +5,9 @@ import json
 import logging
 import os
 import re
+import signal
 import subprocess
+import threading
 import time
 import traceback
 from pathlib import Path
@@ -22,8 +24,10 @@ from prompts.tools_developer import (
     red_flags_user as prompt_red_flags_user,
     sota_system as prompt_sota_system,
     sota_user as prompt_sota_user,
+    log_monitor_system as prompt_log_monitor_system,
+    log_monitor_user as prompt_log_monitor_user,
 )
-from schemas.developer import StackTraceSolution, SOTAResponse
+from schemas.developer import StackTraceSolution, SOTAResponse, LogMonitorVerdict
 import weave
 
 load_dotenv()
@@ -45,6 +49,7 @@ _FINETUNED_CODE_API_MODEL = _LLM_CFG.get("finetuned_code_api_model")
 _RUNTIME_CFG = _CONFIG.get("runtime")
 _BASELINE_TIME_LIMIT = _RUNTIME_CFG.get("baseline_time_limit")
 _BASELINE_CODE_TIMEOUT = _RUNTIME_CFG.get("baseline_code_timeout")
+_LOG_MONITOR_INTERVAL = _RUNTIME_CFG.get("log_monitor_interval", 120)
 _PATH_CFG = _CONFIG.get("paths")
 _OUTPUTS_DIRNAME = _PATH_CFG.get("outputs_dirname")
 
@@ -793,7 +798,8 @@ def _execute_sota_tool_call(item, description, data_path, slug, cpu_core_range, 
             resource_header = _build_resource_header(cpu_core_range, gpu_identifier)
             script_file.write_text(resource_header + code)
 
-            output = execute_code(str(script_file), timeout_seconds=300)
+            job = execute_code(str(script_file), timeout_seconds=300)
+            output = job.result()
             return json.dumps({"output": output})
 
         elif item.name == "scrape_web_page":
@@ -823,68 +829,413 @@ def _execute_sota_tool_call(item, description, data_path, slug, cpu_core_range, 
         return json.dumps({"error": f"Tool execution failed: {str(e)}"})
 
 
+def _stream_reader(stream, buffer: list, timestamp_ref: list):
+    """Read lines from a subprocess stream into a buffer, updating the last-output timestamp.
+
+    Runs as a daemon thread to avoid pipe deadlock when capturing both stdout and stderr.
+    """
+    try:
+        for line in stream:
+            buffer.append(line)
+            timestamp_ref[0] = time.monotonic()
+    except ValueError:
+        pass  # stream closed
+    finally:
+        try:
+            stream.close()
+        except Exception:
+            pass
+
+
+def _kill_process_group(pid: int):
+    """Send SIGKILL to the entire process group rooted at pid."""
+    try:
+        os.killpg(os.getpgid(pid), signal.SIGKILL)
+    except ProcessLookupError:
+        pass  # already dead
+
+
+class ExecutionJob:
+    """Handle for a non-blocking code execution process.
+
+    Wraps a subprocess.Popen with reader threads for stdout/stderr streaming,
+    and exposes methods for monitoring, querying output, and killing.
+    """
+
+    def __init__(self, proc: subprocess.Popen, timeout_seconds: int, filepath: str):
+        self._proc = proc
+        self._timeout_seconds = timeout_seconds
+        self._filepath = filepath
+        self._start_time = time.monotonic()
+
+        self._stdout_buf: list[str] = []
+        self._stderr_buf: list[str] = []
+        self._last_output_time: list[float] = [self._start_time]
+
+        self._stdout_thread = threading.Thread(
+            target=_stream_reader,
+            args=(proc.stdout, self._stdout_buf, self._last_output_time),
+            daemon=True,
+        )
+        self._stderr_thread = threading.Thread(
+            target=_stream_reader,
+            args=(proc.stderr, self._stderr_buf, self._last_output_time),
+            daemon=True,
+        )
+        self._stdout_thread.start()
+        self._stderr_thread.start()
+
+    def done(self) -> bool:
+        """Check if the process has finished."""
+        return self._proc.poll() is not None
+
+    def result(self) -> str:
+        """Get execution result. Blocks until the process finishes if not done.
+
+        Returns stdout on success, or web_search_stack_trace(stderr) on error.
+        """
+        self._proc.wait()
+        self._stdout_thread.join(timeout=5)
+        self._stderr_thread.join(timeout=5)
+
+        stdout_text = "".join(self._stdout_buf)
+        stderr_text = "".join(self._stderr_buf)
+
+        if self._proc.returncode == 0:
+            logger.info("Execution succeeded for %s", self._filepath)
+            return stdout_text
+
+        logger.warning(
+            "Execution failed for %s with return code %s",
+            self._filepath, self._proc.returncode,
+        )
+        return web_search_stack_trace(stderr_text)
+
+    def kill(self, reason: str) -> str:
+        """Kill the process group and return a diagnostic message."""
+        logger.warning("Killing execution of %s: %s", self._filepath, reason)
+        _kill_process_group(self._proc.pid)
+        try:
+            self._proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass
+        self._stdout_thread.join(timeout=5)
+        self._stderr_thread.join(timeout=5)
+
+        last_lines = "".join(self._stdout_buf[-20:])
+        return f"Code execution killed: {reason}\n\nLast output:\n{last_lines}"
+
+    def recent_output(self, n: int = 200) -> str:
+        """Last n lines of combined stdout+stderr."""
+        combined = self._stdout_buf + self._stderr_buf
+        return "".join(combined[-n:])
+
+    def idle_time(self) -> float:
+        """Seconds since last output was received."""
+        return time.monotonic() - self._last_output_time[0]
+
+    def elapsed(self) -> float:
+        """Total seconds since process started."""
+        return time.monotonic() - self._start_time
+
+    @property
+    def pid(self) -> int:
+        return self._proc.pid
+
+    def check_timeout(self) -> bool:
+        """True if the hard timeout has been exceeded."""
+        return self.elapsed() > self._timeout_seconds
+
+
 @weave.op()
-def execute_code(filepath: str, timeout_seconds: int | None = None, conda_env: str | None = None) -> str:
-    """Execute a generated Python file and enrich errors with search guidance.
+def execute_code(filepath: str, timeout_seconds: int | None = None, conda_env: str | None = None) -> "ExecutionJob":
+    """Launch a Python file for execution and return a job handle immediately.
+
+    The process runs in the background. Use the returned ExecutionJob to:
+    - Check completion: job.done()
+    - Get result (blocking): job.result()
+    - Kill the process: job.kill(reason)
+    - Inspect output: job.recent_output(), job.idle_time(), job.elapsed()
 
     Args:
         filepath: Path to the Python file to execute
-        timeout_seconds: Timeout in seconds (default: baseline_time_limit // 4 from config)
+        timeout_seconds: Hard timeout in seconds (default: baseline_code_timeout from config)
         conda_env: Conda environment name to use for execution (None = use current env)
 
     Returns:
-        Execution output or error message
+        ExecutionJob handle for the running process
     """
     if timeout_seconds is None:
-        timeout_seconds = _DEFAULT_CODE_TIMEOUT
+        timeout_seconds = _BASELINE_CODE_TIMEOUT
 
-    # Get conda executable path (resolves "conda: command not found" in subprocess)
     conda_exe = os.environ.get('CONDA_EXE', 'conda')
 
     if conda_env:
-        cmd = [conda_exe, "run", "--no-capture-output", "-n", conda_env, "python", filepath]
+        # -u for unbuffered output on the inner python process
+        cmd = [conda_exe, "run", "--no-capture-output", "-n", conda_env, "python", "-u", filepath]
         logger.info("Executing in conda environment '%s': %s (timeout: %d seconds)", conda_env, filepath, timeout_seconds)
     else:
-        cmd = ["python", filepath]
+        cmd = ["python", "-u", filepath]
         logger.info("Executing generated script: %s (timeout: %d seconds)", filepath, timeout_seconds)
 
+    logger.debug("Running subprocess command: %s", " ".join(cmd))
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    return ExecutionJob(proc, timeout_seconds, filepath)
+
+
+def _execute_monitor_tool_call(item, provider: str) -> str:
+    """Execute a monitor tool call (execute_bash) and return the result as JSON."""
+    if provider == "openai":
+        tool_name = item.name
+        try:
+            args = json.loads(item.arguments)
+        except Exception as e:
+            return json.dumps({"error": f"Failed to parse arguments: {str(e)}"})
+    elif provider == "anthropic":
+        tool_name = item.name
+        args = item.input
+    elif provider == "google":
+        tool_name = item.name
+        args = dict(item.args) if hasattr(item, 'args') else {}
+    else:
+        return json.dumps({"error": f"Unsupported provider: {provider}"})
+
+    if tool_name == "execute_bash":
+        command = args.get("command", "")
+        if not command:
+            return json.dumps({"error": "command parameter is required"})
+        logger.info("Monitor tool: execute_bash(%s)", command)
+        try:
+            result = subprocess.run(
+                command, shell=True, capture_output=True, text=True, timeout=30,
+            )
+            output = result.stdout + result.stderr
+            return json.dumps({"output": output})
+        except subprocess.TimeoutExpired:
+            return json.dumps({"error": "Command timed out after 30 seconds"})
+        except Exception as e:
+            return json.dumps({"error": str(e)})
+    else:
+        return json.dumps({"error": f"Unknown monitor tool: {tool_name}"})
+
+
+@weave.op()
+def monitor_logs(
+    log_output: str,
+    seconds_since_last_output: float,
+    total_elapsed_seconds: float,
+    pid: int,
+    max_tool_steps: int = 3,
+) -> LogMonitorVerdict:
+    """Analyze training logs and system state to decide if the process should be killed.
+
+    Uses an LLM with access to an execute_bash tool for system diagnostics.
+    Returns a LogMonitorVerdict with action ("continue" or "kill") and reason.
+    """
+    from utils.llm_utils import get_monitor_tools_for_provider
+
+    system_prompt = prompt_log_monitor_system()
+    user_prompt = prompt_log_monitor_user(
+        log_output=log_output,
+        seconds_since_last_output=seconds_since_last_output,
+        total_elapsed_seconds=total_elapsed_seconds,
+        pid=pid,
+    )
+
+    provider = detect_provider(_DEVELOPER_TOOL_MODEL)
+    tools = get_monitor_tools_for_provider(provider)
+    input_list = [append_message(provider, "user", user_prompt)]
+
+    for step in range(max_tool_steps):
+        is_last_step = (step == max_tool_steps - 1)
+        text_format = LogMonitorVerdict if is_last_step else None
+
+        logger.info("Monitor step %d/%d (provider: %s)", step + 1, max_tool_steps, provider)
+
+        try:
+            if provider == "openai":
+                response = call_llm_with_retry(
+                    model=_DEVELOPER_TOOL_MODEL,
+                    instructions=system_prompt,
+                    tools=tools if not is_last_step else [],
+                    messages=input_list,
+                    web_search_enabled=False,
+                    text_format=text_format,
+                )
+
+                if hasattr(response, 'action'):
+                    return response
+
+                # Check for tool calls
+                has_tool_calls = any(
+                    hasattr(item, 'type') and item.type == "function_call"
+                    for item in response.output
+                )
+                if not has_tool_calls:
+                    if hasattr(response, 'action'):
+                        return response
+                    # Force structured output
+                    response = call_llm_with_retry(
+                        model=_DEVELOPER_TOOL_MODEL,
+                        instructions=system_prompt,
+                        tools=[],
+                        messages=input_list,
+                        web_search_enabled=False,
+                        text_format=LogMonitorVerdict,
+                    )
+                    return response
+
+                # Execute tool calls
+                input_list.extend(response.output)
+                for item in response.output:
+                    if hasattr(item, 'type') and item.type == "function_call":
+                        tool_result = _execute_monitor_tool_call(item, provider)
+                        input_list.append({
+                            "type": "function_call_output",
+                            "call_id": item.call_id,
+                            "output": tool_result,
+                        })
+
+            elif provider == "anthropic":
+                response = call_llm_with_retry_anthropic(
+                    model=_DEVELOPER_TOOL_MODEL,
+                    instructions=system_prompt,
+                    tools=tools if not is_last_step else [],
+                    messages=input_list,
+                    web_search_enabled=False,
+                    text_format=text_format,
+                )
+
+                if hasattr(response, 'action'):
+                    return response
+
+                if response.stop_reason == "tool_use":
+                    tool_uses = [
+                        block for block in response.content
+                        if hasattr(block, 'type') and block.type == 'tool_use'
+                    ]
+                    tool_results = []
+                    for tool_use in tool_uses:
+                        tool_result_str = _execute_monitor_tool_call(tool_use, provider)
+                        tool_results.append({
+                            "type": "tool_result",
+                            "tool_use_id": tool_use.id,
+                            "content": tool_result_str,
+                        })
+                    input_list.append({"role": "assistant", "content": response.content})
+                    input_list.append({"role": "user", "content": tool_results})
+                else:
+                    if hasattr(response, 'action'):
+                        return response
+                    response = call_llm_with_retry_anthropic(
+                        model=_DEVELOPER_TOOL_MODEL,
+                        instructions=system_prompt,
+                        tools=[],
+                        messages=input_list,
+                        web_search_enabled=False,
+                        text_format=LogMonitorVerdict,
+                    )
+                    return response
+
+            elif provider == "google":
+                from google.genai import types
+
+                response = call_llm_with_retry_google(
+                    model=_DEVELOPER_TOOL_MODEL,
+                    system_instruction=system_prompt,
+                    function_declarations=tools if not is_last_step else [],
+                    messages=input_list,
+                    enable_google_search=False,
+                    text_format=text_format,
+                )
+
+                if hasattr(response, 'action'):
+                    return response
+
+                has_function_calls = False
+                if hasattr(response, 'candidates') and response.candidates:
+                    parts = response.candidates[0].content.parts
+                    has_function_calls = any(
+                        hasattr(part, 'function_call') and part.function_call
+                        for part in parts
+                    )
+
+                if not has_function_calls:
+                    if hasattr(response, 'action'):
+                        return response
+                    response = call_llm_with_retry_google(
+                        model=_DEVELOPER_TOOL_MODEL,
+                        system_instruction=system_prompt,
+                        messages=input_list,
+                        enable_google_search=False,
+                        text_format=LogMonitorVerdict,
+                    )
+                    return response
+
+                # Execute function calls
+                parts = response.candidates[0].content.parts
+                function_responses = []
+                for part in parts:
+                    if hasattr(part, 'function_call') and part.function_call:
+                        tool_result_str = _execute_monitor_tool_call(part.function_call, provider)
+                        function_responses.append(
+                            types.Part.from_function_response(
+                                name=part.function_call.name,
+                                response={"result": tool_result_str},
+                            )
+                        )
+                input_list.append(response.candidates[0].content)
+                if function_responses:
+                    input_list.append(types.Content(role="function", parts=function_responses))
+
+            else:
+                raise ValueError(f"Unsupported provider: {provider}")
+
+        except Exception:
+            logger.exception("Monitor LLM call failed at step %d", step + 1)
+            return LogMonitorVerdict(action="continue", reason="Monitor error — defaulting to continue")
+
+    # Exhausted steps without a verdict — force one
+    logger.warning("Monitor exhausted %d steps, forcing final verdict", max_tool_steps)
     try:
-        logger.debug("Running subprocess command: %s", " ".join(cmd))
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout_seconds,
-        )
-
-        if result.returncode == 0:
-            logger.info("Execution succeeded for %s", filepath)
-            logger.debug("Execution stdout: %s", result.stdout)
-            return result.stdout
-
-        trace = result.stderr
-        logger.warning(
-            "Execution failed for %s with return code %s", filepath, result.returncode
-        )
-        logger.debug("Execution stderr: %s", trace)
-
-        # Do web search for suggestions
-        search_result = web_search_stack_trace(trace)
-        return search_result
-
-    except subprocess.TimeoutExpired:
-        logger.error("Execution timed out after %d seconds for %s", timeout_seconds, filepath)
-        timeout_minutes = timeout_seconds / 60
-        if timeout_minutes >= 60:
-            timeout_hours = timeout_minutes / 60
-            return f"Code execution timed out after {timeout_hours:.1f} hour(s)"
-        elif timeout_minutes >= 1:
-            return f"Code execution timed out after {timeout_minutes:.0f} minute(s)"
+        if provider == "openai":
+            response = call_llm_with_retry(
+                model=_DEVELOPER_TOOL_MODEL,
+                instructions=system_prompt + "\n\nReturn your verdict now.",
+                tools=[],
+                messages=input_list,
+                web_search_enabled=False,
+                text_format=LogMonitorVerdict,
+            )
+        elif provider == "anthropic":
+            response = call_llm_with_retry_anthropic(
+                model=_DEVELOPER_TOOL_MODEL,
+                instructions=system_prompt + "\n\nReturn your verdict now.",
+                tools=[],
+                messages=input_list,
+                web_search_enabled=False,
+                text_format=LogMonitorVerdict,
+            )
+        elif provider == "google":
+            response = call_llm_with_retry_google(
+                model=_DEVELOPER_TOOL_MODEL,
+                system_instruction=system_prompt + "\n\nReturn your verdict now.",
+                messages=input_list,
+                enable_google_search=False,
+                text_format=LogMonitorVerdict,
+            )
         else:
-            return f"Code execution timed out after {timeout_seconds} second(s)"
-    except Exception:
-        trace = traceback.format_exc()
-        logger.exception("Unexpected error while executing %s", filepath)
+            raise ValueError(f"Unsupported provider: {provider}")
 
-        search_result = web_search_stack_trace(trace)
-        return search_result
+        if hasattr(response, 'action'):
+            return response
+    except Exception:
+        logger.exception("Monitor final verdict call failed")
+
+    return LogMonitorVerdict(action="continue", reason="Monitor could not determine verdict — defaulting to continue")

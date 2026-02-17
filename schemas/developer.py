@@ -19,6 +19,12 @@ class SOTAResponse(BaseModel):
     suggestion_code: str
 
 
+class LogMonitorVerdict(BaseModel):
+    """LLM verdict on whether a running training script is healthy."""
+    action: str   # "continue" or "kill"
+    reason: str   # explanation — fed back to the developer agent if killed
+
+
 class CodeGeneration(BaseModel):
     """Schema for generating training code in folder structure.
 

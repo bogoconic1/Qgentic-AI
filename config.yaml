@@ -26,6 +26,7 @@ runtime:
   # Time limits (in seconds)
   baseline_time_limit: 432000  # 5 days for baseline development
   baseline_code_timeout: 43200  # 12 hours for baseline code execution
+  log_monitor_interval: 120  # Seconds between LLM log monitor calls during code execution
   # Grading strategy
   use_validation_score: true  # If true, use validation score from logs instead of MLE-bench grading (faster, no ground truth needed)
   is_lower_better: false  # Metric direction: true if lower scores are better (e.g. MSE), false if higher is better (e.g. R²)

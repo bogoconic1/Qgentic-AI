@@ -423,3 +423,79 @@ def get_tools_for_provider(provider: str):
         return get_tools_gemini()
     else:
         raise ValueError(f"Unsupported provider: {provider}")
+
+
+# ---------------------------------------------------------------------------
+# Monitor tools (execute_bash for system diagnostics during training)
+# ---------------------------------------------------------------------------
+
+def get_monitor_tools_openai():
+    return [
+        {
+            "type": "function",
+            "name": "execute_bash",
+            "description": "Execute a bash command for system diagnostics. Use for checking GPU utilization (nvidia-smi), process status (ps, top), memory (free), disk (df), etc.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "command": {"type": "string", "description": "Bash command to execute."}
+                },
+            },
+            "additionalProperties": False,
+            "required": ["command"],
+        }
+    ]
+
+
+def get_monitor_tools_anthropic():
+    return [
+        {
+            "name": "execute_bash",
+            "description": """Execute a bash command for system diagnostics. Use for checking GPU utilization
+            (nvidia-smi), process status (ps, top), memory usage (free), disk space (df), and other
+            read-only system inspection commands. Do not use for modifying system state.""",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "Bash command to execute."
+                    }
+                },
+                "required": ["command"]
+            }
+        }
+    ]
+
+
+def get_monitor_tools_gemini():
+    from google.genai import types
+
+    return [
+        types.FunctionDeclaration(
+            name="execute_bash",
+            description="Execute a bash command for system diagnostics. Use for checking GPU utilization (nvidia-smi), process status (ps, top), memory (free), disk (df), etc.",
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "Bash command to execute."
+                    }
+                },
+                "required": ["command"]
+            }
+        )
+    ]
+
+
+def get_monitor_tools_for_provider(provider: str):
+    """Get monitor tools (execute_bash) in the appropriate format for the provider."""
+    if provider == "openai":
+        return get_monitor_tools_openai()
+    elif provider == "anthropic":
+        return get_monitor_tools_anthropic()
+    elif provider == "google":
+        return get_monitor_tools_gemini()
+    else:
+        raise ValueError(f"Unsupported provider: {provider}")
