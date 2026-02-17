@@ -10,10 +10,13 @@ from unittest.mock import MagicMock
 
 from tools.developer import (
     execute_code,
+    monitor_logs,
     web_search_stack_trace,
     search_red_flags,
-    search_sota_suggestions
+    search_sota_suggestions,
+    ExecutionJob,
 )
+from schemas.developer import LogMonitorVerdict
 
 
 @pytest.fixture
@@ -67,7 +70,9 @@ def test_script_timeout():
 
 def test_execute_code_success(test_script_success):
     """Test successful code execution."""
-    result = execute_code(test_script_success, timeout_seconds=10)
+    job = execute_code(test_script_success, timeout_seconds=10)
+    assert isinstance(job, ExecutionJob)
+    result = job.result()
 
     # Verify output contains success messages
     assert "Success!" in result
@@ -78,15 +83,19 @@ def test_execute_code_success(test_script_success):
 
 
 def test_execute_code_timeout(test_script_timeout):
-    """Test code execution timeout."""
-    result = execute_code(test_script_timeout, timeout_seconds=3)
+    """Test code execution timeout via job.check_timeout() + kill()."""
+    job = execute_code(test_script_timeout, timeout_seconds=3)
 
-    # Verify timeout message
-    assert "timed out" in result.lower()
-    assert "3 second" in result.lower()
+    import time
+    # Wait for timeout to be reached
+    time.sleep(4)
+    assert job.check_timeout()
+    result = job.kill("Hard timeout exceeded")
+
+    assert "killed" in result.lower() or "timeout" in result.lower()
 
     print("✅ execute_code timeout detection works:")
-    print(f"   - Timeout message: {result}")
+    print(f"   - Timeout message: {result[:80]}")
 
 
 def test_execute_code_error_with_web_search(test_script_error, monkeypatch):
@@ -97,7 +106,8 @@ def test_execute_code_error_with_web_search(test_script_error, monkeypatch):
 
     monkeypatch.setattr("tools.developer.web_search_stack_trace", fake_web_search)
 
-    result = execute_code(test_script_error, timeout_seconds=10)
+    job = execute_code(test_script_error, timeout_seconds=10)
+    result = job.result()
 
     # Verify error is in output
     assert "ValueError" in result or "Test error message" in result
@@ -598,6 +608,247 @@ def test_ingest_images_for_llm_openai_no_resize(test_data_dir, monkeypatch):
     assert captured_calls[0]['resize_for_anthropic'] == False
 
     print("✅ _ingest_images_for_llm does not resize for OpenAI")
+
+
+# ---------------------------------------------------------------------------
+# ExecutionJob + monitor_logs tests
+# ---------------------------------------------------------------------------
+
+def test_execute_code_returns_job():
+    """execute_code() returns an ExecutionJob, not a string."""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+        f.write("print('hello')\n")
+        script_path = f.name
+
+    try:
+        job = execute_code(script_path, timeout_seconds=10)
+        assert isinstance(job, ExecutionJob)
+        result = job.result()
+        assert "hello" in result
+    finally:
+        Path(script_path).unlink(missing_ok=True)
+
+    print("✅ execute_code returns ExecutionJob")
+
+
+def test_execution_job_done_and_result():
+    """Job lifecycle: not done immediately, done after completion, result() returns output."""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+        f.write("import time\ntime.sleep(0.5)\nprint('finished')\n")
+        script_path = f.name
+
+    try:
+        job = execute_code(script_path, timeout_seconds=10)
+        # Should not be done immediately
+        import time
+        time.sleep(0.1)
+        # Process might or might not be done yet, but result() should block and return
+        result = job.result()
+        assert job.done()
+        assert "finished" in result
+    finally:
+        Path(script_path).unlink(missing_ok=True)
+
+    print("✅ ExecutionJob done() and result() work correctly")
+
+
+def test_execution_job_kill():
+    """job.kill() terminates the process and returns diagnostic message."""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+        f.write("import time\nprint('running', flush=True)\ntime.sleep(300)\n")
+        script_path = f.name
+
+    try:
+        job = execute_code(script_path, timeout_seconds=600)
+        import time
+        time.sleep(0.5)
+        msg = job.kill("NaN loss detected")
+        assert job.done()
+        assert "NaN loss detected" in msg
+        assert "running" in msg
+    finally:
+        Path(script_path).unlink(missing_ok=True)
+
+    print("✅ ExecutionJob kill() works")
+
+
+def test_execution_job_recent_output_and_idle():
+    """recent_output() streams in real time, idle_time() tracks silence."""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+        f.write("import time\nprint('start', flush=True)\ntime.sleep(5)\nprint('end', flush=True)\n")
+        script_path = f.name
+
+    try:
+        job = execute_code(script_path, timeout_seconds=30)
+        import time
+        time.sleep(0.5)  # let 'start' arrive
+        assert "start" in job.recent_output()
+
+        time.sleep(2)  # wait through the silence (script sleeps 5s, so 'end' hasn't printed)
+        idle = job.idle_time()
+        assert idle > 1.0, f"Expected idle > 1.0s, got {idle:.2f}s"
+
+        job.result()  # wait for completion
+        assert "end" in job.recent_output()
+    finally:
+        Path(script_path).unlink(missing_ok=True)
+
+    print("✅ ExecutionJob recent_output() and idle_time() work")
+
+
+def test_execution_job_process_group_kill():
+    """kill() kills child processes too via process group."""
+    import os
+
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+        f.write(
+            "import subprocess, sys, time\n"
+            "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(300)'])\n"
+            "print(f'child_pid={child.pid}', flush=True)\n"
+            "time.sleep(300)\n"
+        )
+        script_path = f.name
+
+    try:
+        job = execute_code(script_path, timeout_seconds=600)
+        import time
+        time.sleep(1)
+
+        output = job.recent_output()
+        child_pid = None
+        for line in output.splitlines():
+            if "child_pid=" in line:
+                child_pid = int(line.split("=")[1])
+                break
+        assert child_pid is not None, "Could not find child PID"
+
+        job.kill("test cleanup")
+
+        time.sleep(0.5)
+        try:
+            os.kill(child_pid, 0)
+            assert False, f"Child {child_pid} still alive"
+        except ProcessLookupError:
+            pass  # expected
+
+    finally:
+        Path(script_path).unlink(missing_ok=True)
+
+    print(f"✅ ExecutionJob kills child processes (child {child_pid} killed)")
+
+
+def test_monitor_logs_kill(monkeypatch):
+    """monitor_logs() returns kill verdict when LLM says kill."""
+    kill_verdict = LogMonitorVerdict(action="kill", reason="NaN loss detected at epoch 4")
+
+    def fake_call_llm(*args, **kwargs):
+        if kwargs.get('text_format') == LogMonitorVerdict:
+            return kill_verdict
+        mock = MagicMock()
+        mock.output = []
+        mock.stop_reason = "end_turn"
+        mock.content = []
+        mock.action = "kill"
+        mock.reason = "NaN loss detected at epoch 4"
+        return kill_verdict
+
+    monkeypatch.setattr("tools.developer.detect_provider", lambda x: "openai")
+    monkeypatch.setattr("tools.developer.call_llm_with_retry", fake_call_llm)
+
+    verdict = monitor_logs(
+        log_output="Epoch 4/100 - loss: nan - acc: 0.00\n",
+        seconds_since_last_output=5.0,
+        total_elapsed_seconds=240.0,
+        pid=12345,
+    )
+
+    assert verdict.action == "kill"
+    assert "NaN" in verdict.reason
+
+    print("✅ monitor_logs returns kill verdict")
+
+
+def test_monitor_logs_continue(monkeypatch):
+    """monitor_logs() returns continue verdict when training is healthy."""
+    continue_verdict = LogMonitorVerdict(action="continue", reason="Loss decreasing normally")
+
+    def fake_call_llm(*args, **kwargs):
+        return continue_verdict
+
+    monkeypatch.setattr("tools.developer.detect_provider", lambda x: "openai")
+    monkeypatch.setattr("tools.developer.call_llm_with_retry", fake_call_llm)
+
+    verdict = monitor_logs(
+        log_output="Epoch 2/100 - loss: 1.876 - acc: 0.34\n",
+        seconds_since_last_output=10.0,
+        total_elapsed_seconds=120.0,
+        pid=12345,
+    )
+
+    assert verdict.action == "continue"
+
+    print("✅ monitor_logs returns continue verdict")
+
+
+def test_monitor_logs_with_bash_tool(monkeypatch):
+    """monitor_logs() handles execute_bash tool calls from the LLM."""
+    call_count = [0]
+
+    def fake_call_llm(*args, **kwargs):
+        call_count[0] += 1
+
+        # First call: LLM wants to use execute_bash tool
+        if call_count[0] == 1:
+            mock_response = MagicMock(spec=[])  # no auto-attributes
+            mock_item = MagicMock(spec=[])
+            mock_item.type = "function_call"
+            mock_item.name = "execute_bash"
+            mock_item.arguments = '{"command": "nvidia-smi"}'
+            mock_item.call_id = "call_123"
+            mock_response.output = [mock_item]
+            return mock_response
+
+        # Second call: LLM returns verdict after seeing tool output
+        return LogMonitorVerdict(
+            action="kill",
+            reason="GPU at 0% utilization — process is deadlocked"
+        )
+
+    monkeypatch.setattr("tools.developer.detect_provider", lambda x: "openai")
+    monkeypatch.setattr("tools.developer.call_llm_with_retry", fake_call_llm)
+
+    verdict = monitor_logs(
+        log_output="",
+        seconds_since_last_output=600.0,
+        total_elapsed_seconds=900.0,
+        pid=12345,
+    )
+
+    assert call_count[0] >= 2, f"Expected at least 2 LLM calls (tool use + verdict), got {call_count[0]}"
+    assert verdict.action == "kill"
+    assert "deadlocked" in verdict.reason.lower()
+
+    print("✅ monitor_logs handles execute_bash tool calls")
+
+
+def test_monitor_logs_error_defaults_to_continue(monkeypatch):
+    """monitor_logs() defaults to continue when the LLM call fails."""
+    def fake_call_llm(*args, **kwargs):
+        raise RuntimeError("API error")
+
+    monkeypatch.setattr("tools.developer.detect_provider", lambda x: "openai")
+    monkeypatch.setattr("tools.developer.call_llm_with_retry", fake_call_llm)
+
+    verdict = monitor_logs(
+        log_output="Epoch 1/100 - loss: 2.345\n",
+        seconds_since_last_output=5.0,
+        total_elapsed_seconds=60.0,
+        pid=12345,
+    )
+
+    assert verdict.action == "continue"
+
+    print("✅ monitor_logs defaults to continue on error")
 
 
 if __name__ == "__main__":

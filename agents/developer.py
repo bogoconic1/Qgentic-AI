@@ -16,8 +16,10 @@ import wandb
 
 from tools.developer import (
     execute_code,
+    monitor_logs,
     search_red_flags,
     search_sota_suggestions,
+    _LOG_MONITOR_INTERVAL,
 )
 from utils.guardrails import evaluate_guardrails, build_block_summary
 from tools.helpers import call_llm_with_retry, call_llm_with_retry_anthropic, call_llm_with_retry_google, _build_directory_listing
@@ -561,7 +563,12 @@ class DeveloperAgent:
         return f"{value}"
 
     def _execute_code(self, code_path: Path, version: int) -> str:
-        """Execute code and return execution output.
+        """Execute code with LLM-based log monitoring.
+
+        Launches the script non-blocking, then polls with monitor_logs() every
+        _LOG_MONITOR_INTERVAL seconds. The monitor LLM inspects recent output
+        and can run bash commands (nvidia-smi, ps, etc.) to check system state.
+        If the monitor returns "kill", the process group is terminated immediately.
 
         Args:
             code_path: Path to the code file to execute (e.g., outputs/16_2/1/train.py)
@@ -572,11 +579,36 @@ class DeveloperAgent:
         """
         timeout_seconds = self._get_code_timeout()
 
-        output = execute_code(
+        job = execute_code(
             str(code_path),
             timeout_seconds=timeout_seconds,
-            conda_env=self.conda_env
+            conda_env=self.conda_env,
         )
+        self.logger.info("Launched execution for v%s (pid=%d, timeout=%ds)", version, job.pid, timeout_seconds)
+
+        while not job.done():
+            if job.check_timeout():
+                self.logger.warning("Hard timeout reached for v%s", version)
+                return job.kill("Hard timeout exceeded")
+
+            try:
+                verdict = monitor_logs(
+                    log_output=job.recent_output(),
+                    seconds_since_last_output=job.idle_time(),
+                    total_elapsed_seconds=job.elapsed(),
+                    pid=job.pid,
+                )
+                self.logger.info(
+                    "Monitor verdict for v%s: %s (%s)", version, verdict.action, verdict.reason
+                )
+                if verdict.action == "kill":
+                    return job.kill(verdict.reason)
+            except Exception:
+                self.logger.exception("Monitor call failed for v%s — continuing execution", version)
+
+            time.sleep(_LOG_MONITOR_INTERVAL)
+
+        output = job.result()
         self.logger.info("Execution output captured for version v%s", version)
         self.logger.debug("Execution output: %s", output)
 

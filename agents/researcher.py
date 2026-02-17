@@ -311,7 +311,8 @@ class ResearcherAgent:
                 script_file.write_text(resource_header + code)
 
                 logger.info("execute_python (code_len=%d, step=%d)", len(code), step)
-                tool_output = execute_code(str(script_file), timeout_seconds=300)
+                job = execute_code(str(script_file), timeout_seconds=300)
+                tool_output = job.result()
 
                 result = self._format_tool_result(tool_id, {"output": tool_output}, provider)
 
