@@ -2,6 +2,22 @@
 
 Qgentic-AI is an automated ML competition stack. Two LLM-driven agents -- a **Researcher** and a **Developer** -- take a competition bundle, explore the data, produce a technical plan, generate code, run it locally, analyse the results, and keep refining the solution.
 
+## Problem Statement
+
+> "If you can solve your own problem, it’s much more likely you’re solving the problem for others." - The engineers of Claude Code
+
+I'm 2 golds away from Kaggle Competitions Grandmaster. A gold medal means finishing in the top ~1% against thousands of competitors -- many of whom are full-time ML engineers and PhD researchers dedicating weeks to a single competition. But working 6 days a week makes it extremely difficult to put together a top-notch solution. Gold-Medal performance usually requires **200+ hours of investment**.
+
+Most of that time goes to repetitive "maintenance" tasks with diminishing educational value:
+- Checking intermediate training results.
+- Debugging crashed runs.
+- Iterating endlessly on the same model family.
+- Running endless evaluations.
+
+A UCI study showed it takes ~23 minutes to regain focus after an interruption. Constantly context-switching between my job and my models was silently destroying my productivity.
+
+This was how Qgentic-AI was born, with the goal of automating most of these mundane tasks, so that the amount of human effort to get a top solution reduces from 200+ hours to 20! Let the agent iterate on weekdays and I chime in on the weekends.
+
 ## Results
 
 ![CSIRO Biomass Leaderboard](docs/assets/csiro_lb.png)
