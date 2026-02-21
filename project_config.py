@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 from pathlib import Path
 from functools import lru_cache
 from typing import Any, Mapping
@@ -10,73 +9,12 @@ from typing import Any, Mapping
 import yaml
 
 
-_DEFAULT_CONFIG: dict[str, Any] = {
-    "llm": {
-        "developer_model": "gemini-3-pro-preview",
-        "developer_tool_model": "gemini-3-pro-preview",
-        "researcher_model": "gemini-3-pro-preview",
-        "model_selector_model": "gemini-3-pro-preview",
-        "model_recommender_model": "gemini-3-pro-preview",
-    },
-    "runtime": {
-        "researcher_max_steps": 512,
-        "llm_max_retries": 3,
-        "max_developer_input_tokens": 250000,
-        "directory_listing_max_files": 10,
-        "use_validation_score": False,
-    },
-    "paths": {
-        "task_root": "task",
-        "outputs_dirname": "outputs",
-        "external_data_dirname": "external-data",
-    },
-    "guardrails": {
-        "logging_basicconfig_order": True,
-        "leakage_review": True,
-        "enable_code_safety": True,
-    },
-    "tracking": {
-        "wandb": {
-            "entity": None,
-            "project": None,
-        }
-    },
-    "model_recommender": {
-        "enable_web_search": True,
-    },
-    "developer": {
-        "hitl_sota": False,
-    },
-}
-
-
-def _deep_merge(base: dict[str, Any], override: Mapping[str, Any]) -> dict[str, Any]:
-    result: dict[str, Any] = copy.deepcopy(base)
-    for key, value in override.items():
-        if (
-            key in result
-            and isinstance(result[key], dict)
-            and isinstance(value, Mapping)
-        ):
-            result[key] = _deep_merge(result[key], value)
-        else:
-            result[key] = copy.deepcopy(value)
-    return result
-
-
 @lru_cache(maxsize=1)
 def get_config() -> dict[str, Any]:
-    """Return project configuration (merging config.yaml with defaults)."""
+    """Return project configuration loaded from config.yaml."""
     config_path = Path(__file__).resolve().parent / "config.yaml"
-    if config_path.exists():
-        try:
-            with config_path.open("r", encoding="utf-8") as f:
-                user_config = yaml.safe_load(f) or {}
-            if isinstance(user_config, Mapping):
-                return _deep_merge(_DEFAULT_CONFIG, user_config)
-        except Exception:
-            pass
-    return copy.deepcopy(_DEFAULT_CONFIG)
+    with config_path.open("r", encoding="utf-8") as f:
+        return yaml.safe_load(f)
 
 
 def get_config_value(*keys: str, default: Any | None = None) -> Any:
