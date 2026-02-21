@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 def model_selector_system_prompt(time_limit_minutes: int = 180) -> str:
     return f"""# Role & Objective
 You are a **Kaggle Competitions Grandmaster**.
@@ -76,6 +77,7 @@ Provide **recommended_models** as a list of model recommendations, each with:
 - "name": The model name
 - "reason": Why this model is recommended for this competition/data/metric
 """
+
 
 def preprocessing_system_prompt(time_limit_minutes: int = 180) -> str:
     return f"""# Role & Objective
@@ -171,6 +173,7 @@ Provide **MUST_HAVE** and **NICE_TO_HAVE** recommendations **per selected catego
 }}
 ```
 """
+
 
 def loss_function_system_prompt(time_limit_minutes: int = 180) -> str:
     return f"""# Role & Objective
@@ -279,6 +282,7 @@ the **NICE_TO_HAVE** section may contain multiple.
 - "explanation": Why this is a nice to have for a top-notch solution but not strictly necessary
 """
 
+
 def hyperparameter_tuning_system_prompt(time_limit_minutes: int = 180) -> str:
     return f"""# Role & Objective
 You are a **Kaggle Competitions Grandmaster**.
@@ -375,6 +379,7 @@ Both **MUST_HAVE** and **NICE_TO_HAVE** should have:
   - "explanation": Why this architecture is essential (MUST_HAVE) or nice-to-have (NICE_TO_HAVE)
 """
 
+
 def inference_strategy_system_prompt(inference_time_limit_minutes: int = 30) -> str:
     return f"""# Role & Objective
 You are a **Kaggle Competitions Grandmaster**.
@@ -469,18 +474,16 @@ Both **MUST_HAVE** and **NICE_TO_HAVE** should have:
   - "explanation": Why this is must-have or nice-to-have for a top-notch solution
 """
 
+
 def build_user_prompt(
     description: str,
-    task_type: str | list[str],
+    task_types: list[str],
     task_summary: str,
     model_name: str,
     research_plan: str | None = None,
 ) -> str:
     """Build user prompt with all necessary inputs for model recommender."""
-    if isinstance(task_type, list):
-        task_type_display = " + ".join(task_type) if len(task_type) > 1 else task_type[0]
-    else:
-        task_type_display = task_type
+    task_type_display = " + ".join(task_types) if len(task_types) > 1 else task_types[0]
 
     prompt = f"""<competition_description>
 {description}
@@ -500,6 +503,7 @@ def build_user_prompt(
 </research_plan>"""
 
     return prompt
+
 
 def model_refiner_system_prompt(time_limit_minutes: int = 180) -> str:
     return f"""You are a Kaggle Competitions Grandmaster and machine learning research expert.
@@ -521,9 +525,10 @@ For each of the selected models, provide:
 - selected_from_family: which architecture family this represents (e.g., "DeBERTa family", "Vision Transformer family")
 - reason: detailed explanation (3-5 sentences) citing specific evidence from the paper summary"""
 
+
 def build_refiner_user_prompt(
     description: str,
-    task_type: str | list[str],
+    task_types: list[str],
     task_summary: str,
     research_plan: str | None,
     candidate_models: list[str],
@@ -534,7 +539,7 @@ def build_refiner_user_prompt(
 
     Args:
         description: Competition description
-        task_type: Task type(s)
+        task_types: List of task types
         task_summary: Task summary
         research_plan: Research plan content
         candidate_models: List of candidate model names
@@ -543,15 +548,14 @@ def build_refiner_user_prompt(
     Returns:
         Formatted user prompt for refinement
     """
-    if isinstance(task_type, list):
-        task_type_display = " + ".join(task_type) if len(task_type) > 1 else task_type[0]
-    else:
-        task_type_display = task_type
+    task_type_display = " + ".join(task_types) if len(task_types) > 1 else task_types[0]
 
     candidates_text = ""
     for i, model_name in enumerate(candidate_models, 1):
-        summary = summaries.get(model_name, "Summary unavailable")
-        candidates_text += f"\n\n---\n\n**Candidate {i}: {model_name}**\n\nPaper Summary:\n{summary}\n"
+        summary = summaries[model_name]
+        candidates_text += (
+            f"\n\n---\n\n**Candidate {i}: {model_name}**\n\nPaper Summary:\n{summary}\n"
+        )
 
     prompt = f"""<competition_description>
 {description}

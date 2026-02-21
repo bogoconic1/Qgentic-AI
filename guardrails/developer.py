@@ -1,6 +1,5 @@
 import logging
 import ast
-from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
 from project_config import get_config
@@ -15,8 +14,8 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 _CONFIG = get_config()
-_LLM_CFG = _CONFIG.get("llm")
-_LEAKAGE_REVIEW_MODEL = _LLM_CFG.get("leakage_review_model")
+_LLM_CFG = _CONFIG["llm"]
+_LEAKAGE_REVIEW_MODEL = _LLM_CFG["leakage_review_model"]
 
 # -----------------------------
 # Guardrails: Static logging AST
@@ -27,15 +26,12 @@ LOG_LEVEL_METHODS = {"debug", "info", "warning", "error", "critical"}
 # caution: I did not check logging guardrails - I assume its correct
 def _is_logging_basicconfig_call(call: ast.Call) -> bool:
     """Return True if call node is logging.basicConfig(...)."""
-    try:
-        return (
-            isinstance(call.func, ast.Attribute)
-            and isinstance(call.func.value, ast.Name)
-            and call.func.value.id == "logging"
-            and call.func.attr == "basicConfig"
-        )
-    except Exception:
-        return False
+    return (
+        isinstance(call.func, ast.Attribute)
+        and isinstance(call.func.value, ast.Name)
+        and call.func.value.id == "logging"
+        and call.func.attr == "basicConfig"
+    )
 
 
 def _is_logging_direct_call(call: ast.Call) -> bool:
@@ -47,31 +43,32 @@ def _is_logging_direct_call(call: ast.Call) -> bool:
     # logging.getLogger(...).<level>(...)
     if isinstance(call.func, ast.Attribute) and isinstance(call.func.value, ast.Call):
         inner = call.func.value
-        if isinstance(inner.func, ast.Attribute) and isinstance(inner.func.value, ast.Name):
+        if isinstance(inner.func, ast.Attribute) and isinstance(
+            inner.func.value, ast.Name
+        ):
             if inner.func.value.id == "logging" and inner.func.attr == "getLogger":
                 if call.func.attr in LOG_LEVEL_METHODS:
                     return True
     return False
 
 
-def _collect_logger_aliases(nodes: List[ast.stmt]) -> List[str]:
+def _collect_logger_aliases(nodes: list[ast.stmt]) -> list[str]:
     """Collect top-level variable names assigned from logging.getLogger(...)."""
-    aliases: List[str] = []
+    aliases: list[str] = []
     for node in nodes:
-        try:
-            if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
-                val = node.value
-                if isinstance(val.func, ast.Attribute) and isinstance(val.func.value, ast.Name):
-                    if val.func.value.id == "logging" and val.func.attr == "getLogger":
-                        for tgt in node.targets:
-                            if isinstance(tgt, ast.Name):
-                                aliases.append(tgt.id)
-        except Exception:
-            continue
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
+            val = node.value
+            if isinstance(val.func, ast.Attribute) and isinstance(
+                val.func.value, ast.Name
+            ):
+                if val.func.value.id == "logging" and val.func.attr == "getLogger":
+                    for tgt in node.targets:
+                        if isinstance(tgt, ast.Name):
+                            aliases.append(tgt.id)
     return aliases
 
 
-def check_logging_basicconfig_order(code: str) -> Dict[str, Any]:
+def check_logging_basicconfig_order(code: str) -> dict:
     """
     Ensure logging.basicConfig is executed before any top-level logging statements.
 
@@ -84,25 +81,17 @@ def check_logging_basicconfig_order(code: str) -> Dict[str, Any]:
       statements, FAIL.
     Returns a dict report with status, basicConfig_line, and violations.
     """
-
-    try:
-        module = ast.parse(code)
-    except SyntaxError as exc:
-        return {
-            "status": "error",
-            "error": f"SyntaxError while parsing: {exc}",
-        }
-
+    module = ast.parse(code)
     lines = code.splitlines()
     aliases = _collect_logger_aliases(module.body)
 
-    basic_line: Optional[int] = None
-    violations: List[Dict[str, Any]] = []
+    basic_line: int | None = None
+    violations: list[dict] = []
 
     for node in module.body:
         if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
             if _is_logging_basicconfig_call(node.value) and basic_line is None:
-                basic_line = getattr(node, "lineno", None)
+                basic_line = node.lineno
                 continue
 
         if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
@@ -110,18 +99,27 @@ def check_logging_basicconfig_order(code: str) -> Dict[str, Any]:
             is_log_call = _is_logging_direct_call(call)
 
             # logger_alias.<level>(...)
-            if not is_log_call and isinstance(call.func, ast.Attribute) and isinstance(call.func.value, ast.Name):
-                if call.func.attr in LOG_LEVEL_METHODS and call.func.value.id in aliases:
+            if (
+                not is_log_call
+                and isinstance(call.func, ast.Attribute)
+                and isinstance(call.func.value, ast.Name)
+            ):
+                if (
+                    call.func.attr in LOG_LEVEL_METHODS
+                    and call.func.value.id in aliases
+                ):
                     is_log_call = True
 
             if is_log_call and basic_line is None:
-                lineno = getattr(node, "lineno", -1)
+                lineno = node.lineno
                 code = lines[lineno - 1] if 0 < lineno <= len(lines) else ""
-                violations.append({
-                    "line": lineno,
-                    "code": code.strip(),
-                    "reason": "Logging call appears before logging.basicConfig at top-level.",
-                })
+                violations.append(
+                    {
+                        "line": lineno,
+                        "code": code.strip(),
+                        "reason": "Logging call appears before logging.basicConfig at top-level.",
+                    }
+                )
 
     status = "pass"
     if violations:

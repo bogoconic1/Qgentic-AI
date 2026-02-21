@@ -4,19 +4,23 @@ import base64
 import json
 import logging
 import os
-import re
 import signal
 import subprocess
 import threading
 import time
-import traceback
 from pathlib import Path
 
 from dotenv import load_dotenv
 from project_config import get_config
 from google.genai import types
 from tools.helpers import call_llm
-from utils.llm_utils import extract_text_from_response, append_message, encode_image_to_data_url, get_tools, get_monitor_tools
+from utils.llm_utils import (
+    extract_text_from_response,
+    append_message,
+    encode_image_to_data_url,
+    get_tools,
+    get_monitor_tools,
+)
 from prompts.tools_developer import (
     build_stack_trace_prompt as prompt_stack_trace,
     build_stack_trace_pseudo_prompt as prompt_stack_trace_pseudo,
@@ -43,18 +47,20 @@ logger = logging.getLogger(__name__)
 
 
 _CONFIG = get_config()
-_LLM_CFG = _CONFIG.get("llm")
-_DEVELOPER_TOOL_MODEL = _LLM_CFG.get("developer_tool_model")
-_FINETUNED_CODE_API_MODEL = _LLM_CFG.get("finetuned_code_api_model")
-_RUNTIME_CFG = _CONFIG.get("runtime")
-_BASELINE_TIME_LIMIT = _RUNTIME_CFG.get("baseline_time_limit")
-_BASELINE_CODE_TIMEOUT = _RUNTIME_CFG.get("baseline_code_timeout")
-_LOG_MONITOR_INTERVAL = _RUNTIME_CFG.get("log_monitor_interval", 120)
-_PATH_CFG = _CONFIG.get("paths")
-_OUTPUTS_DIRNAME = _PATH_CFG.get("outputs_dirname")
+_LLM_CFG = _CONFIG["llm"]
+_DEVELOPER_TOOL_MODEL = _LLM_CFG["developer_tool_model"]
+_FINETUNED_CODE_API_MODEL = _LLM_CFG["finetuned_code_api_model"]
+_RUNTIME_CFG = _CONFIG["runtime"]
+_BASELINE_TIME_LIMIT = _RUNTIME_CFG["baseline_time_limit"]
+_BASELINE_CODE_TIMEOUT = _RUNTIME_CFG["baseline_code_timeout"]
+_LOG_MONITOR_INTERVAL = _RUNTIME_CFG["log_monitor_interval"]
+_PATH_CFG = _CONFIG["paths"]
+_OUTPUTS_DIRNAME = _PATH_CFG["outputs_dirname"]
 
 
-def _build_resource_header(cpu_core_range: list[int] | None, gpu_identifier: str | None) -> str:
+def _build_resource_header(
+    cpu_core_range: list[int] | None, gpu_identifier: str | None
+) -> str:
     """Build a Python header that sets CPU affinity and GPU assignment."""
     lines = ["import os\n"]
     if cpu_core_range:
@@ -65,47 +71,45 @@ def _build_resource_header(cpu_core_range: list[int] | None, gpu_identifier: str
     lines.append('os.environ["OPENBLAS_NUM_THREADS"] = "32"\n')
     return "\n".join(lines) + "\n"
 
+
 @weave.op()
 def web_search_stack_trace(query: str) -> str:
     """Research how to fix a bug based on the stack trace and error message."""
     logger.info("Dispatching web search for stack trace remediation guidance.")
     trace_index = query.find("Traceback (most recent call last)")
-    if trace_index != -1: query = query[trace_index:]
+    if trace_index != -1:
+        query = query[trace_index:]
     logger.debug("Stack trace query: %s", query)
 
     logger.info("Attempting fine-tuned model endpoint first...")
 
-    try:
-        ft_system_prompt = prompt_stack_trace_pseudo()
-        ft_user_prompt = "<query>\n" + query + "\n</query>"
+    ft_system_prompt = prompt_stack_trace_pseudo()
+    ft_user_prompt = "<query>\n" + query + "\n</query>"
 
-        ft_response = call_llm(
-            model=_FINETUNED_CODE_API_MODEL,
-            system_instruction=ft_system_prompt,
-            messages=ft_user_prompt,
-            text_format=StackTraceSolution,
-            temperature=1.0,
-            max_retries=3,
-            enable_google_search=False,
-            top_p=1.0,
-            thinking_budget=None,
-        )
+    ft_response = call_llm(
+        model=_FINETUNED_CODE_API_MODEL,
+        system_instruction=ft_system_prompt,
+        messages=ft_user_prompt,
+        text_format=StackTraceSolution,
+        temperature=1.0,
+        max_retries=3,
+        enable_google_search=False,
+        top_p=1.0,
+        thinking_budget=None,
+    )
 
-        solution_text = ft_response.reasoning_and_solution.strip() if ft_response else ""
-        is_valid_response = (
-            ft_response
-            and len(solution_text) >= 35
-            and "I cannot solve this error." not in solution_text
-        )
+    solution_text = ft_response.reasoning_and_solution.strip()
+    is_valid_response = (
+        len(solution_text) >= 35 and "I cannot solve this error." not in solution_text
+    )
 
-        if is_valid_response:
-            logger.info("Fine-tuned model provided a solution, using it.")
-            return query + "\n" + "This is how you can fix the error: \n" + solution_text
+    if is_valid_response:
+        logger.info("Fine-tuned model provided a solution, using it.")
+        return query + "\n" + "This is how you can fix the error: \n" + solution_text
 
-    except Exception as e:
-        logger.warning(f"Fine-tuned model call failed with error: {e}. Falling back to web search workflow.")
-
-    logger.info("Fine-tuned model cannot answer (response too short or failure message), falling back to web search workflow.")
+    logger.info(
+        "Fine-tuned model cannot answer (response too short or failure message), falling back to web search workflow."
+    )
     system_prompt = prompt_stack_trace()
 
     messages = [append_message("user", "<query>\n" + query + "\n</query>")]
@@ -119,14 +123,13 @@ def web_search_stack_trace(query: str) -> str:
         text_format=StackTraceSolution,
     )
 
-    if response and hasattr(response, 'reasoning_and_solution'):
-        solution_text = response.reasoning_and_solution.strip()
-        logger.debug("Returning solution from Gemini structured output.")
-        return query + "\n" + "This is how you can fix the error: \n" + solution_text
+    return (
+        query
+        + "\n"
+        + "This is how you can fix the error: \n"
+        + response.reasoning_and_solution.strip()
+    )
 
-    logger.warning("Unexpected response type, attempting to extract text.")
-    content = extract_text_from_response(response)
-    return query + "\n" + "This is how you can fix the error: \n" + content
 
 def _ingest_images_for_llm(images: list[Path]) -> list[dict] | None:
     """Encode and format images for Gemini messages.
@@ -139,23 +142,14 @@ def _ingest_images_for_llm(images: list[Path]) -> list[dict] | None:
     """
     image_content = []
     for img_path in images:
-        if not img_path.exists():
-            logger.warning(f"Image not found: {img_path}")
-            continue
-
         data_url = encode_image_to_data_url(str(img_path))
-        if not data_url:
-            logger.warning(f"Failed to encode image: {img_path}")
-            continue
-
         if ";base64," in data_url:
             mime_part, b64_data = data_url.split(";base64,", 1)
             mime_type = mime_part.replace("data:", "")
             image_content.append(
                 types.Part(
                     inline_data=types.Blob(
-                        mime_type=mime_type,
-                        data=base64.b64decode(b64_data)
+                        mime_type=mime_type, data=base64.b64decode(b64_data)
                     )
                 )
             )
@@ -212,40 +206,22 @@ def search_red_flags(
         system_instruction=system_prompt,
         function_declarations=[],
         messages=messages,
-        enable_google_search=True
+        enable_google_search=True,
     )
     final_content = extract_text_from_response(response)
 
     logger.info("Red flags identification completed in single pass")
     return final_content
 
-def _get_sota_tools() -> list:
-    """Get tools available for SOTA suggestions.
-
-    Returns:
-        List of FunctionDeclaration objects
-    """
-    return get_tools()
-
-
-def _get_tool_name(tool) -> str:
-    """Extract tool name from a FunctionDeclaration.
-
-    Args:
-        tool: FunctionDeclaration object
-
-    Returns:
-        Tool name string
-    """
-    return tool.name if hasattr(tool, 'name') else ""
-
 
 def _inject_user_guidance(input_list, guidance):
     text = f"[User guidance]: {guidance}"
-    input_list.append(types.Content(
-        role="user",
-        parts=[types.Part.from_text(text=text)],
-    ))
+    input_list.append(
+        types.Content(
+            role="user",
+            parts=[types.Part.from_text(text=text)],
+        )
+    )
 
 
 @weave.op()
@@ -255,13 +231,13 @@ def search_sota_suggestions(
     red_flags: str,
     executed_suggestion: str | None,
     failed_ideas: list[str],
+    slug: str,
+    data_path: str,
     later_recommendations: str | None = None,
     shared_suggestions: list[str] | None = None,
     external_data_listing: str | None = None,
     plan_content: str | None = None,
     attempt_number: int = 1,
-    slug: str | None = None,
-    data_path: str | None = None,
     cpu_core_range: list[int] | None = None,
     gpu_identifier: str | None = None,
     file_suffix: str | None = None,
@@ -272,7 +248,10 @@ def search_sota_suggestions(
     hitl_sota: bool = False,
 ) -> str:
     """Stage 2: Use web search and tools to generate SOTA suggestions based on red flags."""
-    logger.info("Dispatching SOTA suggestions (Stage 2) with web search (attempt #%d)", attempt_number)
+    logger.info(
+        "Dispatching SOTA suggestions (Stage 2) with web search (attempt #%d)",
+        attempt_number,
+    )
 
     context_with_stats = context
     if train_stats:
@@ -280,15 +259,31 @@ def search_sota_suggestions(
         stats_text += f"```json\n{json.dumps(train_stats, indent=2)}\n```\n\n"
         context_with_stats = stats_text + context
         logger.info("Added train_stats to context (%d keys)", len(train_stats))
-    executed_suggestion_text = executed_suggestion or "No previous suggestion executed; this is the first attempt."
-    failed_ideas_text = "\n".join(f"- {idea}" for idea in failed_ideas) if failed_ideas else "No prior ideas are blacklisted."
+    executed_suggestion_text = (
+        executed_suggestion
+        or "No previous suggestion executed; this is the first attempt."
+    )
+    failed_ideas_text = (
+        "\n".join(f"- {idea}" for idea in failed_ideas)
+        if failed_ideas
+        else "No prior ideas are blacklisted."
+    )
 
     # On even attempts, disable shared suggestions to force independent exploration
     if attempt_number % 2 == 0:
-        logger.info("Attempt #%d (even): Disabling shared suggestions to encourage novel exploration", attempt_number)
-        shared_suggestions_text = "No shared suggestions provided for this attempt (exploring independently)."
+        logger.info(
+            "Attempt #%d (even): Disabling shared suggestions to encourage novel exploration",
+            attempt_number,
+        )
+        shared_suggestions_text = (
+            "No shared suggestions provided for this attempt (exploring independently)."
+        )
     else:
-        shared_suggestions_text = "\n".join(f"- {suggestion}" for suggestion in (shared_suggestions or [])) if shared_suggestions else "No shared suggestions yet."
+        shared_suggestions_text = (
+            "\n".join(f"- {suggestion}" for suggestion in (shared_suggestions or []))
+            if shared_suggestions
+            else "No shared suggestions yet."
+        )
 
     # On even attempts, strip "Validated Findings" section from plan to focus on other recommendations
     modified_plan_content = plan_content
@@ -300,10 +295,16 @@ def search_sota_suggestions(
         end_idx = plan_content.find(risks_start)
 
         if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
-            logger.info("Attempt #%d (even): Stripping 'Validated Findings' section (%d chars)", attempt_number, end_idx - start_idx)
+            logger.info(
+                "Attempt #%d (even): Stripping 'Validated Findings' section (%d chars)",
+                attempt_number,
+                end_idx - start_idx,
+            )
             modified_plan_content = plan_content[:start_idx] + plan_content[end_idx:]
         else:
-            logger.warning("Could not find both section headers to strip Validated Findings")
+            logger.warning(
+                "Could not find both section headers to strip Validated Findings"
+            )
 
     plans_section = ""
     if modified_plan_content:
@@ -323,10 +324,11 @@ def search_sota_suggestions(
         executed_suggestion_text=executed_suggestion_text,
         context=context_with_stats,
         shared_suggestions_text=shared_suggestions_text,
-        external_data_listing=external_data_listing or "No external data directories found.",
+        external_data_listing=external_data_listing
+        or "No external data directories found.",
     )
 
-    tools = _get_sota_tools() if (slug and data_path) else []
+    tools = get_tools()
     input_list = [append_message("user", user_prompt)]
 
     if images:
@@ -337,7 +339,12 @@ def search_sota_suggestions(
     step_limit = None if hitl_sota else max_tool_steps
     step = 0
     while step_limit is None or step < step_limit:
-        logger.info("SOTA suggestion step %d/%s (tools: %s)", step + 1, "unlimited" if hitl_sota else str(step_limit), "enabled" if tools else "disabled")
+        logger.info(
+            "SOTA suggestion step %d/%s (tools: %s)",
+            step + 1,
+            "unlimited" if hitl_sota else str(step_limit),
+            "enabled" if tools else "disabled",
+        )
 
         response = call_llm(
             model=_DEVELOPER_TOOL_MODEL,
@@ -345,37 +352,42 @@ def search_sota_suggestions(
             function_declarations=tools if tools else [],
             messages=input_list,
             enable_google_search=True,
-            text_format=SOTAResponse if (step_limit is not None and step == step_limit - 1) else None,
+            text_format=SOTAResponse
+            if (step_limit is not None and step == step_limit - 1)
+            else None,
         )
 
-        has_function_calls = False
-        if hasattr(response, 'candidates') and response.candidates:
-            parts = response.candidates[0].content.parts
-            has_function_calls = any(
-                hasattr(part, 'function_call') and part.function_call
-                for part in parts
+        # text_format is SOTAResponse on last step (returns Pydantic), None otherwise (returns Gemini response)
+        if hasattr(response, "suggestion"):
+            logger.info(
+                "SOTA suggestions completed at step %d (structured output present)",
+                step + 1,
             )
-
-        if not has_function_calls:
-            if response and hasattr(response, 'suggestion'):
-                logger.info("SOTA suggestions completed at step %d (no function calls, structured output present)", step + 1)
-                return response  # Already parsed Pydantic object
-            else:
-                logger.info("SOTA suggestions completed at step %d (no function calls), requesting structured output", step + 1)
-                response = call_llm(
-                    model=_DEVELOPER_TOOL_MODEL,
-                    system_instruction=system_prompt,
-                    messages=input_list,
-                    enable_google_search=True,
-                    text_format=SOTAResponse,
-                )
-                return response  # Already parsed Pydantic object
+            return response
 
         parts = response.candidates[0].content.parts
+        has_function_calls = any(
+            part.function_call for part in parts if hasattr(part, "function_call")
+        )
+
+        if not has_function_calls:
+            logger.info(
+                "SOTA suggestions completed at step %d (no function calls), requesting structured output",
+                step + 1,
+            )
+            response = call_llm(
+                model=_DEVELOPER_TOOL_MODEL,
+                system_instruction=system_prompt,
+                messages=input_list,
+                enable_google_search=True,
+                text_format=SOTAResponse,
+            )
+            return response
+
         function_responses = []
 
         for part in parts:
-            if hasattr(part, 'function_call') and part.function_call:
+            if hasattr(part, "function_call") and part.function_call:
                 tool_result_str = _execute_sota_tool_call(
                     item=part.function_call,
                     description=description,
@@ -390,7 +402,7 @@ def search_sota_suggestions(
                 function_responses.append(
                     types.Part.from_function_response(
                         name=part.function_call.name,
-                        response={"result": tool_result_str}
+                        response={"result": tool_result_str},
                     )
                 )
 
@@ -400,7 +412,9 @@ def search_sota_suggestions(
 
         # HITL: let user provide guidance for next step
         if hitl_sota:
-            user_guidance = input(f"[HITL] Step {step + 1} | Enter to continue, guidance, or 'done': ").strip()
+            user_guidance = input(
+                f"[HITL] Step {step + 1} | Enter to continue, guidance, or 'done': "
+            ).strip()
             if user_guidance.lower() == "done":
                 break
             if user_guidance:
@@ -412,7 +426,8 @@ def search_sota_suggestions(
 
     response = call_llm(
         model=_DEVELOPER_TOOL_MODEL,
-        system_instruction=system_prompt + "\n\nYou have reached the maximum tool usage limit. Provide your final suggestion now based on the information gathered.",
+        system_instruction=system_prompt
+        + "\n\nYou have reached the maximum tool usage limit. Provide your final suggestion now based on the information gathered.",
         messages=input_list,
         enable_google_search=True,
         text_format=SOTAResponse,
@@ -420,7 +435,17 @@ def search_sota_suggestions(
     return response  # Already parsed Pydantic object
 
 
-def _execute_sota_tool_call(item, description, data_path, slug, cpu_core_range, gpu_identifier, file_suffix, step=0, version=1):
+def _execute_sota_tool_call(
+    item,
+    description,
+    data_path,
+    slug,
+    cpu_core_range,
+    gpu_identifier,
+    file_suffix,
+    step=0,
+    version=1,
+):
     """Execute a single SOTA tool call and return JSON result.
 
     Args:
@@ -430,53 +455,37 @@ def _execute_sota_tool_call(item, description, data_path, slug, cpu_core_range, 
     """
     from tools.researcher import scrape_web_page, read_research_paper
 
-    tool_name = item.name
-    args = dict(item.args) if hasattr(item, 'args') else {}
+    args = dict(item.args)
 
-    try:
-        if item.name == "execute_python":
-            code = args.get("code", "")
-            if not code:
-                return json.dumps({"error": "code parameter is required"})
+    if item.name == "execute_python":
+        code = args["code"]
+        logger.info("SOTA tool: execute_python (code_len=%d, step=%d)", len(code), step)
 
-            logger.info("SOTA tool: execute_python (code_len=%d, step=%d)", len(code), step)
+        version_dir = Path(data_path) / _OUTPUTS_DIRNAME / file_suffix / str(version)
+        version_dir.mkdir(parents=True, exist_ok=True)
+        script_file = version_dir / f"execute_python_{step}.py"
 
-            version_dir = Path(data_path) / _OUTPUTS_DIRNAME / file_suffix / str(version)
-            version_dir.mkdir(parents=True, exist_ok=True)
-            script_file = version_dir / f"execute_python_{step}.py"
+        resource_header = _build_resource_header(cpu_core_range, gpu_identifier)
+        script_file.write_text(resource_header + code)
 
-            resource_header = _build_resource_header(cpu_core_range, gpu_identifier)
-            script_file.write_text(resource_header + code)
+        job = execute_code(str(script_file), timeout_seconds=300)
+        output = job.result()
+        return json.dumps({"output": output})
 
-            job = execute_code(str(script_file), timeout_seconds=300)
-            output = job.result()
-            return json.dumps({"output": output})
+    elif item.name == "scrape_web_page":
+        url = args["url"]
+        logger.info("SOTA tool: scrape_web_page(%s)", url)
+        result = scrape_web_page(url)
+        return json.dumps({"content": result})
 
-        elif item.name == "scrape_web_page":
-            url = args.get("url", "")
-            if not url:
-                return json.dumps({"error": "url parameter is required"})
+    elif item.name == "read_research_paper":
+        arxiv_link = args["arxiv_link"]
+        logger.info("SOTA tool: read_research_paper(%s)", arxiv_link)
+        result = read_research_paper(arxiv_link)
+        return json.dumps({"summary": result})
 
-            logger.info("SOTA tool: scrape_web_page(%s)", url)
-            result = scrape_web_page(url)
-            return json.dumps({"content": result})
-
-        elif item.name == "read_research_paper":
-            arxiv_link = args.get("arxiv_link", "")
-            if not arxiv_link:
-                return json.dumps({"error": "arxiv_link parameter is required"})
-
-            logger.info("SOTA tool: read_research_paper(%s)", arxiv_link)
-            result = read_research_paper(arxiv_link)
-            return json.dumps({"summary": result})
-
-        else:
-            logger.error("Unknown SOTA tool: %s", item.name)
-            return json.dumps({"error": f"Unknown tool: {item.name}"})
-
-    except Exception as e:
-        logger.exception("SOTA tool execution failed for %s", item.name)
-        return json.dumps({"error": f"Tool execution failed: {str(e)}"})
+    else:
+        raise ValueError(f"Unknown SOTA tool: {item.name}")
 
 
 def _stream_reader(stream, buffer: list, timestamp_ref: list):
@@ -557,7 +566,8 @@ class ExecutionJob:
 
         logger.warning(
             "Execution failed for %s with return code %s",
-            self._filepath, self._proc.returncode,
+            self._filepath,
+            self._proc.returncode,
         )
         return web_search_stack_trace(stderr_text)
 
@@ -598,7 +608,9 @@ class ExecutionJob:
 
 
 @weave.op()
-def execute_code(filepath: str, timeout_seconds: int | None = None, conda_env: str | None = None) -> "ExecutionJob":
+def execute_code(
+    filepath: str, timeout_seconds: int | None = None, conda_env: str | None = None
+) -> "ExecutionJob":
     """Launch a Python file for execution and return a job handle immediately.
 
     The process runs in the background. Use the returned ExecutionJob to:
@@ -618,15 +630,33 @@ def execute_code(filepath: str, timeout_seconds: int | None = None, conda_env: s
     if timeout_seconds is None:
         timeout_seconds = _BASELINE_CODE_TIMEOUT
 
-    conda_exe = os.environ.get('CONDA_EXE', 'conda')
+    conda_exe = os.environ.get("CONDA_EXE", "conda")
 
     if conda_env:
         # -u for unbuffered output on the inner python process
-        cmd = [conda_exe, "run", "--no-capture-output", "-n", conda_env, "python", "-u", filepath]
-        logger.info("Executing in conda environment '%s': %s (timeout: %d seconds)", conda_env, filepath, timeout_seconds)
+        cmd = [
+            conda_exe,
+            "run",
+            "--no-capture-output",
+            "-n",
+            conda_env,
+            "python",
+            "-u",
+            filepath,
+        ]
+        logger.info(
+            "Executing in conda environment '%s': %s (timeout: %d seconds)",
+            conda_env,
+            filepath,
+            timeout_seconds,
+        )
     else:
         cmd = ["python", "-u", filepath]
-        logger.info("Executing generated script: %s (timeout: %d seconds)", filepath, timeout_seconds)
+        logger.info(
+            "Executing generated script: %s (timeout: %d seconds)",
+            filepath,
+            timeout_seconds,
+        )
 
     logger.debug("Running subprocess command: %s", " ".join(cmd))
     proc = subprocess.Popen(
@@ -641,26 +671,21 @@ def execute_code(filepath: str, timeout_seconds: int | None = None, conda_env: s
 
 def _execute_monitor_tool_call(item) -> str:
     """Execute a monitor tool call (execute_bash) and return the result as JSON."""
-    tool_name = item.name
-    args = dict(item.args) if hasattr(item, 'args') else {}
+    args = dict(item.args)
 
-    if tool_name == "execute_bash":
-        command = args.get("command", "")
-        if not command:
-            return json.dumps({"error": "command parameter is required"})
+    if item.name == "execute_bash":
+        command = args["command"]
         logger.info("Monitor tool: execute_bash(%s)", command)
-        try:
-            result = subprocess.run(
-                command, shell=True, capture_output=True, text=True, timeout=30,
-            )
-            output = result.stdout + result.stderr
-            return json.dumps({"output": output})
-        except subprocess.TimeoutExpired:
-            return json.dumps({"error": "Command timed out after 30 seconds"})
-        except Exception as e:
-            return json.dumps({"error": str(e)})
+        result = subprocess.run(
+            command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        return json.dumps({"output": result.stdout + result.stderr})
     else:
-        return json.dumps({"error": f"Unknown monitor tool: {tool_name}"})
+        raise ValueError(f"Unknown monitor tool: {item.name}")
 
 
 @weave.op()
@@ -688,77 +713,60 @@ def monitor_logs(
     input_list = [append_message("user", user_prompt)]
 
     for step in range(max_tool_steps):
-        is_last_step = (step == max_tool_steps - 1)
+        is_last_step = step == max_tool_steps - 1
         text_format = LogMonitorVerdict if is_last_step else None
 
         logger.info("Monitor step %d/%d", step + 1, max_tool_steps)
 
-        try:
+        response = call_llm(
+            model=_DEVELOPER_TOOL_MODEL,
+            system_instruction=system_prompt,
+            function_declarations=tools if not is_last_step else [],
+            messages=input_list,
+            enable_google_search=False,
+            text_format=text_format,
+        )
+
+        # text_format is LogMonitorVerdict on last step (returns Pydantic), None otherwise
+        if hasattr(response, "action"):
+            return response
+
+        parts = response.candidates[0].content.parts
+        has_function_calls = any(
+            part.function_call for part in parts if hasattr(part, "function_call")
+        )
+
+        if not has_function_calls:
             response = call_llm(
                 model=_DEVELOPER_TOOL_MODEL,
                 system_instruction=system_prompt,
-                function_declarations=tools if not is_last_step else [],
                 messages=input_list,
                 enable_google_search=False,
-                text_format=text_format,
+                text_format=LogMonitorVerdict,
             )
+            return response
 
-            if hasattr(response, 'action'):
-                return response
-
-            has_function_calls = False
-            if hasattr(response, 'candidates') and response.candidates:
-                parts = response.candidates[0].content.parts
-                has_function_calls = any(
-                    hasattr(part, 'function_call') and part.function_call
-                    for part in parts
-                )
-
-            if not has_function_calls:
-                if hasattr(response, 'action'):
-                    return response
-                response = call_llm(
-                    model=_DEVELOPER_TOOL_MODEL,
-                    system_instruction=system_prompt,
-                    messages=input_list,
-                    enable_google_search=False,
-                    text_format=LogMonitorVerdict,
-                )
-                return response
-
-            parts = response.candidates[0].content.parts
-            function_responses = []
-            for part in parts:
-                if hasattr(part, 'function_call') and part.function_call:
-                    tool_result_str = _execute_monitor_tool_call(part.function_call)
-                    function_responses.append(
-                        types.Part.from_function_response(
-                            name=part.function_call.name,
-                            response={"result": tool_result_str},
-                        )
+        function_responses = []
+        for part in parts:
+            if hasattr(part, "function_call") and part.function_call:
+                tool_result_str = _execute_monitor_tool_call(part.function_call)
+                function_responses.append(
+                    types.Part.from_function_response(
+                        name=part.function_call.name,
+                        response={"result": tool_result_str},
                     )
-            input_list.append(response.candidates[0].content)
-            if function_responses:
-                input_list.append(types.Content(role="function", parts=function_responses))
-
-        except Exception:
-            logger.exception("Monitor LLM call failed at step %d", step + 1)
-            return LogMonitorVerdict(action="continue", reason="Monitor error — defaulting to continue")
+                )
+        input_list.append(response.candidates[0].content)
+        if function_responses:
+            input_list.append(types.Content(role="function", parts=function_responses))
 
     # Exhausted steps without a verdict — force one
     logger.warning("Monitor exhausted %d steps, forcing final verdict", max_tool_steps)
-    try:
-        response = call_llm(
-            model=_DEVELOPER_TOOL_MODEL,
-            system_instruction=system_prompt + "\n\nReturn your verdict now.",
-            messages=input_list,
-            enable_google_search=False,
-            text_format=LogMonitorVerdict,
-        )
-
-        if hasattr(response, 'action'):
-            return response
-    except Exception:
-        logger.exception("Monitor final verdict call failed")
-
-    return LogMonitorVerdict(action="continue", reason="Monitor could not determine verdict — defaulting to continue")
+    response = call_llm(
+        model=_DEVELOPER_TOOL_MODEL,
+        system_instruction=system_prompt + "\n\nReturn your verdict now.",
+        messages=input_list,
+        enable_google_search=False,
+        text_format=LogMonitorVerdict,
+    )
+    return response

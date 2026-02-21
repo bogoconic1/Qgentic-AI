@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 def build_stack_trace_pseudo_prompt() -> str:
     return """# Role and Objective
 You are a Python debugging assistant. Your goal is to generate a structured and actionable debugging workflow for a Python traceback, based *only* on your internal knowledge. You have a strict library filter.
@@ -77,6 +78,7 @@ Provide the following fields:
 - `validation`: 1-2 lines confirming your recommendation addresses the specific error or stack trace. If the recommendation does not fully resolve the error based on validation, provide a minimal self-correction and re-validate.
 - `further_steps`: Any additional required actions, or a confirmation that the issue should now be resolved.
 """
+
 
 def red_flags_system() -> str:
     return """You will receive a Kaggle competition description, an initial code script, and complete training logs for your analysis. Your primary responsibility is to identify high-level conceptual red flags by directly reviewing both the provided code and logs.
@@ -162,7 +164,6 @@ Set reasoning_effort = medium by default for balanced thoroughness without exces
 """
 
 
-
 def red_flags_user(
     description: str,
     context: str,
@@ -175,11 +176,7 @@ def red_flags_user(
 """
 
 
-def sota_system(time_limit_minutes: int = None) -> str:
-    # Default time limit if not provided
-    if time_limit_minutes is None:
-        time_limit_minutes = 90
-
+def sota_system(time_limit_minutes: int = 90) -> str:
     return f"""You will receive:
 - Kaggle competition description
 - One or more researcher plans
@@ -321,6 +318,7 @@ Provide a 1–3 sentence milestone micro-update at key logical boundaries: after
 
 Preserve output ordering and section headers for ALL scenarios (errors, partials, or full success).
 """
+
 
 def sota_user(
     description: str,

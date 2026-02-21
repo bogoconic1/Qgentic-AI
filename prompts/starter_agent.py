@@ -76,6 +76,7 @@ Return the output with the following fields:
 - task_summary: "Multi-step forecasting to predict store sales 28 days ahead using historical sales, price, and promotional data. Metric: RMSE. Dataset contains daily sales for 3,049 products across 10 stores over 5 years."
 """
 
+
 def build_user(description: str) -> str:
     return f"""<competition description>
 {description}

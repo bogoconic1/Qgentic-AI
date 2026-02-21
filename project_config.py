@@ -59,13 +59,14 @@ def get_instructions() -> dict[str, list[str]]:
     instructions_path = Path(__file__).resolve().parent / "INSTRUCTIONS.md"
     if not instructions_path.exists():
         return {h: [] for h in _INSTRUCTIONS_HEADINGS}
-    try:
-        text = instructions_path.read_text(encoding="utf-8")
-    except Exception:
-        return {h: [] for h in _INSTRUCTIONS_HEADINGS}
+    text = instructions_path.read_text(encoding="utf-8")
 
     sections: dict[str, list[str]] = {}
     for i, heading in enumerate(_INSTRUCTIONS_HEADINGS):
-        next_heading = _INSTRUCTIONS_HEADINGS[i + 1] if i + 1 < len(_INSTRUCTIONS_HEADINGS) else None
+        next_heading = (
+            _INSTRUCTIONS_HEADINGS[i + 1]
+            if i + 1 < len(_INSTRUCTIONS_HEADINGS)
+            else None
+        )
         sections[heading] = _extract_section(text, heading, next_heading)
     return sections

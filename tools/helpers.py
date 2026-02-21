@@ -48,13 +48,19 @@ def _retry_with_backoff(func, *, max_retries, backoff_sequence):
                 backoff = backoff_sequence[min(attempt, len(backoff_sequence) - 1)]
                 logging.warning(
                     "API call failed (attempt %d/%d): %s: %s. Retrying in %.1fs...",
-                    attempt + 1, max_retries + 1, type(e).__name__, str(e), backoff,
+                    attempt + 1,
+                    max_retries + 1,
+                    type(e).__name__,
+                    str(e),
+                    backoff,
                 )
                 time.sleep(backoff)
             else:
                 logging.error(
                     "API call failed after %d attempts: %s: %s",
-                    max_retries + 1, type(e).__name__, str(e),
+                    max_retries + 1,
+                    type(e).__name__,
+                    str(e),
                 )
         except Exception as e:
             logging.error("Non-retryable error: %s: %s", type(e).__name__, str(e))
@@ -65,11 +71,15 @@ def _retry_with_backoff(func, *, max_retries, backoff_sequence):
 
 def _build_directory_listing(root: str, num_files: int | None = None) -> str:
     cfg = get_config()
-    runtime_cfg = cfg.get("runtime")
-    path_cfg = cfg.get("paths")
-    limit = num_files if num_files is not None else runtime_cfg.get("directory_listing_max_files")
+    runtime_cfg = cfg["runtime"]
+    path_cfg = cfg["paths"]
+    limit = (
+        num_files
+        if num_files is not None
+        else runtime_cfg["directory_listing_max_files"]
+    )
     lines: list[str] = []
-    outputs_dirname = path_cfg.get("outputs_dirname")
+    outputs_dirname = path_cfg["outputs_dirname"]
 
     for current_root, dirs, files in os.walk(root):
         rel_root = os.path.relpath(current_root, root)
@@ -86,13 +96,13 @@ def _build_directory_listing(root: str, num_files: int | None = None) -> str:
                 files_to_show = []
             # At <root>/outputs/<iteration>
             elif len(segments) == 2:
-                # Only descend into external_data_* subdirectories; hide files at this level
-                dirs[:] = sorted([d for d in dirs if d.startswith("external_data_")])
+                # Only descend into the external_data subdirectory; hide files at this level
+                dirs[:] = sorted([d for d in dirs if d == "external_data"])
                 files_to_show = []
             else:
                 # At or below <root>/outputs/<iteration>/*
-                # Allow full traversal within external_data_*; block others entirely
-                if len(segments) >= 3 and segments[2].startswith("external_data_"):
+                # Allow full traversal within external_data; block others entirely
+                if len(segments) >= 3 and segments[2] == "external_data":
                     dirs[:] = sorted(dirs)
                     files_to_show = files
                 else:
@@ -114,12 +124,13 @@ def _build_directory_listing(root: str, num_files: int | None = None) -> str:
 
     return "\n".join(lines)
 
+
 @weave.op()
 def call_llm(
     model: str,
     system_instruction: str,
     messages: str | list = None,
-    text_format = None,
+    text_format=None,
     temperature: float = 1.0,
     max_retries: int | None = None,
     enable_google_search: bool = False,
@@ -130,9 +141,9 @@ def call_llm(
     function_declarations: list = None,
     include_usage: bool = False,
 ):
-    runtime_cfg = get_config().get("runtime")
-    retries = max_retries or runtime_cfg.get("llm_max_retries")
-    backoff_seq = tuple(runtime_cfg.get("llm_backoff_sequence"))
+    runtime_cfg = get_config()["runtime"]
+    retries = max_retries or runtime_cfg["llm_max_retries"]
+    backoff_seq = tuple(runtime_cfg["llm_backoff_sequence"])
 
     def _call():
         client = genai.Client()
@@ -154,15 +165,16 @@ def call_llm(
             "tools": tool_list if tool_list else None,
         }
 
-        if thinking_level is not None or thinking_budget is not None or include_thoughts:
-            thinking_config_params = {}
-            if thinking_level is not None:
-                thinking_config_params["thinking_level"] = thinking_level
-            if thinking_budget is not None:
-                thinking_config_params["thinking_budget"] = thinking_budget
-            if include_thoughts:
-                thinking_config_params["include_thoughts"] = include_thoughts
-            config_params["thinking_config"] = genai_types.ThinkingConfig(**thinking_config_params)
+        thinking_config_params = {}
+        if thinking_level is not None:
+            thinking_config_params["thinking_level"] = thinking_level
+        if thinking_budget is not None:
+            thinking_config_params["thinking_budget"] = thinking_budget
+        if include_thoughts:
+            thinking_config_params["include_thoughts"] = include_thoughts
+        config_params["thinking_config"] = genai_types.ThinkingConfig(
+            **thinking_config_params
+        )
 
         if text_format is not None:
             config_params["response_mime_type"] = "application/json"
@@ -174,19 +186,13 @@ def call_llm(
             config=genai_types.GenerateContentConfig(**config_params),
         )
 
-        input_tokens = None
-        if include_usage and hasattr(response, 'usage_metadata') and response.usage_metadata:
-            input_tokens = getattr(response.usage_metadata, 'prompt_token_count', None)
+        input_tokens = (
+            response.usage_metadata.prompt_token_count if include_usage else None
+        )
 
         if text_format is not None:
-            try:
-                parsed_result = text_format.model_validate_json(response.text)
-                return (parsed_result, input_tokens) if include_usage else parsed_result
-            except Exception as parse_error:
-                logging.warning(f"Initial JSON parsing failed, attempting to clean response: {parse_error}")
-                cleaned_text = response.text.lstrip("```json").lstrip("```").rstrip("```").strip()
-                parsed_result = text_format.model_validate_json(cleaned_text)
-                return (parsed_result, input_tokens) if include_usage else parsed_result
+            parsed_result = text_format.model_validate_json(response.text)
+            return (parsed_result, input_tokens) if include_usage else parsed_result
         else:
             return (response, input_tokens) if include_usage else response
 
