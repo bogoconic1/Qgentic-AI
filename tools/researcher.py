@@ -30,7 +30,6 @@ def read_research_paper(arxiv_link: str) -> str:
         Structured markdown summary with sections: Abstract, Introduction, Related Work,
         Method/Architecture, Experiments/Results, and Conclusion.
     """
-    # Extract arxiv ID from link (handles full URLs or just IDs)
     arxiv_id_match = re.search(r'(\d{4}\.\d{4,5})', arxiv_link)
     if arxiv_id_match:
         arxiv_id = arxiv_id_match.group(1)

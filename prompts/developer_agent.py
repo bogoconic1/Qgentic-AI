@@ -28,7 +28,6 @@ def _read_helper_files(slug: str) -> str:
     Returns:
         Formatted string with helper file schemas and contents, or empty string if no files found
     """
-    # Read from task root directory
     base_dir = Path(f"task/{slug}")
 
     helper_sections = []
@@ -40,7 +39,6 @@ def _read_helper_files(slug: str) -> str:
             with open(cv_splits_path, 'r') as f:
                 cv_data = json.load(f)
 
-            # Limit lists to 5 items for display
             cv_data_limited = _limit_list_items(cv_data, max_items=5)
 
             cv_section = f"""
@@ -97,12 +95,10 @@ def _get_hard_constraints(model_name: str) -> str:
 
 
 def build_system(description: str, directory_listing: str, model_name: str, slug: str, cpu_core_range: list[int] | None = None, gpu_identifier: str | None = None, gpu_isolation_mode: str = "none", hitl_instructions: list[str] | None = None) -> str:
-    # Build resource allocation info
     resource_info = ""
     if cpu_core_range is not None:
         resource_info = f"\nNumber of CPUs: {len(cpu_core_range)} cores"
 
-    # Build HITL instructions section if provided
     hitl_section = ""
     if hitl_instructions and len(hitl_instructions) > 0:
         hitl_items = "\n".join([f"{i+1}. {instr}" for i, instr in enumerate(hitl_instructions)])
@@ -120,7 +116,6 @@ You have been provided with the following guidance for code implementation:
 
     constraints = _get_hard_constraints(model_name)
 
-    # Read helper files (cv_splits.json, metric.py) if they exist
     helper_files_section = _read_helper_files(slug)
 
     return f"""# Role: Lead Developer for Machine-Learning Competition Team
@@ -193,7 +188,6 @@ def build_user(
     version: int = 1,
     model_recommendations: str = "",
 ) -> str:
-    # Build model recommendations section (only for version 1)
     recommendations_section = ""
     if version == 1 and model_recommendations:
         recommendations_section = f"""
@@ -202,7 +196,6 @@ def build_user(
 
 """
 
-    # Extract version folder from log_path (e.g., outputs/16_2/1 from outputs/16_2/1/train.txt)
     from pathlib import Path
     version_folder = Path(log_path).parent
 

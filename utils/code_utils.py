@@ -58,9 +58,7 @@ def extract_python_code(content: str) -> str:
         except SyntaxError:
             pass
 
-    # Decision logic
     if new_compiles and old_compiles:
-        # Both compile - use the longer one
         if len(code_new) >= len(code_old):
             logger.debug(f"Both patterns compile, using new pattern ({len(code_new)} chars vs {len(code_old)} chars)")
             return code_new
@@ -74,7 +72,6 @@ def extract_python_code(content: str) -> str:
         logger.debug(f"Only old pattern compiles, using old pattern ({len(code_old)} chars)")
         return code_old
     else:
-        # Neither compiles - use the longer one anyway
         if len(code_new) >= len(code_old):
             logger.debug(f"Neither compiles, using new pattern as longer ({len(code_new)} chars vs {len(code_old)} chars)")
             return code_new
@@ -92,11 +89,9 @@ def strip_header_from_code(code_path: Path) -> str:
     Returns:
         Clean code without headers
     """
-    # Read the code
     with open(code_path, 'r') as f:
         code_text = f.read()
 
-    # Read metadata to get number of header lines
     metadata_path = code_path.with_suffix('.json')
     if metadata_path.exists():
         with open(metadata_path, 'r') as f:
@@ -108,6 +103,5 @@ def strip_header_from_code(code_path: Path) -> str:
     if num_header_lines == 0:
         return code_text
 
-    # Strip header lines
     lines = code_text.split('\n')
     return '\n'.join(lines[num_header_lines:])

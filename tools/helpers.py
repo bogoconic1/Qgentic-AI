@@ -99,7 +99,6 @@ def _build_directory_listing(root: str, num_files: int | None = None) -> str:
                     dirs[:] = []
                     files_to_show = []
         else:
-            # Outside outputs subtree: normal traversal
             dirs[:] = sorted(dirs)
             files_to_show = files
 
@@ -108,8 +107,7 @@ def _build_directory_listing(root: str, num_files: int | None = None) -> str:
         folder_display = "." if rel_root in (".", "") else os.path.basename(rel_root)
         lines.append(f"{indent}{folder_display}/")
 
-        # Print files according to policy and limit
-        for name in files_to_show[:limit]:  # to avoid stuffing context window
+        for name in files_to_show[:limit]:
             lines.append(f"{indent}    {name}")
         if len(files_to_show) > limit:
             lines.append(f"{indent}    ... ({len(files_to_show) - limit} more files)")
@@ -139,7 +137,6 @@ def call_llm(
     def _call():
         client = genai.Client()
 
-        # Build tools list - combine into single Tool object
         tool_list = []
         tool_params = {}
         if enable_google_search:

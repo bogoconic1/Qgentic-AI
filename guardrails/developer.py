@@ -100,13 +100,11 @@ def check_logging_basicconfig_order(code: str) -> Dict[str, Any]:
     violations: List[Dict[str, Any]] = []
 
     for node in module.body:
-        # Detect a top-level basicConfig call
         if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
             if _is_logging_basicconfig_call(node.value) and basic_line is None:
                 basic_line = getattr(node, "lineno", None)
                 continue
 
-        # Detect top-level logging statements prior to basicConfig
         if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
             call = node.value
             is_log_call = _is_logging_direct_call(call)

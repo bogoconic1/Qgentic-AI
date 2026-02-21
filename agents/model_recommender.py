@@ -78,14 +78,11 @@ class ModelRecommenderAgent:
         self.outputs_dir = self.base_dir / self.outputs_dirname / str(iteration)
         self.outputs_dir.mkdir(parents=True, exist_ok=True)
 
-        # Output paths
         self.json_path = self.outputs_dir / "model_recommendations.json"
         self.log_path = self.outputs_dir / "model_recommender.log"
 
-        # Configure logger
         self._configure_logger()
 
-        # Load inputs once
         self.inputs = self._load_inputs()
 
         logger.info(
@@ -116,7 +113,6 @@ class ModelRecommenderAgent:
         """
         inputs = {}
 
-        # Load competition description
         description_path = self.base_dir / "description.md"
         if description_path.exists():
             with open(description_path, "r") as f:
@@ -125,7 +121,6 @@ class ModelRecommenderAgent:
             logger.warning("No description.md found at %s", description_path)
             inputs["description"] = ""
 
-        # Load task_types and task_summary from starter_suggestions.json
         starter_path = self.outputs_dir / "starter_suggestions.json"
         if starter_path.exists():
             try:
@@ -148,7 +143,6 @@ class ModelRecommenderAgent:
             inputs["task_type"] = []
             inputs["task_summary"] = ""
 
-        # Load research plan (optional)
         plan_path = self.outputs_dir / "plan.md"
         if plan_path.exists():
             with open(plan_path, "r") as f:
@@ -188,13 +182,11 @@ class ModelRecommenderAgent:
         Returns:
             Pydantic model instance or None
         """
-        # Response is already parsed Pydantic object when text_format is used
         return response if response else None
 
     @weave.op()
     def _recommend_preprocessing(self, model_name: str) -> Dict[str, Any]:
         """Get preprocessing recommendations for a model."""
-        # Build user prompt with categories
         user_prompt = build_user_prompt(
             description=self.inputs["description"],
             task_type=self.inputs["task_type"],
@@ -203,7 +195,6 @@ class ModelRecommenderAgent:
             research_plan=self.inputs.get("plan"),
         )
 
-        # Call LLM
         time_limit_minutes = int(_BASELINE_CODE_TIMEOUT / 60)
         system_prompt = preprocessing_system_prompt(time_limit_minutes=time_limit_minutes)
         messages = [append_message("user", user_prompt)]
@@ -213,12 +204,10 @@ class ModelRecommenderAgent:
 
             response_text = extract_text_from_response(response)
 
-            # Parse JSON from response text
             if not response_text:
                 logger.warning("[%s] No response for preprocessing", model_name)
                 return {}
 
-            # Extract JSON from code blocks
             json_pattern = r'```json\s*(.*?)\s*```'
             matches = re.findall(json_pattern, response_text, re.DOTALL)
 
@@ -384,7 +373,6 @@ class ModelRecommenderAgent:
             system_prompt, messages, text_format=ModelSelection
         )
 
-        # Parse Stage 1 response
         try:
             parsed = self._get_structured_output(response)
             if not parsed:
@@ -395,7 +383,6 @@ class ModelRecommenderAgent:
                 logger.warning("No models in recommended_models array, using default models")
                 return []
 
-            # Extract candidate model names (should be 16)
             candidate_models = [model.name.strip() for model in parsed.recommended_models if model.name.strip()]
 
             if not candidate_models:
@@ -404,7 +391,6 @@ class ModelRecommenderAgent:
 
             logger.info("Stage 1: Selected %d candidate models", len(candidate_models))
 
-            # Save candidate models
             candidate_models_path = self.outputs_dir / "candidate_models.json"
             try:
                 with open(candidate_models_path, "w") as f:
@@ -420,7 +406,6 @@ class ModelRecommenderAgent:
             logger.info("Stage 3: Refining to 8 final models")
             final_models = self._refine_model_selection(candidate_models, summaries)
 
-            # Save final selected models
             selected_models_path = self.outputs_dir / "selected_models.json"
             try:
                 with open(selected_models_path, "w") as f:
@@ -450,15 +435,12 @@ class ModelRecommenderAgent:
         client = PaperSummaryClient(is_model=True)
         summaries = {}
 
-        # Fetch summaries in parallel
         with ThreadPoolExecutor(max_workers=len(model_names)) as executor:
-            # Submit all tasks
             future_to_model = {
                 executor.submit(client.generate_summary, model_name): model_name
                 for model_name in model_names
             }
 
-            # Collect results as they complete
             for future in future_to_model:
                 model_name = future_to_model[future]
                 try:
@@ -469,7 +451,6 @@ class ModelRecommenderAgent:
                     logger.warning("[%s] Failed to retrieve paper summary: %s", model_name, e)
                     summaries[model_name] = "Summary unavailable - no paper found or retrieval failed"
 
-        # Save summaries to file for reference
         summaries_path = self.outputs_dir / "candidate_model_summaries.json"
         try:
             with open(summaries_path, "w") as f:
@@ -505,7 +486,6 @@ class ModelRecommenderAgent:
 
         time_limit_minutes = int(_BASELINE_CODE_TIMEOUT / 60)
 
-        # Build prompts from prompts module
         user_prompt = build_refiner_user_prompt(
             description=self.inputs["description"],
             task_type=self.inputs["task_type"],
@@ -518,7 +498,6 @@ class ModelRecommenderAgent:
 
         system_instruction = model_refiner_system_prompt(time_limit_minutes=time_limit_minutes)
 
-        # Call Gemini 2.5 Pro with structured output
         try:
             messages = [append_message("user", user_prompt)]
             refined_selection = call_llm(
@@ -532,7 +511,6 @@ class ModelRecommenderAgent:
 
             logger.info("Model refinement completed: selected %d models", len(final_models))
 
-            # Save refined selection with reasoning to file
             refined_path = self.outputs_dir / "refined_model_selection.json"
             try:
                 with open(refined_path, "w") as f:
@@ -575,15 +553,12 @@ class ModelRecommenderAgent:
 
         all_recommendations = {}
 
-        # Run model recommendations in parallel using ThreadPoolExecutor
         with ThreadPoolExecutor(max_workers=len(model_list)) as executor:
-            # Submit all tasks
             future_to_model = {
                 executor.submit(self._recommend_for_model, model_name): model_name
                 for model_name in model_list
             }
 
-            # Collect results as they complete
             for future in future_to_model:
                 model_name = future_to_model[future]
                 try:
@@ -591,7 +566,6 @@ class ModelRecommenderAgent:
                     all_recommendations[model_name] = recommendations
                     logger.info("[%s] Recommendations generated successfully", model_name)
 
-                    # Persist incrementally after each model completes
                     try:
                         with open(self.json_path, "w") as f:
                             json.dump(all_recommendations, f, indent=2)
@@ -608,7 +582,6 @@ class ModelRecommenderAgent:
             logger.error("Failed to get recommendations for any model")
             raise RuntimeError("No model recommendations were generated successfully")
 
-        # Final persist to JSON
         try:
             with open(self.json_path, "w") as f:
                 json.dump(all_recommendations, f, indent=2)

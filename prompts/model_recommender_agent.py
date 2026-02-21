@@ -1,4 +1,4 @@
-from __future__ import annotations # delays type checking (Typing module) until runtime
+from __future__ import annotations
 
 def model_selector_system_prompt(time_limit_minutes: int = 180) -> str:
     return f"""# Role & Objective
@@ -477,7 +477,6 @@ def build_user_prompt(
     research_plan: str | None = None,
 ) -> str:
     """Build user prompt with all necessary inputs for model recommender."""
-    # Format task_type(s) properly
     if isinstance(task_type, list):
         task_type_display = " + ".join(task_type) if len(task_type) > 1 else task_type[0]
     else:
@@ -544,13 +543,11 @@ def build_refiner_user_prompt(
     Returns:
         Formatted user prompt for refinement
     """
-    # Format task_type(s) properly
     if isinstance(task_type, list):
         task_type_display = " + ".join(task_type) if len(task_type) > 1 else task_type[0]
     else:
         task_type_display = task_type
 
-    # Build candidates text with summaries
     candidates_text = ""
     for i, model_name in enumerate(candidate_models, 1):
         summary = summaries.get(model_name, "Summary unavailable")

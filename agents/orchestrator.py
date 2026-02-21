@@ -43,13 +43,11 @@ def _get_mig_uuids() -> list[str]:
         if result.returncode != 0:
             return []
 
-        # Parse output for MIG UUIDs from all GPUs
         # Example line: "  MIG 2g.20gb     Device  0: (UUID: MIG-17331e1a-f2f0-500d-86f0-acf8289655ad)"
         mig_uuids = []
         lines = result.stdout.strip().split("\n")
 
         for line in lines:
-            # Parse MIG UUID from any line that contains both "MIG" and "UUID:"
             if "MIG" in line and "UUID:" in line:
                 match = re.search(r'UUID:\s+(MIG-[a-f0-9\-]+)', line)
                 if match:
@@ -99,7 +97,6 @@ def _calculate_max_parallel_workers_and_pools() -> tuple[int, list[str], str]:
         )
 
     if enable_mig:
-        # MIG mode: Auto-detect MIG instances from all GPUs
         detected_mig_uuids = _get_mig_uuids()
         if len(detected_mig_uuids) > 0:
             return len(detected_mig_uuids), detected_mig_uuids, "mig"
@@ -108,10 +105,8 @@ def _calculate_max_parallel_workers_and_pools() -> tuple[int, list[str], str]:
             return fallback, [], "mig"
 
     elif enable_multi_gpu:
-        # Multi-GPU mode: Auto-detect available GPUs
         available_gpus = _get_available_gpus()
 
-        # Filter by allowed_gpu_ids if specified in config
         allowed_gpu_ids = _RUNTIME_CFG.get("allowed_gpu_ids", None)
         if allowed_gpu_ids is not None and len(allowed_gpu_ids) > 0:
             available_gpus = [gpu_id for gpu_id in available_gpus if gpu_id in allowed_gpu_ids]
@@ -124,7 +119,6 @@ def _calculate_max_parallel_workers_and_pools() -> tuple[int, list[str], str]:
             return fallback, [], "multi-gpu"
 
     else:
-        # No GPU isolation: Use configured value
         max_workers = int(_RUNTIME_CFG.get("baseline_max_parallel_workers", 1))
         return max_workers, [], "none"
 
@@ -165,10 +159,8 @@ def _ensure_conda_environments(num_workers: int) -> None:
     # Get conda executable path (resolves "conda: command not found" in subprocess)
     conda_exe = os.environ.get('CONDA_EXE', 'conda')
 
-    # Get the base environment name (current active environment)
     base_env = os.environ.get('CONDA_DEFAULT_ENV', 'qgentic-ai')
 
-    # Check if environments should be reset on each run
     reset_per_run = _RUNTIME_CFG.get("reset_conda_envs_per_run", True)
 
     if reset_per_run:
@@ -178,7 +170,6 @@ def _ensure_conda_environments(num_workers: int) -> None:
         print(f"Ensuring {num_workers} conda environments for isolated package installation (reuse mode enabled)...")
         print(f"Base environment: {base_env}")
 
-    # Check which environments exist
     result = subprocess.run(
         [conda_exe, "env", "list"],
         capture_output=True,
@@ -188,7 +179,6 @@ def _ensure_conda_environments(num_workers: int) -> None:
     
     existing_envs = result.stdout
 
-    # Create or recreate environments based on config
     for i in range(1, num_workers + 1):
         env_name = f"qgentic-model-{i}"
 
@@ -231,7 +221,6 @@ def _ensure_conda_environments(num_workers: int) -> None:
 
 @weave.op()
 def _run_researcher_once(slug: str, iteration: int, run_id: int) -> tuple[int, str, int]:
-    # Calculate resource pools for CPU affinity and GPU isolation
     max_parallel_workers, gpu_pool, _ = _calculate_max_parallel_workers_and_pools()
     cpu_core_pool = _create_cpu_core_pool(max_parallel_workers)
 
@@ -273,7 +262,6 @@ def _run_developer_baseline(slug: str, iteration_suffix: str, model_name: str, n
     gpu_identifier = gpu_pool.get() if gpu_pool else None
 
     try:
-        # Format NOW recommendations for developer
         formatted_recommendations = _format_recommendations_for_developer(now_recommendations)
 
         baseline_time_limit = _RUNTIME_CFG["baseline_time_limit"]
@@ -307,7 +295,6 @@ def _extract_now_recommendations(recommendations: dict) -> dict:
     """
     now_only = {}
 
-    # Preprocessing - each category has MUST_HAVE/NICE_TO_HAVE structure
     preprocessing = recommendations.get("preprocessing", {})
     if preprocessing:
         now_only["preprocessing"] = {}
@@ -319,14 +306,12 @@ def _extract_now_recommendations(recommendations: dict) -> dict:
                         "MUST_HAVE": now_items
                     }
 
-    # Loss function - MUST_HAVE is an object, NICE_TO_HAVE is an array
     loss_fn = recommendations.get("loss_function", {})
     if loss_fn and "MUST_HAVE" in loss_fn:
         now_only["loss_function"] = {
             "MUST_HAVE": loss_fn["MUST_HAVE"]
         }
 
-    # Hyperparameters - MUST_HAVE has hyperparameters and architectures arrays
     hyperparams = recommendations.get("hyperparameters", {})
     if hyperparams and "MUST_HAVE" in hyperparams:
         now_section = hyperparams["MUST_HAVE"]
@@ -337,7 +322,6 @@ def _extract_now_recommendations(recommendations: dict) -> dict:
             cleaned_now["architectures"] = now_section["architectures"]
         now_only["hyperparameters"] = {"MUST_HAVE": cleaned_now}
 
-    # Inference strategies - MUST_HAVE has inference_strategies array
     inference = recommendations.get("inference_strategies", {})
     if inference and "MUST_HAVE" in inference:
         now_section = inference["MUST_HAVE"]
@@ -358,7 +342,6 @@ def _extract_later_recommendations(recommendations: dict) -> dict:
     """
     later_only = {}
 
-    # Preprocessing - each category has MUST_HAVE/NICE_TO_HAVE structure
     preprocessing = recommendations.get("preprocessing", {})
     if preprocessing:
         later_only["preprocessing"] = {}
@@ -370,14 +353,12 @@ def _extract_later_recommendations(recommendations: dict) -> dict:
                         "NICE_TO_HAVE": later_items
                     }
 
-    # Loss function - NICE_TO_HAVE is an array
     loss_fn = recommendations.get("loss_function", {})
     if loss_fn and "NICE_TO_HAVE" in loss_fn:
         later_only["loss_function"] = {
             "NICE_TO_HAVE": loss_fn["NICE_TO_HAVE"]
         }
 
-    # Hyperparameters - NICE_TO_HAVE has hyperparameters and architectures arrays
     hyperparams = recommendations.get("hyperparameters", {})
     if hyperparams and "NICE_TO_HAVE" in hyperparams:
         later_section = hyperparams["NICE_TO_HAVE"]
@@ -388,7 +369,6 @@ def _extract_later_recommendations(recommendations: dict) -> dict:
             cleaned_later["architectures"] = later_section["architectures"]
         later_only["hyperparameters"] = {"NICE_TO_HAVE": cleaned_later}
 
-    # Inference strategies - NICE_TO_HAVE has inference_strategies array
     inference = recommendations.get("inference_strategies", {})
     if inference and "NICE_TO_HAVE" in inference:
         later_section = inference["NICE_TO_HAVE"]
@@ -409,7 +389,6 @@ def _format_recommendations_for_developer(recommendations: dict) -> str:
     """
     details = []
 
-    # Preprocessing
     preprocessing = recommendations.get("preprocessing", {})
     if preprocessing:
         details.append("## Preprocessing Strategies")
@@ -425,7 +404,6 @@ def _format_recommendations_for_developer(recommendations: dict) -> str:
                             if strategy:
                                 details.append(f"- {strategy}: {explanation}")
 
-    # Loss function
     loss_fn = recommendations.get("loss_function", {})
     if loss_fn and "MUST_HAVE" in loss_fn:
         details.append("\n## Loss Function")
@@ -435,7 +413,6 @@ def _format_recommendations_for_developer(recommendations: dict) -> str:
         if loss_name:
             details.append(f"- Use {loss_name}: {loss_exp}")
 
-    # Hyperparameters
     hyperparams = recommendations.get("hyperparameters", {})
     if hyperparams and "MUST_HAVE" in hyperparams:
         now_section = hyperparams["MUST_HAVE"]
@@ -449,7 +426,6 @@ def _format_recommendations_for_developer(recommendations: dict) -> str:
                 if hp:
                     details.append(f"- {hp}: {explanation}")
 
-        # Architectures
         arch_list = now_section.get("architectures", [])
         if arch_list:
             details.append("\n### Architecture Recommendations")
@@ -460,7 +436,6 @@ def _format_recommendations_for_developer(recommendations: dict) -> str:
                     if arch:
                         details.append(f"- {arch}: {explanation}")
 
-    # Inference strategies
     inference = recommendations.get("inference_strategies", {})
     if inference and "MUST_HAVE" in inference:
         now_section = inference["MUST_HAVE"]
@@ -518,7 +493,6 @@ class Orchestrator:
         target = self.rollback_to_version
         parent_outputs = self.base_dir / _OUTPUTS_DIRNAME
 
-        # Validate: at least one model has the target version folder
         found = False
         for iter_suffix in model_iterations:
             model_dir = parent_outputs / iter_suffix
@@ -541,7 +515,6 @@ class Orchestrator:
             trash_dir = model_dir / "_trash" / timestamp
             moved_any = False
 
-            # Move version folders > target into _trash/<timestamp>/
             for entry in sorted(model_dir.iterdir()):
                 if not entry.is_dir() or entry.name.startswith("_"):
                     continue
@@ -557,7 +530,6 @@ class Orchestrator:
                     entry.rename(dest)
                     print(f"Rollback: moved {entry} -> {dest}")
 
-            # Delete checkpoint rows beyond target
             delete_checkpoints_after(conn, self.slug, iter_suffix, target)
             print(f"Rollback: deleted checkpoints after v{target} for iteration {iter_suffix}")
 
@@ -596,7 +568,6 @@ class Orchestrator:
                 raise RuntimeError("No plan found")
 
         # Phase 3: Model Recommender Agent - Get model-specific recommendations
-        # First dynamically selects suitable models, then generates recommendations for each
         model_rec_path = self.outputs_dir / "model_recommendations.json"
         if model_rec_path.exists():
             with open(model_rec_path, "r") as f:
@@ -604,7 +575,6 @@ class Orchestrator:
         else:
             model_rec_agent = ModelRecommenderAgent(self.slug, self.iteration)
 
-            # Check if human provided models (HITL mode)
             hitl_models = get_instructions()["# Models"]
 
             if hitl_models and len(hitl_models) > 0:
@@ -622,7 +592,6 @@ class Orchestrator:
             else:
                 raise RuntimeError("No model recommendations found")
 
-        # Extract NOW and LATER recommendations for each model
         now_recommendations_all = {}
         later_recommendations_all = {}
 
@@ -631,19 +600,16 @@ class Orchestrator:
             now_recommendations_all[model_name] = now_recs
             later_recommendations_all[model_name] = _extract_later_recommendations(recommendations)
         
-        # Persist NOW recommendations for future use
         now_rec_path = self.outputs_dir / "now_recommendations.json"
         with open(now_rec_path, "w") as f:
             json.dump(now_recommendations_all, f, indent=2)
 
-        # Persist LATER recommendations for future use
         later_rec_path = self.outputs_dir / "later_recommendations.json"
         with open(later_rec_path, "w") as f:
             json.dump(later_recommendations_all, f, indent=2)
 
         # Phase 4: Baseline Developer Stage - Evaluate models in parallel with NOW recommendations
 
-        # Rollback: clean up version folders and checkpoints beyond target version
         if self.rollback_to_version is not None:
             model_iterations = [
                 f"{self.iteration}_{idx}"
@@ -653,7 +619,6 @@ class Orchestrator:
 
         baseline_results = {}
 
-        # Get parallel execution configuration using shared helper functions
         max_parallel_workers, gpu_pool_list, gpu_isolation_mode = _calculate_max_parallel_workers_and_pools()
 
         # Force single worker in HITL mode
@@ -664,7 +629,6 @@ class Orchestrator:
 
         cpu_core_pool_list = _create_cpu_core_pool(max_parallel_workers)
 
-        # Print configuration summary
         if gpu_isolation_mode == "mig":
             if len(gpu_pool_list) > 0:
                 print(f"MIG enabled: Auto-detected {max_parallel_workers} MIG instances")
@@ -683,7 +647,6 @@ class Orchestrator:
         # Create resource queues for dynamic allocation (baseline developer uses Queues for flexibility)
         num_models = len(now_recommendations_all)
 
-        # CPU core pool (convert list to Queue for dynamic acquisition/release)
         cpu_core_pool = None
         if len(cpu_core_pool_list) > 0 and num_models > 1:
             cpu_core_pool = Queue()
@@ -691,7 +654,6 @@ class Orchestrator:
                 cpu_core_pool.put(core_range)
             print(f"CPU core pool created with {max_parallel_workers} core ranges")
 
-        # GPU pool (convert list to Queue for dynamic acquisition/release)
         gpu_pool = None
         if num_models > 1 and len(gpu_pool_list) > 0:
             gpu_pool = Queue()
@@ -702,8 +664,6 @@ class Orchestrator:
             elif gpu_isolation_mode == "multi-gpu":
                 print(f"GPU pool created with {len(gpu_pool_list)} GPUs")
 
-        # Prepare tasks for parallel execution (no pre-assignment of resources)
-        # Load existing baseline results if available for selective reruns
         existing_baseline_results = {}
         baseline_path = self.outputs_dir / "baseline_results.json"
         if baseline_path.exists():
@@ -714,15 +674,12 @@ class Orchestrator:
             except Exception as e:
                 print(f"Warning: Could not load existing baseline results: {e}")
 
-        # Read external data listing and plan content (shared across all models)
         external_data_listing = self._get_external_data_listing()
         plan_content = self._get_plan_content()
         print(f"External data listing: {len(external_data_listing)} chars")
         print(f"Plan content: {len(plan_content)} chars")
 
         if not os.path.exists(self.outputs_dir / "baseline_results.json") or len(existing_baseline_results) < len(now_recommendations_all):
-            # Ensure conda environments exist for isolated package installation
-            # Create environments for all models (not just parallel workers)
             num_models = len(now_recommendations_all)
             _ensure_conda_environments(num_models)
 
@@ -732,7 +689,6 @@ class Orchestrator:
                 dev_iter = f"{self.iteration}_{idx}"
                 later_recs = later_recommendations_all.get(model_name, {})
 
-                # Assign isolated conda environment for this model
                 conda_env = f"qgentic-model-{idx}"
 
                 # Skip if this model already has results (unless you want to force rerun)
@@ -757,7 +713,6 @@ class Orchestrator:
                     conda_env
                 ))
 
-            # Start with existing results (for incremental updates)
             baseline_results = existing_baseline_results.copy()
 
             # Run developer agents — directly on main thread for HITL (stdin required),
@@ -812,7 +767,6 @@ class Orchestrator:
             else:
                 print("No new baseline tasks to run (all models already completed)")
 
-            # Persist baseline results (final)
             if baseline_results:
                 baseline_path = self.outputs_dir / "baseline_results.json"
                 with open(baseline_path, "w") as f:
@@ -820,7 +774,6 @@ class Orchestrator:
             else:
                 raise RuntimeError("All developer baseline runs failed")
 
-        # Return baseline results path
         baseline_path = self.outputs_dir / "baseline_results.json"
         return True, str(baseline_path)
     
