@@ -219,8 +219,6 @@ class ModelRecommenderAgent:
                 return {}
 
             # Extract JSON from code blocks
-            import re
-            import json
             json_pattern = r'```json\s*(.*?)\s*```'
             matches = re.findall(json_pattern, response_text, re.DOTALL)
 

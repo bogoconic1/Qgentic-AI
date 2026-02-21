@@ -20,13 +20,14 @@ from tools.developer import (
     search_red_flags,
     search_sota_suggestions,
     _LOG_MONITOR_INTERVAL,
+    _BASELINE_CODE_TIMEOUT,
 )
 from utils.guardrails import evaluate_guardrails, build_block_summary
 from tools.helpers import call_llm, _build_directory_listing
 from utils.llm_utils import extract_text_from_response, append_message
 from utils.checkpoint import create_db as _create_checkpoint_db, save_checkpoint, load_latest_checkpoint
 from utils.grade import run_grade
-from schemas.developer import CodeGeneration
+from schemas.developer import CodeGeneration, SOTAResponse
 from utils.code_utils import strip_header_from_code, extract_python_code
 from prompts.developer_agent import (
     build_system as prompt_build_system,
@@ -211,7 +212,6 @@ class DeveloperAgent:
         Returns:
             Timeout in seconds for code execution
         """
-        from tools.developer import _BASELINE_CODE_TIMEOUT
         return _BASELINE_CODE_TIMEOUT
 
 
@@ -764,8 +764,6 @@ class DeveloperAgent:
         Returns:
             Directory listing string
         """
-        from pathlib import Path
-
         lines = []
 
         # 1. Base directory listing (train/, test/, root files)
@@ -794,8 +792,6 @@ class DeveloperAgent:
         Returns:
             Directory listing showing train/, test/ folders and root-level files
         """
-        from pathlib import Path
-
         lines = []
         base_dir = Path(self.base_dir)
 
@@ -1109,7 +1105,6 @@ class DeveloperAgent:
                 user_input = input("[HITL] Press Enter to accept, or type replacement: ").strip()
                 if user_input:
                     user_code = input("[HITL] Enter code snippet (or press Enter to skip): ").strip()
-                    from schemas.developer import SOTAResponse
                     sota_response = SOTAResponse(
                         blacklist=sota_response.blacklist,
                         blacklist_reason=sota_response.blacklist_reason,
