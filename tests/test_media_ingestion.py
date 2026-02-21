@@ -43,15 +43,15 @@ def test_ingest_new_media_appends_multimodal_message(tmp_path, monkeypatch):
     # Act: ingest the newly created media
     messages = agent._ingest_new_media(before)
 
-    # Assert: a message was returned with correct structure
+    # Assert: a message was returned with correct structure (Gemini format)
     assert messages is not None
     assert len(messages) == 1
     m = messages[0]
     assert m.get("role") == "user"
-    content = m.get("content")
-    assert isinstance(content, list) and len(content) >= 1
-    # At least one input_image item present (Responses API format)
-    assert any(item.get("type") == "input_image" for item in content)
+    parts = m.get("parts")
+    assert isinstance(parts, list) and len(parts) >= 1
+    # At least one Part with inline_data present (Gemini format)
+    assert any(hasattr(p, "inline_data") and p.inline_data for p in parts)
 
 
 def test_ingest_media_respects_max_images(tmp_path):
@@ -80,8 +80,8 @@ def test_ingest_media_respects_max_images(tmp_path):
 
     assert messages is not None
     assert len(messages) == 1
-    content = messages[0]["content"]
-    attached = [c for c in content if c.get("type") == "input_image"]
+    parts = messages[0]["parts"]
+    attached = [p for p in parts if hasattr(p, "inline_data") and p.inline_data]
     assert len(attached) <= MAX_IMAGES_PER_STEP
 
 

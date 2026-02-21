@@ -9,12 +9,12 @@ from project_config import get_config, get_instructions
 
 from tools.researcher import read_research_paper, scrape_web_page
 from tools.developer import execute_code, _build_resource_header
-from utils.llm_utils import get_tools_for_provider, detect_provider, append_message, encode_image_to_data_url
+from utils.llm_utils import get_tools, append_message, encode_image_to_data_url
 from prompts.researcher_agent import (
     build_system as prompt_build_system,
     initial_user_for_build_plan as prompt_initial_user,
 )
-from tools.helpers import call_llm_with_retry, call_llm_with_retry_anthropic, call_llm_with_retry_google
+from tools.helpers import call_llm
 import weave
 
 logger = logging.getLogger(__name__)
@@ -41,7 +41,7 @@ MAX_TOTAL_BYTES = 5 * 1024 * 1024
 class ResearcherAgent:
     """Lead Research Strategist with tool-calling.
 
-    Uses OpenAI tool calling to decide when/what to ask via ask_domain_expert.
+    Uses Gemini tool calling to decide when/what to ask via ask_domain_expert.
     Continues executing tool calls until the model returns a final plan
     (no further tool calls), or the tool-call budget is exhausted.
     """
@@ -103,7 +103,7 @@ class ResearcherAgent:
         logger.info(
             "ResearcherAgent initialized for slug=%s iteration=%s", self.slug, self.iteration
         )
-        
+
     def _list_media_files(self) -> set[Path]:
         media_dir = self.media_dir
         if not media_dir.exists():
@@ -114,11 +114,13 @@ class ResearcherAgent:
                 files.add(p)
         return files
 
-    def _encode_image_to_data_url(self, path: Path, resize_for_anthropic: bool = False) -> str:
-        """Wrapper around utils.llm_utils.encode_image_to_data_url for backward compatibility."""
-        return encode_image_to_data_url(path, resize_for_anthropic=resize_for_anthropic)
+    def _encode_image_to_data_url(self, path: Path) -> str:
+        """Wrapper around utils.llm_utils.encode_image_to_data_url."""
+        return encode_image_to_data_url(path)
 
-    def _ingest_new_media(self, before_set: set[Path], provider: str = "openai") -> None:
+    def _ingest_new_media(self, before_set: set[Path]) -> None:
+        from google.genai import types
+
         after_set = self._list_media_files()
         new_files = list(after_set - before_set)
         if not new_files:
@@ -141,51 +143,25 @@ class ResearcherAgent:
             total += size
         if not selected:
             return
-        content: list[dict] = []
+        content: list = []
         for p in selected:
-            # Resize images for Anthropic to respect 2000px limit for multi-image requests
-            resize_for_anthropic = (provider == "anthropic")
-            data_url = self._encode_image_to_data_url(p, resize_for_anthropic=resize_for_anthropic)
+            data_url = self._encode_image_to_data_url(p)
             if not data_url:
                 continue
 
-            # Format image based on provider
-            if provider == "anthropic":
-                # Extract base64 data and mime type from data URL
-                # data_url format: "data:image/jpeg;base64,/9j/4AAQ..."
-                if ";base64," in data_url:
-                    mime_part, b64_data = data_url.split(";base64,", 1)
-                    mime_type = mime_part.replace("data:", "")
-                    content.append({
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": mime_type,
-                            "data": b64_data
-                        }
-                    })
-            elif provider == "google":
-                # Gemini format: Part with inline_data
-                from google.genai import types
-                if ";base64," in data_url:
-                    mime_part, b64_data = data_url.split(";base64,", 1)
-                    mime_type = mime_part.replace("data:", "")
-                    content.append(
-                        types.Part(
-                            inline_data=types.Blob(
-                                mime_type=mime_type,
-                                data=base64.b64decode(b64_data)
-                            )
+            if ";base64," in data_url:
+                mime_part, b64_data = data_url.split(";base64,", 1)
+                mime_type = mime_part.replace("data:", "")
+                content.append(
+                    types.Part(
+                        inline_data=types.Blob(
+                            mime_type=mime_type,
+                            data=base64.b64decode(b64_data)
                         )
                     )
-            else:  # OpenAI format
-                content.append({"type": "input_image", "image_url": data_url})
+                )
 
-        # Return in provider-specific format
-        if provider == "google":
-            return [{"role": "user", "parts": content}]
-        else:
-            return [{"role": "user", "content": content}]
+        return [{"role": "user", "parts": content}]
 
     def _compose_system(self) -> str:
         # Load task_types from starter_suggestions.json
@@ -230,76 +206,45 @@ class ResearcherAgent:
         return res
 
 
-    def _format_tool_result(self, tool_id: str, output_data: dict, provider: str, is_error: bool = False):
-        """Format tool result for the appropriate provider.
+    def _format_tool_result(self, tool_id: str, output_data: dict, is_error: bool = False):
+        """Format tool result for Gemini.
 
         Args:
-            tool_id: Tool call ID (call_id for OpenAI, id for Anthropic)
+            tool_id: Tool call ID
             output_data: Dict of output data (e.g., {"insights": "..."})
-            provider: "openai" or "anthropic"
             is_error: Whether this is an error response
 
         Returns:
-            Formatted dict for the provider
+            Formatted dict
         """
-        if provider == "openai":
-            return {
-                "type": "function_call_output",
-                "call_id": tool_id,
-                "output": json.dumps(output_data)
-            }
-        else:  # anthropic or google
-            return {
-                "type": "tool_result",
-                "tool_use_id": tool_id,
-                "content": json.dumps(output_data),
-                "is_error": is_error
-            }
+        return {
+            "type": "tool_result",
+            "tool_use_id": tool_id,
+            "content": json.dumps(output_data),
+            "is_error": is_error
+        }
 
-    def _execute_tool_call(self, item, input_list: list = None, provider: str = "openai", step: int = 0):
-        """Execute a single tool call and append results to input_list or return dict.
+    def _execute_tool_call(self, item, input_list: list = None, step: int = 0):
+        """Execute a single tool call and return result dict.
 
         Args:
-            item: Tool call item from LLM response
-            input_list: Message list to append tool results to (for OpenAI, modified in-place)
-            provider: "openai", "anthropic", or "google"
+            item: Tool call item from Gemini response (a part with function_call attribute)
+            input_list: Message list (unused for Gemini, kept for interface consistency)
             step: Current tool loop step (for unique filenames)
 
         Returns:
-            None for OpenAI (modifies input_list in-place)
-            dict for Anthropic/Gemini (tool_result format)
+            dict (tool_result format)
         """
-        # Parse tool name and arguments based on provider
-        if provider == "openai":
-            tool_name = item.name
-            try:
-                tool_args = json.loads(item.arguments)
-            except Exception as e:
-                logger.error("Failed to parse arguments: %s", e)
-                tool_args = {}
-            tool_id = item.call_id
-        elif provider == "anthropic":
-            tool_name = item.name
-            tool_args = item.input  # Already a dict
-            tool_id = item.id
-        elif provider == "google":
-            # For Gemini, item is a part with function_call attribute
-            tool_name = item.function_call.name
-            tool_args = dict(item.function_call.args)
-            tool_id = item.function_call.id if hasattr(item.function_call, 'id') else None
-        else:
-            raise ValueError(f"Unsupported provider: {provider}")
+        tool_name = item.function_call.name
+        tool_args = dict(item.function_call.args)
+        tool_id = item.function_call.id if hasattr(item.function_call, 'id') else None
 
         # Execute the tool based on tool_name
         if tool_name == "execute_python":
             code = tool_args.get("code", "")
             if not code:
                 tool_output = "Error: code parameter is required."
-                result = self._format_tool_result(tool_id, {"output": tool_output}, provider, is_error=True)
-                if provider == "openai":
-                    input_list.append(result)
-                else:
-                    return result
+                return self._format_tool_result(tool_id, {"output": tool_output}, is_error=True)
             else:
                 before_media = self._list_media_files()
 
@@ -314,22 +259,17 @@ class ResearcherAgent:
                 job = execute_code(str(script_file), timeout_seconds=300)
                 tool_output = job.result()
 
-                result = self._format_tool_result(tool_id, {"output": tool_output}, provider)
+                result = self._format_tool_result(tool_id, {"output": tool_output})
 
                 # Ingest media (charts/plots generated by the script)
                 media_prompt = None
                 try:
-                    media_prompt = self._ingest_new_media(before_media, provider)
+                    media_prompt = self._ingest_new_media(before_media)
                 except Exception as e:
                     logger.error("Failed to ingest new media: %s", e)
 
-                if provider == "openai":
-                    input_list.append(result)
-                    if media_prompt:
-                        input_list += media_prompt
-                else:
-                    self._pending_media = media_prompt
-                    return result
+                self._pending_media = media_prompt
+                return result
 
         elif tool_name == "read_research_paper":
             arxiv_link = tool_args.get("arxiv_link", "")
@@ -342,11 +282,7 @@ class ResearcherAgent:
 
             logger.info("Paper summary response length=%s", len(tool_output or ""))
 
-            result = self._format_tool_result(tool_id, {"summary": tool_output}, provider)
-            if provider == "openai":
-                input_list.append(result)
-            else:
-                return result
+            return self._format_tool_result(tool_id, {"summary": tool_output})
 
         elif tool_name == "scrape_web_page":
             url = tool_args.get("url", "")
@@ -359,177 +295,90 @@ class ResearcherAgent:
 
             logger.info("Scraped content length=%s", len(tool_output or ""))
 
-            result = self._format_tool_result(tool_id, {"content": tool_output}, provider)
-            if provider == "openai":
-                input_list.append(result)
-            else:
-                return result
+            return self._format_tool_result(tool_id, {"content": tool_output})
 
     @weave.op()
     def build_plan(self, max_steps: int | None = None) -> str:
+        from google.genai import types
+
         system_prompt = self._compose_system()
         starter_suggestions = self._read_starter_suggestions()
 
         max_steps = max_steps or _DEFAULT_MAX_STEPS
         logger.info("Researcher run started with max_steps=%s", max_steps)
 
-        # Detect provider and get appropriate tools
-        provider = detect_provider(_RESEARCHER_AGENT_MODEL)
-        tools = get_tools_for_provider(provider)
-        logger.info("Using provider: %s with model: %s", provider, _RESEARCHER_AGENT_MODEL)
+        tools = get_tools()
+        logger.info("Using model: %s", _RESEARCHER_AGENT_MODEL)
 
-        # Initialize conversation in provider-specific format using append_message
+        # Initialize conversation
         initial_prompt = prompt_initial_user(self.description, starter_suggestions)
-        input_list = [append_message(provider, "user", initial_prompt)]
+        input_list = [append_message("user", initial_prompt)]
 
         for step in range(max_steps):
             logger.info("[Researcher] Step %s/%s", step + 1, max_steps)
 
             if step == max_steps - 1:
-                input_list.append(append_message(provider, "user", "This is your FINAL step. Output the final plan now!"))
+                input_list.append(append_message("user", "This is your FINAL step. Output the final plan now!"))
                 logger.info("Reached final step; forcing plan output prompt")
 
-            if provider == "openai":
-                response = call_llm_with_retry(
-                    model=_RESEARCHER_AGENT_MODEL,
-                    instructions=system_prompt,
-                    tools=tools,
-                    messages=input_list,
-                    web_search_enabled=True,
-                )
+            response = call_llm(
+                model=_RESEARCHER_AGENT_MODEL,
+                system_instruction=system_prompt,
+                messages=input_list,
+                function_declarations=tools if tools else [],
+                enable_google_search=True,
+            )
 
-                input_list += response.output
-                tool_calls = False
+            # Check if response has function calls
+            has_tool_calls = False
+            function_call_parts = []
+            if hasattr(response, 'candidates') and response.candidates:
+                for part in response.candidates[0].content.parts:
+                    if hasattr(part, 'function_call') and part.function_call:
+                        has_tool_calls = True
+                        function_call_parts.append(part)
 
-                for item in response.output:
-                    if item.type == "function_call":
-                        tool_calls = True
-                        self._execute_tool_call(item, input_list, provider="openai", step=step)
+            if has_tool_calls:
+                # Execute all tool calls and collect results
+                function_response_parts = []
+                self._pending_media = None  # Reset pending media
 
-                if tool_calls:
-                    continue
+                for part in function_call_parts:
+                    result_dict = self._execute_tool_call(part, step=step)
 
-                # No tool calls -> final plan
-                final_content = response.output_text or ""
-
-            elif provider == "anthropic":
-                response = call_llm_with_retry_anthropic(
-                    model=_RESEARCHER_AGENT_MODEL,
-                    instructions=system_prompt,
-                    tools=tools,
-                    messages=input_list,
-                    web_search_enabled=True,
-                )
-
-                # Check stop_reason
-                if response.stop_reason == "tool_use":
-                    # Extract tool_use blocks from content
-                    tool_uses = [
-                        block for block in response.content
-                        if hasattr(block, 'type') and block.type == 'tool_use'
-                    ]
-
-                    # Execute all tools and collect results
-                    tool_results = []
-                    self._pending_media = None  # Reset pending media
-                    for tool_use in tool_uses:
-                        result = self._execute_tool_call(tool_use, provider="anthropic", step=step)
-                        tool_results.append(result)
-
-                    # Add to messages in Anthropic format
-                    # IMPORTANT: Keep ALL content blocks including web_search_result
-                    # (needed for citations to work, even though they increase token usage)
-                    input_list.append({
-                        "role": "assistant",
-                        "content": response.content
-                    })
-
-                    # Combine tool results with media if available
-                    user_content = tool_results
-                    if hasattr(self, '_pending_media') and self._pending_media:
-                        # Add media images after tool results
-                        user_content = tool_results + self._pending_media[0]["content"]
-                        self._pending_media = None  # Clear after use
-
-                    input_list.append({
-                        "role": "user",
-                        "content": user_content
-                    })
-
-                    continue
-
-                # No tool use -> final plan
-                final_content = ''.join([
-                    block.text for block in response.content
-                    if hasattr(block, 'text')
-                ])
-
-            elif provider == "google":
-                response = call_llm_with_retry_google(
-                    model=_RESEARCHER_AGENT_MODEL,
-                    system_instruction=system_prompt,
-                    messages=input_list,  # Pass full conversation history
-                    function_declarations=tools if tools else [],
-                    enable_google_search=True,
-                )
-
-                # Check if response has function calls
-                has_tool_calls = False
-                function_call_parts = []
-                if hasattr(response, 'candidates') and response.candidates:
-                    for part in response.candidates[0].content.parts:
-                        if hasattr(part, 'function_call') and part.function_call:
-                            has_tool_calls = True
-                            function_call_parts.append(part)
-
-                if has_tool_calls:
-                    # Execute all tool calls and collect results
-                    from google.genai import types
-
-                    function_response_parts = []
-                    self._pending_media = None  # Reset pending media
-
-                    for part in function_call_parts:
-                        # Execute tool using existing method
-                        result_dict = self._execute_tool_call(part, provider="google", step=step)
-
-                        # Format as Gemini function response
-                        function_response_parts.append(
-                            types.Part.from_function_response(
-                                name=part.function_call.name,
-                                response=result_dict
-                            )
+                    # Format as Gemini function response
+                    function_response_parts.append(
+                        types.Part.from_function_response(
+                            name=part.function_call.name,
+                            response=result_dict
                         )
-
-                    # Add model's response with tool calls to conversation
-                    input_list.append(response.candidates[0].content)
-
-                    # Add function responses
-                    input_list.append(
-                        types.Content(role="function", parts=function_response_parts)
                     )
 
-                    # Add media if available
-                    if hasattr(self, '_pending_media') and self._pending_media:
-                        # _pending_media format: [{"role": "user", "parts": [Part, Part, ...]}]
-                        media_parts = self._pending_media[0]["parts"]
-                        input_list.append(
-                            types.Content(role="user", parts=media_parts)
-                        )
-                        logger.info("Added %d media items to conversation", len(media_parts))
-                        self._pending_media = None
+                # Add model's response with tool calls to conversation
+                input_list.append(response.candidates[0].content)
 
-                    continue
+                # Add function responses
+                input_list.append(
+                    types.Content(role="function", parts=function_response_parts)
+                )
 
-                # No tool calls -> final plan
-                final_content = response.text if hasattr(response, 'text') else ""
+                # Add media if available
+                if hasattr(self, '_pending_media') and self._pending_media:
+                    media_parts = self._pending_media[0]["parts"]
+                    input_list.append(
+                        types.Content(role="user", parts=media_parts)
+                    )
+                    logger.info("Added %d media items to conversation", len(media_parts))
+                    self._pending_media = None
 
-            else:
-                raise ValueError(f"Unsupported provider: {provider}")
+                continue
+
+            # No tool calls -> final plan
+            final_content = response.text if hasattr(response, 'text') else ""
 
             if step < 5:
-                input_list.append(append_message(provider, "assistant", final_content))
-                input_list.append(append_message(provider, "user", "Go ahead."))
+                input_list.append(append_message("assistant", final_content))
+                input_list.append(append_message("user", "Go ahead."))
                 continue
 
             # Common final plan handling

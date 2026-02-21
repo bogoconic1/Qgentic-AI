@@ -22,8 +22,8 @@ from tools.developer import (
     _LOG_MONITOR_INTERVAL,
 )
 from utils.guardrails import evaluate_guardrails, build_block_summary
-from tools.helpers import call_llm_with_retry, call_llm_with_retry_anthropic, call_llm_with_retry_google, _build_directory_listing
-from utils.llm_utils import detect_provider, extract_text_from_response, append_message
+from tools.helpers import call_llm, _build_directory_listing
+from utils.llm_utils import extract_text_from_response, append_message
 from utils.checkpoint import create_db as _create_checkpoint_db, save_checkpoint, load_latest_checkpoint
 from utils.grade import run_grade
 from schemas.developer import CodeGeneration
@@ -358,41 +358,14 @@ class DeveloperAgent:
 
         schema = CodeGeneration
 
-        # Detect provider
-        provider = detect_provider(_DEVELOPER_MODEL)
-        input_tokens = None
-
-        if provider == "openai":
-            result, input_tokens = call_llm_with_retry(
-                model=_DEVELOPER_MODEL,
-                instructions=instructions,
-                tools=[],
-                messages=messages,
-                web_search_enabled=True,
-                text_format=schema,
-                include_usage=True
-            )
-        elif provider == "anthropic":
-            result, input_tokens = call_llm_with_retry_anthropic(
-                model=_DEVELOPER_MODEL,
-                instructions=instructions,
-                tools=[],
-                messages=messages,
-                web_search_enabled=True,
-                text_format=schema,
-                include_usage=True
-            )
-        elif provider == "google":
-            result, input_tokens = call_llm_with_retry_google(
-                model=_DEVELOPER_MODEL,
-                system_instruction=instructions,
-                messages=messages,
-                enable_google_search=True,
-                text_format=schema,
-                include_usage=True
-            )
-        else:
-            raise ValueError(f"Unsupported provider: {provider}")
+        result, input_tokens = call_llm(
+            model=_DEVELOPER_MODEL,
+            system_instruction=instructions,
+            messages=messages,
+            enable_google_search=True,
+            text_format=schema,
+            include_usage=True
+        )
 
         self.logger.info("Model response received for iteration %s", self.iteration)
 
@@ -411,7 +384,7 @@ class DeveloperAgent:
         content = f"```python\n{code_dict['train_py']}\n```"
 
         # Create message history entry
-        output = [append_message(provider, "assistant", content)]
+        output = [append_message("assistant", content)]
 
         # Log input tokens for debugging
         if input_tokens:
@@ -1234,7 +1207,7 @@ class DeveloperAgent:
 
     def _run_feedback_and_build_next_instruction(
         self, version, code_context, run_score, previous_successful_version,
-        base_score, submission_exists, output, input_list, provider,
+        base_score, submission_exists, output, input_list,
         sota_suggestions_call_id
     ):
         """Run step 6: gather feedback and append next instruction to input_list.
@@ -1336,11 +1309,11 @@ class DeveloperAgent:
             )
 
             if blacklist_flag and rollback_code:
-                input_list.append(append_message(provider, "user", 'The previous code has been blacklisted. Here is the most recent valid (successful and non-blacklisted) version for your reference (please start work from this version): \n' + rollback_code))
+                input_list.append(append_message("user", 'The previous code has been blacklisted. Here is the most recent valid (successful and non-blacklisted) version for your reference (please start work from this version): \n' + rollback_code))
             elif blacklist_flag:
                 self.logger.warning("Blacklist triggered but no valid rollback version available")
 
-            input_list.append(append_message(provider, "user", next_instr))
+            input_list.append(append_message("user", next_instr))
 
         else:
             next_log_path = self.outputs_dir / self._log_filename(version + 1)
@@ -1411,7 +1384,7 @@ This is the stack trace and advice on how to fix the error:
 {prompt_execution_failure_suffix(next_log_path, next_submission_path, next_version_folder)}
 """
 
-            input_list.append(append_message(provider, "user", next_instr))
+            input_list.append(append_message("user", next_instr))
 
         return sota_suggestions_call_id, False
 
@@ -1432,7 +1405,6 @@ This is the stack trace and advice on how to fix the error:
         last_input_tokens = None  # Track input tokens from previous API call for adaptive trimming
 
         system_prompt = self._compose_system()
-        provider = detect_provider(_DEVELOPER_MODEL)
 
         # Log external data listing and plan content (passed from orchestrator)
         self.logger.info("External data listing (%d chars): %s", len(self.external_data_listing), self.external_data_listing[:200] + "..." if len(self.external_data_listing) > 200 else self.external_data_listing)
@@ -1458,13 +1430,13 @@ This is the stack trace and advice on how to fix the error:
                 )
                 sota_suggestions_call_id, _ = self._run_feedback_and_build_next_instruction(
                     resumed_version, code_context, run_score, prev_ver,
-                    base_score, sub_exists, "", input_list, provider,
+                    base_score, sub_exists, "", input_list,
                     sota_suggestions_call_id
                 )
             self.logger.info("Step 6 replayed for v%s, entering main loop", resumed_version)
         else:
             user_prompt = self._build_user_prompt(version=1)
-            input_list = [append_message(provider, "user", user_prompt)]
+            input_list = [append_message("user", user_prompt)]
             attempt = 0
             sota_suggestions_call_id = 0
         while True:
@@ -1550,7 +1522,7 @@ This is the stack trace and advice on how to fix the error:
                 next_version_folder = self.outputs_dir / str(version + 1)
                 fix_instr = prompt_guardrail_fix_suffix(next_log_path, next_submission_path, next_version_folder)
                 guardrail_prompt = summary_text + fix_instr
-                input_list.append(append_message(provider, "user", guardrail_prompt))
+                input_list.append(append_message("user", guardrail_prompt))
                 self.logger.info("User prompt with guardrail feedback: %s", guardrail_prompt)
                 # continue to next attempt without execution
                 continue
@@ -1570,7 +1542,7 @@ This is the stack trace and advice on how to fix the error:
             # Step 6: Gather feedback and build next instruction
             sota_suggestions_call_id, should_break = self._run_feedback_and_build_next_instruction(
                 version, code_context, run_score, previous_successful_version,
-                base_score, submission_exists, output, input_list, provider,
+                base_score, submission_exists, output, input_list,
                 sota_suggestions_call_id
             )
             if should_break:

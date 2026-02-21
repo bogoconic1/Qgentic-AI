@@ -5,9 +5,9 @@ from typing import Any, Dict, List, Optional
 from dotenv import load_dotenv
 from project_config import get_config
 
-from tools.helpers import call_llm_with_retry, call_llm_with_retry_anthropic, call_llm_with_retry_google
+from tools.helpers import call_llm
 from prompts.guardrails import leakage_review as prompt_leakage_review
-from utils.llm_utils import detect_provider, append_message
+from utils.llm_utils import append_message
 from schemas.guardrails import LeakageReviewResponse
 
 
@@ -145,32 +145,12 @@ def llm_leakage_review(code: str) -> LeakageReviewResponse:
     Uses the configured leakage review model. Returns structured LeakageReviewResponse.
     """
     system_prompt = prompt_leakage_review()
-    provider = detect_provider(_LEAKAGE_REVIEW_MODEL)
-    messages = [append_message(provider, "user", "Python Training Script: \n\n" + code)]
+    messages = [append_message("user", "Python Training Script: \n\n" + code)]
 
-    if provider == "openai":
-        return call_llm_with_retry(
-            model=_LEAKAGE_REVIEW_MODEL,
-            instructions=system_prompt,
-            tools=[],
-            messages=messages,
-            text_format=LeakageReviewResponse,
-        )
-    elif provider == "anthropic":
-        return call_llm_with_retry_anthropic(
-            model=_LEAKAGE_REVIEW_MODEL,
-            instructions=system_prompt,
-            tools=[],
-            messages=messages,
-            text_format=LeakageReviewResponse,
-        )
-    elif provider == "google":
-        return call_llm_with_retry_google(
-            model=_LEAKAGE_REVIEW_MODEL,
-            system_instruction=system_prompt,
-            function_declarations=[],
-            messages=messages,
-            text_format=LeakageReviewResponse,
-        )
-    else:
-        raise ValueError(f"Unsupported provider: {provider}")
+    return call_llm(
+        model=_LEAKAGE_REVIEW_MODEL,
+        system_instruction=system_prompt,
+        function_declarations=[],
+        messages=messages,
+        text_format=LeakageReviewResponse,
+    )

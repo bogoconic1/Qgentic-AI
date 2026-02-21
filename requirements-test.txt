@@ -1,31 +1,13 @@
-# Minimal dependencies for running tests
-# Tests use mocks and don't need the full ML stack
-
-# Testing framework
-pytest>=7.0
-pytest-cov>=4.0
-
-# Core dependencies that agents/tools import
-pydantic>=2.0
-openai>=1.0
-python-dotenv>=1.0
-anthropic>=0.34.0
-
-# Observability (used in agent code)
-weave>=0.50.0
-wandb>=0.16.0
-
-# Data handling (lightweight, used in some agent imports)
-pandas>=2.1
-numpy>=1.26
-
-# Kaggle integration (used in tools)
-kaggle>=1.6.0
-kagglehub>=0.2.0
-
-# Google/Gemini (used in researcher tools)
+pytest
+pytest-cov
+pydantic
+python-dotenv
+weave
+wandb
+pandas
+numpy
+kaggle
+kagglehub
 google-genai
-
-# Utilities
-PyYAML>=6.0
-requests>=2.31.0
+PyYAML
+requests

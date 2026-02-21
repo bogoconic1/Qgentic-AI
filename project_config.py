@@ -12,11 +12,11 @@ import yaml
 
 _DEFAULT_CONFIG: dict[str, Any] = {
     "llm": {
-        "developer_model": "gpt-5",
-        "developer_tool_model": "gpt-5",
-        "researcher_model": "gpt-5",
-        "model_selector_model": "gpt-5",
-        "model_recommender_model": "gpt-5",
+        "developer_model": "gemini-3-pro-preview",
+        "developer_tool_model": "gemini-3-pro-preview",
+        "researcher_model": "gemini-3-pro-preview",
+        "model_selector_model": "gemini-3-pro-preview",
+        "model_recommender_model": "gemini-3-pro-preview",
     },
     "runtime": {
         "researcher_max_steps": 512,

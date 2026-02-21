@@ -11,9 +11,9 @@ import weave
 from weave.trace.util import ThreadPoolExecutor
 
 from project_config import get_config, get_instructions
-from tools.helpers import call_llm_with_retry, call_llm_with_retry_anthropic, call_llm_with_retry_google
+from tools.helpers import call_llm
 from tools.generate_paper_summary import PaperSummaryClient
-from utils.llm_utils import detect_provider, extract_text_from_response, append_message
+from utils.llm_utils import extract_text_from_response, append_message
 from prompts.model_recommender_agent import (
     model_selector_system_prompt,
     model_refiner_system_prompt,
@@ -161,7 +161,7 @@ class ModelRecommenderAgent:
         return inputs
 
     def _call_model_selector(self, system_prompt: str, messages: list, text_format=None):
-        """Call the model selector with automatic provider detection.
+        """Call the model selector.
 
         Args:
             system_prompt: System instruction
@@ -169,47 +169,21 @@ class ModelRecommenderAgent:
             text_format: Optional Pydantic model for structured outputs
 
         Returns:
-            Tuple of (response, provider)
+            LLM response
         """
-        provider = detect_provider(_MODEL_SELECTOR_MODEL)
+        return call_llm(
+            model=_MODEL_SELECTOR_MODEL,
+            system_instruction=system_prompt,
+            messages=messages,
+            text_format=text_format,
+            enable_google_search=_ENABLE_WEB_SEARCH,
+        )
 
-        if provider == "openai":
-            response = call_llm_with_retry(
-                model=_MODEL_SELECTOR_MODEL,
-                instructions=system_prompt,
-                tools=[],
-                messages=messages,
-                web_search_enabled=_ENABLE_WEB_SEARCH,
-                text_format=text_format,
-            )
-        elif provider == "anthropic":
-            response = call_llm_with_retry_anthropic(
-                model=_MODEL_SELECTOR_MODEL,
-                instructions=system_prompt,
-                tools=[],
-                messages=messages,
-                web_search_enabled=_ENABLE_WEB_SEARCH,
-                text_format=text_format,
-            )
-        elif provider == "google":
-            response = call_llm_with_retry_google(
-                model=_MODEL_SELECTOR_MODEL,
-                system_instruction=system_prompt,
-                messages=messages,
-                text_format=text_format,
-                enable_google_search=_ENABLE_WEB_SEARCH,
-            )
-        else:
-            raise ValueError(f"Unsupported provider: {provider}")
-
-        return response, provider
-
-    def _get_structured_output(self, response, provider):
-        """Extract structured output from response based on provider.
+    def _get_structured_output(self, response):
+        """Extract structured output from response.
 
         Args:
             response: LLM response object
-            provider: "openai" or "anthropic"
 
         Returns:
             Pydantic model instance or None
@@ -232,14 +206,12 @@ class ModelRecommenderAgent:
         # Call LLM
         time_limit_minutes = int(_BASELINE_CODE_TIMEOUT / 60)
         system_prompt = preprocessing_system_prompt(time_limit_minutes=time_limit_minutes)
-        provider = detect_provider(_MODEL_SELECTOR_MODEL)
-        messages = [append_message(provider, "user", user_prompt)]
+        messages = [append_message("user", user_prompt)]
 
         try:
-            response, provider = self._call_model_selector(system_prompt, messages)
+            response = self._call_model_selector(system_prompt, messages)
 
-            # Extract text from response (works for both providers)
-            response_text = extract_text_from_response(response, provider)
+            response_text = extract_text_from_response(response)
 
             # Parse JSON from response text
             if not response_text:
@@ -278,15 +250,14 @@ class ModelRecommenderAgent:
 
         time_limit_minutes = int(_BASELINE_CODE_TIMEOUT / 60)
         system_prompt = loss_function_system_prompt(time_limit_minutes=time_limit_minutes)
-        provider = detect_provider(_MODEL_SELECTOR_MODEL)
-        messages = [append_message(provider, "user", user_prompt)]
+        messages = [append_message("user", user_prompt)]
 
         try:
-            response, provider = self._call_model_selector(
+            response = self._call_model_selector(
                 system_prompt, messages, text_format=LossFunctionRecommendations
             )
 
-            parsed = self._get_structured_output(response, provider)
+            parsed = self._get_structured_output(response)
             if not parsed:
                 logger.warning("[%s] No structured output for loss function", model_name)
                 return {}
@@ -312,15 +283,14 @@ class ModelRecommenderAgent:
 
         time_limit_minutes = int(_BASELINE_CODE_TIMEOUT / 60)
         system_prompt = hyperparameter_tuning_system_prompt(time_limit_minutes=time_limit_minutes)
-        provider = detect_provider(_MODEL_SELECTOR_MODEL)
-        messages = [append_message(provider, "user", user_prompt)]
+        messages = [append_message("user", user_prompt)]
 
         try:
-            response, provider = self._call_model_selector(
+            response = self._call_model_selector(
                 system_prompt, messages, text_format=HyperparameterRecommendations
             )
 
-            parsed = self._get_structured_output(response, provider)
+            parsed = self._get_structured_output(response)
             if not parsed:
                 logger.warning("[%s] No structured output for hyperparameters", model_name)
                 return {}
@@ -346,15 +316,14 @@ class ModelRecommenderAgent:
 
         inference_time_limit_minutes = int(_BASELINE_CODE_TIMEOUT / 60)
         system_prompt = inference_strategy_system_prompt(inference_time_limit_minutes=inference_time_limit_minutes)
-        provider = detect_provider(_MODEL_SELECTOR_MODEL)
-        messages = [append_message(provider, "user", user_prompt)]
+        messages = [append_message("user", user_prompt)]
 
         try:
-            response, provider = self._call_model_selector(
+            response = self._call_model_selector(
                 system_prompt, messages, text_format=InferenceStrategyRecommendations
             )
 
-            parsed = self._get_structured_output(response, provider)
+            parsed = self._get_structured_output(response)
             if not parsed:
                 logger.warning("[%s] No structured output for inference strategies", model_name)
                 return {}
@@ -411,16 +380,15 @@ class ModelRecommenderAgent:
             research_plan=self.inputs.get("plan"),
         )
 
-        provider = detect_provider(_MODEL_SELECTOR_MODEL)
-        messages = [append_message(provider, "user", user_prompt)]
+        messages = [append_message("user", user_prompt)]
 
-        response, provider = self._call_model_selector(
+        response = self._call_model_selector(
             system_prompt, messages, text_format=ModelSelection
         )
 
         # Parse Stage 1 response
         try:
-            parsed = self._get_structured_output(response, provider)
+            parsed = self._get_structured_output(response)
             if not parsed:
                 logger.warning("No structured output received, using default models")
                 return []
@@ -554,8 +522,8 @@ class ModelRecommenderAgent:
 
         # Call Gemini 2.5 Pro with structured output
         try:
-            messages = [append_message("google", "user", user_prompt)]
-            refined_selection = call_llm_with_retry_google(
+            messages = [append_message("user", user_prompt)]
+            refined_selection = call_llm(
                 model=_MODEL_RECOMMENDER_MODEL,
                 system_instruction=system_instruction,
                 messages=messages,

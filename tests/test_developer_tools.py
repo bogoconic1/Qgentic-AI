@@ -74,7 +74,6 @@ def test_execute_code_success(test_script_success):
     assert isinstance(job, ExecutionJob)
     result = job.result()
 
-    # Verify output contains success messages
     assert "Success!" in result
     assert "Script completed" in result
 
@@ -100,7 +99,6 @@ def test_execute_code_timeout(test_script_timeout):
 
 def test_execute_code_error_with_web_search(test_script_error, monkeypatch):
     """Test code execution with error triggers web search."""
-    # Mock web_search_stack_trace to avoid actual web search
     def fake_web_search(query):
         return query + "\nThis is how you can fix the error: \nMock solution for test error"
 
@@ -109,9 +107,7 @@ def test_execute_code_error_with_web_search(test_script_error, monkeypatch):
     job = execute_code(test_script_error, timeout_seconds=10)
     result = job.result()
 
-    # Verify error is in output
     assert "ValueError" in result or "Test error message" in result
-    # Verify web search result is appended
     assert "This is how you can fix the error" in result
     assert "Mock solution" in result
 
@@ -124,7 +120,6 @@ def test_web_search_stack_trace(monkeypatch):
     from schemas.developer import StackTraceSolution
 
     def fake_call_llm(*args, **kwargs):
-        # For Anthropic/Google providers, return the Pydantic object directly
         return StackTraceSolution(
             checklist=["Check X", "Verify Y"],
             web_search_findings="Found solution on Stack Overflow",
@@ -133,18 +128,11 @@ def test_web_search_stack_trace(monkeypatch):
             further_steps="Consider refactoring the code"
         )
 
-    # Mock all provider-specific LLM calls - IMPORTANT: also mock in tools.helpers
-    # because web_search_stack_trace does inline import from tools.helpers
-    monkeypatch.setattr("tools.developer.call_llm_with_retry", fake_call_llm)
-    monkeypatch.setattr("tools.developer.call_llm_with_retry_anthropic", fake_call_llm)
-    monkeypatch.setattr("tools.developer.call_llm_with_retry_google", fake_call_llm)
-    monkeypatch.setattr("tools.helpers.call_llm_with_retry_google", fake_call_llm)
-    monkeypatch.setattr("tools.developer.detect_provider", lambda x: "openai")
+    monkeypatch.setattr("tools.developer.call_llm", fake_call_llm)
 
     query = "Traceback (most recent call last):\n  File 'test.py', line 1\nValueError: test"
     result = web_search_stack_trace(query)
 
-    # Verify result format
     assert "Traceback" in result
     assert "This is how you can fix the error" in result
     assert "doing Y" in result
@@ -155,30 +143,29 @@ def test_web_search_stack_trace(monkeypatch):
 
 def test_web_search_stack_trace_fallback(monkeypatch):
     """Test web_search_stack_trace fallback when structured parsing fails."""
-    def fake_call_llm_google(*args, **kwargs):
-        # Simulate fine-tuned model failing with an attribute error
+    def fake_call_llm_raise(*args, **kwargs):
         raise AttributeError("reasoning_and_solution")
 
     def fake_call_llm_fallback(*args, **kwargs):
-        # For the fallback path, return an object that only has output_text
-        # (no reasoning_and_solution) to trigger the fallback to raw content
         class FallbackResponse:
-            output_text = "Fallback solution text"
+            text = "Fallback solution text"
         return FallbackResponse()
 
-    # Mock all provider-specific LLM calls - IMPORTANT: also mock in tools.helpers
-    # because web_search_stack_trace does inline import from tools.helpers
-    monkeypatch.setattr("tools.developer.call_llm_with_retry", fake_call_llm_fallback)
-    monkeypatch.setattr("tools.developer.call_llm_with_retry_anthropic", fake_call_llm_fallback)
-    monkeypatch.setattr("tools.developer.call_llm_with_retry_google", fake_call_llm_fallback)
-    # Google helper for the fine-tuned model call should fail
-    monkeypatch.setattr("tools.helpers.call_llm_with_retry_google", fake_call_llm_google)
-    monkeypatch.setattr("tools.developer.detect_provider", lambda x: "openai")
+    # First call (fine-tuned model) raises, fallback call succeeds
+    call_count = [0]
+    def fake_call_llm(*args, **kwargs):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            raise AttributeError("reasoning_and_solution")
+        class FallbackResponse:
+            text = "Fallback solution text"
+        return FallbackResponse()
+
+    monkeypatch.setattr("tools.developer.call_llm", fake_call_llm)
 
     query = "Traceback (most recent call last):\nTypeError: cannot convert"
     result = web_search_stack_trace(query)
 
-    # Verify fallback to output_text
     assert "Fallback solution text" in result
     assert "This is how you can fix the error" in result
 
@@ -196,23 +183,17 @@ def test_search_red_flags(monkeypatch):
     )
 
     def fake_call_llm(*args, **kwargs):
-        # Return object with output_text for OpenAI provider path
         mock_response = MagicMock()
-        mock_response.output_text = red_flags_text
+        mock_response.text = red_flags_text
         return mock_response
 
-    # Force OpenAI provider to use output_text path
-    monkeypatch.setattr("tools.developer.detect_provider", lambda x: "openai")
-    monkeypatch.setattr("tools.developer.call_llm_with_retry", fake_call_llm)
-    monkeypatch.setattr("tools.developer.call_llm_with_retry_anthropic", fake_call_llm)
-    monkeypatch.setattr("tools.developer.call_llm_with_retry_google", fake_call_llm)
+    monkeypatch.setattr("tools.developer.call_llm", fake_call_llm)
 
     description = "Test competition description"
     context = "Current code context"
 
     result = search_red_flags(description, context)
 
-    # Verify result
     assert "Red Flags" in result or "Data leakage" in result
     assert len(result) > 0
 
@@ -225,23 +206,22 @@ def test_search_sota_suggestions(monkeypatch):
     from schemas.developer import SOTAResponse
 
     def fake_call_llm(*args, **kwargs):
-        mock_response = MagicMock()
-        mock_response.output = []
-        # Return structured SOTAResponse with all required fields
-        mock_response.output_parsed = SOTAResponse(
-            blacklist=False,
-            blacklist_reason="The previous suggestion is still valid",
-            suggestion="Try using a transformer-based architecture with attention mechanisms",
-            suggestion_reason="Transformers have shown SOTA results on similar tasks",
-            suggestion_code="# Example transformer code\nmodel = TransformerModel()"
-        )
-        mock_response.output_text = "Mock SOTA suggestions"
+        # When text_format is provided, return the Pydantic object directly
+        if kwargs.get('text_format'):
+            return SOTAResponse(
+                blacklist=False,
+                blacklist_reason="The previous suggestion is still valid",
+                suggestion="Try using a transformer-based architecture with attention mechanisms",
+                suggestion_reason="Transformers have shown SOTA results on similar tasks",
+                suggestion_code="# Example transformer code\nmodel = TransformerModel()"
+            )
+        # Return a Gemini-like response with no function calls
+        mock_response = MagicMock(spec=[])
+        mock_response.candidates = None  # No candidates triggers the else branch
+        mock_response.text = "Mock SOTA suggestions"
         return mock_response
 
-    # Mock all provider-specific LLM calls
-    monkeypatch.setattr("tools.developer.call_llm_with_retry", fake_call_llm)
-    monkeypatch.setattr("tools.developer.call_llm_with_retry_anthropic", fake_call_llm)
-    monkeypatch.setattr("tools.developer.call_llm_with_retry_google", fake_call_llm)
+    monkeypatch.setattr("tools.developer.call_llm", fake_call_llm)
 
     result = search_sota_suggestions(
         description="Test competition",
@@ -255,14 +235,11 @@ def test_search_sota_suggestions(monkeypatch):
         plan_content=None
     )
 
-    # Verify result is response object with structured output
-    assert hasattr(result, 'output_parsed')
-    assert result.output_parsed.blacklist == False
-    assert "transformer" in result.output_parsed.suggestion
+    assert hasattr(result, 'suggestion')
+    assert "transformer" in result.suggestion.lower()
 
     print("✅ search_sota_suggestions works:")
-    print(f"   - Blacklist: {result.output_parsed.blacklist}")
-    print(f"   - Suggestion: {result.output_parsed.suggestion[:50]}...")
+    print(f"   - Suggestion: {result.suggestion[:50]}...")
 
 
 def test_search_sota_suggestions_with_plan_content(monkeypatch):
@@ -272,24 +249,20 @@ def test_search_sota_suggestions_with_plan_content(monkeypatch):
     captured_kwargs = {}
 
     def fake_call_llm(*args, **kwargs):
-        # Capture kwargs to verify plan_content is included
         captured_kwargs.update(kwargs)
+        if kwargs.get('text_format'):
+            return SOTAResponse(
+                blacklist=False,
+                blacklist_reason="Continue with current approach",
+                suggestion="Use the plan's recommended approach",
+                suggestion_reason="Following the research plan systematically",
+                suggestion_code="# Following the plan\nmodel = PlanRecommendedModel()"
+            )
         mock_response = MagicMock()
-        mock_response.output = []
-        mock_response.output_parsed = SOTAResponse(
-            blacklist=False,
-            blacklist_reason="Continue with current approach",
-            suggestion="Use the plan's recommended approach",
-            suggestion_reason="Following the research plan systematically",
-            suggestion_code="# Following the plan\nmodel = PlanRecommendedModel()"
-        )
-        mock_response.output_text = "Mock response"
+        mock_response.text = "Mock response"
         return mock_response
 
-    # Mock all provider-specific LLM calls
-    monkeypatch.setattr("tools.developer.call_llm_with_retry", fake_call_llm)
-    monkeypatch.setattr("tools.developer.call_llm_with_retry_anthropic", fake_call_llm)
-    monkeypatch.setattr("tools.developer.call_llm_with_retry_google", fake_call_llm)
+    monkeypatch.setattr("tools.developer.call_llm", fake_call_llm)
 
     plan_content = "# Research Plan\n- Step 1: Try XGBoost\n- Step 2: Try Neural Networks"
 
@@ -305,14 +278,10 @@ def test_search_sota_suggestions_with_plan_content(monkeypatch):
         plan_content=plan_content
     )
 
-    # Verify plan content was included in the prompt
     messages = captured_kwargs.get('messages', [])
     assert len(messages) > 0
-    # Handle both Google ('parts') and OpenAI/Anthropic ('content') formats
-    if 'parts' in messages[0]:
-        user_message = messages[0]['parts'][0]['text']
-    else:
-        user_message = messages[0]['content']
+    # Gemini format uses 'parts'
+    user_message = messages[0]['parts'][0]['text']
     assert "<plan>" in user_message
     assert "XGBoost" in user_message
     assert "<suggestions>" in user_message
@@ -327,8 +296,7 @@ def test_search_sota_suggestions_with_tools(monkeypatch, test_data_dir):
     """Test search_sota_suggestions with tool calling enabled."""
     from schemas.developer import SOTAResponse
 
-    def fake_call_llm_anthropic(*args, **kwargs):
-        # When text_format is provided (last step), return the Pydantic object directly
+    def fake_call_llm(*args, **kwargs):
         if kwargs.get('text_format'):
             return SOTAResponse(
                 blacklist=False,
@@ -337,19 +305,17 @@ def test_search_sota_suggestions_with_tools(monkeypatch, test_data_dir):
                 suggestion_reason="Data shows imbalanced target, stratification will help",
                 suggestion_code="# Stratified sampling\nfrom sklearn.model_selection import StratifiedKFold"
             )
-        # Otherwise return response with stop_reason="end_turn" (no tool use)
+        # Return response with no tool calls (text-only)
         mock_response = MagicMock()
-        mock_response.stop_reason = "end_turn"
-        mock_response.content = []
-        # Include suggestion attribute so it returns early
+        mock_response.candidates = [MagicMock()]
+        mock_response.candidates[0].content.parts = [MagicMock()]
+        mock_response.candidates[0].content.parts[0].function_call = None
+        mock_response.candidates[0].content.parts[0].text = "Analyzing data..."
+        mock_response.text = "Analyzing data..."
         mock_response.suggestion = "Add stratified sampling based on target distribution"
         return mock_response
 
-    # Force Anthropic provider (when slug/data_path provided, uses Anthropic with tools)
-    monkeypatch.setattr("tools.developer.detect_provider", lambda x: "anthropic")
-    monkeypatch.setattr("tools.developer.call_llm_with_retry", fake_call_llm_anthropic)
-    monkeypatch.setattr("tools.developer.call_llm_with_retry_anthropic", fake_call_llm_anthropic)
-    monkeypatch.setattr("tools.developer.call_llm_with_retry_google", fake_call_llm_anthropic)
+    monkeypatch.setattr("tools.developer.call_llm", fake_call_llm)
 
     result = search_sota_suggestions(
         description="Binary classification competition",
@@ -363,7 +329,6 @@ def test_search_sota_suggestions_with_tools(monkeypatch, test_data_dir):
         gpu_identifier="0",
     )
 
-    # Verify final result is SOTAResponse Pydantic object or has suggestion attribute
     assert hasattr(result, 'suggestion')
     assert "stratified" in result.suggestion.lower() or "sampling" in result.suggestion.lower()
 
@@ -376,8 +341,7 @@ def test_search_sota_suggestions_early_exit_forces_structured_output(monkeypatch
     """Test that early exit (no tool calls on step 2) still returns structured output."""
     from schemas.developer import SOTAResponse
 
-    def fake_call_llm_anthropic(*args, **kwargs):
-        # When text_format is provided (last step), return the Pydantic object directly
+    def fake_call_llm(*args, **kwargs):
         if kwargs.get('text_format'):
             return SOTAResponse(
                 blacklist=False,
@@ -386,19 +350,16 @@ def test_search_sota_suggestions_early_exit_forces_structured_output(monkeypatch
                 suggestion_reason="Data shows miscalibration",
                 suggestion_code="# Calibration code\nfrom sklearn.calibration import CalibratedClassifierCV"
             )
-        # Otherwise return response with stop_reason="end_turn" (no tool use)
         mock_response = MagicMock()
-        mock_response.stop_reason = "end_turn"
-        mock_response.content = []
-        # Include suggestion attribute so it returns early
+        mock_response.candidates = [MagicMock()]
+        mock_response.candidates[0].content.parts = [MagicMock()]
+        mock_response.candidates[0].content.parts[0].function_call = None
+        mock_response.candidates[0].content.parts[0].text = "No tools needed."
+        mock_response.text = "No tools needed."
         mock_response.suggestion = "Use calibration based on EDA"
         return mock_response
 
-    # Force Anthropic provider (when slug/data_path provided, uses Anthropic with tools)
-    monkeypatch.setattr("tools.developer.detect_provider", lambda x: "anthropic")
-    monkeypatch.setattr("tools.developer.call_llm_with_retry", fake_call_llm_anthropic)
-    monkeypatch.setattr("tools.developer.call_llm_with_retry_anthropic", fake_call_llm_anthropic)
-    monkeypatch.setattr("tools.developer.call_llm_with_retry_google", fake_call_llm_anthropic)
+    monkeypatch.setattr("tools.developer.call_llm", fake_call_llm)
 
     result = search_sota_suggestions(
         description="Test competition",
@@ -410,7 +371,6 @@ def test_search_sota_suggestions_early_exit_forces_structured_output(monkeypatch
         data_path="/tmp/test",
     )
 
-    # Final result should have suggestion attribute
     assert hasattr(result, 'suggestion')
     assert "calibration" in result.suggestion.lower()
 
@@ -426,52 +386,39 @@ def test_search_sota_suggestions_without_tools(monkeypatch):
 
     def fake_call_llm(*args, **kwargs):
         call_count[0] += 1
+        if kwargs.get('text_format'):
+            return SOTAResponse(
+                blacklist=False,
+                blacklist_reason="No tools available, using web search only",
+                suggestion="Try ensemble methods",
+                suggestion_reason="Common SOTA approach",
+                suggestion_code="# Ensemble approach\nfrom sklearn.ensemble import VotingClassifier"
+            )
         mock_response = MagicMock()
-        mock_response.output = []
-        mock_response.output_parsed = SOTAResponse(
-            blacklist=False,
-            blacklist_reason="No tools available, using web search only",
-            suggestion="Try ensemble methods",
-            suggestion_reason="Common SOTA approach",
-            suggestion_code="# Ensemble approach\nfrom sklearn.ensemble import VotingClassifier"
-        )
-        mock_response.output_text = "Suggestion based on web search"
-
-        # Verify tools are empty when slug/data_path not provided
-        assert kwargs.get('tools', []) == []
-
+        mock_response.text = "Suggestion based on web search"
         return mock_response
 
-    # Mock all provider-specific LLM calls
-    monkeypatch.setattr("tools.developer.call_llm_with_retry", fake_call_llm)
-    monkeypatch.setattr("tools.developer.call_llm_with_retry_anthropic", fake_call_llm)
-    monkeypatch.setattr("tools.developer.call_llm_with_retry_google", fake_call_llm)
+    monkeypatch.setattr("tools.developer.call_llm", fake_call_llm)
 
-    # Call without slug/data_path - tools should be disabled
     result = search_sota_suggestions(
         description="Test competition",
         context="Current context",
         red_flags="Some issues",
         executed_suggestion="Previous",
         failed_ideas=[],
-        # No slug/data_path provided
     )
 
-    # Should only make one call (no tool loop)
-    assert call_count[0] == 1
-    assert hasattr(result, 'output_parsed')
+    assert hasattr(result, 'suggestion')
 
     print("✅ search_sota_suggestions without tools works:")
-    print(f"   - Single LLM call made (no tool loop)")
-    print(f"   - Tools correctly disabled when slug/data_path missing")
+    print(f"   - LLM calls made: {call_count[0]}")
 
 
 def test_encode_image_to_data_url_basic(test_data_dir):
-    """Test basic image encoding without resize."""
+    """Test basic image encoding."""
     from utils.llm_utils import encode_image_to_data_url
     from PIL import Image
 
-    # Create a small test image
     img_path = Path(test_data_dir) / "test_image.png"
     img = Image.new('RGB', (100, 100), color='red')
     img.save(img_path)
@@ -479,135 +426,9 @@ def test_encode_image_to_data_url_basic(test_data_dir):
     result = encode_image_to_data_url(str(img_path))
 
     assert result.startswith("data:image/png;base64,")
-    assert len(result) > 50  # Should have base64 data
+    assert len(result) > 50
 
     print("✅ encode_image_to_data_url basic encoding works")
-
-
-def test_encode_image_to_data_url_resize_for_anthropic(test_data_dir):
-    """Test image encoding with resize for Anthropic's size limits."""
-    from utils.llm_utils import encode_image_to_data_url
-    from PIL import Image
-
-    # Create a large test image (3000x2000)
-    img_path = Path(test_data_dir) / "large_image.png"
-    img = Image.new('RGB', (3000, 2000), color='blue')
-    img.save(img_path)
-
-    result = encode_image_to_data_url(str(img_path), resize_for_anthropic=True)
-
-    # Should be resized and converted to JPEG
-    assert result.startswith("data:image/jpeg;base64,")
-
-    # Decode and verify dimensions are within limits
-    import base64
-    import io
-    b64_data = result.split(";base64,")[1]
-    decoded = base64.b64decode(b64_data)
-    resized_img = Image.open(io.BytesIO(decoded))
-
-    assert resized_img.width <= 2000
-    assert resized_img.height <= 2000
-
-    print("✅ encode_image_to_data_url resize for Anthropic works")
-    print(f"   - Original: 3000x2000, Resized: {resized_img.width}x{resized_img.height}")
-
-
-def test_encode_image_to_data_url_compression(test_data_dir):
-    """Test image compression to meet size limits."""
-    from utils.llm_utils import encode_image_to_data_url
-    from PIL import Image
-    import numpy as np
-
-    # Create a large noisy image that won't compress well
-    img_path = Path(test_data_dir) / "noisy_image.png"
-    # Create random noise image
-    noise = np.random.randint(0, 255, (2000, 2000, 3), dtype=np.uint8)
-    img = Image.fromarray(noise)
-    img.save(img_path)
-
-    # Set a small max size to force compression
-    result = encode_image_to_data_url(
-        str(img_path),
-        resize_for_anthropic=True,
-        max_size_bytes=500_000  # 500KB limit
-    )
-
-    # Verify the result is under the limit
-    import base64
-    b64_data = result.split(";base64,")[1]
-    decoded_size = len(base64.b64decode(b64_data))
-
-    assert decoded_size <= 500_000
-
-    print("✅ encode_image_to_data_url compression works")
-    print(f"   - Compressed to: {decoded_size / 1024:.1f}KB")
-
-
-def test_ingest_images_for_llm_anthropic(test_data_dir, monkeypatch):
-    """Test _ingest_images_for_llm passes resize flag for Anthropic."""
-    from tools.developer import _ingest_images_for_llm
-    from PIL import Image
-
-    # Create a test image
-    img_path = Path(test_data_dir) / "test_chart.png"
-    img = Image.new('RGB', (500, 500), color='green')
-    img.save(img_path)
-
-    # Track if resize_for_anthropic is passed
-    captured_calls = []
-
-    def mock_encode(path, resize_for_anthropic=False, max_size_bytes=4_500_000):
-        captured_calls.append({
-            'path': path,
-            'resize_for_anthropic': resize_for_anthropic,
-            'max_size_bytes': max_size_bytes
-        })
-        # Return a valid data URL
-        return "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
-
-    # Monkeypatch at the source module since it's imported inside the function
-    monkeypatch.setattr("utils.llm_utils.encode_image_to_data_url", mock_encode)
-
-    result = _ingest_images_for_llm([img_path], provider="anthropic")
-
-    # Verify resize flag was passed for Anthropic
-    assert len(captured_calls) == 1
-    assert captured_calls[0]['resize_for_anthropic'] == True
-
-    print("✅ _ingest_images_for_llm passes resize flag for Anthropic")
-
-
-def test_ingest_images_for_llm_openai_no_resize(test_data_dir, monkeypatch):
-    """Test _ingest_images_for_llm does not resize for OpenAI."""
-    from tools.developer import _ingest_images_for_llm
-    from PIL import Image
-
-    # Create a test image
-    img_path = Path(test_data_dir) / "test_chart.png"
-    img = Image.new('RGB', (500, 500), color='yellow')
-    img.save(img_path)
-
-    # Track if resize_for_anthropic is passed
-    captured_calls = []
-
-    def mock_encode(path, resize_for_anthropic=False, max_size_bytes=4_500_000):
-        captured_calls.append({
-            'path': path,
-            'resize_for_anthropic': resize_for_anthropic
-        })
-        return "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
-
-    # Monkeypatch at the source module since it's imported inside the function
-    monkeypatch.setattr("utils.llm_utils.encode_image_to_data_url", mock_encode)
-
-    result = _ingest_images_for_llm([img_path], provider="openai")
-
-    # Verify resize flag was NOT passed for OpenAI
-    assert len(captured_calls) == 1
-    assert captured_calls[0]['resize_for_anthropic'] == False
-
-    print("✅ _ingest_images_for_llm does not resize for OpenAI")
 
 
 # ---------------------------------------------------------------------------
@@ -639,10 +460,8 @@ def test_execution_job_done_and_result():
 
     try:
         job = execute_code(script_path, timeout_seconds=10)
-        # Should not be done immediately
         import time
         time.sleep(0.1)
-        # Process might or might not be done yet, but result() should block and return
         result = job.result()
         assert job.done()
         assert "finished" in result
@@ -742,18 +561,9 @@ def test_monitor_logs_kill(monkeypatch):
     kill_verdict = LogMonitorVerdict(action="kill", reason="NaN loss detected at epoch 4")
 
     def fake_call_llm(*args, **kwargs):
-        if kwargs.get('text_format') == LogMonitorVerdict:
-            return kill_verdict
-        mock = MagicMock()
-        mock.output = []
-        mock.stop_reason = "end_turn"
-        mock.content = []
-        mock.action = "kill"
-        mock.reason = "NaN loss detected at epoch 4"
         return kill_verdict
 
-    monkeypatch.setattr("tools.developer.detect_provider", lambda x: "openai")
-    monkeypatch.setattr("tools.developer.call_llm_with_retry", fake_call_llm)
+    monkeypatch.setattr("tools.developer.call_llm", fake_call_llm)
 
     verdict = monitor_logs(
         log_output="Epoch 4/100 - loss: nan - acc: 0.00\n",
@@ -775,8 +585,7 @@ def test_monitor_logs_continue(monkeypatch):
     def fake_call_llm(*args, **kwargs):
         return continue_verdict
 
-    monkeypatch.setattr("tools.developer.detect_provider", lambda x: "openai")
-    monkeypatch.setattr("tools.developer.call_llm_with_retry", fake_call_llm)
+    monkeypatch.setattr("tools.developer.call_llm", fake_call_llm)
 
     verdict = monitor_logs(
         log_output="Epoch 2/100 - loss: 1.876 - acc: 0.34\n",
@@ -799,13 +608,22 @@ def test_monitor_logs_with_bash_tool(monkeypatch):
 
         # First call: LLM wants to use execute_bash tool
         if call_count[0] == 1:
-            mock_response = MagicMock(spec=[])  # no auto-attributes
-            mock_item = MagicMock(spec=[])
-            mock_item.type = "function_call"
-            mock_item.name = "execute_bash"
-            mock_item.arguments = '{"command": "nvidia-smi"}'
-            mock_item.call_id = "call_123"
-            mock_response.output = [mock_item]
+            mock_fc = MagicMock()
+            mock_fc.name = "execute_bash"
+            mock_fc.args = {"command": "echo ok"}
+            mock_fc.id = "call_123"
+
+            mock_part = MagicMock(spec=['function_call'])
+            mock_part.function_call = mock_fc
+
+            mock_content = MagicMock()
+            mock_content.parts = [mock_part]
+
+            mock_candidate = MagicMock()
+            mock_candidate.content = mock_content
+
+            mock_response = MagicMock(spec=['candidates'])
+            mock_response.candidates = [mock_candidate]
             return mock_response
 
         # Second call: LLM returns verdict after seeing tool output
@@ -814,8 +632,7 @@ def test_monitor_logs_with_bash_tool(monkeypatch):
             reason="GPU at 0% utilization — process is deadlocked"
         )
 
-    monkeypatch.setattr("tools.developer.detect_provider", lambda x: "openai")
-    monkeypatch.setattr("tools.developer.call_llm_with_retry", fake_call_llm)
+    monkeypatch.setattr("tools.developer.call_llm", fake_call_llm)
 
     verdict = monitor_logs(
         log_output="",
@@ -836,8 +653,7 @@ def test_monitor_logs_error_defaults_to_continue(monkeypatch):
     def fake_call_llm(*args, **kwargs):
         raise RuntimeError("API error")
 
-    monkeypatch.setattr("tools.developer.detect_provider", lambda x: "openai")
-    monkeypatch.setattr("tools.developer.call_llm_with_retry", fake_call_llm)
+    monkeypatch.setattr("tools.developer.call_llm", fake_call_llm)
 
     verdict = monitor_logs(
         log_output="Epoch 1/100 - loss: 2.345\n",

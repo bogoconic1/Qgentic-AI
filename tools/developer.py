@@ -13,10 +13,9 @@ import traceback
 from pathlib import Path
 
 from dotenv import load_dotenv
-from openai import OpenAI
 from project_config import get_config
-from tools.helpers import call_llm_with_retry, call_llm_with_retry_anthropic, call_llm_with_retry_google
-from utils.llm_utils import detect_provider, extract_text_from_response, append_message
+from tools.helpers import call_llm
+from utils.llm_utils import extract_text_from_response, append_message
 from prompts.tools_developer import (
     build_stack_trace_prompt as prompt_stack_trace,
     build_stack_trace_pseudo_prompt as prompt_stack_trace_pseudo,
@@ -75,16 +74,15 @@ def web_search_stack_trace(query: str) -> str:
 
     # Step 1: Try fine-tuned model first (no web search capability)
     logger.info("Attempting fine-tuned model endpoint first...")
-    from tools.helpers import call_llm_with_retry_google
 
     try:
         ft_system_prompt = prompt_stack_trace_pseudo()
         ft_user_prompt = "<query>\n" + query + "\n</query>"
 
-        ft_response = call_llm_with_retry_google(
+        ft_response = call_llm(
             model=_FINETUNED_CODE_API_MODEL,
             system_instruction=ft_system_prompt,
-            user_prompt=ft_user_prompt,
+            messages=ft_user_prompt,
             text_format=StackTraceSolution,
             temperature=1.0,
             max_retries=3,
@@ -112,88 +110,39 @@ def web_search_stack_trace(query: str) -> str:
     logger.info("Fine-tuned model cannot answer (response too short or failure message), falling back to web search workflow.")
     system_prompt = prompt_stack_trace()
 
-    # Detect provider and create messages in provider-specific format
-    provider = detect_provider(_DEVELOPER_TOOL_MODEL)
-    messages = [append_message(provider, "user", "<query>\n" + query + "\n</query>")]
+    messages = [append_message("user", "<query>\n" + query + "\n</query>")]
     logger.debug("Web search messages: %s", messages)
 
-    if provider == "openai":
-        response = call_llm_with_retry(
-            model=_DEVELOPER_TOOL_MODEL,
-            instructions=system_prompt,
-            tools=[],
-            messages=messages,
-            web_search_enabled=True,
-            text_format=StackTraceSolution,
-        )
+    response = call_llm(
+        model=_DEVELOPER_TOOL_MODEL,
+        system_instruction=system_prompt,
+        messages=messages,
+        enable_google_search=True,
+        text_format=StackTraceSolution,
+    )
 
-        # Response is already parsed Pydantic object
-        solution_text = ""
-        if response and hasattr(response, 'reasoning_and_solution'):
-            solution_text = response.reasoning_and_solution.strip()
-            logger.debug("Returning solution from OpenAI structured output.")
-            return query + "\n" + "This is how you can fix the error: \n" + solution_text
+    # Response is already parsed Pydantic object
+    if response and hasattr(response, 'reasoning_and_solution'):
+        solution_text = response.reasoning_and_solution.strip()
+        logger.debug("Returning solution from Gemini structured output.")
+        return query + "\n" + "This is how you can fix the error: \n" + solution_text
 
-        # Fallback to raw output if structured parsing fails
-        content = response.output_text or ""
-        logger.warning("Structured output parsing failed, falling back to raw content.")
-        return query + "\n" + "This is how you can fix the error: \n" + content
+    # Fallback if not a Pydantic object (shouldn't happen with text_format)
+    logger.warning("Unexpected response type, attempting to extract text.")
+    content = extract_text_from_response(response)
+    return query + "\n" + "This is how you can fix the error: \n" + content
 
-    elif provider == "anthropic":
-        response = call_llm_with_retry_anthropic(
-            model=_DEVELOPER_TOOL_MODEL,
-            instructions=system_prompt,
-            tools=[],
-            messages=messages,
-            web_search_enabled=True,
-            text_format=StackTraceSolution,
-        )
-
-        # Response is already parsed Pydantic object
-        if response and hasattr(response, 'reasoning_and_solution'):
-            solution_text = response.reasoning_and_solution.strip()
-            logger.debug("Returning solution from structured output.")
-            return query + "\n" + "This is how you can fix the error: \n" + solution_text
-
-        # Fallback if not a Pydantic object (shouldn't happen with text_format)
-        logger.warning("Unexpected response type, attempting to extract text.")
-        content = extract_text_from_response(response, provider)
-        return query + "\n" + "This is how you can fix the error: \n" + content
-
-    elif provider == "google":
-        response = call_llm_with_retry_google(
-            model=_DEVELOPER_TOOL_MODEL,
-            system_instruction=system_prompt,
-            messages=messages,
-            enable_google_search=True,
-            text_format=StackTraceSolution,
-        )
-
-        # Response is already parsed Pydantic object
-        if response and hasattr(response, 'reasoning_and_solution'):
-            solution_text = response.reasoning_and_solution.strip()
-            logger.debug("Returning solution from Gemini structured output.")
-            return query + "\n" + "This is how you can fix the error: \n" + solution_text
-
-        # Fallback if not a Pydantic object (shouldn't happen with text_format)
-        logger.warning("Unexpected response type, attempting to extract text.")
-        content = extract_text_from_response(response, provider)
-        return query + "\n" + "This is how you can fix the error: \n" + content
-
-    else:
-        raise ValueError(f"Unsupported provider: {provider}")
-
-def _ingest_images_for_llm(images: list[Path], provider: str) -> list[dict] | None:
-    """Encode and format images for LLM messages (shared helper for red flags and SOTA tools).
+def _ingest_images_for_llm(images: list[Path]) -> list[dict] | None:
+    """Encode and format images for Gemini messages.
 
     Args:
         images: List of image paths to ingest
-        provider: Provider type ("openai", "anthropic", or "google")
 
     Returns:
         List of formatted image messages ready to append, or None if no valid images
     """
     from utils.llm_utils import encode_image_to_data_url
+    from google.genai import types
 
     image_content = []
     for img_path in images:
@@ -201,50 +150,27 @@ def _ingest_images_for_llm(images: list[Path], provider: str) -> list[dict] | No
             logger.warning(f"Image not found: {img_path}")
             continue
 
-        # Encode image to data URL (with compression for Anthropic's 5MB limit)
-        resize_flag = (provider == "anthropic")
-        data_url = encode_image_to_data_url(str(img_path), resize_for_anthropic=resize_flag)
+        data_url = encode_image_to_data_url(str(img_path))
         if not data_url:
             logger.warning(f"Failed to encode image: {img_path}")
             continue
 
-        # Format based on provider
-        if provider == "anthropic":
-            if ";base64," in data_url:
-                mime_part, b64_data = data_url.split(";base64,", 1)
-                mime_type = mime_part.replace("data:", "")
-                image_content.append({
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": mime_type,
-                        "data": b64_data
-                    }
-                })
-        elif provider == "google":
-            from google.genai import types
-            if ";base64," in data_url:
-                mime_part, b64_data = data_url.split(";base64,", 1)
-                mime_type = mime_part.replace("data:", "")
-                image_content.append(
-                    types.Part(
-                        inline_data=types.Blob(
-                            mime_type=mime_type,
-                            data=base64.b64decode(b64_data)
-                        )
+        if ";base64," in data_url:
+            mime_part, b64_data = data_url.split(";base64,", 1)
+            mime_type = mime_part.replace("data:", "")
+            image_content.append(
+                types.Part(
+                    inline_data=types.Blob(
+                        mime_type=mime_type,
+                        data=base64.b64decode(b64_data)
                     )
                 )
-        else:  # OpenAI
-            image_content.append({"type": "input_image", "image_url": data_url})
+            )
 
     if not image_content:
         return None
 
-    # Return in provider-specific format
-    if provider == "google":
-        return [{"role": "user", "parts": image_content}]
-    else:
-        return [{"role": "user", "content": image_content}]
+    return [{"role": "user", "parts": image_content}]
 
 
 @weave.op()
@@ -282,108 +208,56 @@ def search_red_flags(
         context=context_with_stats,
     )
 
-    # Detect provider and call appropriate API
-    provider = detect_provider(_DEVELOPER_TOOL_MODEL)
-
     # Start with text message
-    messages = [append_message(provider, "user", user_prompt)]
+    messages = [append_message("user", user_prompt)]
 
     # Add images if provided
     if images:
-        image_messages = _ingest_images_for_llm(images, provider)
+        image_messages = _ingest_images_for_llm(images)
         if image_messages:
             messages.extend(image_messages)
 
-    if provider == "openai":
-        response = call_llm_with_retry(
-            model=_DEVELOPER_TOOL_MODEL,
-            instructions=system_prompt,
-            tools=[],
-            messages=messages,
-            web_search_enabled=True
-        )
-        final_content = response.output_text or ""
-    elif provider == "anthropic":
-        response = call_llm_with_retry_anthropic(
-            model=_DEVELOPER_TOOL_MODEL,
-            instructions=system_prompt,
-            tools=[],
-            messages=messages,
-            web_search_enabled=True
-        )
-        final_content = extract_text_from_response(response, provider)
-    elif provider == "google":
-        response = call_llm_with_retry_google(
-            model=_DEVELOPER_TOOL_MODEL,
-            system_instruction=system_prompt,
-            function_declarations=[],
-            messages=messages,
-            enable_google_search=True
-        )
-        final_content = extract_text_from_response(response, provider)
-    else:
-        raise ValueError(f"Unsupported provider: {provider}")
+    response = call_llm(
+        model=_DEVELOPER_TOOL_MODEL,
+        system_instruction=system_prompt,
+        function_declarations=[],
+        messages=messages,
+        enable_google_search=True
+    )
+    final_content = extract_text_from_response(response)
 
     logger.info("Red flags identification completed in single pass")
     return final_content
 
-def _get_sota_tools(provider: str = "openai") -> list:
+def _get_sota_tools() -> list:
     """Get tools available for SOTA suggestions.
 
-    Args:
-        provider: "openai", "anthropic", or "google" for format conversion
-
     Returns:
-        List of tool definitions in provider-specific format
+        List of FunctionDeclaration objects
     """
-    from utils.llm_utils import get_tools_for_provider
-    return get_tools_for_provider(provider)
+    from utils.llm_utils import get_tools
+    return get_tools()
 
 
-def _get_tool_name(tool, provider: str) -> str:
-    """Extract tool name from tool definition based on provider format.
+def _get_tool_name(tool) -> str:
+    """Extract tool name from a FunctionDeclaration.
 
     Args:
-        tool: Tool definition dict or FunctionDeclaration
-        provider: Provider type
+        tool: FunctionDeclaration object
 
     Returns:
         Tool name string
     """
-    if provider == "openai":
-        return tool.get("name", "")
-    elif provider == "anthropic":
-        return tool.get("name", "")
-    elif provider == "google":
-        # Gemini uses FunctionDeclaration objects
-        return tool.name if hasattr(tool, 'name') else ""
-    else:
-        return ""
+    return tool.name if hasattr(tool, 'name') else ""
 
 
-def _inject_user_guidance(input_list, guidance, provider):
+def _inject_user_guidance(input_list, guidance):
+    from google.genai import types as genai_types
     text = f"[User guidance]: {guidance}"
-    if provider == "openai":
-        input_list.append({"role": "user", "content": text})
-    elif provider == "anthropic":
-        # Anthropic requires alternating roles — append to last user message
-        if input_list and input_list[-1].get("role") == "user":
-            content = input_list[-1]["content"]
-            if isinstance(content, list):
-                content.append({"type": "text", "text": text})
-            else:
-                input_list[-1]["content"] = [
-                    {"type": "text", "text": content},
-                    {"type": "text", "text": text},
-                ]
-        else:
-            input_list.append({"role": "user", "content": text})
-    elif provider == "google":
-        from google.genai import types as genai_types
-        input_list.append(genai_types.Content(
-            role="user",
-            parts=[genai_types.Part.from_text(text=text)],
-        ))
+    input_list.append(genai_types.Content(
+        role="user",
+        parts=[genai_types.Part.from_text(text=text)],
+    ))
 
 
 @weave.op()
@@ -409,34 +283,9 @@ def search_sota_suggestions(
     train_stats: dict | None = None,
     hitl_sota: bool = False,
 ) -> str:
-    """Stage 2: Use web search and tools to generate SOTA suggestions based on red flags.
+    """Stage 2: Use web search and tools to generate SOTA suggestions based on red flags."""
+    from google.genai import types
 
-    Args:
-        description: Competition description
-        context: Current code and logs context
-        red_flags: Red flags identified from Stage 1 (final summary text)
-        executed_suggestion: Most recently executed suggestion
-        failed_ideas: List of blacklisted ideas from this model
-        later_recommendations: LATER recommendations for progressive improvement
-        shared_suggestions: List of all suggestions from all parallel models with outcomes
-                          Format: "Model <model> tried <suggestion> (score improved/worsened/remained by X: A -> B)"
-        external_data_listing: Directory listing of external_data_* folders
-        plan_content: Content of plan.md file
-        attempt_number: Which attempt this is (1, 2, 3, ...) for interleaving strategy
-        slug: Competition slug
-        data_path: Path to task data directory
-        cpu_core_range: CPU cores for execute_python execution
-        gpu_identifier: GPU for execute_python execution
-        file_suffix: Suffix for temporary files to prevent race conditions (e.g., "1_1", "1_2")
-        max_tool_steps: Maximum tool call iterations before forcing final answer
-        images: Optional list of image paths (e.g., loss_curve.png, metric_curve.png)
-        train_stats: Optional training statistics dict from train_stats.json
-                    (must include: model_name, cv_scores, cv_mean, cv_std)
-
-    Returns:
-        Parsed SOTAResponse object with suggestion, blacklist, blacklist_reason, and suggestion_code fields.
-        Returns None if parsing fails.
-    """
     logger.info("Dispatching SOTA suggestions (Stage 2) with web search (attempt #%d)", attempt_number)
 
     # Include train_stats in context if provided
@@ -495,216 +344,83 @@ def search_sota_suggestions(
     )
 
     # Tool execution loop
-    provider = detect_provider(_DEVELOPER_TOOL_MODEL)
-    tools = _get_sota_tools(provider) if (slug and data_path) else []
-    input_list = [append_message(provider, "user", user_prompt)]
+    tools = _get_sota_tools() if (slug and data_path) else []
+    input_list = [append_message("user", user_prompt)]
 
     # Add images if provided
     if images:
-        image_messages = _ingest_images_for_llm(images, provider)
+        image_messages = _ingest_images_for_llm(images)
         if image_messages:
             input_list.extend(image_messages)
 
     step_limit = None if hitl_sota else max_tool_steps
     step = 0
     while step_limit is None or step < step_limit:
-        logger.info("SOTA suggestion step %d/%s (tools: %s, provider: %s)", step + 1, "unlimited" if hitl_sota else str(step_limit), "enabled" if tools else "disabled", provider)
+        logger.info("SOTA suggestion step %d/%s (tools: %s)", step + 1, "unlimited" if hitl_sota else str(step_limit), "enabled" if tools else "disabled")
 
-        if provider == "openai":
-            response = call_llm_with_retry(
-                model=_DEVELOPER_TOOL_MODEL,
-                instructions=system_prompt,
-                tools=tools,
-                messages=input_list,
-                web_search_enabled=True,
-                text_format=SOTAResponse if (step_limit is not None and step == step_limit - 1) else None,
+        response = call_llm(
+            model=_DEVELOPER_TOOL_MODEL,
+            system_instruction=system_prompt,
+            function_declarations=tools if tools else [],
+            messages=input_list,
+            enable_google_search=True,
+            text_format=SOTAResponse if (step_limit is not None and step == step_limit - 1) else None,
+        )
+
+        # Check if response has function calls
+        has_function_calls = False
+        if hasattr(response, 'candidates') and response.candidates:
+            parts = response.candidates[0].content.parts
+            has_function_calls = any(
+                hasattr(part, 'function_call') and part.function_call
+                for part in parts
             )
 
-            # Add response to conversation
-            input_list.extend(response.output)
-
-            # Check if response has tool calls
-            has_tool_calls = any(
-                hasattr(item, 'type') and item.type == "function_call"
-                for item in response.output
-            )
-
-            if not has_tool_calls:
-                # No tool calls, check if we have structured output
-                if response and hasattr(response, 'suggestion'):
-                    logger.info("SOTA suggestions completed at step %d (no tool calls, structured output present)", step + 1)
-                    return response  # Already parsed Pydantic object
-                else:
-                    # Need to get structured output - make final call
-                    logger.info("SOTA suggestions completed at step %d (no tool calls), requesting structured output", step + 1)
-                    response = call_llm_with_retry(
-                        model=_DEVELOPER_TOOL_MODEL,
-                        instructions=system_prompt,
-                        tools=[],
-                        messages=input_list,
-                        web_search_enabled=True,
-                        text_format=SOTAResponse,
-                    )
-                    return response  # Already parsed Pydantic object
-
-            # Execute tool calls
-            for item in response.output:
-                if hasattr(item, 'type') and item.type == "function_call":
-                    tool_result = _execute_sota_tool_call(
-                        item=item,
-                        description=description,
-                        data_path=data_path,
-                        slug=slug,
-                        cpu_core_range=cpu_core_range,
-                        gpu_identifier=gpu_identifier,
-                        file_suffix=file_suffix,
-                        step=step,
-                        version=version,
-                        provider=provider,
-                    )
-                    input_list.append({
-                        "type": "function_call_output",
-                        "call_id": item.call_id,
-                        "output": tool_result
-                    })
-
-        elif provider == "anthropic":
-            response = call_llm_with_retry_anthropic(
-                model=_DEVELOPER_TOOL_MODEL,
-                instructions=system_prompt,
-                tools=tools,
-                messages=input_list,
-                web_search_enabled=True,
-                text_format=SOTAResponse if (step_limit is not None and step == step_limit - 1) else None,
-            )
-
-            # Check stop_reason
-            if response.stop_reason == "tool_use":
-                # Extract tool_use blocks
-                tool_uses = [
-                    block for block in response.content
-                    if hasattr(block, 'type') and block.type == 'tool_use'
-                ]
-
-                # Execute all tools and collect results
-                tool_results = []
-                for tool_use in tool_uses:
-                    tool_result_str = _execute_sota_tool_call(
-                        item=tool_use,
-                        description=description,
-                        data_path=data_path,
-                        slug=slug,
-                        cpu_core_range=cpu_core_range,
-                        gpu_identifier=gpu_identifier,
-                        file_suffix=file_suffix,
-                        step=step,
-                        version=version,
-                        provider=provider,
-                    )
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": tool_use.id,
-                        "content": tool_result_str
-                    })
-
-                # Add to messages in Anthropic format
-                input_list.append({
-                    "role": "assistant",
-                    "content": response.content
-                })
-                input_list.append({
-                    "role": "user",
-                    "content": tool_results
-                })
-
+        if not has_function_calls:
+            # No function calls, check if we have structured output
+            if response and hasattr(response, 'suggestion'):
+                logger.info("SOTA suggestions completed at step %d (no function calls, structured output present)", step + 1)
+                return response  # Already parsed Pydantic object
             else:
-                # No tool use, check if we have structured output
-                if response and hasattr(response, 'suggestion'):
-                    logger.info("SOTA suggestions completed at step %d (no tool use, structured output present)", step + 1)
-                    return response  # Already parsed Pydantic object
-                else:
-                    # Need to get structured output - make final call
-                    logger.info("SOTA suggestions completed at step %d (no tool use), requesting structured output", step + 1)
-                    response = call_llm_with_retry_anthropic(
-                        model=_DEVELOPER_TOOL_MODEL,
-                        instructions=system_prompt,
-                        tools=[],
-                        messages=input_list,
-                        web_search_enabled=True,
-                        text_format=SOTAResponse,
+                # Need to get structured output - make final call
+                logger.info("SOTA suggestions completed at step %d (no function calls), requesting structured output", step + 1)
+                response = call_llm(
+                    model=_DEVELOPER_TOOL_MODEL,
+                    system_instruction=system_prompt,
+                    messages=input_list,
+                    enable_google_search=True,
+                    text_format=SOTAResponse,
+                )
+                return response  # Already parsed Pydantic object
+
+        # Execute function calls
+        parts = response.candidates[0].content.parts
+        function_responses = []
+
+        for part in parts:
+            if hasattr(part, 'function_call') and part.function_call:
+                tool_result_str = _execute_sota_tool_call(
+                    item=part.function_call,
+                    description=description,
+                    data_path=data_path,
+                    slug=slug,
+                    cpu_core_range=cpu_core_range,
+                    gpu_identifier=gpu_identifier,
+                    file_suffix=file_suffix,
+                    step=step,
+                    version=version,
+                )
+                function_responses.append(
+                    types.Part.from_function_response(
+                        name=part.function_call.name,
+                        response={"result": tool_result_str}
                     )
-                    return response  # Already parsed Pydantic object
-
-        elif provider == "google":
-            from google.genai import types
-
-            response = call_llm_with_retry_google(
-                model=_DEVELOPER_TOOL_MODEL,
-                system_instruction=system_prompt,
-                function_declarations=tools if tools else [],
-                messages=input_list,
-                enable_google_search=True,
-                text_format=SOTAResponse if (step_limit is not None and step == step_limit - 1) else None,
-            )
-
-            # Check if response has function calls
-            has_function_calls = False
-            if hasattr(response, 'candidates') and response.candidates:
-                parts = response.candidates[0].content.parts
-                has_function_calls = any(
-                    hasattr(part, 'function_call') and part.function_call
-                    for part in parts
                 )
 
-            if not has_function_calls:
-                # No function calls, check if we have structured output
-                if response and hasattr(response, 'suggestion'):
-                    logger.info("SOTA suggestions completed at step %d (no function calls, structured output present)", step + 1)
-                    return response  # Already parsed Pydantic object
-                else:
-                    # Need to get structured output - make final call
-                    logger.info("SOTA suggestions completed at step %d (no function calls), requesting structured output", step + 1)
-                    response = call_llm_with_retry_google(
-                        model=_DEVELOPER_TOOL_MODEL,
-                        system_instruction=system_prompt,
-                        messages=input_list,
-                        enable_google_search=True,
-                        text_format=SOTAResponse,
-                    )
-                    return response  # Already parsed Pydantic object
-
-            # Execute function calls
-            parts = response.candidates[0].content.parts
-            function_responses = []
-
-            for part in parts:
-                if hasattr(part, 'function_call') and part.function_call:
-                    tool_result_str = _execute_sota_tool_call(
-                        item=part.function_call,
-                        description=description,
-                        data_path=data_path,
-                        slug=slug,
-                        cpu_core_range=cpu_core_range,
-                        gpu_identifier=gpu_identifier,
-                        file_suffix=file_suffix,
-                        step=step,
-                        version=version,
-                        provider=provider,
-                    )
-                    function_responses.append(
-                        types.Part.from_function_response(
-                            name=part.function_call.name,
-                            response={"result": tool_result_str}
-                        )
-                    )
-
-            # Add model's full response (preserves function_call parts)
-            input_list.append(response.candidates[0].content)
-            if function_responses:
-                input_list.append(types.Content(role="function", parts=function_responses))
-
-        else:
-            raise ValueError(f"Unsupported provider: {provider}")
+        # Add model's full response (preserves function_call parts)
+        input_list.append(response.candidates[0].content)
+        if function_responses:
+            input_list.append(types.Content(role="function", parts=function_responses))
 
         # HITL: let user provide guidance for next step
         if hitl_sota:
@@ -712,75 +428,36 @@ def search_sota_suggestions(
             if user_guidance.lower() == "done":
                 break
             if user_guidance:
-                _inject_user_guidance(input_list, user_guidance, provider)
+                _inject_user_guidance(input_list, user_guidance)
 
         step += 1
 
     # Reached max steps (or user typed 'done'), force final structured answer
     logger.warning("SOTA forcing final answer after %d steps", step)
 
-    if provider == "openai":
-        response = call_llm_with_retry(
-            model=_DEVELOPER_TOOL_MODEL,
-            instructions=system_prompt + "\n\nYou have reached the maximum tool usage limit. Provide your final suggestion now based on the information gathered.",
-            tools=[],
-            messages=input_list,
-            web_search_enabled=True,
-            text_format=SOTAResponse,
-        )
-        return response  # Already parsed Pydantic object
-    elif provider == "anthropic":
-        response = call_llm_with_retry_anthropic(
-            model=_DEVELOPER_TOOL_MODEL,
-            instructions=system_prompt + "\n\nYou have reached the maximum tool usage limit. Provide your final suggestion now based on the information gathered.",
-            tools=[],
-            messages=input_list,
-            web_search_enabled=True,
-            text_format=SOTAResponse,
-        )
-        return response  # Already parsed Pydantic object
-    elif provider == "google":
-        response = call_llm_with_retry_google(
-            model=_DEVELOPER_TOOL_MODEL,
-            system_instruction=system_prompt + "\n\nYou have reached the maximum tool usage limit. Provide your final suggestion now based on the information gathered.",
-            messages=input_list,
-            enable_google_search=True,
-            text_format=SOTAResponse,
-        )
-        return response  # Already parsed Pydantic object
-    else:
-        raise ValueError(f"Unsupported provider: {provider}")
+    response = call_llm(
+        model=_DEVELOPER_TOOL_MODEL,
+        system_instruction=system_prompt + "\n\nYou have reached the maximum tool usage limit. Provide your final suggestion now based on the information gathered.",
+        messages=input_list,
+        enable_google_search=True,
+        text_format=SOTAResponse,
+    )
+    return response  # Already parsed Pydantic object
 
 
-def _execute_sota_tool_call(item, description, data_path, slug, cpu_core_range, gpu_identifier, file_suffix, step=0, version=1, provider="openai"):
+def _execute_sota_tool_call(item, description, data_path, slug, cpu_core_range, gpu_identifier, file_suffix, step=0, version=1):
     """Execute a single SOTA tool call and return JSON result.
 
     Args:
-        item: Tool call item (OpenAI, Anthropic, or Google format)
+        item: Gemini function_call object
         step: Current tool loop step (for unique filenames)
         version: Current developer version (for output directory)
-        provider: "openai", "anthropic", or "google"
     """
     from tools.researcher import scrape_web_page, read_research_paper
     import json
 
-    # Parse tool name and arguments based on provider
-    if provider == "openai":
-        tool_name = item.name
-        try:
-            args = json.loads(item.arguments)
-        except Exception as e:
-            logger.error("Failed to parse tool arguments: %s", e)
-            return json.dumps({"error": f"Failed to parse arguments: {str(e)}"})
-    elif provider == "anthropic":
-        tool_name = item.name
-        args = item.input  # Already a dict
-    elif provider == "google":
-        tool_name = item.name
-        # Gemini function_call.args is already a dict
-        args = dict(item.args) if hasattr(item, 'args') else {}
-    else:
-        return json.dumps({"error": f"Unsupported provider: {provider}"})
+    tool_name = item.name
+    args = dict(item.args) if hasattr(item, 'args') else {}
 
     try:
         if item.name == "execute_python":
@@ -989,22 +666,10 @@ def execute_code(filepath: str, timeout_seconds: int | None = None, conda_env: s
     return ExecutionJob(proc, timeout_seconds, filepath)
 
 
-def _execute_monitor_tool_call(item, provider: str) -> str:
+def _execute_monitor_tool_call(item) -> str:
     """Execute a monitor tool call (execute_bash) and return the result as JSON."""
-    if provider == "openai":
-        tool_name = item.name
-        try:
-            args = json.loads(item.arguments)
-        except Exception as e:
-            return json.dumps({"error": f"Failed to parse arguments: {str(e)}"})
-    elif provider == "anthropic":
-        tool_name = item.name
-        args = item.input
-    elif provider == "google":
-        tool_name = item.name
-        args = dict(item.args) if hasattr(item, 'args') else {}
-    else:
-        return json.dumps({"error": f"Unsupported provider: {provider}"})
+    tool_name = item.name
+    args = dict(item.args) if hasattr(item, 'args') else {}
 
     if tool_name == "execute_bash":
         command = args.get("command", "")
@@ -1038,7 +703,8 @@ def monitor_logs(
     Uses an LLM with access to an execute_bash tool for system diagnostics.
     Returns a LogMonitorVerdict with action ("continue" or "kill") and reason.
     """
-    from utils.llm_utils import get_monitor_tools_for_provider
+    from utils.llm_utils import get_monitor_tools
+    from google.genai import types
 
     system_prompt = prompt_log_monitor_system()
     user_prompt = prompt_log_monitor_user(
@@ -1048,154 +714,63 @@ def monitor_logs(
         pid=pid,
     )
 
-    provider = detect_provider(_DEVELOPER_TOOL_MODEL)
-    tools = get_monitor_tools_for_provider(provider)
-    input_list = [append_message(provider, "user", user_prompt)]
+    tools = get_monitor_tools()
+    input_list = [append_message("user", user_prompt)]
 
     for step in range(max_tool_steps):
         is_last_step = (step == max_tool_steps - 1)
         text_format = LogMonitorVerdict if is_last_step else None
 
-        logger.info("Monitor step %d/%d (provider: %s)", step + 1, max_tool_steps, provider)
+        logger.info("Monitor step %d/%d", step + 1, max_tool_steps)
 
         try:
-            if provider == "openai":
-                response = call_llm_with_retry(
-                    model=_DEVELOPER_TOOL_MODEL,
-                    instructions=system_prompt,
-                    tools=tools if not is_last_step else [],
-                    messages=input_list,
-                    web_search_enabled=False,
-                    text_format=text_format,
+            response = call_llm(
+                model=_DEVELOPER_TOOL_MODEL,
+                system_instruction=system_prompt,
+                function_declarations=tools if not is_last_step else [],
+                messages=input_list,
+                enable_google_search=False,
+                text_format=text_format,
+            )
+
+            if hasattr(response, 'action'):
+                return response
+
+            has_function_calls = False
+            if hasattr(response, 'candidates') and response.candidates:
+                parts = response.candidates[0].content.parts
+                has_function_calls = any(
+                    hasattr(part, 'function_call') and part.function_call
+                    for part in parts
                 )
 
+            if not has_function_calls:
                 if hasattr(response, 'action'):
                     return response
-
-                # Check for tool calls
-                has_tool_calls = any(
-                    hasattr(item, 'type') and item.type == "function_call"
-                    for item in response.output
-                )
-                if not has_tool_calls:
-                    if hasattr(response, 'action'):
-                        return response
-                    # Force structured output
-                    response = call_llm_with_retry(
-                        model=_DEVELOPER_TOOL_MODEL,
-                        instructions=system_prompt,
-                        tools=[],
-                        messages=input_list,
-                        web_search_enabled=False,
-                        text_format=LogMonitorVerdict,
-                    )
-                    return response
-
-                # Execute tool calls
-                input_list.extend(response.output)
-                for item in response.output:
-                    if hasattr(item, 'type') and item.type == "function_call":
-                        tool_result = _execute_monitor_tool_call(item, provider)
-                        input_list.append({
-                            "type": "function_call_output",
-                            "call_id": item.call_id,
-                            "output": tool_result,
-                        })
-
-            elif provider == "anthropic":
-                response = call_llm_with_retry_anthropic(
-                    model=_DEVELOPER_TOOL_MODEL,
-                    instructions=system_prompt,
-                    tools=tools if not is_last_step else [],
-                    messages=input_list,
-                    web_search_enabled=False,
-                    text_format=text_format,
-                )
-
-                if hasattr(response, 'action'):
-                    return response
-
-                if response.stop_reason == "tool_use":
-                    tool_uses = [
-                        block for block in response.content
-                        if hasattr(block, 'type') and block.type == 'tool_use'
-                    ]
-                    tool_results = []
-                    for tool_use in tool_uses:
-                        tool_result_str = _execute_monitor_tool_call(tool_use, provider)
-                        tool_results.append({
-                            "type": "tool_result",
-                            "tool_use_id": tool_use.id,
-                            "content": tool_result_str,
-                        })
-                    input_list.append({"role": "assistant", "content": response.content})
-                    input_list.append({"role": "user", "content": tool_results})
-                else:
-                    if hasattr(response, 'action'):
-                        return response
-                    response = call_llm_with_retry_anthropic(
-                        model=_DEVELOPER_TOOL_MODEL,
-                        instructions=system_prompt,
-                        tools=[],
-                        messages=input_list,
-                        web_search_enabled=False,
-                        text_format=LogMonitorVerdict,
-                    )
-                    return response
-
-            elif provider == "google":
-                from google.genai import types
-
-                response = call_llm_with_retry_google(
+                response = call_llm(
                     model=_DEVELOPER_TOOL_MODEL,
                     system_instruction=system_prompt,
-                    function_declarations=tools if not is_last_step else [],
                     messages=input_list,
                     enable_google_search=False,
-                    text_format=text_format,
+                    text_format=LogMonitorVerdict,
                 )
+                return response
 
-                if hasattr(response, 'action'):
-                    return response
-
-                has_function_calls = False
-                if hasattr(response, 'candidates') and response.candidates:
-                    parts = response.candidates[0].content.parts
-                    has_function_calls = any(
-                        hasattr(part, 'function_call') and part.function_call
-                        for part in parts
-                    )
-
-                if not has_function_calls:
-                    if hasattr(response, 'action'):
-                        return response
-                    response = call_llm_with_retry_google(
-                        model=_DEVELOPER_TOOL_MODEL,
-                        system_instruction=system_prompt,
-                        messages=input_list,
-                        enable_google_search=False,
-                        text_format=LogMonitorVerdict,
-                    )
-                    return response
-
-                # Execute function calls
-                parts = response.candidates[0].content.parts
-                function_responses = []
-                for part in parts:
-                    if hasattr(part, 'function_call') and part.function_call:
-                        tool_result_str = _execute_monitor_tool_call(part.function_call, provider)
-                        function_responses.append(
-                            types.Part.from_function_response(
-                                name=part.function_call.name,
-                                response={"result": tool_result_str},
-                            )
+            # Execute function calls
+            parts = response.candidates[0].content.parts
+            function_responses = []
+            for part in parts:
+                if hasattr(part, 'function_call') and part.function_call:
+                    tool_result_str = _execute_monitor_tool_call(part.function_call)
+                    function_responses.append(
+                        types.Part.from_function_response(
+                            name=part.function_call.name,
+                            response={"result": tool_result_str},
                         )
-                input_list.append(response.candidates[0].content)
-                if function_responses:
-                    input_list.append(types.Content(role="function", parts=function_responses))
-
-            else:
-                raise ValueError(f"Unsupported provider: {provider}")
+                    )
+            input_list.append(response.candidates[0].content)
+            if function_responses:
+                input_list.append(types.Content(role="function", parts=function_responses))
 
         except Exception:
             logger.exception("Monitor LLM call failed at step %d", step + 1)
@@ -1204,34 +779,13 @@ def monitor_logs(
     # Exhausted steps without a verdict — force one
     logger.warning("Monitor exhausted %d steps, forcing final verdict", max_tool_steps)
     try:
-        if provider == "openai":
-            response = call_llm_with_retry(
-                model=_DEVELOPER_TOOL_MODEL,
-                instructions=system_prompt + "\n\nReturn your verdict now.",
-                tools=[],
-                messages=input_list,
-                web_search_enabled=False,
-                text_format=LogMonitorVerdict,
-            )
-        elif provider == "anthropic":
-            response = call_llm_with_retry_anthropic(
-                model=_DEVELOPER_TOOL_MODEL,
-                instructions=system_prompt + "\n\nReturn your verdict now.",
-                tools=[],
-                messages=input_list,
-                web_search_enabled=False,
-                text_format=LogMonitorVerdict,
-            )
-        elif provider == "google":
-            response = call_llm_with_retry_google(
-                model=_DEVELOPER_TOOL_MODEL,
-                system_instruction=system_prompt + "\n\nReturn your verdict now.",
-                messages=input_list,
-                enable_google_search=False,
-                text_format=LogMonitorVerdict,
-            )
-        else:
-            raise ValueError(f"Unsupported provider: {provider}")
+        response = call_llm(
+            model=_DEVELOPER_TOOL_MODEL,
+            system_instruction=system_prompt + "\n\nReturn your verdict now.",
+            messages=input_list,
+            enable_google_search=False,
+            text_format=LogMonitorVerdict,
+        )
 
         if hasattr(response, 'action'):
             return response

@@ -2,14 +2,10 @@ import logging
 import os
 import time
 
-import anthropic
-from anthropic import Anthropic
 from google import genai
 from google.genai import errors as genai_errors
 from google.genai import types as genai_types
 import httpx
-import openai
-from openai import OpenAI
 import weave
 
 from project_config import get_config
@@ -27,14 +23,6 @@ RETRYABLE_EXCEPTIONS = (
     httpx.ConnectTimeout,
     httpx.PoolTimeout,
     httpx.HTTPStatusError,
-    openai.APIConnectionError,
-    openai.APITimeoutError,
-    openai.RateLimitError,
-    openai.InternalServerError,
-    anthropic.APIConnectionError,
-    anthropic.APITimeoutError,
-    anthropic.RateLimitError,
-    anthropic.InternalServerError,
     genai_errors.ServerError,
     genai_errors.ClientError,
 )
@@ -129,136 +117,7 @@ def _build_directory_listing(root: str, num_files: int | None = None) -> str:
     return "\n".join(lines)
 
 @weave.op()
-def call_llm_with_retry(
-    model: str,
-    instructions: str,
-    tools: list,
-    messages: list,
-    max_retries: int | None = None,
-    web_search_enabled: bool = False,
-    text_format = None,
-    include_usage: bool = False,
-):
-    client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
-    runtime_cfg = get_config().get("runtime")
-    retries = max_retries or runtime_cfg.get("llm_max_retries")
-    backoff_seq = tuple(runtime_cfg.get("llm_backoff_sequence"))
-
-    # Add web_search without mutating caller's tools list
-    if web_search_enabled:
-        tools = tools + [{"type": "web_search"}]
-
-    def _call():
-        if text_format is not None:
-            response = client.responses.parse(
-                model=model,
-                instructions=instructions,
-                tools=tools,
-                input=messages,
-                text_format=text_format,
-            )
-            input_tokens = None
-            if include_usage and hasattr(response, 'usage') and response.usage:
-                input_tokens = getattr(response.usage, 'input_tokens', None)
-
-            if hasattr(response, 'output_parsed') and response.output_parsed:
-                result = response.output_parsed
-            elif hasattr(response, 'parsed_output') and response.parsed_output:
-                result = response.parsed_output
-            else:
-                logging.warning("OpenAI structured output response missing parsed object")
-                result = response
-
-            return (result, input_tokens) if include_usage else result
-        else:
-            response = client.responses.create(
-                model=model,
-                instructions=instructions,
-                tools=tools,
-                input=messages,
-            )
-            if include_usage:
-                input_tokens = None
-                if hasattr(response, 'usage') and response.usage:
-                    input_tokens = getattr(response.usage, 'input_tokens', None)
-                return (response, input_tokens)
-            return response
-
-    return _retry_with_backoff(_call, max_retries=retries, backoff_sequence=backoff_seq)
-
-@weave.op()
-def call_llm_with_retry_anthropic(
-    model: str,
-    instructions: str,
-    tools: list,
-    messages: list,
-    max_retries: int | None = None,
-    web_search_enabled: bool = False,
-    text_format = None,
-    max_tokens: int = 16384,
-    include_usage: bool = False,
-):
-    client = Anthropic(api_key=os.environ.get('ANTHROPIC_API_KEY'))
-    runtime_cfg = get_config().get("runtime")
-    retries = max_retries or runtime_cfg.get("llm_max_retries")
-    backoff_seq = tuple(runtime_cfg.get("llm_backoff_sequence"))
-
-    # Add web search tool if enabled (don't mutate caller's tools list)
-    if web_search_enabled:
-        tools = tools + [{
-            "type": "web_search_20250305",
-            "name": "web_search",
-            "max_uses": 20,
-        }]
-
-    def _call():
-        if text_format is not None:
-            response = client.beta.messages.parse(
-                model=model,
-                betas=["structured-outputs-2025-11-13"],
-                system=instructions,
-                messages=messages,
-                max_tokens=max_tokens,
-                output_format=text_format,
-                tools=tools if tools else [],
-                thinking={
-                    "type": "enabled",
-                    "budget_tokens": 4096
-                },
-            )
-            input_tokens = None
-            if include_usage and hasattr(response, 'usage') and response.usage:
-                input_tokens = getattr(response.usage, 'input_tokens', None)
-
-            if hasattr(response, 'parsed_output') and response.parsed_output:
-                result = response.parsed_output
-            else:
-                logging.warning("Anthropic structured output response missing parsed_output")
-                result = response
-            return (result, input_tokens) if include_usage else result
-        else:
-            response = client.messages.create(
-                model=model,
-                system=instructions,
-                messages=messages,
-                max_tokens=max_tokens,
-                tools=tools if tools else [],
-                thinking={
-                    "type": "enabled",
-                    "budget_tokens": 4096
-                },
-            )
-            if include_usage:
-                input_tokens = None
-                if hasattr(response, 'usage') and response.usage:
-                    input_tokens = getattr(response.usage, 'input_tokens', None)
-                return (response, input_tokens)
-            return response
-
-    return _retry_with_backoff(_call, max_retries=retries, backoff_sequence=backoff_seq)
-
-@weave.op()
-def call_llm_with_retry_google(
+def call_llm(
     model: str,
     system_instruction: str,
     messages: str | list = None,
