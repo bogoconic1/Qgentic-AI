@@ -85,12 +85,12 @@ def test_agent_initialization(test_task_dir, monkeypatch):
 
 
 # NOTE: test_build_plan_with_tool_calls has been removed as it requires extensive
-# mocking of complex OpenAI API response formats. The core functionality is tested
+# mocking of complex Gemini API response formats. The core functionality is tested
 # through integration tests.
 
 
 # NOTE: test_build_plan_direct_output has been removed as it requires extensive
-# mocking of complex OpenAI API response formats. The core functionality is tested
+# mocking of complex Gemini API response formats. The core functionality is tested
 # through integration tests.
 
 
@@ -125,11 +125,11 @@ def test_read_starter_suggestions(test_task_dir, monkeypatch):
 
 
 # NOTE: test_researcher_build_plan_invalid_tool_arguments has been removed as it requires
-# extensive mocking of complex OpenAI API response formats.
+# extensive mocking of complex Gemini API response formats.
 
 
 # NOTE: test_researcher_build_plan_empty_tool_results has been removed as it requires
-# extensive mocking of complex OpenAI API response formats.
+# extensive mocking of complex Gemini API response formats.
 
 
 # Tests for extracted methods after refactoring

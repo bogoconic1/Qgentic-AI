@@ -1,50 +1,26 @@
-# Minimal cross-modal baseline dependencies (offline-friendly)
-# Tabular/Text/Image/Video ingestion + training + diagnostics
-
-# Core numerical/ML stack
-numpy>=1.26
-pandas>=2.1
-scikit-learn>=1.4
-tqdm>=4.66
-rich>=13.7
-
-# Gradient-boosting (GPU-capable on supported platforms)
-xgboost>=2.0
-
-# Optional: LightGBM (avoid on macOS by default due to build frictions)
-lightgbm>=4.3; platform_system != "Darwin"
-
-# File formats and fast IO
-pyarrow>=14.0
-xmltodict>=0.13
-# PDF parsing via PyMuPDF (fitz)
-pymupdf>=1.24
-
-# Images/Video
-Pillow>=10.0
-opencv-python>=4.8
-albumentations>=1.4
-
-# Anthropic SDK for Async Messages API
-anthropic>=0.34.0
-
-# Optional helpers (uncomment if needed)
-polars>=0.20  # fast tabular EDA/processing
-catboost>=1.2
-pyyaml>=6.0
-
+numpy
+pandas
+scikit-learn
+tqdm
+rich
+xgboost
+lightgbm; platform_system != "Darwin"
+pyarrow
+xmltodict
+pymupdf
+Pillow
+opencv-python
+albumentations
+polars
+catboost
+pyyaml
 exa
 firecrawl-py
 sentence-transformers
-
-# Agents & tooling
-openai>=1.40.0
-python-dotenv>=1.0.1
-
+python-dotenv
 kaggle
 kagglehub
 nltk
-
 transformers[torch]
 torchvision
 tensorflow
@@ -53,15 +29,13 @@ peft
 bitsandbytes
 tf-keras
 sentencepiece
-
 wandb
 weave
-timm>=0.9.16
-datasets 
+timm
+datasets
 tensorboard
 matplotlib
 seaborn
 torchgeo
 scikit-image
-
 google-genai

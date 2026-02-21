@@ -13,7 +13,7 @@ Does NOT restrict file system access - trusts LLM code generation.
 import logging
 from typing import Dict, Any
 
-from tools.helpers import call_llm_with_retry_google
+from tools.helpers import call_llm
 from schemas.guardrails import CodeSafetyCheck
 from prompts.guardrails import code_safety_system, code_safety_user
 from project_config import get_config
@@ -49,7 +49,7 @@ def check_code_safety(code: str) -> Dict[str, Any]:
         system_prompt = code_safety_system()
         user_prompt = code_safety_user(code)
 
-        response = call_llm_with_retry_google(
+        response = call_llm(
             model=_SAFETY_MODEL,
             system_instruction=system_prompt,
             messages=user_prompt,

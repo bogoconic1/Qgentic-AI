@@ -3,14 +3,14 @@ from dotenv import load_dotenv
 import weave
 
 from project_config import get_config
-from tools.helpers import call_llm_with_retry, call_llm_with_retry_anthropic, call_llm_with_retry_google
-from utils.llm_utils import detect_provider, extract_text_from_response, append_message
+from tools.helpers import call_llm
+from utils.llm_utils import extract_text_from_response, append_message
 
 load_dotenv()
 
 
 class PaperSummaryClient:
-    """Wrapper for paper summarization using multi-provider LLM support."""
+    """Wrapper for paper summarization using Gemini."""
 
     _DEFAULT_PROMPT_MODEL = (
         "The model name: {model_name}\n"
@@ -27,9 +27,6 @@ class PaperSummaryClient:
         cfg = get_config()
         self.model_name = cfg["llm"]["paper_summary_model"]
         self.is_model = is_model
-
-        # Detect provider from model name
-        self.provider = detect_provider(self.model_name)
 
         if self.is_model:
             self.system_instruction = (
@@ -79,38 +76,14 @@ class PaperSummaryClient:
             default_prompt = self._DEFAULT_PROMPT_MODEL if self.is_model else self._DEFAULT_PROMPT_ARXIV
             prompt = default_prompt.format(model_name=model_name)
 
-        # Build messages in provider-specific format
-        messages = [append_message(self.provider, "user", prompt)]
+        messages = [append_message("user", prompt)]
 
-        # Call appropriate LLM based on provider
-        if self.provider == "openai":
-            response = call_llm_with_retry(
-                model=self.model_name,
-                instructions=self.system_instruction,
-                tools=[],
-                messages=messages,
-                web_search_enabled=True,
-            )
-            result = extract_text_from_response(response, "openai")
-        elif self.provider == "anthropic":
-            response = call_llm_with_retry_anthropic(
-                model=self.model_name,
-                instructions=self.system_instruction,
-                tools=[],
-                messages=messages,
-                web_search_enabled=True,
-            )
-            result = extract_text_from_response(response, "anthropic")
-        elif self.provider == "google":
-            response = call_llm_with_retry_google(
-                model=self.model_name,
-                system_instruction=self.system_instruction,
-                messages=messages,
-                enable_google_search=True,
-            )
-            # Extract text from Gemini response
-            result = response.text if hasattr(response, 'text') else str(response)
-        else:
-            return f"Error: Unsupported provider '{self.provider}'"
+        response = call_llm(
+            model=self.model_name,
+            system_instruction=self.system_instruction,
+            messages=messages,
+            enable_google_search=True,
+        )
+        result = response.text if hasattr(response, 'text') else str(response)
 
         return result if result else "Error: Failed to generate summary"
