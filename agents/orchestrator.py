@@ -13,6 +13,7 @@ from agents.developer import DeveloperAgent
 from agents.starter import StarterAgent
 from agents.model_recommender import ModelRecommenderAgent
 from project_config import get_config, get_instructions
+from tools.helpers import _build_directory_listing
 from utils.checkpoint import create_db as _create_checkpoint_db, delete_checkpoints_after
 from weave.trace.util import ThreadPoolExecutor
 import weave
@@ -484,8 +485,6 @@ class Orchestrator:
 
     def _get_external_data_listing(self) -> str:
         """Get directory listing of external_data_* folders in outputs/<iteration>."""
-        from tools.helpers import _build_directory_listing
-
         if not self.outputs_dir.exists():
             return "No external data directories found."
 

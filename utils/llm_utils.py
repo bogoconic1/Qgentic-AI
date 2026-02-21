@@ -7,6 +7,8 @@ import logging
 import mimetypes
 from pathlib import Path
 
+from google.genai import types
+
 logger = logging.getLogger(__name__)
 
 
@@ -104,8 +106,6 @@ def get_tools():
     Returns:
         List of FunctionDeclaration objects
     """
-    from google.genai import types
-
     return [
         types.FunctionDeclaration(
             name="execute_python",
@@ -158,8 +158,6 @@ def get_tools():
 
 def get_monitor_tools():
     """Get monitor tools (execute_bash) as Gemini FunctionDeclaration objects."""
-    from google.genai import types
-
     return [
         types.FunctionDeclaration(
             name="execute_bash",

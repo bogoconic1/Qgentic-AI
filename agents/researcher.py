@@ -15,6 +15,7 @@ from prompts.researcher_agent import (
     initial_user_for_build_plan as prompt_initial_user,
 )
 from tools.helpers import call_llm
+from google.genai import types
 import weave
 
 logger = logging.getLogger(__name__)
@@ -119,8 +120,6 @@ class ResearcherAgent:
         return encode_image_to_data_url(path)
 
     def _ingest_new_media(self, before_set: set[Path]) -> None:
-        from google.genai import types
-
         after_set = self._list_media_files()
         new_files = list(after_set - before_set)
         if not new_files:
@@ -299,8 +298,6 @@ class ResearcherAgent:
 
     @weave.op()
     def build_plan(self, max_steps: int | None = None) -> str:
-        from google.genai import types
-
         system_prompt = self._compose_system()
         starter_suggestions = self._read_starter_suggestions()
 

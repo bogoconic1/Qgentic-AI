@@ -14,8 +14,9 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from project_config import get_config
+from google.genai import types
 from tools.helpers import call_llm
-from utils.llm_utils import extract_text_from_response, append_message
+from utils.llm_utils import extract_text_from_response, append_message, encode_image_to_data_url, get_tools, get_monitor_tools
 from prompts.tools_developer import (
     build_stack_trace_prompt as prompt_stack_trace,
     build_stack_trace_pseudo_prompt as prompt_stack_trace_pseudo,
@@ -141,9 +142,6 @@ def _ingest_images_for_llm(images: list[Path]) -> list[dict] | None:
     Returns:
         List of formatted image messages ready to append, or None if no valid images
     """
-    from utils.llm_utils import encode_image_to_data_url
-    from google.genai import types
-
     image_content = []
     for img_path in images:
         if not img_path.exists():
@@ -235,7 +233,6 @@ def _get_sota_tools() -> list:
     Returns:
         List of FunctionDeclaration objects
     """
-    from utils.llm_utils import get_tools
     return get_tools()
 
 
@@ -252,11 +249,10 @@ def _get_tool_name(tool) -> str:
 
 
 def _inject_user_guidance(input_list, guidance):
-    from google.genai import types as genai_types
     text = f"[User guidance]: {guidance}"
-    input_list.append(genai_types.Content(
+    input_list.append(types.Content(
         role="user",
-        parts=[genai_types.Part.from_text(text=text)],
+        parts=[types.Part.from_text(text=text)],
     ))
 
 
@@ -284,8 +280,6 @@ def search_sota_suggestions(
     hitl_sota: bool = False,
 ) -> str:
     """Stage 2: Use web search and tools to generate SOTA suggestions based on red flags."""
-    from google.genai import types
-
     logger.info("Dispatching SOTA suggestions (Stage 2) with web search (attempt #%d)", attempt_number)
 
     # Include train_stats in context if provided
@@ -454,7 +448,6 @@ def _execute_sota_tool_call(item, description, data_path, slug, cpu_core_range, 
         version: Current developer version (for output directory)
     """
     from tools.researcher import scrape_web_page, read_research_paper
-    import json
 
     tool_name = item.name
     args = dict(item.args) if hasattr(item, 'args') else {}
@@ -703,9 +696,6 @@ def monitor_logs(
     Uses an LLM with access to an execute_bash tool for system diagnostics.
     Returns a LogMonitorVerdict with action ("continue" or "kill") and reason.
     """
-    from utils.llm_utils import get_monitor_tools
-    from google.genai import types
-
     system_prompt = prompt_log_monitor_system()
     user_prompt = prompt_log_monitor_user(
         log_output=log_output,
