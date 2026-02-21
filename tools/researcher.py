@@ -1,9 +1,9 @@
 import logging
 import os
 import re
-from pathlib import Path
 
 from dotenv import load_dotenv
+from firecrawl import Firecrawl
 import weave
 from tools.generate_paper_summary import PaperSummaryClient
 
@@ -30,7 +30,7 @@ def read_research_paper(arxiv_link: str) -> str:
         Structured markdown summary with sections: Abstract, Introduction, Related Work,
         Method/Architecture, Experiments/Results, and Conclusion.
     """
-    arxiv_id_match = re.search(r'(\d{4}\.\d{4,5})', arxiv_link)
+    arxiv_id_match = re.search(r"(\d{4}\.\d{4,5})", arxiv_link)
     if arxiv_id_match:
         arxiv_id = arxiv_id_match.group(1)
     else:
@@ -39,14 +39,10 @@ def read_research_paper(arxiv_link: str) -> str:
 
     logger.info("Reading research paper with arxiv ID: %s", arxiv_id)
 
-    try:
-        client = PaperSummaryClient(is_model=False)
-        summary = client.generate_summary(model_name=arxiv_id)
-        logger.info("Successfully generated paper summary (length: %d chars)", len(summary))
-        return summary
-    except Exception as e:
-        logger.exception("Failed to read research paper: %s", arxiv_id)
-        return f"Error reading paper: {str(e)}"
+    client = PaperSummaryClient(is_model=False)
+    summary = client.generate_summary(model_name=arxiv_id)
+    logger.info("Successfully generated paper summary (length: %d chars)", len(summary))
+    return summary
 
 
 @weave.op()
@@ -64,35 +60,14 @@ def scrape_web_page(url: str) -> str:
     """
     logger.info("Scraping web page: %s", url)
 
-    try:
-        from firecrawl import Firecrawl
+    api_key = os.environ["FIRECRAWL_API_KEY"]
+    app = Firecrawl(api_key=api_key)
+    doc = app.scrape(url, formats=["markdown"])
 
-        api_key = os.environ.get("FIRECRAWL_API_KEY")
-        if not api_key:
-            logger.error("FIRECRAWL_API_KEY not set in environment")
-            return "Error: FIRECRAWL_API_KEY environment variable is not set. Cannot scrape web pages."
-
-        app = Firecrawl(api_key=api_key)
-        doc = app.scrape(url, formats=["markdown"])
-
-        if doc.markdown:
-            title = doc.metadata.title if doc.metadata and doc.metadata.title else url
-            content = doc.markdown[:30000]  # Limit to first 30000 characters
-            truncated = len(doc.markdown) > 30000
-            logger.info("Successfully scraped page (length: %d chars, truncated: %s, title: %s)",
-                       len(doc.markdown), truncated, title)
-
-            result = f"# {title}\n\nSource: {url}\n\n{content}"
-            if truncated:
-                result += f"\n\n... (content truncated at 30000 characters, original length: {len(doc.markdown)} chars)"
-            return result
-        else:
-            logger.warning("No markdown content returned from Firecrawl for URL: %s", url)
-            return f"Error: Failed to scrape page at {url}. The page may be inaccessible or contain no readable content."
-
-    except ImportError:
-        logger.error("Firecrawl package not installed")
-        return "Error: Firecrawl package is not installed. Install with: pip install firecrawl-py"
-    except Exception as e:
-        logger.exception("Failed to scrape web page: %s", url)
-        return f"Error scraping page: {str(e)}"
+    title = doc.metadata.title if doc.metadata and doc.metadata.title else url
+    logger.info(
+        "Successfully scraped page (length: %d chars, title: %s)",
+        len(doc.markdown),
+        title,
+    )
+    return f"# {title}\n\nSource: {url}\n\n{doc.markdown}"

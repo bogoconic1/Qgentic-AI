@@ -298,25 +298,20 @@ Plan:
 """
 
 
-def _get_task_specific_requirements(task_type: str | list[str]) -> str:
+def _get_task_specific_requirements(task_types: list[str]) -> str:
     """Return task-specific exploration guidelines (NOT prescriptive checklists).
 
     These are GUIDELINES for what to explore, not mandatory step-by-step instructions.
     The researcher should adapt based on domain discoveries.
     """
 
-    # Handle multimodal case
-    if isinstance(task_type, list):
-        if len(task_type) == 1:
-            task_type = task_type[0]
-        else:
-            # Multimodal: combine requirements
-            sections = []
-            for t in task_type:
-                sections.append(_get_task_specific_requirements(t))
+    if len(task_types) > 1:
+        sections = []
+        for t in task_types:
+            sections.append(_get_task_specific_requirements([t]))
 
-            multimodal_header = f"""
-## MULTIMODAL Competition Detected: {' + '.join(task_type).upper()}
+        multimodal_header = f"""
+## MULTIMODAL Competition Detected: {" + ".join(task_types).upper()}
 
 This competition requires handling multiple data modalities. Consider:
 
@@ -333,7 +328,9 @@ This competition requires handling multiple data modalities. Consider:
 
 ---
 """
-            return multimodal_header + "\n\n".join(sections)
+        return multimodal_header + "\n\n".join(sections)
+
+    task_type = task_types[0]
 
     if task_type == "tabular":
         return """
@@ -611,7 +608,7 @@ If you find yourself performing "standard CV analysis" without domain context, p
 
 After each substantive step or analysis, briefly validate your insight, noting if it supports or challenges domain hypotheses, and state your next step or adjustment. Set reasoning_effort = medium for this workflow: keep analysis and validation concise but thorough, matching the task complexity.
 """
-    
+
     elif task_type == "time_series":
         return """## Task-Specific Exploration Guide: TIME-SERIES
 
@@ -704,45 +701,28 @@ Apply the domain-first principles:
 """
 
 
-def build_system(base_dir: str, task_type: str | list[str] = "tabular", hitl_instructions: list[str] | None = None) -> str:
+def build_system(
+    base_dir: str, task_types: list[str], hitl_instructions: list[str] | None = None
+) -> str:
     """Build research system prompt with domain-aware, hypothesis-driven approach.
 
     Args:
         base_dir: Base directory path
-        task_type: Single task type string or list of task types (for multimodal)
+        task_types: List of task types (e.g., ["nlp"] or ["computer_vision", "tabular"] for multimodal)
     """
 
-    def normalize_single_task_type(tt: str) -> str:
-        tt = tt.lower().replace(" ", "_").replace("-", "_")
-        if "computer" in tt or "vision" in tt or "image" in tt:
-            return "computer_vision"
-        elif "nlp" in tt or "text" in tt or "language" in tt:
-            return "nlp"
-        elif "time" in tt or "series" in tt or "forecast" in tt:
-            return "time_series"
-        elif "audio" in tt or "sound" in tt or "speech" in tt:
-            return "audio"
-        elif "tabular" in tt or "structured" in tt:
-            return "tabular"
-        return tt
-
-    if isinstance(task_type, list):
-        normalized_task_types = [normalize_single_task_type(tt) for tt in task_type]
-        task_type_display = " + ".join(normalized_task_types) if len(normalized_task_types) > 1 else normalized_task_types[0]
-        task_type_for_requirements = normalized_task_types
-    else:
-        normalized_task_type = normalize_single_task_type(task_type)
-        task_type_display = normalized_task_type
-        task_type_for_requirements = normalized_task_type
+    task_type_display = " + ".join(task_types) if len(task_types) > 1 else task_types[0]
 
     domain_discovery = _get_domain_discovery_phase()
     hypothesis_driven = _get_hypothesis_driven_exploration()
     few_shot = _get_few_shot_examples()
-    task_guidelines = _get_task_specific_requirements(task_type_for_requirements)
+    task_guidelines = _get_task_specific_requirements(task_types)
 
     hitl_section = ""
-    if hitl_instructions and len(hitl_instructions) > 0:
-        hitl_items = "\n".join([f"{i+1}. {instr}" for i, instr in enumerate(hitl_instructions)])
+    if hitl_instructions:
+        hitl_items = "\n".join(
+            [f"{i + 1}. {instr}" for i, instr in enumerate(hitl_instructions)]
+        )
         hitl_section = f"""
 # Human-In-The-Loop Instructions
 

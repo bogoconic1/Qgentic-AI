@@ -3,6 +3,7 @@ from pydantic import BaseModel
 
 class StackTraceSolution(BaseModel):
     """Schema for stack trace debugging solutions."""
+
     checklist: list[str]
     web_search_findings: str
     reasoning_and_solution: str
@@ -12,6 +13,7 @@ class StackTraceSolution(BaseModel):
 
 class SOTAResponse(BaseModel):
     """Schema for SOTA suggestions combining blacklist decision and new suggestion."""
+
     blacklist: bool
     blacklist_reason: str
     suggestion: str
@@ -21,8 +23,9 @@ class SOTAResponse(BaseModel):
 
 class LogMonitorVerdict(BaseModel):
     """LLM verdict on whether a running training script is healthy."""
-    action: str   # "continue" or "kill"
-    reason: str   # explanation — fed back to the developer agent if killed
+
+    action: str  # "continue" or "kill"
+    reason: str  # explanation — fed back to the developer agent if killed
 
 
 class CodeGeneration(BaseModel):
@@ -30,4 +33,5 @@ class CodeGeneration(BaseModel):
 
     The train_py field should contain the complete training script.
     """
+
     train_py: str

@@ -35,30 +35,26 @@ def _read_helper_files(slug: str) -> str:
     # Check for cv_splits.json
     cv_splits_path = base_dir / "cv_splits.json"
     if cv_splits_path.exists():
-        try:
-            with open(cv_splits_path, 'r') as f:
-                cv_data = json.load(f)
+        with open(cv_splits_path, "r") as f:
+            cv_data = json.load(f)
 
-            cv_data_limited = _limit_list_items(cv_data, max_items=5)
+        cv_data_limited = _limit_list_items(cv_data, max_items=5)
 
-            cv_section = f"""
+        cv_section = f"""
 **cv_splits.json**: pre-defined cross-validation splits. Please read from here and DO NOT generate your own splits.
 ```json
 {json.dumps(cv_data_limited, indent=2)}
 ```
 """
-            helper_sections.append(cv_section)
-        except Exception:
-            pass  # Skip if file can't be read
+        helper_sections.append(cv_section)
 
     # Check for metric.py
     metric_path = base_dir / "metric.py"
     if metric_path.exists():
-        try:
-            with open(metric_path, 'r') as f:
-                metric_content = f.read()
+        with open(metric_path, "r") as f:
+            metric_content = f.read()
 
-            metric_section = f"""
+        metric_section = f"""
 **metric.py**: competition-specific evaluation metric. Please use this metric for evaluation. DO NOT generate your own metric.
 
 You should write the line
@@ -72,36 +68,34 @@ File contents:
 {metric_content}
 ```
 """
-            helper_sections.append(metric_section)
-        except Exception:
-            pass  # Skip if file can't be read
+        helper_sections.append(metric_section)
 
     if helper_sections:
-        return f"\n### 3. Available Helper Files in `{base_dir}`\n" + "\n".join(helper_sections)
+        return f"\n### 3. Available Helper Files in `{base_dir}`\n" + "\n".join(
+            helper_sections
+        )
     return ""
 
 
-def _get_hard_constraints(model_name: str) -> str:
-    """
-    Get the hard constraints section for developer agent system prompts.
-
-    Args:
-        model_name: The model name to be used in constraints
-
-    Returns:
-        Formatted hard constraints string
-    """
-    return get_hard_constraints(model_name=model_name)
-
-
-def build_system(description: str, directory_listing: str, model_name: str, slug: str, cpu_core_range: list[int] | None = None, gpu_identifier: str | None = None, gpu_isolation_mode: str = "none", hitl_instructions: list[str] | None = None) -> str:
+def build_system(
+    description: str,
+    directory_listing: str,
+    model_name: str,
+    slug: str,
+    cpu_core_range: list[int] | None = None,
+    gpu_identifier: str | None = None,
+    gpu_isolation_mode: str = "none",
+    hitl_instructions: list[str] | None = None,
+) -> str:
     resource_info = ""
     if cpu_core_range is not None:
         resource_info = f"\nNumber of CPUs: {len(cpu_core_range)} cores"
 
     hitl_section = ""
-    if hitl_instructions and len(hitl_instructions) > 0:
-        hitl_items = "\n".join([f"{i+1}. {instr}" for i, instr in enumerate(hitl_instructions)])
+    if hitl_instructions:
+        hitl_items = "\n".join(
+            [f"{i + 1}. {instr}" for i, instr in enumerate(hitl_instructions)]
+        )
         hitl_section = f"""
 # Human-In-The-Loop Instructions
 
@@ -114,7 +108,7 @@ You have been provided with the following guidance for code implementation:
 ---
 """
 
-    constraints = _get_hard_constraints(model_name)
+    constraints = get_hard_constraints(model_name=model_name)
 
     helper_files_section = _read_helper_files(slug)
 
@@ -132,7 +126,7 @@ Your objective is to deliver a complete, executable training script (train.py) f
 **Context:**
 - **Competition Description:** 
   {description}
-- **Directory Structure for `{Path('task') / slug}`:
+- **Directory Structure for `{Path("task") / slug}`:
   {directory_listing}
 
 {helper_files_section}
@@ -197,6 +191,7 @@ def build_user(
 """
 
     from pathlib import Path
+
     version_folder = Path(log_path).parent
 
     base = f"""{recommendations_section}Project structure:
@@ -205,43 +200,36 @@ def build_user(
 - Version folder: {version_folder}
 - The logs should be written to a file named {log_path}
 - Required submission output: {submission_path}
-"""
-    base += (
-        "\nReturn train.py that writes logs to "
-        f"{log_path}, "
-        "produces a submission CSV at "
-        f"{submission_path}, "
-        f"and saves the following artifacts to {version_folder}/:\n"
-        f"  - valid_preds.csv (validation predictions with fold info, predictions, ground truth, IDs)\n"
-        f"  - train_stats.json (model_name, cv_scores, cv_mean, cv_std, cv_worst, submission_distribution, hyperparameters)\n"
-        f"  - trained model files (model_*.pkl/.pt/.h5)\n"
-        f"  - loss_curve.png (training/validation loss plot)\n"
-        f"  - metric_curve.png (training/validation metric plot)"
-    )
+
+Return train.py that writes logs to {log_path}, produces a submission CSV at {submission_path}, and saves the following artifacts to {version_folder}/:
+  - valid_preds.csv (validation predictions with fold info, predictions, ground truth, IDs)
+  - train_stats.json (model_name, cv_scores, cv_mean, cv_std, cv_worst, submission_distribution, hyperparameters)
+  - trained model files (model_*.pkl/.pt/.h5)
+  - loss_curve.png (training/validation loss plot)
+  - metric_curve.png (training/validation metric plot)"""
 
     if threshold_directive:
         base += f"\n{threshold_directive}"
     return base
 
 
-def guardrail_fix_suffix(next_log_path: str | Path, next_submission_path: str | Path, version_folder: str | Path) -> str:
-    return (
-        "\nPlease regenerate the script addressing the above guardrail issues. "
-        f"Write logs to {next_log_path} "
-        f"and save the following artifacts to {version_folder}/:\n"
-        f"  - submission.csv\n"
-        f"  - valid_preds.csv\n"
-        f"  - train_stats.json\n"
-        f"  - trained model files\n"
-        f"  - loss_curve.png\n"
-        f"  - metric_curve.png"
-    )
+def guardrail_fix_suffix(next_log_path: str | Path, version_folder: str | Path) -> str:
+    return f"""
+Please regenerate the script addressing the above guardrail issues. Write logs to {next_log_path} and save the following artifacts to {version_folder}/:
+  - submission.csv
+  - valid_preds.csv
+  - train_stats.json
+  - trained model files
+  - loss_curve.png
+  - metric_curve.png"""
 
 
-def execution_failure_suffix(next_log_path: str | Path, next_submission_path: str | Path, version_folder: str | Path) -> str:
-    return (
-        "\nPlease modify your code to fix the error!\n\n"
-        "Remember:\n"
-        f"- write logs to {next_log_path}\n"
-        f"- save artifacts to {version_folder}/: submission.csv, valid_preds.csv, train_stats.json, models, loss_curve.png, metric_curve.png"
-    )
+def execution_failure_suffix(
+    next_log_path: str | Path, version_folder: str | Path
+) -> str:
+    return f"""
+Please modify your code to fix the error!
+
+Remember:
+- write logs to {next_log_path}
+- save artifacts to {version_folder}/: submission.csv, valid_preds.csv, train_stats.json, models, loss_curve.png, metric_curve.png"""

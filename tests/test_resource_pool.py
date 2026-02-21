@@ -1,12 +1,9 @@
 """Unit tests for dynamic resource pool allocation (CPU cores and MIG instances)."""
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import time
 import unittest
 from queue import Queue
 from concurrent.futures import ThreadPoolExecutor
-import time
 
 
 class TestDynamicResourceAllocation(unittest.TestCase):
@@ -94,14 +91,6 @@ class TestDynamicResourceAllocation(unittest.TestCase):
             futures = [executor.submit(_run_developer_baseline, **task) for task in tasks]
             results = [f.result() for f in futures]
 
-        # Verify assignments
-        print("\n=== Process Assignments ===")
-        for pid in sorted(process_assignments.keys()):
-            assignment = process_assignments[pid]
-            print(f"Process {pid}: CPU {assignment['cpu']} + GPU {assignment['gpu']} "
-                  f"(started at {assignment['start_time']:.2f}s)")
-
-        # Assertions
         # Process 3 should get resources from Process 2 (fastest to complete)
         self.assertEqual(process_assignments[3]["cpu"], process_assignments[2]["cpu"],
                         "Process 3 should get CPU from completed Process 2")
@@ -119,5 +108,3 @@ class TestDynamicResourceAllocation(unittest.TestCase):
         self.assertEqual(gpu_pool.qsize(), 3, "All 3 GPU instances should be back in pool")
 
 
-if __name__ == "__main__":
-    unittest.main(verbosity=2)

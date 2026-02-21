@@ -59,10 +59,6 @@ def get_hard_constraints(
 
     constraints_parts.append("""- Do not use any `while` loops in your code.""")
 
-    # Add the 's' typo from the original code for backward compatibility
-    if model_name:  # Only developer has this typo
-        constraints_parts[-1] += "s"
-
     constraints_parts.append("""- At the end, log the distribution of the submission predictions (e.g., value counts for classification, summary statistics for regression).
 - If asked to download external datasets, use kagglehub.
 ```

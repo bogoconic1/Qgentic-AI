@@ -26,13 +26,15 @@ def extract_python_code(content: str) -> str:
         Extracted Python code, or original content if no code blocks found
     """
     # Try old pattern (matches any ``` including in strings/comments)
-    pattern_old = r'```python\s*(.*?)\s*```'
+    pattern_old = r"```python\s*(.*?)\s*```"
     matches_old = re.findall(pattern_old, content, re.DOTALL | re.IGNORECASE)
     code_old = "\n\n".join(matches_old).strip() if matches_old else ""
 
     # Try new pattern (only matches ``` at start of line)
-    pattern_new = r'```python\s*\n(.*?)\n^```'
-    matches_new = re.findall(pattern_new, content, re.DOTALL | re.MULTILINE | re.IGNORECASE)
+    pattern_new = r"```python\s*\n(.*?)\n^```"
+    matches_new = re.findall(
+        pattern_new, content, re.DOTALL | re.MULTILINE | re.IGNORECASE
+    )
     code_new = "\n\n".join(matches_new).strip() if matches_new else ""
 
     # If neither found anything, return original content
@@ -46,37 +48,49 @@ def extract_python_code(content: str) -> str:
 
     if code_old:
         try:
-            compile(code_old, '<string>', 'exec')
+            compile(code_old, "<string>", "exec")
             old_compiles = True
         except SyntaxError:
             pass
 
     if code_new:
         try:
-            compile(code_new, '<string>', 'exec')
+            compile(code_new, "<string>", "exec")
             new_compiles = True
         except SyntaxError:
             pass
 
     if new_compiles and old_compiles:
         if len(code_new) >= len(code_old):
-            logger.debug(f"Both patterns compile, using new pattern ({len(code_new)} chars vs {len(code_old)} chars)")
+            logger.debug(
+                f"Both patterns compile, using new pattern ({len(code_new)} chars vs {len(code_old)} chars)"
+            )
             return code_new
         else:
-            logger.debug(f"Both patterns compile, using old pattern ({len(code_old)} chars vs {len(code_new)} chars)")
+            logger.debug(
+                f"Both patterns compile, using old pattern ({len(code_old)} chars vs {len(code_new)} chars)"
+            )
             return code_old
     elif new_compiles:
-        logger.debug(f"Only new pattern compiles, using new pattern ({len(code_new)} chars)")
+        logger.debug(
+            f"Only new pattern compiles, using new pattern ({len(code_new)} chars)"
+        )
         return code_new
     elif old_compiles:
-        logger.debug(f"Only old pattern compiles, using old pattern ({len(code_old)} chars)")
+        logger.debug(
+            f"Only old pattern compiles, using old pattern ({len(code_old)} chars)"
+        )
         return code_old
     else:
         if len(code_new) >= len(code_old):
-            logger.debug(f"Neither compiles, using new pattern as longer ({len(code_new)} chars vs {len(code_old)} chars)")
+            logger.debug(
+                f"Neither compiles, using new pattern as longer ({len(code_new)} chars vs {len(code_old)} chars)"
+            )
             return code_new
         else:
-            logger.debug(f"Neither compiles, using old pattern as longer ({len(code_old)} chars vs {len(code_new)} chars)")
+            logger.debug(
+                f"Neither compiles, using old pattern as longer ({len(code_old)} chars vs {len(code_new)} chars)"
+            )
             return code_old
 
 
@@ -89,12 +103,12 @@ def strip_header_from_code(code_path: Path) -> str:
     Returns:
         Clean code without headers
     """
-    with open(code_path, 'r') as f:
+    with open(code_path, "r") as f:
         code_text = f.read()
 
-    metadata_path = code_path.with_suffix('.json')
+    metadata_path = code_path.with_suffix(".json")
     if metadata_path.exists():
-        with open(metadata_path, 'r') as f:
+        with open(metadata_path, "r") as f:
             metadata = json.load(f)
         num_header_lines = metadata.get("num_header_lines", 0)
     else:
@@ -103,5 +117,5 @@ def strip_header_from_code(code_path: Path) -> str:
     if num_header_lines == 0:
         return code_text
 
-    lines = code_text.split('\n')
-    return '\n'.join(lines[num_header_lines:])
+    lines = code_text.split("\n")
+    return "\n".join(lines[num_header_lines:])

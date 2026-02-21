@@ -1,7 +1,6 @@
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
 
@@ -12,7 +11,6 @@ from prompts.starter_agent import (
     build_system as prompt_build_system,
     build_user as prompt_build_user,
 )
-from constants import VALID_TASK_TYPES, normalize_task_type
 from schemas.starter import StarterSuggestions
 import weave
 
@@ -21,13 +19,13 @@ logger = logging.getLogger(__name__)
 
 
 _CONFIG = get_config()
-_LLM_CFG = _CONFIG.get("llm")
-_PATH_CFG = _CONFIG.get("paths")
+_LLM_CFG = _CONFIG["llm"]
+_PATH_CFG = _CONFIG["paths"]
 
-_STARTER_MODEL = _LLM_CFG.get("starter_model")
+_STARTER_MODEL = _LLM_CFG["starter_model"]
 
-_TASK_ROOT = Path(_PATH_CFG.get("task_root"))
-_OUTPUTS_DIRNAME = _PATH_CFG.get("outputs_dirname")
+_TASK_ROOT = Path(_PATH_CFG["task_root"])
+_OUTPUTS_DIRNAME = _PATH_CFG["outputs_dirname"]
 
 
 class StarterAgent:
@@ -52,13 +50,11 @@ class StarterAgent:
         existing_paths = {getattr(h, "baseFilename", None) for h in logger.handlers}
         log_file = self.outputs_dir / "starter.log"
         if str(log_file) not in existing_paths:
-            try:
-                fh = logging.FileHandler(log_file)
-                fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s [%(name)s] %(message)s"))
-                logger.addHandler(fh)
-            except Exception:
-                # Fallback: no-op if file handler cannot be created
-                pass
+            fh = logging.FileHandler(log_file)
+            fh.setFormatter(
+                logging.Formatter("%(asctime)s %(levelname)s [%(name)s] %(message)s")
+            )
+            logger.addHandler(fh)
         logger.setLevel(logging.DEBUG)
 
     @weave.op()
@@ -70,8 +66,11 @@ class StarterAgent:
         user_prompt = prompt_build_user(description=description)
 
         messages = [append_message("user", user_prompt)]
-        logger.info("Dispatching StarterAgent request for slug=%s iteration=%s",
-                   self.slug, self.iteration)
+        logger.info(
+            "Dispatching StarterAgent request for slug=%s iteration=%s",
+            self.slug,
+            self.iteration,
+        )
 
         response = call_llm(
             model=_STARTER_MODEL,
@@ -81,46 +80,10 @@ class StarterAgent:
             enable_google_search=True,
         )
 
-        suggestions: Dict[str, Any] = {}
-        try:
-            if not response:
-                raise ValueError("No structured output received from model")
+        suggestions = {
+            "task_types": response.task_types,
+            "task_summary": response.task_summary,
+        }
 
-            parsed = response
-
-            if not parsed.task_types:
-                raise ValueError("task_types list cannot be empty")
-
-            normalized_task_types = []
-            for raw_task_type in parsed.task_types:
-                normalized_task_type = normalize_task_type(raw_task_type)
-
-                if raw_task_type.lower() != normalized_task_type:
-                    logger.info(f"Normalized task_type from '{raw_task_type}' to '{normalized_task_type}'")
-
-                if normalized_task_type not in VALID_TASK_TYPES:
-                    raise ValueError(
-                        f"Invalid task_type '{raw_task_type}' (normalized: '{normalized_task_type}'). "
-                        f"Must be one of {VALID_TASK_TYPES}"
-                    )
-
-                normalized_task_types.append(normalized_task_type)
-
-            suggestions = {
-                "task_types": normalized_task_types,
-                "task_summary": parsed.task_summary
-            }
-
-        except ValueError as e:
-            logger.error(f"Validation error in starter response: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error processing starter response: {e}")
-            raise
-
-        try:
-            self.json_path.write_text(json.dumps(suggestions, indent=2))
-        except Exception:
-            logger.debug("Failed to persist starter_suggestions.json")
-
-        logger.info("StarterAgent completed with %s keys", len(suggestions) if isinstance(suggestions, dict) else 0)
+        self.json_path.write_text(json.dumps(suggestions, indent=2))
+        logger.info("StarterAgent completed: task_types=%s", response.task_types)
