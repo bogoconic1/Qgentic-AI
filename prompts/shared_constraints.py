@@ -19,19 +19,16 @@ def get_hard_constraints(
     Returns:
         Formatted hard constraints string ready for inclusion in system prompts.
     """
-    # Build model-specific constraints
     model_constraint_lines = []
     if model_name:
         model_constraint_lines.append(
             f"- Use ONLY `{model_name}` (no substitutions or fallback models)."
         )
 
-    # Build model substitution constraint (developer-specific)
     modular_pipeline_constraint = ""
     if model_name:
         modular_pipeline_constraint = f"- Modular pipeline: update preprocessing/postprocessing or hyperparameters, but do not swap out `{model_name}`."
 
-    # Build common constraints
     common_constraints = """- Deliver a fully-contained, single-file script.
 - Use CUDA if available.
 - **DO NOT** explicitly set `os.environ['CUDA_VISIBLE_DEVICES']` in your code.
@@ -44,28 +41,22 @@ def get_hard_constraints(
 - Do not use `try/except` to suppress errors.
 - Log final validation results, best epoch number and total training time after training."""
 
-    # Continue with more common constraints
     additional_common_constraints = """- Prefer pretrained models if available. Set pretrained=True if applicable.
 - If an online implementation of the model is available (e.g. GitHub), use it. Do not code from scratch.
 - External datasets: may be appended **only** to training set.
 - **DL Only:** After 1st epoch on fold 0, if loss is NaN, STOP training and jump directly to inference to generate the submission file."""
 
-    # Build the constraints with conditional sections
     constraints_parts = ["**Hard Constraints:**"]
 
-    # Add model-specific constraints first (if applicable)
     if model_constraint_lines:
         constraints_parts.extend(model_constraint_lines)
 
-    # Add common constraints
     constraints_parts.append(common_constraints)
     constraints_parts.append(additional_common_constraints)
 
-    # Add modular pipeline constraint (if applicable)
     if modular_pipeline_constraint:
         constraints_parts.append(modular_pipeline_constraint)
 
-    # Add final common constraints
     constraints_parts.append("""- Do not use any `while` loops in your code.""")
 
     # Add the 's' typo from the original code for backward compatibility

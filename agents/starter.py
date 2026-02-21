@@ -81,20 +81,16 @@ class StarterAgent:
             enable_google_search=True,
         )
 
-        # Use structured output parsing
         suggestions: Dict[str, Any] = {}
         try:
             if not response:
                 raise ValueError("No structured output received from model")
 
-            # Response is already parsed Pydantic object
             parsed = response
 
-            # Validate and normalize task_types (list)
             if not parsed.task_types:
                 raise ValueError("task_types list cannot be empty")
 
-            # Validate and normalize each task type
             normalized_task_types = []
             for raw_task_type in parsed.task_types:
                 normalized_task_type = normalize_task_type(raw_task_type)
@@ -122,7 +118,6 @@ class StarterAgent:
             logger.error(f"Unexpected error processing starter response: {e}")
             raise
 
-        # Persist JSON
         try:
             self.json_path.write_text(json.dumps(suggestions, indent=2))
         except Exception:

@@ -712,7 +712,6 @@ def build_system(base_dir: str, task_type: str | list[str] = "tabular", hitl_ins
         task_type: Single task type string or list of task types (for multimodal)
     """
 
-    # Normalize task_type(s)
     def normalize_single_task_type(tt: str) -> str:
         tt = tt.lower().replace(" ", "_").replace("-", "_")
         if "computer" in tt or "vision" in tt or "image" in tt:
@@ -727,7 +726,6 @@ def build_system(base_dir: str, task_type: str | list[str] = "tabular", hitl_ins
             return "tabular"
         return tt
 
-    # Handle both string and list inputs
     if isinstance(task_type, list):
         normalized_task_types = [normalize_single_task_type(tt) for tt in task_type]
         task_type_display = " + ".join(normalized_task_types) if len(normalized_task_types) > 1 else normalized_task_types[0]
@@ -737,15 +735,11 @@ def build_system(base_dir: str, task_type: str | list[str] = "tabular", hitl_ins
         task_type_display = normalized_task_type
         task_type_for_requirements = normalized_task_type
 
-    # Get universal components
     domain_discovery = _get_domain_discovery_phase()
     hypothesis_driven = _get_hypothesis_driven_exploration()
     few_shot = _get_few_shot_examples()
-
-    # Get task-specific guidelines
     task_guidelines = _get_task_specific_requirements(task_type_for_requirements)
 
-    # Build HITL instructions section if provided
     hitl_section = ""
     if hitl_instructions and len(hitl_instructions) > 0:
         hitl_items = "\n".join([f"{i+1}. {instr}" for i, instr in enumerate(hitl_instructions)])

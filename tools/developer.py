@@ -73,7 +73,6 @@ def web_search_stack_trace(query: str) -> str:
     if trace_index != -1: query = query[trace_index:]
     logger.debug("Stack trace query: %s", query)
 
-    # Step 1: Try fine-tuned model first (no web search capability)
     logger.info("Attempting fine-tuned model endpoint first...")
 
     try:
@@ -92,7 +91,6 @@ def web_search_stack_trace(query: str) -> str:
             thinking_budget=None,
         )
 
-        # Check if fine-tuned model can answer (consider failure if < 35 chars or contains failure message)
         solution_text = ft_response.reasoning_and_solution.strip() if ft_response else ""
         is_valid_response = (
             ft_response
@@ -107,7 +105,6 @@ def web_search_stack_trace(query: str) -> str:
     except Exception as e:
         logger.warning(f"Fine-tuned model call failed with error: {e}. Falling back to web search workflow.")
 
-    # Step 2: Fallback to current workflow with web search
     logger.info("Fine-tuned model cannot answer (response too short or failure message), falling back to web search workflow.")
     system_prompt = prompt_stack_trace()
 
@@ -122,13 +119,11 @@ def web_search_stack_trace(query: str) -> str:
         text_format=StackTraceSolution,
     )
 
-    # Response is already parsed Pydantic object
     if response and hasattr(response, 'reasoning_and_solution'):
         solution_text = response.reasoning_and_solution.strip()
         logger.debug("Returning solution from Gemini structured output.")
         return query + "\n" + "This is how you can fix the error: \n" + solution_text
 
-    # Fallback if not a Pydantic object (shouldn't happen with text_format)
     logger.warning("Unexpected response type, attempting to extract text.")
     content = extract_text_from_response(response)
     return query + "\n" + "This is how you can fix the error: \n" + content
@@ -192,7 +187,6 @@ def search_red_flags(
     """
     logger.info("Dispatching red flags identification via direct analysis")
 
-    # Include train_stats in context if provided
     context_with_stats = context
     if train_stats:
         stats_text = "## Training Statistics (from train_stats.json)\n\n"
@@ -206,10 +200,8 @@ def search_red_flags(
         context=context_with_stats,
     )
 
-    # Start with text message
     messages = [append_message("user", user_prompt)]
 
-    # Add images if provided
     if images:
         image_messages = _ingest_images_for_llm(images)
         if image_messages:
@@ -282,7 +274,6 @@ def search_sota_suggestions(
     """Stage 2: Use web search and tools to generate SOTA suggestions based on red flags."""
     logger.info("Dispatching SOTA suggestions (Stage 2) with web search (attempt #%d)", attempt_number)
 
-    # Include train_stats in context if provided
     context_with_stats = context
     if train_stats:
         stats_text = "## Training Statistics (from train_stats.json)\n\n"
@@ -314,14 +305,12 @@ def search_sota_suggestions(
         else:
             logger.warning("Could not find both section headers to strip Validated Findings")
 
-    # Build plans_section: combine plan.md and later_recommendations
     plans_section = ""
     if modified_plan_content:
         plans_section += f"\n<plan>\n{modified_plan_content}\n</plan>\n"
     if later_recommendations:
         plans_section += f"\n<suggestions>\n{later_recommendations}\n</suggestions>\n"
 
-    # Convert time limit from seconds to minutes for prompt
     time_limit_minutes = int(_BASELINE_CODE_TIMEOUT / 60)
 
     system_prompt = prompt_sota_system(time_limit_minutes=time_limit_minutes)
@@ -337,11 +326,9 @@ def search_sota_suggestions(
         external_data_listing=external_data_listing or "No external data directories found.",
     )
 
-    # Tool execution loop
     tools = _get_sota_tools() if (slug and data_path) else []
     input_list = [append_message("user", user_prompt)]
 
-    # Add images if provided
     if images:
         image_messages = _ingest_images_for_llm(images)
         if image_messages:
@@ -361,7 +348,6 @@ def search_sota_suggestions(
             text_format=SOTAResponse if (step_limit is not None and step == step_limit - 1) else None,
         )
 
-        # Check if response has function calls
         has_function_calls = False
         if hasattr(response, 'candidates') and response.candidates:
             parts = response.candidates[0].content.parts
@@ -371,12 +357,10 @@ def search_sota_suggestions(
             )
 
         if not has_function_calls:
-            # No function calls, check if we have structured output
             if response and hasattr(response, 'suggestion'):
                 logger.info("SOTA suggestions completed at step %d (no function calls, structured output present)", step + 1)
                 return response  # Already parsed Pydantic object
             else:
-                # Need to get structured output - make final call
                 logger.info("SOTA suggestions completed at step %d (no function calls), requesting structured output", step + 1)
                 response = call_llm(
                     model=_DEVELOPER_TOOL_MODEL,
@@ -387,7 +371,6 @@ def search_sota_suggestions(
                 )
                 return response  # Already parsed Pydantic object
 
-        # Execute function calls
         parts = response.candidates[0].content.parts
         function_responses = []
 
@@ -411,7 +394,6 @@ def search_sota_suggestions(
                     )
                 )
 
-        # Add model's full response (preserves function_call parts)
         input_list.append(response.candidates[0].content)
         if function_responses:
             input_list.append(types.Content(role="function", parts=function_responses))
@@ -426,7 +408,6 @@ def search_sota_suggestions(
 
         step += 1
 
-    # Reached max steps (or user typed 'done'), force final structured answer
     logger.warning("SOTA forcing final answer after %d steps", step)
 
     response = call_llm(
@@ -460,7 +441,6 @@ def _execute_sota_tool_call(item, description, data_path, slug, cpu_core_range, 
 
             logger.info("SOTA tool: execute_python (code_len=%d, step=%d)", len(code), step)
 
-            # Save to outputs/{iteration}/{version}/execute_python_{step}.py
             version_dir = Path(data_path) / _OUTPUTS_DIRNAME / file_suffix / str(version)
             version_dir.mkdir(parents=True, exist_ok=True)
             script_file = version_dir / f"execute_python_{step}.py"
@@ -746,7 +726,6 @@ def monitor_logs(
                 )
                 return response
 
-            # Execute function calls
             parts = response.candidates[0].content.parts
             function_responses = []
             for part in parts:

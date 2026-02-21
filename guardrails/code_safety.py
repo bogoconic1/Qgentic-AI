@@ -61,7 +61,6 @@ def check_code_safety(code: str) -> Dict[str, Any]:
             thinking_budget=None,
         )
 
-        # Parse structured output
         if response and hasattr(response, 'decision'):
             decision = "proceed" if response.decision == "allow" else "block"
 
@@ -85,7 +84,6 @@ def check_code_safety(code: str) -> Dict[str, Any]:
                 "confidence": response.confidence,
             }
 
-        # Fallback if structured output fails
         logger.warning("Structured output parsing failed, defaulting to ALLOW (lenient)")
         return {
             "decision": "proceed",
@@ -122,18 +120,14 @@ def format_safety_feedback(safety_result: Dict[str, Any]) -> str:
         return "Code passed security checks."
 
     lines = ["Code BLOCKED by security guardrails (CRITICAL ISSUES):\n"]
-
-    # Add reasoning
     lines.append(f"**Reasoning:** {safety_result['reasoning']}\n")
 
-    # List violations
     if safety_result["violations"]:
         lines.append("**Critical Violations:**")
         for violation in safety_result["violations"]:
             lines.append(f"  - {violation}")
         lines.append("")
 
-    # Add fix suggestion
     if safety_result["suggested_fix"]:
         lines.append(f"**How to fix:**\n{safety_result['suggested_fix']}\n")
 

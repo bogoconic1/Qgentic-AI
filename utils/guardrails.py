@@ -23,7 +23,6 @@ def evaluate_guardrails(
         "decision": "proceed",
     }
 
-    # 1) Static logging.basicConfig order check
     log_check: Dict[str, Any] = {"status": "skipped", "reason": "disabled in config"}
     if enable_logging_guard:
         try:
@@ -33,7 +32,6 @@ def evaluate_guardrails(
             log_check = {"status": "error", "error": "exception in logging check"}
     guard_report["logging_check"] = log_check
 
-    # 2) Leakage review (LLM)
     leakage_result: LeakageReviewResponse | Dict[str, Any] = {"status": "skipped", "reason": "disabled in config"}
     if enable_leakage_guard:
         try:
@@ -45,7 +43,6 @@ def evaluate_guardrails(
             leakage_result = {"status": "error", "error": "LLM call failed"}
     guard_report["leakage_check"] = leakage_result
 
-    # 3) LLM-based critical security check
     safety_check: Dict[str, Any] = {"decision": "proceed", "reason": "disabled in config"}
     if enable_code_safety:
         try:
@@ -70,13 +67,11 @@ def build_block_summary(guard_report: Dict[str, Any]) -> str:
     """Compose a human-readable summary for a blocking guardrail decision."""
     lines: list[str] = []
 
-    # Safety check (critical issues)
     safety_check = guard_report.get("safety_check", {})
     if safety_check.get("decision") == "block":
         safety_summary = format_safety_feedback(safety_check)
         lines.append(safety_summary)
 
-    # Leakage
     try:
         leakage_check = guard_report.get("leakage_check")
         if isinstance(leakage_check, LeakageReviewResponse):

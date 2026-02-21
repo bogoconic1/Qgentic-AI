@@ -30,7 +30,6 @@ def encode_image_to_data_url(image_path: str | Path, max_size_bytes: int = 4_500
     """
     path = Path(image_path) if isinstance(image_path, str) else image_path
 
-    # Determine MIME type
     mime, _ = mimetypes.guess_type(path.name)
     if mime is None:
         suffix = path.suffix.lower()
@@ -48,7 +47,6 @@ def encode_image_to_data_url(image_path: str | Path, max_size_bytes: int = 4_500
     try:
         image_bytes = path.read_bytes()
 
-        # Final size check
         if len(image_bytes) > max_size_bytes:
             logger.error(f"Image {path.name} exceeds size limit ({len(image_bytes)/1024/1024:.2f}MB > {max_size_bytes/1024/1024:.2f}MB). Skipping.")
             return ""

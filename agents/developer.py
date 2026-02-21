@@ -97,7 +97,6 @@ class DeveloperAgent:
         self.developer_log_path = self.outputs_dir / f"developer_{iteration}.txt"
         self._configure_logger()
 
-        # Resource allocation for parallel execution
         self.cpu_core_range = cpu_core_range  # List of CPU cores to use (e.g., [0,1,2,...,41])
         self.gpu_identifier = gpu_identifier  # GPU identifier: MIG UUID or GPU ID (as string)
         self.gpu_isolation_mode = gpu_isolation_mode  # "mig", "multi-gpu", or "none"
@@ -113,7 +112,6 @@ class DeveloperAgent:
         self.gold_threshold: Optional[float] = _RUNTIME_CFG.get("gold_threshold")
         self.best_score: float = float("inf") if self.is_lower_better else float("-inf")
 
-        # Iteration state
         self.previous_runs: list[tuple[str, float]] = []
         self.blacklisted_ideas: list[str] = []
         self.successful_ideas: list[str] = []  # Suggestions that led to successful, non-blacklisted executions
@@ -127,18 +125,14 @@ class DeveloperAgent:
         self.best_version: Optional[int] = None
         self.last_successful_version: Optional[int] = None  # For score comparison: most recent version with a score
 
-        # File targets
         self.latest_submission_path: Optional[Path] = None
 
-        # LATER recommendations for progressive enhancement
         self.later_recommendations: Optional[dict] = later_recommendations
         self.threshold_directive: str = ""
 
-        # External data and plan content (passed from orchestrator)
         self.external_data_listing: str = external_data_listing or "No external data directories found."
         self.plan_content: str = plan_content or "No plan.md found."
 
-        # Set external data directory for execute_python scripts
         # Use parent iteration folder (e.g., outputs/17 for iteration 17_2)
         parent_iteration_folder = self._get_parent_iteration_folder()
         self.external_dir = parent_iteration_folder / "external_data_1"
@@ -147,7 +141,6 @@ class DeveloperAgent:
 
         os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
-        # Model-specific strategy recommendations for the developer system prompt
         self.model_name: Optional[str] = model_name
         self.model_recommendations: Optional[str] = model_recommendations
 
@@ -164,10 +157,8 @@ class DeveloperAgent:
         # Create a unique logger for this instance to avoid cross-contamination in parallel execution
         self.logger = logging.getLogger(f"{__name__}.{self.slug}.{self.iteration}")
 
-        # Clear any existing handlers to ensure clean slate
         self.logger.handlers = []
 
-        # Add file handler for this specific instance
         file_handler = logging.FileHandler(self.developer_log_path)
         file_handler.setFormatter(
             logging.Formatter("%(asctime)s %(levelname)s [%(name)s] %(message)s")
@@ -263,7 +254,6 @@ class DeveloperAgent:
 
         sections = []
 
-        # Preprocessing
         preprocessing = self.later_recommendations.get("preprocessing", {})
         if preprocessing:
             sections.append("## Preprocessing NICE_TO_HAVE Recommendations")
@@ -281,7 +271,6 @@ class DeveloperAgent:
                                     if explanation:
                                         sections.append(f"  {explanation}")
 
-        # Loss function
         loss_fn = self.later_recommendations.get("loss_function", {})
         if loss_fn and "NICE_TO_HAVE" in loss_fn:
             sections.append("\n## Loss Function NICE_TO_HAVE Recommendations")
@@ -296,7 +285,6 @@ class DeveloperAgent:
                             if explanation:
                                 sections.append(f"  {explanation}")
 
-        # Hyperparameters
         hyperparams = self.later_recommendations.get("hyperparameters", {})
         if hyperparams and "NICE_TO_HAVE" in hyperparams:
             later_section = hyperparams["NICE_TO_HAVE"]
@@ -325,7 +313,6 @@ class DeveloperAgent:
                             if explanation:
                                 sections.append(f"  {explanation}")
 
-        # Inference strategies
         inference = self.later_recommendations.get("inference_strategies", {})
         if inference and "NICE_TO_HAVE" in inference:
             later_section = inference["NICE_TO_HAVE"]
@@ -369,11 +356,9 @@ class DeveloperAgent:
 
         self.logger.info("Model response received for iteration %s", self.iteration)
 
-        # Extract code dict from Pydantic model
         code_dict = result.model_dump()
         self.logger.debug("Generated code dict keys: %s", list(code_dict.keys()))
 
-        # Extract code from markdown backticks
         raw_content = code_dict.get('train_py', '')
         if raw_content:
             extracted = extract_python_code(raw_content)
@@ -383,10 +368,8 @@ class DeveloperAgent:
 
         content = f"```python\n{code_dict['train_py']}\n```"
 
-        # Create message history entry
         output = [append_message("assistant", content)]
 
-        # Log input tokens for debugging
         if input_tokens:
             self.logger.info("API call used %d input tokens", input_tokens)
 
@@ -398,18 +381,15 @@ class DeveloperAgent:
         Returns:
             Tuple of (postprocessed_code, num_header_lines_added)
         """
-        # Build the resource allocation header
         lines = []
         lines.append("import os")
 
-        # CPU affinity
         if self.cpu_core_range is not None:
             lines.append("import psutil  # For CPU affinity")
             lines.append("")
             lines.append("# CPU affinity (pin to specific cores to prevent resource overlap)")
             lines.append(f"psutil.Process(os.getpid()).cpu_affinity({self.cpu_core_range})")
 
-        # GPU assignment (works for both MIG and multi-GPU)
         if self.gpu_identifier is not None:
             lines.append(f'os.environ["CUDA_VISIBLE_DEVICES"] = "{self.gpu_identifier}"')
         lines.append(f'BASE_DIR = "task/{self.slug}" if not os.getenv(\'KAGGLE_KERNEL_RUN_TYPE\') else "/kaggle/input/{self.slug}"')
@@ -418,7 +398,6 @@ class DeveloperAgent:
         header = "\n".join(lines)
         num_header_lines = len(lines)
 
-        # Insert header at the top of the code
         return header + "\n" + code, num_header_lines
 
     def _get_parent_iteration_folder(self) -> Path:
@@ -432,7 +411,6 @@ class DeveloperAgent:
             Path to parent iteration folder (e.g., task/csiro-biomass/outputs/16)
         """
         iteration_str = str(self.iteration)
-        # Extract base iteration number (before any underscore)
         base_iteration = iteration_str.split('_')[0]
         return self.base_dir / self.outputs_dirname / base_iteration
 
@@ -454,12 +432,10 @@ class DeveloperAgent:
         Returns:
             Path to the version folder
         """
-        # Create version folder
         version_folder = self.outputs_dir / str(version)
         version_folder.mkdir(parents=True, exist_ok=True)
         self.logger.info("Writing code to version folder: %s", version_folder)
 
-        # Postprocess and write train.py
         train_py = code_dict.get('train_py', '')
         if not train_py:
             raise ValueError("train_py is required in code_dict")
@@ -469,16 +445,13 @@ class DeveloperAgent:
         train_path.write_text(postprocessed_code)
         self.logger.debug("Written train.py (%d characters)", len(postprocessed_code))
 
-        # Write metadata with header line count
         metadata_path = version_folder / 'train.json'
         metadata_path.write_text(json.dumps({"num_header_lines": num_header_lines}))
         self.logger.debug("Written train.json with %d header lines", num_header_lines)
 
-        # Copy shared files from task root directory (task/{slug}/)
         # These files are REQUIRED - throw error if not found
         task_root = self.base_dir
 
-        # Copy cv_splits.json (required)
         cv_splits_src = task_root / 'cv_splits.json'
         if not cv_splits_src.exists():
             raise FileNotFoundError(f"cv_splits.json not found in task root: {cv_splits_src}. This file is required.")
@@ -486,7 +459,6 @@ class DeveloperAgent:
         shutil.copy2(cv_splits_src, cv_splits_dst)
         self.logger.debug("Copied cv_splits.json from %s", cv_splits_src)
 
-        # Copy metric.py (required)
         metric_src = task_root / 'metric.py'
         if not metric_src.exists():
             raise FileNotFoundError(f"metric.py not found in task root: {metric_src}. This file is required.")
@@ -598,15 +570,12 @@ class DeveloperAgent:
         prev_display = self._format_score_value(previous_score)
         curr_display = self._format_score_value(current_score)
 
-        # If either score is N/A, just append scores without calculating delta
         if prev_display == "N/A" or curr_display == "N/A":
             return f"{suggestion} (score: {prev_display} -> {curr_display})"
 
-        # Calculate delta
         delta = current_score - previous_score
         abs_delta = abs(delta)
 
-        # Determine if it's an improvement based on metric direction
         if abs_delta < 1e-9:  # Essentially the same
             impact = "remained the same"
             return f"{suggestion} (score {impact}: {prev_display} -> {curr_display})"
@@ -624,7 +593,6 @@ class DeveloperAgent:
         if reason:
             entry = f"{suggestion} -- {reason}"
 
-        # Add to instance-level blacklist
         if entry not in self.blacklisted_ideas:
             self.blacklisted_ideas.append(entry)
 
@@ -636,11 +604,9 @@ class DeveloperAgent:
         if not suggestion:
             return
 
-        # Format the suggestion entry with model name and score impact
         prev_display = self._format_score_value(previous_score)
         curr_display = self._format_score_value(current_score)
 
-        # Build the entry with model name
         model_prefix = f"Model {self.model_name} tried"
 
         if prev_display == "N/A" or curr_display == "N/A":
@@ -687,37 +653,30 @@ class DeveloperAgent:
             - code_content_markdown contains train.py (headers stripped)
             Returns (1, None) if no valid version found
         """
-        # Iterate backwards from current_version-1 to find most recent valid version
         for v in range(current_version - 1, 0, -1):
-            # Check if version folder exists
             version_folder = self.outputs_dir / str(v)
             if not version_folder.exists():
                 continue
 
-            # Check if submission.csv exists (indicates successful execution)
             submission_path = version_folder / 'submission.csv'
             if not submission_path.exists():
                 self.logger.debug(f"v{v} skipped: no submission.csv in {version_folder}")
                 continue
 
-            # Check if blacklisted
             is_blacklisted = v in self.blacklisted_versions
             if is_blacklisted:
                 self.logger.debug(f"v{v} skipped: blacklisted")
                 continue
 
-            # Valid version found - read train.py
             self.logger.info(f"Found most recent valid version for rollback: v{v}")
 
             try:
-                # Read train.py with headers stripped
                 train_path = version_folder / 'train.py'
                 if train_path.exists():
                     train_py = strip_header_from_code(train_path)
                 else:
                     train_py = "# train.py not found"
 
-                # Construct markdown
                 code_content = f"train.py:\n```python\n{train_py}\n```"
 
                 return v, code_content
@@ -738,7 +697,6 @@ class DeveloperAgent:
         Returns:
             The Final Summary text, or full response if section not found
         """
-        # Find "### Final Summary" section
         match = re.search(r'### Final Summary\s*\n(.+)', red_flags_response, re.DOTALL)
 
         if match:
@@ -766,17 +724,14 @@ class DeveloperAgent:
         """
         lines = []
 
-        # 1. Base directory listing (train/, test/, root files)
         lines.append("=== Base Directory (task data) ===")
         base_listing = self._build_base_dir_listing()
         lines.append(base_listing)
 
-        # 2. External data directories
         if self.external_data_listing and self.external_data_listing != "No external data directories found.":
             lines.append("\n=== External Data ===")
             lines.append(self.external_data_listing)
 
-        # 3. Models directory for current version
         models_dir = self.outputs_dir / f"models_{version}"
         if models_dir.exists() and models_dir.is_dir():
             lines.append(f"\n=== Models (version {version}) ===")
@@ -795,30 +750,24 @@ class DeveloperAgent:
         lines = []
         base_dir = Path(self.base_dir)
 
-        # Get root-level files
         root_files = sorted([f.name for f in base_dir.iterdir() if f.is_file()])
 
-        # Show root directory
         lines.append("./")
         for file_name in root_files:
             lines.append(f"    {file_name}")
 
-        # Show train/ directory if it exists
         train_dir = base_dir / "train"
         if train_dir.exists() and train_dir.is_dir():
             lines.append("    train/")
             train_listing = _build_directory_listing(str(train_dir))
-            # Indent the train listing
             for line in train_listing.split('\n'):
                 if line.strip():
                     lines.append(f"    {line}")
 
-        # Show test/ directory if it exists
         test_dir = base_dir / "test"
         if test_dir.exists() and test_dir.is_dir():
             lines.append("    test/")
             test_listing = _build_directory_listing(str(test_dir))
-            # Indent the test listing
             for line in test_listing.split('\n'):
                 if line.strip():
                     lines.append(f"    {line}")
@@ -864,14 +813,12 @@ class DeveloperAgent:
 
         run_score = float("inf") if self.is_lower_better else float("-inf")
 
-        # Initialize variables that will be returned (set properly if submission exists)
         previous_successful_version: Optional[int] = None
         base_score: Optional[float] = None
         submission_exists = submission_path.exists()
 
         if submission_exists:
             self.latest_submission_path = submission_path
-            # Mark this version as successful (generated submission)
             self.successful_versions.add(version)
             self.logger.info(
                 "Submission detected at %s after attempt %s (marking v%s as successful)",
@@ -880,10 +827,8 @@ class DeveloperAgent:
             previous_successful_version = self.last_successful_version  # Initialize before try
 
             if _USE_VALIDATION_SCORE:
-                # Use validation score from train_stats.json instead of parsing logs
                 self.logger.info("Using validation score from train_stats.json (use_validation_score=True)")
                 try:
-                    # Read train_stats.json from version folder
                     version_folder = self.outputs_dir / str(version)
                     train_stats_path = version_folder / 'train_stats.json'
 
@@ -897,7 +842,7 @@ class DeveloperAgent:
                         if run_score is not None:
                             self._log_attempt_score(attempt, run_score)
                             self.logger.info("Your validation score (cv_worst) is %s", run_score)
-                            # Store score for this version and track for comparison
+
                             self.version_scores[version] = run_score
                             self.last_successful_version = version
                         else:
@@ -909,7 +854,6 @@ class DeveloperAgent:
 
                 code_context += f"<validation_score>\n{run_score}\n</validation_score>\n"
             else:
-                # Use MLE-bench grading (original behavior)
                 grade_feedback = ""
                 try:
                     info, grade_feedback, returncode, stderr = run_grade(str(submission_path), self.slug)
@@ -928,7 +872,7 @@ class DeveloperAgent:
                         run_score = info.get('score') if info else None
                         self._log_attempt_score(attempt, run_score)
                         self.logger.info("Your result on the test set is %s", run_score)
-                        # Store score for this version and track for comparison
+
                         if run_score is not None:
                             self.version_scores[version] = run_score
                             self.last_successful_version = version
@@ -938,7 +882,6 @@ class DeveloperAgent:
 
                 code_context += f"<leaderboard_score>\n{run_score}\n</leaderboard_score>\n"
 
-            # Compare against most recent successful version (with a score)
             if previous_successful_version is not None:
                 base_version = previous_successful_version
                 base_score = self.version_scores[base_version]
@@ -975,17 +918,13 @@ class DeveloperAgent:
                     self.best_score,
                 )
 
-            # Build analysis message with context
             analysis_msg = f"The current score is {run_score_display}."
 
-            # Add previous score context if available
             if base_score is not None:
                 base_score_display = self._format_score_value(base_score)
                 analysis_msg += f" Your score before implementing this suggestion was {base_score_display}."
 
-            # Add target context
             if self.gold_threshold is not None and run_score is not None:
-                # Compare current score to target (accounting for metric direction)
                 if self.is_lower_better:
                     if run_score <= self.gold_threshold:
                         analysis_msg += f" You have reached/exceeded the TARGET of {self.gold_threshold}! Focus on further incremental improvements."
@@ -1006,8 +945,6 @@ class DeveloperAgent:
             code_context += f"<analysis>\n{analysis_msg}\n</analysis>\n"
             self.previous_runs.append((code_clean, run_score))
 
-        # Return previous_successful_version and base_score for use in run() method
-        # These are None if no submission was generated or if this is the first successful version
         return code_context, run_score, previous_successful_version, base_score, submission_exists
 
     def _gather_sota_feedback(self, code_context: str, version: int, attempt_number: int = 1):
@@ -1022,16 +959,13 @@ class DeveloperAgent:
             Parsed SOTAResponse object or None if gathering/parsing failed
         """
         try:
-            # Format LATER recommendations for context
             later_context = self._format_later_recommendations()
 
-            # Build extended directory listing including models_{version}/
             extended_listing = self._build_extended_data_listing(version)
 
             # STAGE 1: Identify red flags via direct analysis
             self.logger.info("Stage 1: Identifying red flags via direct analysis...")
 
-            # Collect training visualizations and stats from version folder
             version_folder = self.outputs_dir / str(version)
             training_images = []
             for img_name in ['loss_curve.png', 'metric_curve.png']:
@@ -1041,7 +975,6 @@ class DeveloperAgent:
                 else:
                     self.logger.debug(f"Training image not found: {img_path}")
 
-            # Read train_stats.json if available
             train_stats_path = version_folder / 'train_stats.json'
             train_stats = None
             if train_stats_path.exists():
@@ -1060,13 +993,11 @@ class DeveloperAgent:
             )
             self.logger.info("Red flags response length: %d chars", len(red_flags_response))
 
-            # Extract Final Summary from red flags response
             final_summary = self._extract_final_summary(red_flags_response)
 
             # STAGE 2: Generate SOTA suggestions based on red flags
             self.logger.info("Stage 2: Generating SOTA suggestions based on red flags...")
 
-            # Get shared suggestions from all parallel models
             shared_suggestions = self._get_shared_suggestions()
 
             self.logger.info("Using %d shared suggestions from all models (including this one)",
@@ -1397,15 +1328,13 @@ This is the stack trace and advice on how to fix the error:
         deadline = start_time + max_time_seconds
 
         run_score = 0
-        last_input_tokens = None  # Track input tokens from previous API call for adaptive trimming
+        last_input_tokens = None
 
         system_prompt = self._compose_system()
 
-        # Log external data listing and plan content (passed from orchestrator)
         self.logger.info("External data listing (%d chars): %s", len(self.external_data_listing), self.external_data_listing[:200] + "..." if len(self.external_data_listing) > 200 else self.external_data_listing)
         self.logger.info("Plan content (%d chars): %s", len(self.plan_content), self.plan_content[:200] + "..." if len(self.plan_content) > 200 else self.plan_content)
 
-        # Try to resume from checkpoint
         checkpoint = self._load_latest_checkpoint()
         if checkpoint:
             input_list = checkpoint["input_list"]
@@ -1450,7 +1379,6 @@ This is the stack trace and advice on how to fix the error:
                         "Token threshold exceeded: %d > %d (80%% of %d), removing messages",
                         last_input_tokens, int(threshold), max_input_tokens
                     )
-                    # Remove 4 messages from the front
                     for _ in range(min(4, len(input_list) - 1)):
                         input_list.pop(0)
 
@@ -1484,7 +1412,6 @@ This is the stack trace and advice on how to fix the error:
             response_output, code_dict, last_input_tokens = self._generate_code(instructions=system_prompt, messages=input_list)
             input_list += response_output
 
-            # Write code to folder structure (train.py)
             version_folder = self._write_code(code_dict, version)
 
             # ---------------------------
@@ -1494,7 +1421,6 @@ This is the stack trace and advice on how to fix the error:
             with open(str(train_py_path), "r") as f:
                 code_text = f.read()
 
-            # Strip the header lines to get the clean LLM-generated code
             code_clean = strip_header_from_code(train_py_path)
 
             guard_report = evaluate_guardrails(
@@ -1510,7 +1436,6 @@ This is the stack trace and advice on how to fix the error:
                 self.logger.debug("Failed to log final guardrail decision for v%s", version)
 
             if guard_report.get("decision") == "block":
-                # Build feedback and ask for a corrected script without executing
                 summary_text = build_block_summary(guard_report)
                 next_log_path = self.outputs_dir / self._log_filename(version + 1)
                 next_submission_path = self.outputs_dir / self._submission_filename(version + 1)
@@ -1519,7 +1444,6 @@ This is the stack trace and advice on how to fix the error:
                 guardrail_prompt = summary_text + fix_instr
                 input_list.append(append_message("user", guardrail_prompt))
                 self.logger.info("User prompt with guardrail feedback: %s", guardrail_prompt)
-                # continue to next attempt without execution
                 continue
 
             # Execute the code
@@ -1545,14 +1469,12 @@ This is the stack trace and advice on how to fix the error:
 
             self.logger.info("previous runs count: %s", len(self.previous_runs))
 
-            # Only log specific file types to wandb artifacts
             allowed_extensions = {'.py', '.txt', '.csv'}
             for path in self.outputs_dir.iterdir():
                 if not path.is_file():
                     self.logger.debug("Skipping non-file path when logging artifact: %s", path)
                     continue
 
-                # Check if file extension is in allowed list (case-insensitive)
                 if path.suffix.lower() in allowed_extensions:
                     artifact.add_file(str(path), overwrite=True)
                 else:
