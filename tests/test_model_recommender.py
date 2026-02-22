@@ -28,6 +28,9 @@ def patch_llm_calls(monkeypatch):
             InferenceStrategySection,
             InferenceStrategyItem,
             ModelSelection,
+            PreprocessingRecommendations,
+            CategoryRecommendations,
+            StrategyItem,
         )
 
         text_format = kwargs.get("text_format")
@@ -37,12 +40,12 @@ def patch_llm_calls(monkeypatch):
                 return text_format(
                     MUST_HAVE=LossFunctionMustHave(
                         loss_function="CrossEntropyLoss",
-                        explanation="Suitable for multi-class classification",
+                        reasoning="Suitable for multi-class classification",
                     ),
                     NICE_TO_HAVE=[
                         LossFunctionNiceToHave(
                             loss_function="FocalLoss",
-                            explanation="Helps with class imbalance",
+                            reasoning="Helps with class imbalance",
                         )
                     ],
                 )
@@ -52,13 +55,13 @@ def patch_llm_calls(monkeypatch):
                         hyperparameters=[
                             HyperparameterItem(
                                 hyperparameter="learning_rate=2e-5",
-                                explanation="Standard for BERT fine-tuning",
+                                reasoning="Standard for BERT fine-tuning",
                             )
                         ],
                         architectures=[
                             ArchitectureItem(
                                 architecture="3 layer encoder",
-                                explanation="Balanced complexity",
+                                reasoning="Balanced complexity",
                             )
                         ],
                     ),
@@ -66,7 +69,7 @@ def patch_llm_calls(monkeypatch):
                         hyperparameters=[
                             HyperparameterItem(
                                 hyperparameter="warmup_steps=1000",
-                                explanation="Helps with training stability",
+                                reasoning="Helps with training stability",
                             )
                         ],
                         architectures=[],
@@ -78,7 +81,7 @@ def patch_llm_calls(monkeypatch):
                         inference_strategies=[
                             InferenceStrategyItem(
                                 strategy="Test-time augmentation",
-                                explanation="Improves robustness",
+                                reasoning="Improves robustness",
                             )
                         ]
                     ),
@@ -86,10 +89,23 @@ def patch_llm_calls(monkeypatch):
                         inference_strategies=[
                             InferenceStrategyItem(
                                 strategy="Ensemble voting",
-                                explanation="Better predictions",
+                                reasoning="Better predictions",
                             )
                         ]
                     ),
+                )
+            elif text_format.__name__ == "PreprocessingRecommendations":
+                return text_format(
+                    categories={
+                        "preprocessing": CategoryRecommendations(
+                            MUST_HAVE=[
+                                StrategyItem(reasoning="Required for transformer models", strategy="Tokenize using BERT")
+                            ],
+                            NICE_TO_HAVE=[
+                                StrategyItem(reasoning="Helps with generalization", strategy="Lowercase text")
+                            ],
+                        )
+                    }
                 )
             elif text_format.__name__ == "ModelSelection":
                 return text_format(
@@ -99,7 +115,7 @@ def patch_llm_calls(monkeypatch):
                 return text_format()
         else:
             mock_response = MagicMock()
-            mock_response.text = '```json\n{\n    "preprocessing": {\n        "MUST_HAVE": [\n            {"strategy": "Tokenize using BERT", "explanation": "Required for transformer models"}\n        ],\n        "NICE_TO_HAVE": [\n            {"strategy": "Lowercase text", "explanation": "Helps with generalization"}\n        ]\n    }\n}\n```'
+            mock_response.text = '```json\n{\n    "preprocessing": {\n        "MUST_HAVE": [\n            {"strategy": "Tokenize using BERT", "reasoning": "Required for transformer models"}\n        ],\n        "NICE_TO_HAVE": [\n            {"strategy": "Lowercase text", "reasoning": "Helps with generalization"}\n        ]\n    }\n}\n```'
             return mock_response
 
     monkeypatch.setattr("agents.model_recommender.call_llm", fake_call_llm)

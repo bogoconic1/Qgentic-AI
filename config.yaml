@@ -1,13 +1,13 @@
 llm:
-  developer_model: "gemini-3-pro-preview"
-  developer_tool_model: "gemini-3-pro-preview"
-  researcher_model: "gemini-3-pro-preview"
-  model_selector_model: "gemini-3-pro-preview"
-  model_recommender_model: "gemini-3-pro-preview"
-  paper_summary_model: "gemini-3-pro-preview"
-  starter_model: "gemini-3-pro-preview"
-  leakage_review_model: "gemini-3-pro-preview"
-  finetuned_code_api_model: "gemini-3-pro-preview"
+  developer_model: "gemini-3.1-pro-preview"
+  developer_tool_model: "gemini-3.1-pro-preview"
+  researcher_model: "gemini-3.1-pro-preview"
+  model_selector_model: "gemini-3.1-pro-preview"
+  model_recommender_model: "gemini-3.1-pro-preview"
+  paper_summary_model: "gemini-3.1-pro-preview"
+  starter_model: "gemini-3.1-pro-preview"
+  leakage_review_model: "gemini-3.1-pro-preview"
+  finetuned_code_api_model: "gemini-3.1-pro-preview"
 runtime:
   researcher_max_steps: 512
   llm_max_retries: 5

@@ -2,7 +2,6 @@
 
 import json
 import logging
-import re
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -12,7 +11,7 @@ from weave.trace.util import ThreadPoolExecutor
 from project_config import get_config, get_instructions
 from tools.helpers import call_llm
 from tools.generate_paper_summary import PaperSummaryClient
-from utils.llm_utils import extract_text_from_response, append_message
+from utils.llm_utils import append_message
 from prompts.model_recommender_agent import (
     model_selector_system_prompt,
     model_refiner_system_prompt,
@@ -26,6 +25,7 @@ from prompts.model_recommender_agent import (
 from schemas.model_recommender import (
     ModelSelection,
     RefinedModelSelection,
+    PreprocessingRecommendations,
     LossFunctionRecommendations,
     HyperparameterRecommendations,
     InferenceStrategyRecommendations,
@@ -169,18 +169,10 @@ class ModelRecommenderAgent:
         )
         messages = [append_message("user", user_prompt)]
 
-        response = self._call_model_selector(system_prompt, messages)
-        response_text = extract_text_from_response(response)
-
-        json_pattern = r"```json\s*(.*?)\s*```"
-        matches = re.findall(json_pattern, response_text, re.DOTALL)
-
-        if not matches:
-            raise ValueError(
-                f"[{model_name}] No JSON block found in preprocessing response"
-            )
-
-        result = json.loads(matches[0])
+        response = self._call_model_selector(
+            system_prompt, messages, text_format=PreprocessingRecommendations
+        )
+        result = response.model_dump()["categories"]
         logger.info(
             "[%s] Successfully parsed preprocessing recommendations", model_name
         )

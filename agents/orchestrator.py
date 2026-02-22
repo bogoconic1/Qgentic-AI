@@ -399,29 +399,29 @@ def _format_recommendations_for_developer(recommendations: dict) -> str:
             now_items = content["MUST_HAVE"]
             details.append(f"\n### {category.replace('_', ' ').title()}")
             for item in now_items:
-                details.append(f"- {item['strategy']}: {item['explanation']}")
+                details.append(f"- {item['strategy']}: {item['reasoning']}")
 
     now_loss = recommendations["loss_function"]["MUST_HAVE"]
     if now_loss["loss_function"]:
         details.append("\n## Loss Function")
-        details.append(f"- Use {now_loss['loss_function']}: {now_loss['explanation']}")
+        details.append(f"- Use {now_loss['loss_function']}: {now_loss['reasoning']}")
 
     now_section = recommendations["hyperparameters"]["MUST_HAVE"]
     if now_section["hyperparameters"]:
         details.append("\n## Hyperparameters")
         for item in now_section["hyperparameters"]:
-            details.append(f"- {item['hyperparameter']}: {item['explanation']}")
+            details.append(f"- {item['hyperparameter']}: {item['reasoning']}")
 
     if now_section["architectures"]:
         details.append("\n### Architecture Recommendations")
         for item in now_section["architectures"]:
-            details.append(f"- {item['architecture']}: {item['explanation']}")
+            details.append(f"- {item['architecture']}: {item['reasoning']}")
 
     inf_section = recommendations["inference_strategies"]["MUST_HAVE"]
     if inf_section["inference_strategies"]:
         details.append("\n## Inference Strategies")
         for item in inf_section["inference_strategies"]:
-            details.append(f"- {item['strategy']}: {item['explanation']}")
+            details.append(f"- {item['strategy']}: {item['reasoning']}")
 
     return "\n".join(details) if details else "No specific recommendations available."
 

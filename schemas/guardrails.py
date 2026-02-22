@@ -21,8 +21,8 @@ class LeakageReviewResponse(BaseModel):
 class CodeSafetyCheck(BaseModel):
     """Schema for LLM-based code safety analysis."""
 
+    reasoning: str
     decision: str  # "allow" or "block"
     confidence: float  # 0.0-1.0
-    reasoning: str
     violations: list[str]  # List of specific security issues found
     suggested_fix: str  # How to fix the issues

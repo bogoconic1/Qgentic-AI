@@ -10,5 +10,6 @@ TaskType = Literal["computer_vision", "nlp", "tabular", "time_series", "audio"]
 class StarterSuggestions(BaseModel):
     """Schema for starter agent task type classification and summary."""
 
+    reasoning: str
     task_types: list[TaskType]
     task_summary: str

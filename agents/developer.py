@@ -1,7 +1,6 @@
 import logging
 import math
 import os
-import re
 import shutil
 import time
 import threading
@@ -271,8 +270,8 @@ class DeveloperAgent:
                     for item in later_items:
                         if item["strategy"]:
                             sections.append(f"- {item['strategy']}")
-                            if item["explanation"]:
-                                sections.append(f"  {item['explanation']}")
+                            if item["reasoning"]:
+                                sections.append(f"  {item['reasoning']}")
 
         later_losses = self.later_recommendations["loss_function"]["NICE_TO_HAVE"]
         if later_losses:
@@ -280,8 +279,8 @@ class DeveloperAgent:
             for item in later_losses:
                 if item["loss_function"]:
                     sections.append(f"- {item['loss_function']}")
-                    if item["explanation"]:
-                        sections.append(f"  {item['explanation']}")
+                    if item["reasoning"]:
+                        sections.append(f"  {item['reasoning']}")
 
         later_section = self.later_recommendations["hyperparameters"]["NICE_TO_HAVE"]
         if later_section["hyperparameters"]:
@@ -289,16 +288,16 @@ class DeveloperAgent:
             for item in later_section["hyperparameters"]:
                 if item["hyperparameter"]:
                     sections.append(f"- {item['hyperparameter']}")
-                    if item["explanation"]:
-                        sections.append(f"  {item['explanation']}")
+                    if item["reasoning"]:
+                        sections.append(f"  {item['reasoning']}")
 
         if later_section["architectures"]:
             sections.append("\n### Architecture NICE_TO_HAVE Recommendations")
             for item in later_section["architectures"]:
                 if item["architecture"]:
                     sections.append(f"- {item['architecture']}")
-                    if item["explanation"]:
-                        sections.append(f"  {item['explanation']}")
+                    if item["reasoning"]:
+                        sections.append(f"  {item['reasoning']}")
 
         inf_section = self.later_recommendations["inference_strategies"]["NICE_TO_HAVE"]
         if inf_section["inference_strategies"]:
@@ -306,8 +305,8 @@ class DeveloperAgent:
             for item in later_section["inference_strategies"]:
                 if item["strategy"]:
                     sections.append(f"- {item['strategy']}")
-                    if item["explanation"]:
-                        sections.append(f"  {item['explanation']}")
+                    if item["reasoning"]:
+                        sections.append(f"  {item['reasoning']}")
 
         return (
             "\n".join(sections)
@@ -548,10 +547,10 @@ class DeveloperAgent:
                     "Monitor verdict for v%s: %s (%s)",
                     version,
                     verdict.action,
-                    verdict.reason,
+                    verdict.reasoning,
                 )
                 if verdict.action == "kill":
-                    return job.kill(verdict.reason)
+                    return job.kill(verdict.reasoning)
             except Exception:
                 self.logger.exception(
                     "Monitor call failed for v%s — continuing execution", version
@@ -713,28 +712,6 @@ class DeveloperAgent:
             "No valid rollback version found; falling back to v1 (initial version)"
         )
         return 1, None
-
-    def _extract_final_summary(self, red_flags_response: str) -> str:
-        """Extract just the Final Summary section from red flags response.
-
-        Args:
-            red_flags_response: Full markdown response from search_red_flags()
-
-        Returns:
-            The Final Summary text, or full response if section not found
-        """
-        match = re.search(r"### Final Summary\s*\n(.+)", red_flags_response, re.DOTALL)
-
-        if match:
-            summary = match.group(1).strip()
-            self.logger.info("Extracted Final Summary (%d chars)", len(summary))
-            return summary
-        else:
-            # Fallback: return entire response if section not found
-            self.logger.warning(
-                "Could not extract Final Summary section, using full response"
-            )
-            return red_flags_response
 
     def _build_extended_data_listing(self, version: int) -> str:
         """Build directory listing for SOTA suggestions including base dir and current models.
@@ -1056,11 +1033,9 @@ class DeveloperAgent:
                 images=training_images if training_images else None,
                 train_stats=train_stats,
             )
-            self.logger.info(
-                "Red flags response length: %d chars", len(red_flags_response)
-            )
+            self.logger.info("Red flags analysis completed")
 
-            final_summary = self._extract_final_summary(red_flags_response)
+            final_summary = red_flags_response.final_summary
 
             # STAGE 2: Generate SOTA suggestions based on red flags
             self.logger.info(
@@ -1103,9 +1078,9 @@ class DeveloperAgent:
                 print(f"\n{'=' * 60}")
                 print(f"[HITL] Model: {self.model_name} | Version: {version}")
                 print(f"[HITL] Suggestion: {sota_response.suggestion}")
-                print(f"[HITL] Reason: {sota_response.suggestion_reason}")
+                print(f"[HITL] Reason: {sota_response.suggestion_reasoning}")
                 print(
-                    f"[HITL] Blacklist previous: {sota_response.blacklist} ({sota_response.blacklist_reason})"
+                    f"[HITL] Blacklist previous: {sota_response.blacklist} ({sota_response.blacklist_reasoning})"
                 )
                 print(f"{'=' * 60}")
                 user_input = input(
@@ -1116,10 +1091,14 @@ class DeveloperAgent:
                         "[HITL] Enter code snippet (or press Enter to skip): "
                     ).strip()
                     sota_response = SOTAResponse(
+                        plan_summary=sota_response.plan_summary,
+                        red_flags_summary=sota_response.red_flags_summary,
+                        shared_experiences_summary=sota_response.shared_experiences_summary,
+                        research_summary=sota_response.research_summary,
+                        blacklist_reasoning=sota_response.blacklist_reasoning,
                         blacklist=sota_response.blacklist,
-                        blacklist_reason=sota_response.blacklist_reason,
+                        suggestion_reasoning="Human override",
                         suggestion=user_input,
-                        suggestion_reason="Human override",
                         suggestion_code=user_code,
                     )
                     self.logger.info(
@@ -1241,7 +1220,7 @@ class DeveloperAgent:
             if sota_response:
                 suggestion_text = sota_response.suggestion.strip()
                 blacklist_flag = bool(sota_response.blacklist)
-                blacklist_reason = sota_response.blacklist_reason.strip()
+                blacklist_reason = sota_response.blacklist_reasoning.strip()
                 suggestion_code = sota_response.suggestion_code.strip()
             else:
                 suggestion_text = ""
@@ -1408,11 +1387,10 @@ class DeveloperAgent:
                         train_stats=train_stats,
                     )
                     self.logger.info(
-                        f"Red flags analysis complete for {error_type} (length: %d chars)",
-                        len(red_flags_response),
+                        f"Red flags analysis complete for {error_type}"
                     )
 
-                    final_summary = self._extract_final_summary(red_flags_response)
+                    final_summary = red_flags_response.final_summary
 
                     error_message = "TIMEOUT" if is_timeout else "OUT OF MEMORY"
                     next_instr = f"""

@@ -9,11 +9,11 @@ def test_format_recommendations():
         "preprocessing": {
             "preprocessing": {
                 "MUST_HAVE": [
-                    {"strategy": "Strategy 1", "explanation": "Explanation 1"},
-                    {"strategy": "Strategy 2", "explanation": "Explanation 2"},
-                    {"strategy": "Strategy 3", "explanation": "Explanation 3"},
-                    {"strategy": "Strategy 4", "explanation": "Explanation 4"},
-                    {"strategy": "Strategy 5", "explanation": "Explanation 5"},
+                    {"strategy": "Strategy 1", "reasoning": "Explanation 1"},
+                    {"strategy": "Strategy 2", "reasoning": "Explanation 2"},
+                    {"strategy": "Strategy 3", "reasoning": "Explanation 3"},
+                    {"strategy": "Strategy 4", "reasoning": "Explanation 4"},
+                    {"strategy": "Strategy 5", "reasoning": "Explanation 5"},
                 ],
                 "NICE_TO_HAVE": [],
             },
@@ -21,7 +21,7 @@ def test_format_recommendations():
                 "MUST_HAVE": [
                     {
                         "strategy": "Use BPE tokenization",
-                        "explanation": "Better for subword handling",
+                        "reasoning": "Better for subword handling",
                     }
                 ],
                 "NICE_TO_HAVE": [],
@@ -30,7 +30,7 @@ def test_format_recommendations():
         "loss_function": {
             "MUST_HAVE": {
                 "loss_function": "MSELoss with custom QWK wrapper",
-                "explanation": "Aligns with QWK competition metric",
+                "reasoning": "Aligns with QWK competition metric",
             },
             "NICE_TO_HAVE": [],
         },
@@ -39,45 +39,45 @@ def test_format_recommendations():
                 "hyperparameters": [
                     {
                         "hyperparameter": "learning_rate: 2e-5",
-                        "explanation": "Standard for transformers",
+                        "reasoning": "Standard for transformers",
                     },
                     {
                         "hyperparameter": "batch_size: 16",
-                        "explanation": "Balance memory and training speed",
+                        "reasoning": "Balance memory and training speed",
                     },
                     {
                         "hyperparameter": "epochs: 5",
-                        "explanation": "Prevent overfitting",
+                        "reasoning": "Prevent overfitting",
                     },
                     {
                         "hyperparameter": "warmup_steps: 100",
-                        "explanation": "Stabilize training",
+                        "reasoning": "Stabilize training",
                     },
                     {
                         "hyperparameter": "weight_decay: 0.01",
-                        "explanation": "Regularization",
+                        "reasoning": "Regularization",
                     },
                     {
                         "hyperparameter": "max_grad_norm: 1.0",
-                        "explanation": "Gradient clipping",
+                        "reasoning": "Gradient clipping",
                     },
                 ],
                 "architectures": [
                     {
                         "architecture": "Add dropout layer (0.1)",
-                        "explanation": "Reduce overfitting",
+                        "reasoning": "Reduce overfitting",
                     },
                     {
                         "architecture": "Multi-sample dropout",
-                        "explanation": "Better regularization",
+                        "reasoning": "Better regularization",
                     },
                     {
                         "architecture": "Layerwise learning rate decay",
-                        "explanation": "Fine-tune pretrained layers",
+                        "reasoning": "Fine-tune pretrained layers",
                     },
                     {
                         "architecture": "EMA weights",
-                        "explanation": "Stabilize predictions",
+                        "reasoning": "Stabilize predictions",
                     },
                 ],
             },
@@ -88,19 +88,19 @@ def test_format_recommendations():
                 "inference_strategies": [
                     {
                         "strategy": "Test-time augmentation",
-                        "explanation": "Improve robustness",
+                        "reasoning": "Improve robustness",
                     },
                     {
                         "strategy": "Threshold tuning",
-                        "explanation": "Optimize for metric",
+                        "reasoning": "Optimize for metric",
                     },
                     {
                         "strategy": "Fold averaging",
-                        "explanation": "Reduce variance",
+                        "reasoning": "Reduce variance",
                     },
                     {
                         "strategy": "Monte Carlo dropout",
-                        "explanation": "Uncertainty estimation",
+                        "reasoning": "Uncertainty estimation",
                     },
                 ]
             },
@@ -141,7 +141,7 @@ def test_empty_preprocessing_and_inference():
         "loss_function": {
             "MUST_HAVE": {
                 "loss_function": "CrossEntropyLoss",
-                "explanation": "Good for classification",
+                "reasoning": "Good for classification",
             },
             "NICE_TO_HAVE": [],
         },

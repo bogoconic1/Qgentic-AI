@@ -4,28 +4,40 @@ from pydantic import BaseModel
 class StackTraceSolution(BaseModel):
     """Schema for stack trace debugging solutions."""
 
-    checklist: list[str]
+    reasoning: str
     web_search_findings: str
-    reasoning_and_solution: str
-    validation: str
-    further_steps: str
+    solution: str
 
 
 class SOTAResponse(BaseModel):
     """Schema for SOTA suggestions combining blacklist decision and new suggestion."""
 
+    plan_summary: str
+    red_flags_summary: str
+    shared_experiences_summary: str
+    research_summary: str
+    blacklist_reasoning: str
     blacklist: bool
-    blacklist_reason: str
+    suggestion_reasoning: str
     suggestion: str
-    suggestion_reason: str
     suggestion_code: str
 
 
 class LogMonitorVerdict(BaseModel):
     """LLM verdict on whether a running training script is healthy."""
 
+    reasoning: str
     action: str  # "continue" or "kill"
-    reason: str  # explanation — fed back to the developer agent if killed
+
+
+class RedFlagsResponse(BaseModel):
+    """Red flags analysis result."""
+
+    reasoning: str
+    code_issues: str
+    log_issues: str
+    web_search_findings: str
+    final_summary: str
 
 
 class CodeGeneration(BaseModel):
@@ -33,5 +45,5 @@ class CodeGeneration(BaseModel):
 
     The train_py field should contain the complete training script.
     """
-
+    reasoning: str
     train_py: str
