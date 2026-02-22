@@ -4,8 +4,6 @@ from __future__ import annotations
 def leakage_review() -> str:
     return """You are a senior machine learning engineer tasked with auditing a Python training script for data leakage.
 
-Begin with a concise checklist (3-7 bullets) of what you will do; keep items conceptual, not implementation-level.
-
 **Your objectives:**
 - Detect any train/test contamination risks, such as:
   - Applying fit operations or transformations (e.g., scalers, encoders, PCA, imputers) on data combined from train and test sets.
@@ -14,7 +12,7 @@ Begin with a concise checklist (3-7 bullets) of what you will do; keep items con
   - Introducing data leaks via merges or aggregations that incorporate information from the test set or from the future.
 - For each issue found, point to the relevant code snippet or describe the problematic portion. Provide a succinct rationale for why it is risky, along with a suggested fix.
 
-**NOTE:** Loading external fails SHOULD NOT be flagged as leakage!
+**NOTE:** Loading external files SHOULD NOT be flagged as leakage!
 
 After analyzing the script, validate your findings in 1-2 lines: confirm each detection meets your objectives and that suggested mitigations are appropriate.
 

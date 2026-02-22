@@ -1,71 +1,28 @@
-"""
-Shared prompt utilities for the Developer agent.
-
-This module contains common constraint definitions used by developer_agent.py.
-"""
-
 from __future__ import annotations
 
 
 def get_hard_constraints(
     model_name: str | None = None,
 ) -> str:
-    """
-    Get the hard constraints section for system prompts.
+    lines = ["**Hard Constraints:**"]
 
-    Args:
-        model_name: The model name to be used in constraints.
-
-    Returns:
-        Formatted hard constraints string ready for inclusion in system prompts.
-    """
-    model_constraint_lines = []
     if model_name:
-        model_constraint_lines.append(
-            f"- Use ONLY `{model_name}` (no substitutions or fallback models)."
+        lines.append(
+            f"- Use ONLY `{model_name}`. Do not swap the model; you may update preprocessing, postprocessing, or hyperparameters."
         )
 
-    modular_pipeline_constraint = ""
-    if model_name:
-        modular_pipeline_constraint = f"- Modular pipeline: update preprocessing/postprocessing or hyperparameters, but do not swap out `{model_name}`."
-
-    common_constraints = """- Deliver a fully-contained, single-file script.
-- Use CUDA if available.
-- **DO NOT** explicitly set `os.environ['CUDA_VISIBLE_DEVICES']` in your code.
-- Place all `logging.info` statements for validation results (per fold and overall) as well as model loading, train/test set size; only log data loading/setup if directly relevant to validation.
-- Also emit concise `logging.info` statements for any computed quantities that can go really wrong (e.g. class weights, thresholds).
+    lines.append(
+        """- **DO NOT** explicitly set `os.environ['CUDA_VISIBLE_DEVICES']`.
 - Place `logging.basicConfig()` at the start of the script.
-- Deep learning: **no** gradient checkpointing. Do not code fallback methods.
-- **IMPORTANT:** If you're using XGBoost, LightGBM, or CatBoost, first train the model with the suggested parameters. Then, perform hyperparameter tuning using Optuna for up to 300 seconds. Finally, retrain the model using the best parameters from the tuning run and select the configuration with the best validation performance.
-- If you use `transformers.Trainer`, use eval_strategy instead of evaluation_strategy.
+- Log validation results (per fold and overall), model loading, train/test set size, and any computed quantities that can go wrong (e.g. class weights, thresholds).
+- Log final validation results, best epoch number, total training time, and submission prediction distribution.
 - Do not use `try/except` to suppress errors.
-- Log final validation results, best epoch number and total training time after training."""
-
-    additional_common_constraints = """- Prefer pretrained models if available. Set pretrained=True if applicable.
-- If an online implementation of the model is available (e.g. GitHub), use it. Do not code from scratch.
 - External datasets: may be appended **only** to training set.
-- **DL Only:** After 1st epoch on fold 0, if loss is NaN, STOP training and jump directly to inference to generate the submission file."""
-
-    constraints_parts = ["**Hard Constraints:**"]
-
-    if model_constraint_lines:
-        constraints_parts.extend(model_constraint_lines)
-
-    constraints_parts.append(common_constraints)
-    constraints_parts.append(additional_common_constraints)
-
-    if modular_pipeline_constraint:
-        constraints_parts.append(modular_pipeline_constraint)
-
-    constraints_parts.append("""- Do not use any `while` loops in your code.""")
-
-    constraints_parts.append("""- At the end, log the distribution of the submission predictions (e.g., value counts for classification, summary statistics for regression).
-- If asked to download external datasets, use kagglehub.
+- If asked to download external datasets, use kagglehub:
 ```
 import kagglehub
-
-# Download latest version
 path = kagglehub.dataset_download("<author>/<dataset_name>")
-```""")
+```"""
+    )
 
-    return "\n".join(constraints_parts)
+    return "\n".join(lines)
