@@ -241,7 +241,7 @@ def search_sota_suggestions(
     cpu_core_range: list[int] | None = None,
     gpu_identifier: str | None = None,
     file_suffix: str | None = None,
-    max_tool_steps: int = 20,
+    max_tool_steps: int = 128,
     version: int = 1,
     images: list[Path] | None = None,
     train_stats: dict | None = None,
@@ -346,15 +346,15 @@ def search_sota_suggestions(
             "enabled" if tools else "disabled",
         )
 
+        is_last_step = step_limit is not None and step == step_limit - 1
+
         response = call_llm(
             model=_DEVELOPER_TOOL_MODEL,
             system_instruction=system_prompt,
-            function_declarations=tools if tools else [],
+            function_declarations=tools if (tools and not is_last_step) else [],
             messages=input_list,
             enable_google_search=True,
-            text_format=SOTAResponse
-            if (step_limit is not None and step == step_limit - 1)
-            else None,
+            text_format=SOTAResponse if is_last_step else None,
         )
 
         # text_format is SOTAResponse on last step (returns Pydantic), None otherwise (returns Gemini response)

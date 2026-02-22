@@ -302,11 +302,13 @@ class ResearcherAgent:
                 )
                 logger.info("Reached final step; forcing plan output prompt")
 
+            is_last_step = step == max_steps - 1
+
             response = call_llm(
                 model=_RESEARCHER_AGENT_MODEL,
                 system_instruction=system_prompt,
                 messages=input_list,
-                function_declarations=tools if tools else [],
+                function_declarations=tools if (tools and not is_last_step) else [],
                 enable_google_search=True,
             )
 
