@@ -29,7 +29,7 @@ from utils.checkpoint import (
     load_latest_checkpoint,
 )
 from utils.grade import run_grade
-from schemas.developer import CodeGeneration, SOTAResponse
+from schemas.developer import SOTAResponse
 from utils.code_utils import strip_header_from_code, extract_python_code
 from prompts.developer_agent import (
     build_system as prompt_build_system,
@@ -317,53 +317,38 @@ class DeveloperAgent:
     @weave.op()
     def _generate_code(
         self, instructions: str, messages: list[dict[str, str]]
-    ) -> tuple[list[dict], dict[str, str], int | None]:
-        """Generate code using structured output.
+    ) -> tuple[list[dict], str, int | None]:
+        """Generate code via markdown-fenced output.
 
         Returns:
-            Tuple of (message_history_entry, code_dict, input_tokens)
-            - message_history_entry: List with assistant message containing markdown
-            - code_dict: Dict with 'train_py' key
-            - input_tokens: Number of input tokens used in this API call (for adaptive trimming)
+            Tuple of (message_history, train_py_code, input_tokens)
         """
         self.logger.info(
             "Requesting code generation from model for iteration %s", self.iteration
         )
 
-        schema = CodeGeneration
-
-        result, input_tokens = call_llm(
+        response, input_tokens = call_llm(
             model=_DEVELOPER_MODEL,
             system_instruction=instructions,
             messages=messages,
             enable_google_search=True,
-            text_format=schema,
             include_usage=True,
         )
 
         self.logger.info("Model response received for iteration %s", self.iteration)
 
-        code_dict = result.model_dump()
-        self.logger.debug("Generated code dict keys: %s", list(code_dict.keys()))
+        raw_content = response.text
+        code = extract_python_code(raw_content)
+        if not code:
+            raise ValueError("No ```python code block found in model response")
 
-        raw_content = code_dict["train_py"]
-        extracted = extract_python_code(raw_content)
-        if extracted and extracted != raw_content:
-            code_dict["train_py"] = extracted
-            self.logger.debug(
-                "Extracted code from markdown (%d chars -> %d chars)",
-                len(raw_content),
-                len(extracted),
-            )
-
-        content = f"```python\n{code_dict['train_py']}\n```"
-
+        content = f"```python\n{code}\n```"
         output = [append_message("assistant", content)]
 
         if input_tokens:
             self.logger.info("API call used %d input tokens", input_tokens)
 
-        return output, code_dict, input_tokens
+        return output, code, input_tokens
 
     def _postprocess_code(self, code: str) -> tuple[str, int]:
         """Insert resource allocation and BASE_DIR setup at the top of generated code.
@@ -412,19 +397,11 @@ class DeveloperAgent:
         base_iteration = iteration_str.split("_")[0]
         return self.base_dir / self.outputs_dirname / base_iteration
 
-    def _write_code(self, code_dict: dict[str, str], version: int) -> Path:
-        """Write code to version folder structure.
-
-        Creates folder structure:
-        outputs/{iteration}/
-        ├── {version}/
-        │   ├── train.py (with headers)
-        │   ├── train.json (metadata)
-        │   ├── cv_splits.json (copied from parent)
-        │   └── metric.py (copied from parent)
+    def _write_code(self, train_py: str, version: int) -> Path:
+        """Write train.py and supporting files to a version folder.
 
         Args:
-            code_dict: Dict with 'train_py' key
+            train_py: Python training script source code
             version: Version number
 
         Returns:
@@ -433,8 +410,6 @@ class DeveloperAgent:
         version_folder = self.outputs_dir / str(version)
         version_folder.mkdir(parents=True, exist_ok=True)
         self.logger.info("Writing code to version folder: %s", version_folder)
-
-        train_py = code_dict["train_py"]
         postprocessed_code, num_header_lines = self._postprocess_code(train_py)
         train_path = version_folder / "train.py"
         train_path.write_text(postprocessed_code)
@@ -1552,12 +1527,12 @@ Fix the error. Write logs to {next_log_path} and save all required artifacts to 
             self.logger.info("Attempt %s (time left ~%.1f min)", attempt, minutes_left)
             version = attempt
 
-            response_output, code_dict, last_input_tokens = self._generate_code(
+            response_output, train_py, last_input_tokens = self._generate_code(
                 instructions=system_prompt, messages=input_list
             )
             input_list += response_output
 
-            version_folder = self._write_code(code_dict, version)
+            version_folder = self._write_code(train_py, version)
 
             # ---------------------------
             # Pre-exec guardrail checks
