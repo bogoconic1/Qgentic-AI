@@ -35,8 +35,6 @@ from utils.code_utils import strip_header_from_code, extract_python_code
 from prompts.developer_agent import (
     build_system as prompt_build_system,
     build_user as prompt_build_user,
-    guardrail_fix_suffix as prompt_guardrail_fix_suffix,
-    execution_failure_suffix as prompt_execution_failure_suffix,
 )
 
 
@@ -237,8 +235,6 @@ class DeveloperAgent:
             model_name=self.model_name,
             slug=self.slug,
             cpu_core_range=self.cpu_core_range,
-            gpu_identifier=self.gpu_identifier,
-            gpu_isolation_mode=self.gpu_isolation_mode,
             hitl_instructions=_HITL_INSTRUCTIONS,
         )
 
@@ -1426,8 +1422,7 @@ Your code FAILED during execution due to {error_message}!
 Performance analysis:
 {final_summary}
 
-{prompt_execution_failure_suffix(next_log_path, next_submission_path, next_version_folder)}
-"""
+Fix the error. Write logs to {next_log_path} and save all required artifacts to {next_version_folder}/."""
                 except Exception:
                     self.logger.exception(
                         f"Failed to run red flags analysis for {error_type}"
@@ -1438,16 +1433,14 @@ Your code FAILED during execution due to {error_message}!
 This is the stack trace and advice on how to fix the error:
 {output}
 
-{prompt_execution_failure_suffix(next_log_path, next_submission_path, next_version_folder)}
-"""
+Fix the error. Write logs to {next_log_path} and save all required artifacts to {next_version_folder}/."""
             else:
                 next_instr = f"""
 Your code FAILED during execution!
 This is the stack trace and advice on how to fix the error:
 {output}
 
-{prompt_execution_failure_suffix(next_log_path, next_submission_path, next_version_folder)}
-"""
+Fix the error. Write logs to {next_log_path} and save all required artifacts to {next_version_folder}/."""
 
             input_list.append(append_message("user", next_instr))
 
@@ -1615,9 +1608,7 @@ This is the stack trace and advice on how to fix the error:
                     self.outputs_dir / f"{version + 1}/submission.csv"
                 )
                 next_version_folder = self.outputs_dir / str(version + 1)
-                fix_instr = prompt_guardrail_fix_suffix(
-                    next_log_path, next_submission_path, next_version_folder
-                )
+                fix_instr = f"\nRegenerate the script addressing the above guardrail issues. Write logs to {next_log_path} and save all required artifacts to {next_version_folder}/."
                 guardrail_prompt = summary_text + fix_instr
                 input_list.append(append_message("user", guardrail_prompt))
                 self.logger.info(
