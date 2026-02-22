@@ -21,7 +21,7 @@ If the task is or contains "nlp", include at least one encoder-only model (e.g. 
 ## Output
 Provide `recommended_models` as a list, each with:
 - "name": model name and size
-- "reason": why this model fits the competition/data/metric
+- "reasoning": why this model fits the competition/data/metric
 """
 
 
@@ -47,15 +47,7 @@ Do not search for or use actual winning solutions from this specific competition
 - **NICE_TO_HAVE**: "Neutral" findings from research_plan + untested but well-established strategies.
 
 ## Output
-Return a JSON block in ```json backticks with MUST_HAVE and NICE_TO_HAVE per category:
-```json
-{{
-  "feature_creation": {{
-    "MUST_HAVE": [{{"strategy": "string", "explanation": "string"}}],
-    "NICE_TO_HAVE": [{{"strategy": "string", "explanation": "string"}}]
-  }}
-}}
-```
+Provide `categories` as a dict keyed by category name, each with MUST_HAVE and NICE_TO_HAVE lists of strategies.
 """
 
 
@@ -78,11 +70,11 @@ Do not search for or use actual winning solutions from this specific competition
 ## Output
 **MUST_HAVE**: object with:
 - "loss_function": the single best loss function
-- "explanation": why this loss aligns with the metric and data
+- "reasoning": why this loss aligns with the metric and data
 
 **NICE_TO_HAVE**: list of objects, each with:
 - "loss_function": alternative loss
-- "explanation": why it's a useful but non-essential option
+- "reasoning": why it's a useful but non-essential option
 """
 
 
@@ -103,11 +95,11 @@ Both MUST_HAVE and NICE_TO_HAVE contain:
 
 - **hyperparameters**: list of items, each with:
   - "hyperparameter": specific value (MUST_HAVE) or range (NICE_TO_HAVE)
-  - "explanation": why
+  - "reasoning": why
 
 - **architectures**: list of items, each with:
   - "architecture": the design or modification
-  - "explanation": why
+  - "reasoning": why
 """
 
 
@@ -131,7 +123,7 @@ Do not search for or use actual winning solutions from this specific competition
 Both MUST_HAVE and NICE_TO_HAVE contain:
 - **inference_strategies**: list of items, each with:
   - "strategy": the inference strategy
-  - "explanation": why
+  - "reasoning": why
 """
 
 
@@ -176,7 +168,7 @@ Key principles:
 Select up to 8. For each, provide:
 - name: exact model name from the candidate list
 - selected_from_family: architecture family (e.g. "DeBERTa family")
-- reason: 3-5 sentences citing evidence from the paper summary"""
+- reasoning: 3-5 sentences citing evidence from the paper summary"""
 
 
 def build_refiner_user_prompt(

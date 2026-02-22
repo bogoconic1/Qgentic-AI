@@ -9,8 +9,9 @@ from pydantic import BaseModel
 class RecommendedModel(BaseModel):
     """Individual model recommendation."""
 
+    reasoning: str
     name: str
-    reason: str
+    
 
 
 class ModelSelection(BaseModel):
@@ -22,9 +23,9 @@ class ModelSelection(BaseModel):
 class RefinedModel(BaseModel):
     """Individual refined model selection with detailed reasoning."""
 
+    reasoning: str
     name: str
     selected_from_family: str
-    reason: str
 
 
 class RefinedModelSelection(BaseModel):
@@ -39,8 +40,8 @@ class RefinedModelSelection(BaseModel):
 class StrategyItem(BaseModel):
     """Individual strategy with explanation."""
 
+    reasoning: str
     strategy: str
-    explanation: str
 
 
 class CategoryRecommendations(BaseModel):
@@ -50,21 +51,27 @@ class CategoryRecommendations(BaseModel):
     NICE_TO_HAVE: list[StrategyItem]
 
 
+class PreprocessingRecommendations(BaseModel):
+    """Schema for preprocessing recommendations. Keys are category names."""
+
+    categories: dict[str, CategoryRecommendations]
+
+
 # Loss Function Schemas
 
 
 class LossFunctionMustHave(BaseModel):
     """MUST_HAVE loss function (single)."""
 
+    reasoning: str
     loss_function: str
-    explanation: str
 
 
 class LossFunctionNiceToHave(BaseModel):
     """NICE_TO_HAVE loss function item."""
 
+    reasoning: str
     loss_function: str
-    explanation: str
 
 
 class LossFunctionRecommendations(BaseModel):
@@ -80,15 +87,15 @@ class LossFunctionRecommendations(BaseModel):
 class HyperparameterItem(BaseModel):
     """Individual hyperparameter recommendation."""
 
+    reasoning: str
     hyperparameter: str
-    explanation: str
 
 
 class ArchitectureItem(BaseModel):
     """Individual architecture recommendation."""
 
+    reasoning: str
     architecture: str
-    explanation: str
 
 
 class HyperparameterSection(BaseModel):
@@ -111,8 +118,8 @@ class HyperparameterRecommendations(BaseModel):
 class InferenceStrategyItem(BaseModel):
     """Individual inference strategy."""
 
+    reasoning: str
     strategy: str
-    explanation: str
 
 
 class InferenceStrategySection(BaseModel):

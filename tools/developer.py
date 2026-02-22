@@ -31,7 +31,7 @@ from prompts.tools_developer import (
     log_monitor_system as prompt_log_monitor_system,
     log_monitor_user as prompt_log_monitor_user,
 )
-from schemas.developer import StackTraceSolution, SOTAResponse, LogMonitorVerdict
+from schemas.developer import StackTraceSolution, SOTAResponse, LogMonitorVerdict, RedFlagsResponse
 import weave
 
 load_dotenv()
@@ -98,7 +98,7 @@ def web_search_stack_trace(query: str) -> str:
         thinking_budget=None,
     )
 
-    solution_text = ft_response.reasoning_and_solution.strip()
+    solution_text = ft_response.solution.strip()
     is_valid_response = (
         len(solution_text) >= 35 and "I cannot solve this error." not in solution_text
     )
@@ -127,7 +127,7 @@ def web_search_stack_trace(query: str) -> str:
         query
         + "\n"
         + "This is how you can fix the error: \n"
-        + response.reasoning_and_solution.strip()
+        + response.solution.strip()
     )
 
 
@@ -166,7 +166,7 @@ def search_red_flags(
     context: str,
     images: list[Path] | None = None,
     train_stats: dict | None = None,
-) -> str:
+) -> RedFlagsResponse:
     """Stage 1: Direct analysis to identify red flags in the current approach.
 
     Args:
@@ -177,7 +177,7 @@ def search_red_flags(
                     (must include: model_name, cv_scores, cv_mean, cv_std)
 
     Returns:
-        Red flags response text (markdown format with structured analysis)
+        RedFlagsResponse with structured analysis fields
     """
     logger.info("Dispatching red flags identification via direct analysis")
 
@@ -207,11 +207,11 @@ def search_red_flags(
         function_declarations=[],
         messages=messages,
         enable_google_search=True,
+        text_format=RedFlagsResponse,
     )
-    final_content = extract_text_from_response(response)
 
     logger.info("Red flags identification completed in single pass")
-    return final_content
+    return response
 
 
 def _inject_user_guidance(input_list, guidance):

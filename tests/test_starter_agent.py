@@ -16,6 +16,7 @@ def patch_llm_calls(monkeypatch):
         from schemas.starter import StarterSuggestions
 
         return StarterSuggestions(
+            reasoning="NLP task based on text data and classification objective",
             task_types=["nlp"],
             task_summary="Text classification task for sentiment analysis",
         )
@@ -90,6 +91,7 @@ def test_task_type_literal_constraint():
 
     # Valid task types should pass
     valid = StarterSuggestions(
+        reasoning="Multi-modal NLP and tabular task",
         task_types=["nlp", "tabular"],
         task_summary="Multi-modal task",
     )
@@ -98,12 +100,14 @@ def test_task_type_literal_constraint():
     # Invalid task type should be rejected
     with pytest.raises(ValidationError):
         StarterSuggestions(
+            reasoning="test",
             task_types=["NLP"],
             task_summary="Should fail",
         )
 
     with pytest.raises(ValidationError):
         StarterSuggestions(
+            reasoning="test",
             task_types=["invalid_type"],
             task_summary="Should fail",
         )

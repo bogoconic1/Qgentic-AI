@@ -9,22 +9,12 @@ Only handle errors directly related to: `xgboost`, `transformers`, `pytorch`, `s
 
 **If related:** Analyze the error and provide a solution.
 **If NOT related:** Return these exact values:
-- `checklist`: []
 - `web_search_findings`: ""
-- `reasoning_and_solution`: "I cannot solve this error."
-- `validation`: ""
-- `further_steps`: ""
+- `solution`: "I cannot solve this error."
 
 ## Constraints
 - No web search. `web_search_findings` MUST be `""` in all cases.
 - Do not recommend downgrading packages except as a last resort.
-
-## Output Fields
-- `checklist`: Array of debugging steps (or `[]` if not a supported library).
-- `web_search_findings`: Must be `""`.
-- `reasoning_and_solution`: Explain why the error occurred and how to fix it, or `"I cannot solve this error."`
-- `validation`: 1-2 lines confirming the fix addresses the error, or `""`.
-- `further_steps`: Remaining actions, or `""`.
 """
 
 
@@ -33,13 +23,6 @@ def build_stack_trace_prompt() -> str:
 
 ## Constraints
 - Do not recommend downgrading packages except as a last resort.
-
-## Output Fields
-- `checklist`: Array of debugging steps.
-- `web_search_findings`: Summary of relevant web search insights.
-- `reasoning_and_solution`: Explain why the error occurred and how to fix it.
-- `validation`: 1-2 lines confirming the fix addresses the error. Self-correct if it doesn't.
-- `further_steps`: Remaining actions, or confirmation that the issue is resolved.
 """
 
 
@@ -73,25 +56,8 @@ def red_flags_system() -> str:
 - Unusual submission distributions (e.g. all one class, constant outputs)
 - Training time from logs
 
-## Output Format
-
-Use these exact headers:
-
-### Checklist
-- (3-7 high-level bullet points)
-
-### Detailed Analysis
-
-#### 1. Code Issues
-
-#### 2. Log / Performance Issues
-
-#### 3. Web Search Findings
-
-### Final Summary
-- Critical red flags and their likely impact on leaderboard performance.
-- Web insights most useful for improvement.
-- Training time from logs, if present.
+## Output
+- `final_summary`: Critical red flags and their likely impact on leaderboard performance, web insights most useful for improvement, and training time from logs.
 """
 
 
@@ -171,10 +137,10 @@ Make exactly THREE suggestions from different categories. Each should be high-im
     - If none: "No shared experiments yet."
 - Research and Suggestion (three numbered, one per category)
 - Previous Suggestion Review and New Suggestion:
+  - `blacklist_reasoning`: Justification for blacklisting previous suggestion
   - `blacklist`: Boolean — should previous suggestion be blacklisted?
-  - `blacklist_reason`: Justification
+  - `suggestion_reasoning`: Why this is the best choice now
   - `suggestion`: Best next idea (or "No suggestions." if none viable)
-  - `suggestion_reason`: Why it's the best choice now
   - `suggestion_code`: Complete Python code implementing the suggestion (or empty string)
 """
 
@@ -255,7 +221,7 @@ Only use tools when the logs are ambiguous. If the logs clearly show NaN loss or
 
 You MUST return a JSON object with exactly two fields:
 - "action": either "continue" or "kill"
-- "reason": a concise explanation (1-2 sentences)"""
+- "reasoning": a concise explanation (1-2 sentences)"""
 
 
 def log_monitor_user(

@@ -107,11 +107,9 @@ def test_web_search_stack_trace(monkeypatch):
 
     def fake_call_llm(*args, **kwargs):
         return StackTraceSolution(
-            checklist=["Check X", "Verify Y"],
+            reasoning="The error is caused by X.",
             web_search_findings="Found solution on Stack Overflow",
-            reasoning_and_solution="The error is caused by X. You can fix it by doing Y.",
-            validation="Verify the fix works by running Z",
-            further_steps="Consider refactoring the code",
+            solution="The error is caused by X. You can fix it by doing Y.",
         )
 
     monkeypatch.setattr("tools.developer.call_llm", fake_call_llm)
@@ -135,19 +133,15 @@ def test_web_search_stack_trace_fallback(monkeypatch):
         if call_count[0] == 1:
             # Fine-tuned model returns a too-short response (< 35 chars)
             return StackTraceSolution(
-                checklist=[],
+                reasoning="Cannot solve.",
                 web_search_findings="",
-                reasoning_and_solution="I cannot solve this error.",
-                validation="",
-                further_steps="",
+                solution="I cannot solve this error.",
             )
         # Web search fallback returns a proper solution
         return StackTraceSolution(
-            checklist=["Check types"],
+            reasoning="Check types for compatibility.",
             web_search_findings="Found on SO",
-            reasoning_and_solution="Fallback solution text that is long enough to pass validation",
-            validation="Run tests",
-            further_steps="Refactor",
+            solution="Fallback solution text that is long enough to pass validation",
         )
 
     monkeypatch.setattr("tools.developer.call_llm", fake_call_llm)
@@ -162,17 +156,16 @@ def test_web_search_stack_trace_fallback(monkeypatch):
 
 def test_search_red_flags(monkeypatch):
     """Test search_red_flags with mocked LLM call."""
-    red_flags_text = (
-        "# Red Flags Analysis\n\n"
-        "## Critical Issues\n"
-        "1. Data leakage detected in preprocessing\n"
-        "2. Overfitting on validation set\n"
-    )
+    from schemas.developer import RedFlagsResponse
 
     def fake_call_llm(*args, **kwargs):
-        mock_response = MagicMock()
-        mock_response.text = red_flags_text
-        return mock_response
+        return RedFlagsResponse(
+            reasoning="Analyzing code and logs for issues.",
+            code_issues="Data leakage detected in preprocessing",
+            log_issues="Overfitting on validation set",
+            web_search_findings="",
+            final_summary="Critical: data leakage in preprocessing, overfitting on validation.",
+        )
 
     monkeypatch.setattr("tools.developer.call_llm", fake_call_llm)
 
@@ -181,8 +174,8 @@ def test_search_red_flags(monkeypatch):
 
     result = search_red_flags(description, context)
 
-    assert "Red Flags" in result or "Data leakage" in result
-    assert len(result) > 0
+    assert result.final_summary
+    assert "leakage" in result.code_issues.lower()
 
 
 def _make_no_tool_call_response():
@@ -207,10 +200,14 @@ def test_search_sota_suggestions(monkeypatch, test_data_dir):
     def fake_call_llm(*args, **kwargs):
         if kwargs.get("text_format"):
             return SOTAResponse(
+                plan_summary="Test plan summary",
+                red_flags_summary="Test red flags",
+                shared_experiences_summary="Test shared experiences",
+                research_summary="Test research",
                 blacklist=False,
-                blacklist_reason="The previous suggestion is still valid",
+                blacklist_reasoning="The previous suggestion is still valid",
                 suggestion="Try using a transformer-based architecture with attention mechanisms",
-                suggestion_reason="Transformers have shown SOTA results on similar tasks",
+                suggestion_reasoning="Transformers have shown SOTA results on similar tasks",
                 suggestion_code="# Example transformer code\nmodel = TransformerModel()",
             )
         return _make_no_tool_call_response()
@@ -245,10 +242,14 @@ def test_search_sota_suggestions_with_plan_content(monkeypatch, test_data_dir):
         captured_kwargs.update(kwargs)
         if kwargs.get("text_format"):
             return SOTAResponse(
+                plan_summary="Test plan summary",
+                red_flags_summary="Test red flags",
+                shared_experiences_summary="Test shared experiences",
+                research_summary="Test research",
                 blacklist=False,
-                blacklist_reason="Continue with current approach",
+                blacklist_reasoning="Continue with current approach",
                 suggestion="Use the plan's recommended approach",
-                suggestion_reason="Following the research plan systematically",
+                suggestion_reasoning="Following the research plan systematically",
                 suggestion_code="# Following the plan\nmodel = PlanRecommendedModel()",
             )
         return _make_no_tool_call_response()
@@ -289,10 +290,14 @@ def test_search_sota_suggestions_with_tools(monkeypatch, test_data_dir):
     def fake_call_llm(*args, **kwargs):
         if kwargs.get("text_format"):
             return SOTAResponse(
+                plan_summary="Test plan summary",
+                red_flags_summary="Test red flags",
+                shared_experiences_summary="Test shared experiences",
+                research_summary="Test research",
                 blacklist=False,
-                blacklist_reason="Based on findings, previous approach is valid",
+                blacklist_reasoning="Based on findings, previous approach is valid",
                 suggestion="Add stratified sampling based on target distribution",
-                suggestion_reason="Data shows imbalanced target, stratification will help",
+                suggestion_reasoning="Data shows imbalanced target, stratification will help",
                 suggestion_code="# Stratified sampling\nfrom sklearn.model_selection import StratifiedKFold",
             )
         return _make_no_tool_call_response()
@@ -327,10 +332,14 @@ def test_search_sota_suggestions_early_exit_forces_structured_output(
     def fake_call_llm(*args, **kwargs):
         if kwargs.get("text_format"):
             return SOTAResponse(
+                plan_summary="Test plan summary",
+                red_flags_summary="Test red flags",
+                shared_experiences_summary="Test shared experiences",
+                research_summary="Test research",
                 blacklist=False,
-                blacklist_reason="Based on findings",
+                blacklist_reasoning="Based on findings",
                 suggestion="Use calibration based on EDA",
-                suggestion_reason="Data shows miscalibration",
+                suggestion_reasoning="Data shows miscalibration",
                 suggestion_code="# Calibration code\nfrom sklearn.calibration import CalibratedClassifierCV",
             )
         return _make_no_tool_call_response()
@@ -361,10 +370,14 @@ def test_search_sota_suggestions_without_tools(monkeypatch, test_data_dir):
         call_count[0] += 1
         if kwargs.get("text_format"):
             return SOTAResponse(
+                plan_summary="Test plan summary",
+                red_flags_summary="Test red flags",
+                shared_experiences_summary="Test shared experiences",
+                research_summary="Test research",
                 blacklist=False,
-                blacklist_reason="No tools available, using web search only",
+                blacklist_reasoning="No tools available, using web search only",
                 suggestion="Try ensemble methods",
-                suggestion_reason="Common SOTA approach",
+                suggestion_reasoning="Common SOTA approach",
                 suggestion_code="# Ensemble approach\nfrom sklearn.ensemble import VotingClassifier",
             )
         return _make_no_tool_call_response()
@@ -524,7 +537,8 @@ def test_execution_job_process_group_kill():
 def test_monitor_logs_kill(monkeypatch):
     """monitor_logs() returns kill verdict when LLM says kill."""
     kill_verdict = LogMonitorVerdict(
-        action="kill", reason="NaN loss detected at epoch 4"
+        reasoning="NaN loss detected at epoch 4",
+        action="kill",
     )
 
     def fake_call_llm(*args, **kwargs):
@@ -540,13 +554,14 @@ def test_monitor_logs_kill(monkeypatch):
     )
 
     assert verdict.action == "kill"
-    assert "NaN" in verdict.reason
+    assert "NaN" in verdict.reasoning
 
 
 def test_monitor_logs_continue(monkeypatch):
     """monitor_logs() returns continue verdict when training is healthy."""
     continue_verdict = LogMonitorVerdict(
-        action="continue", reason="Loss decreasing normally"
+        reasoning="Loss decreasing normally",
+        action="continue",
     )
 
     def fake_call_llm(*args, **kwargs):
@@ -591,8 +606,8 @@ def test_monitor_logs_with_bash_tool(monkeypatch):
             return mock_response
 
         return LogMonitorVerdict(
+            reasoning="GPU at 0% utilization — process is deadlocked",
             action="kill",
-            reason="GPU at 0% utilization — process is deadlocked",
         )
 
     monkeypatch.setattr("tools.developer.call_llm", fake_call_llm)
@@ -606,4 +621,4 @@ def test_monitor_logs_with_bash_tool(monkeypatch):
 
     assert call_count[0] >= 2
     assert verdict.action == "kill"
-    assert "deadlocked" in verdict.reason.lower()
+    assert "deadlocked" in verdict.reasoning.lower()
