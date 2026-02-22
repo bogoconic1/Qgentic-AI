@@ -266,49 +266,39 @@ class DeveloperAgent:
         if preprocessing:
             sections.append("## Preprocessing NICE_TO_HAVE Recommendations")
             for category, content in preprocessing.items():
-                later_items = content["NICE_TO_HAVE"]
-                if later_items:
+                strategies = content["NICE_TO_HAVE"]
+                if strategies:
                     sections.append(f"\n### {category.replace('_', ' ').title()}")
-                    for item in later_items:
-                        if item["strategy"]:
-                            sections.append(f"- {item['strategy']}")
-                            if item["reasoning"]:
-                                sections.append(f"  {item['reasoning']}")
+                    for item in strategies:
+                        sections.append(f"- {item['strategy']}")
+                        sections.append(f"  {item['reasoning']}")
 
-        later_losses = self.later_recommendations["loss_function"]["NICE_TO_HAVE"]
-        if later_losses:
+        losses = self.later_recommendations["loss_function"]["NICE_TO_HAVE"]
+        if losses:
             sections.append("\n## Loss Function NICE_TO_HAVE Recommendations")
-            for item in later_losses:
-                if item["loss_function"]:
-                    sections.append(f"- {item['loss_function']}")
-                    if item["reasoning"]:
-                        sections.append(f"  {item['reasoning']}")
+            for item in losses:
+                sections.append(f"- {item['loss_function']}")
+                sections.append(f"  {item['reasoning']}")
 
-        later_section = self.later_recommendations["hyperparameters"]["NICE_TO_HAVE"]
-        if later_section["hyperparameters"]:
+        hyperparams = self.later_recommendations["hyperparameters"]["NICE_TO_HAVE"]
+        if hyperparams["hyperparameters"]:
             sections.append("\n## Hyperparameters NICE_TO_HAVE Recommendations")
-            for item in later_section["hyperparameters"]:
-                if item["hyperparameter"]:
-                    sections.append(f"- {item['hyperparameter']}")
-                    if item["reasoning"]:
-                        sections.append(f"  {item['reasoning']}")
+            for item in hyperparams["hyperparameters"]:
+                sections.append(f"- {item['hyperparameter']}")
+                sections.append(f"  {item['reasoning']}")
 
-        if later_section["architectures"]:
+        if hyperparams["architectures"]:
             sections.append("\n### Architecture NICE_TO_HAVE Recommendations")
-            for item in later_section["architectures"]:
-                if item["architecture"]:
-                    sections.append(f"- {item['architecture']}")
-                    if item["reasoning"]:
-                        sections.append(f"  {item['reasoning']}")
+            for item in hyperparams["architectures"]:
+                sections.append(f"- {item['architecture']}")
+                sections.append(f"  {item['reasoning']}")
 
-        inf_section = self.later_recommendations["inference_strategies"]["NICE_TO_HAVE"]
-        if inf_section["inference_strategies"]:
+        inference = self.later_recommendations["inference_strategies"]["NICE_TO_HAVE"]
+        if inference:
             sections.append("\n## Inference Strategies NICE_TO_HAVE Recommendations")
-            for item in later_section["inference_strategies"]:
-                if item["strategy"]:
-                    sections.append(f"- {item['strategy']}")
-                    if item["reasoning"]:
-                        sections.append(f"  {item['reasoning']}")
+            for item in inference:
+                sections.append(f"- {item['strategy']}")
+                sections.append(f"  {item['reasoning']}")
 
         return (
             "\n".join(sections)

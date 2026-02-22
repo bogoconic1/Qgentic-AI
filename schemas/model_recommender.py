@@ -122,14 +122,8 @@ class InferenceStrategyItem(BaseModel):
     strategy: str
 
 
-class InferenceStrategySection(BaseModel):
-    """List of inference strategies."""
-
-    inference_strategies: list[InferenceStrategyItem]
-
-
 class InferenceStrategyRecommendations(BaseModel):
     """Schema for inference strategy recommendations."""
 
-    MUST_HAVE: InferenceStrategySection
-    NICE_TO_HAVE: InferenceStrategySection
+    MUST_HAVE: list[InferenceStrategyItem]
+    NICE_TO_HAVE: list[InferenceStrategyItem]

@@ -84,27 +84,25 @@ def test_format_recommendations():
             "NICE_TO_HAVE": {"hyperparameters": [], "architectures": []},
         },
         "inference_strategies": {
-            "MUST_HAVE": {
-                "inference_strategies": [
-                    {
-                        "strategy": "Test-time augmentation",
-                        "reasoning": "Improve robustness",
-                    },
-                    {
-                        "strategy": "Threshold tuning",
-                        "reasoning": "Optimize for metric",
-                    },
-                    {
-                        "strategy": "Fold averaging",
-                        "reasoning": "Reduce variance",
-                    },
-                    {
-                        "strategy": "Monte Carlo dropout",
-                        "reasoning": "Uncertainty estimation",
-                    },
-                ]
-            },
-            "NICE_TO_HAVE": {"inference_strategies": []},
+            "MUST_HAVE": [
+                {
+                    "strategy": "Test-time augmentation",
+                    "reasoning": "Improve robustness",
+                },
+                {
+                    "strategy": "Threshold tuning",
+                    "reasoning": "Optimize for metric",
+                },
+                {
+                    "strategy": "Fold averaging",
+                    "reasoning": "Reduce variance",
+                },
+                {
+                    "strategy": "Monte Carlo dropout",
+                    "reasoning": "Uncertainty estimation",
+                },
+            ],
+            "NICE_TO_HAVE": [],
         },
     }
 
@@ -150,8 +148,8 @@ def test_empty_preprocessing_and_inference():
             "NICE_TO_HAVE": {"hyperparameters": [], "architectures": []},
         },
         "inference_strategies": {
-            "MUST_HAVE": {"inference_strategies": []},
-            "NICE_TO_HAVE": {"inference_strategies": []},
+            "MUST_HAVE": [],
+            "NICE_TO_HAVE": [],
         },
     }
     details = _format_recommendations_for_developer(recs)

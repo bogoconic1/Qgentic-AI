@@ -120,10 +120,9 @@ Do not search for or use actual winning solutions from this specific competition
 - **NICE_TO_HAVE**: TTA, calibration, post-processing, ensembling.
 
 ## Output
-Both MUST_HAVE and NICE_TO_HAVE contain:
-- **inference_strategies**: list of items, each with:
-  - "strategy": the inference strategy
-  - "reasoning": why
+MUST_HAVE and NICE_TO_HAVE are each a list of items with:
+- "strategy": the inference strategy
+- "reasoning": why
 """
 
 
