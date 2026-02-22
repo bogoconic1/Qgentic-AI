@@ -38,12 +38,3 @@ class RedFlagsResponse(BaseModel):
     log_issues: str
     web_search_findings: str
     final_summary: str
-
-
-class CodeGeneration(BaseModel):
-    """Schema for generating training code in folder structure.
-
-    The train_py field should contain the complete training script.
-    """
-    reasoning: str
-    train_py: str

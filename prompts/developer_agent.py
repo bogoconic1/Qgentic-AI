@@ -106,7 +106,7 @@ def build_system(
 
 Return a single Python script within ```python backticks.
 
-Start the file with a docstring containing a 3-7 bullet point checklist of your approach.
+Start the file with a docstring containing your reasoning and approach.
 
 ### Required Artifacts
 The script must save these files to the paths specified in the user prompt:
