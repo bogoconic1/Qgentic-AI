@@ -8,6 +8,7 @@ llm:
   starter_model: "gemini-3.1-pro-preview"
   leakage_review_model: "gemini-3.1-pro-preview"
   finetuned_code_api_model: "gemini-3.1-pro-preview"
+  library_investigator_model: "gemini-3.1-pro-preview"
 runtime:
   researcher_max_steps: 512
   llm_max_retries: 5
@@ -31,6 +32,7 @@ runtime:
   use_validation_score: true  # If true, use validation score from logs instead of MLE-bench grading (faster, no ground truth needed)
   is_lower_better: false  # Metric direction: true if lower scores are better (e.g. MSE), false if higher is better (e.g. R²)
   gold_threshold: null  # Target score to reach (null = no target)
+  library_investigator_max_steps: 15
 paths:
   task_root: "task"
   outputs_dirname: "outputs"

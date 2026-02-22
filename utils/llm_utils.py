@@ -165,3 +165,112 @@ def get_monitor_tools():
             },
         )
     ]
+
+
+# ---------------------------------------------------------------------------
+# Library investigator tools (read-only, scoped to site-packages)
+# ---------------------------------------------------------------------------
+
+
+def get_library_investigator_tools():
+    """Get tools for the library investigator sub-agent.
+
+    Four read-only tools scoped to the venv's site-packages directory.
+    """
+    return [
+        types.FunctionDeclaration(
+            name="list_packages",
+            description="List all installed Python packages in the virtual environment's site-packages directory. Returns package directory names (excludes dist-info, egg-info, and private directories).",
+            parameters_json_schema={
+                "type": "object",
+                "properties": {},
+            },
+        ),
+        types.FunctionDeclaration(
+            name="read_file",
+            description="Read a Python source file from site-packages. Path is relative to site-packages (e.g., 'transformers/trainer.py'). Returns numbered lines. Files over 300 lines are truncated unless start_line/end_line are specified.",
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "File path relative to site-packages (e.g., 'trl/trainer/sft_trainer.py')",
+                    },
+                    "start_line": {
+                        "type": "integer",
+                        "description": "Start line number (1-indexed). Optional.",
+                    },
+                    "end_line": {
+                        "type": "integer",
+                        "description": "End line number (1-indexed, inclusive). Optional.",
+                    },
+                },
+                "required": ["path"],
+            },
+        ),
+        types.FunctionDeclaration(
+            name="glob_files",
+            description="Find files matching a glob pattern within a package directory. For example, glob_files('transformers', '**/*trainer*.py') finds all trainer-related files.",
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "package": {
+                        "type": "string",
+                        "description": "Package directory name (e.g., 'transformers', 'trl')",
+                    },
+                    "pattern": {
+                        "type": "string",
+                        "description": "Glob pattern (e.g., '**/*.py', '**/sft*.py')",
+                    },
+                },
+                "required": ["package", "pattern"],
+            },
+        ),
+        types.FunctionDeclaration(
+            name="grep_code",
+            description="Search for a regex pattern in Python source files within a package. Returns matching lines with file paths and line numbers.",
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "package": {
+                        "type": "string",
+                        "description": "Package directory name (e.g., 'transformers', 'xgboost')",
+                    },
+                    "pattern": {
+                        "type": "string",
+                        "description": "Regular expression pattern to search for (e.g., 'class SFTTrainer', 'def forward')",
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Maximum number of matching lines to return (default: 20)",
+                    },
+                },
+                "required": ["package", "pattern"],
+            },
+        ),
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Developer tools (investigate_library for code generation)
+# ---------------------------------------------------------------------------
+
+
+def get_developer_tools():
+    """Get tools available to the DeveloperAgent during code generation."""
+    return [
+        types.FunctionDeclaration(
+            name="investigate_library",
+            description="Investigate the actual source code of an installed Python library to understand its API before writing code. A sub-agent will explore the library's source files in site-packages and return accurate constructor signatures, method signatures, and usage patterns. Use this when you need to understand how to use a library correctly.",
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Natural language query describing what you need to understand (e.g., 'How to use trl SFTTrainer with a Qwen3-4B model, including SFTConfig and data formatting')",
+                    }
+                },
+                "required": ["query"],
+            },
+        ),
+    ]

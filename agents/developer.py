@@ -22,7 +22,9 @@ from tools.developer import (
 )
 from utils.guardrails import evaluate_guardrails, build_block_summary
 from tools.helpers import call_llm, _build_directory_listing
-from utils.llm_utils import append_message
+from google.genai import types
+from tools.library_investigator import investigate_library
+from utils.llm_utils import append_message, get_developer_tools
 from utils.checkpoint import (
     create_db as _create_checkpoint_db,
     save_checkpoint,
@@ -320,6 +322,10 @@ class DeveloperAgent:
     ) -> tuple[list[dict], str, int | None]:
         """Generate code via markdown-fenced output.
 
+        The model can call investigate_library to read installed package source
+        code before producing its final code output. Up to 3 tool rounds are
+        allowed before the model must emit code.
+
         Returns:
             Tuple of (message_history, train_py_code, input_tokens)
         """
@@ -327,28 +333,84 @@ class DeveloperAgent:
             "Requesting code generation from model for iteration %s", self.iteration
         )
 
-        response, input_tokens = call_llm(
-            model=_DEVELOPER_MODEL,
-            system_instruction=instructions,
-            messages=messages,
-            enable_google_search=True,
-            include_usage=True,
-        )
+        tools = get_developer_tools()
+        max_tool_steps = 3
+        input_tokens = None
 
-        self.logger.info("Model response received for iteration %s", self.iteration)
+        for step in range(max_tool_steps + 1):
+            is_last_step = step == max_tool_steps
 
-        raw_content = response.text
-        code = extract_python_code(raw_content)
-        if not code:
-            raise ValueError("No ```python code block found in model response")
+            response, step_tokens = call_llm(
+                model=_DEVELOPER_MODEL,
+                system_instruction=instructions,
+                messages=messages,
+                function_declarations=tools if not is_last_step else [],
+                enable_google_search=True,
+                include_usage=True,
+            )
+            input_tokens = step_tokens
 
-        content = f"```python\n{code}\n```"
-        output = [append_message("assistant", content)]
+            parts = response.candidates[0].content.parts
+            has_function_calls = any(
+                part.function_call
+                for part in parts
+                if hasattr(part, "function_call")
+            )
 
-        if input_tokens:
-            self.logger.info("API call used %d input tokens", input_tokens)
+            if not has_function_calls:
+                self.logger.info(
+                    "Model response received for iteration %s (step %d)",
+                    self.iteration,
+                    step + 1,
+                )
+                raw_content = response.text
+                code = extract_python_code(raw_content)
+                if not code:
+                    raise ValueError(
+                        "No ```python code block found in model response"
+                    )
 
-        return output, code, input_tokens
+                content = f"```python\n{code}\n```"
+                output = [append_message("assistant", content)]
+
+                if input_tokens:
+                    self.logger.info("API call used %d input tokens", input_tokens)
+
+                return output, code, input_tokens
+
+            # Execute tool calls (investigate_library)
+            function_responses = []
+            for part in parts:
+                if hasattr(part, "function_call") and part.function_call:
+                    result_str = self._execute_developer_tool_call(
+                        part.function_call
+                    )
+                    function_responses.append(
+                        types.Part.from_function_response(
+                            name=part.function_call.name,
+                            response={"result": result_str},
+                        )
+                    )
+
+            messages.append(response.candidates[0].content)
+            if function_responses:
+                messages.append(
+                    types.Content(role="function", parts=function_responses)
+                )
+
+        # Should not reach here (last step has no tools so model must produce text)
+        raise RuntimeError("Code generation exhausted tool steps without producing code")
+
+    def _execute_developer_tool_call(self, function_call) -> str:
+        """Dispatch a tool call made during code generation."""
+        args = dict(function_call.args)
+
+        if function_call.name == "investigate_library":
+            query = args["query"]
+            self.logger.info("investigate_library called: %s", query[:100])
+            return investigate_library(query)
+
+        return json.dumps({"error": f"Unknown tool: {function_call.name}"})
 
     def _postprocess_code(self, code: str) -> tuple[str, int]:
         """Insert resource allocation and BASE_DIR setup at the top of generated code.
