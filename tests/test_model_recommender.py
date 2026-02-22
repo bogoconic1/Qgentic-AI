@@ -25,7 +25,6 @@ def patch_llm_calls(monkeypatch):
             HyperparameterItem,
             ArchitectureItem,
             InferenceStrategyRecommendations,
-            InferenceStrategySection,
             InferenceStrategyItem,
             ModelSelection,
             PreprocessingRecommendations,
@@ -77,22 +76,18 @@ def patch_llm_calls(monkeypatch):
                 )
             elif text_format.__name__ == "InferenceStrategyRecommendations":
                 return text_format(
-                    MUST_HAVE=InferenceStrategySection(
-                        inference_strategies=[
-                            InferenceStrategyItem(
-                                strategy="Test-time augmentation",
-                                reasoning="Improves robustness",
-                            )
-                        ]
-                    ),
-                    NICE_TO_HAVE=InferenceStrategySection(
-                        inference_strategies=[
-                            InferenceStrategyItem(
-                                strategy="Ensemble voting",
-                                reasoning="Better predictions",
-                            )
-                        ]
-                    ),
+                    MUST_HAVE=[
+                        InferenceStrategyItem(
+                            strategy="Test-time augmentation",
+                            reasoning="Improves robustness",
+                        )
+                    ],
+                    NICE_TO_HAVE=[
+                        InferenceStrategyItem(
+                            strategy="Ensemble voting",
+                            reasoning="Better predictions",
+                        )
+                    ],
                 )
             elif text_format.__name__ == "PreprocessingRecommendations":
                 return text_format(

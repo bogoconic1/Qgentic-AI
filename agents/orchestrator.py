@@ -327,20 +327,12 @@ def _extract_now_recommendations(recommendations: dict) -> dict:
         "MUST_HAVE": recommendations["loss_function"]["MUST_HAVE"]
     }
 
-    now_section = recommendations["hyperparameters"]["MUST_HAVE"]
     now_only["hyperparameters"] = {
-        "MUST_HAVE": {
-            "hyperparameters": now_section["hyperparameters"],
-            "architectures": now_section["architectures"],
-        }
+        "MUST_HAVE": recommendations["hyperparameters"]["MUST_HAVE"]
     }
 
     now_only["inference_strategies"] = {
-        "MUST_HAVE": {
-            "inference_strategies": recommendations["inference_strategies"][
-                "MUST_HAVE"
-            ]["inference_strategies"]
-        }
+        "MUST_HAVE": recommendations["inference_strategies"]["MUST_HAVE"]
     }
 
     return now_only
@@ -365,20 +357,12 @@ def _extract_later_recommendations(recommendations: dict) -> dict:
         "NICE_TO_HAVE": recommendations["loss_function"]["NICE_TO_HAVE"]
     }
 
-    later_section = recommendations["hyperparameters"]["NICE_TO_HAVE"]
     later_only["hyperparameters"] = {
-        "NICE_TO_HAVE": {
-            "hyperparameters": later_section["hyperparameters"],
-            "architectures": later_section["architectures"],
-        }
+        "NICE_TO_HAVE": recommendations["hyperparameters"]["NICE_TO_HAVE"]
     }
 
     later_only["inference_strategies"] = {
-        "NICE_TO_HAVE": {
-            "inference_strategies": recommendations["inference_strategies"][
-                "NICE_TO_HAVE"
-            ]["inference_strategies"]
-        }
+        "NICE_TO_HAVE": recommendations["inference_strategies"]["NICE_TO_HAVE"]
     }
 
     return later_only
@@ -396,31 +380,31 @@ def _format_recommendations_for_developer(recommendations: dict) -> str:
     if preprocessing:
         details.append("## Preprocessing Strategies")
         for category, content in preprocessing.items():
-            now_items = content["MUST_HAVE"]
+            strategies = content["MUST_HAVE"]
             details.append(f"\n### {category.replace('_', ' ').title()}")
-            for item in now_items:
+            for item in strategies:
                 details.append(f"- {item['strategy']}: {item['reasoning']}")
 
-    now_loss = recommendations["loss_function"]["MUST_HAVE"]
-    if now_loss["loss_function"]:
+    loss = recommendations["loss_function"]["MUST_HAVE"]
+    if loss["loss_function"]:
         details.append("\n## Loss Function")
-        details.append(f"- Use {now_loss['loss_function']}: {now_loss['reasoning']}")
+        details.append(f"- Use {loss['loss_function']}: {loss['reasoning']}")
 
-    now_section = recommendations["hyperparameters"]["MUST_HAVE"]
-    if now_section["hyperparameters"]:
+    hyperparams = recommendations["hyperparameters"]["MUST_HAVE"]
+    if hyperparams["hyperparameters"]:
         details.append("\n## Hyperparameters")
-        for item in now_section["hyperparameters"]:
+        for item in hyperparams["hyperparameters"]:
             details.append(f"- {item['hyperparameter']}: {item['reasoning']}")
 
-    if now_section["architectures"]:
+    if hyperparams["architectures"]:
         details.append("\n### Architecture Recommendations")
-        for item in now_section["architectures"]:
+        for item in hyperparams["architectures"]:
             details.append(f"- {item['architecture']}: {item['reasoning']}")
 
-    inf_section = recommendations["inference_strategies"]["MUST_HAVE"]
-    if inf_section["inference_strategies"]:
+    inference = recommendations["inference_strategies"]["MUST_HAVE"]
+    if inference:
         details.append("\n## Inference Strategies")
-        for item in inf_section["inference_strategies"]:
+        for item in inference:
             details.append(f"- {item['strategy']}: {item['reasoning']}")
 
     return "\n".join(details) if details else "No specific recommendations available."
