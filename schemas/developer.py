@@ -16,8 +16,8 @@ class SOTAResponse(BaseModel):
     red_flags_summary: str
     shared_experiences_summary: str
     research_summary: str
-    blacklist_reasoning: str
     blacklist: bool
+    blacklist_reasoning: str
     suggestion_reasoning: str
     suggestion: str
     suggestion_code: str

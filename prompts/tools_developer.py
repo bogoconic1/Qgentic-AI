@@ -137,8 +137,8 @@ Make exactly THREE suggestions from different categories. Each should be high-im
     - If none: "No shared experiments yet."
 - Research and Suggestion (three numbered, one per category)
 - Previous Suggestion Review and New Suggestion:
-  - `blacklist_reasoning`: Justification for blacklisting previous suggestion
   - `blacklist`: Boolean — should previous suggestion be blacklisted?
+  - `blacklist_reasoning`: Justification for blacklisting previous suggestion
   - `suggestion_reasoning`: Why this is the best choice now
   - `suggestion`: Best next idea (or "No suggestions." if none viable)
   - `suggestion_code`: Complete Python code implementing the suggestion (or empty string)
