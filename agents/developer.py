@@ -382,10 +382,10 @@ class DeveloperAgent:
                         )
                     )
 
-            messages.append(response.candidates[0].content)
+            messages.append(response.candidates[0].content.model_dump(mode="json", exclude_none=True))
             if function_responses:
                 messages.append(
-                    types.Content(role="function", parts=function_responses)
+                    types.Content(role="function", parts=function_responses).model_dump(mode="json", exclude_none=True)
                 )
 
         # Should not reach here (last step has no tools so model must produce text)
@@ -1634,14 +1634,9 @@ Fix the error. Write logs to {next_log_path} and save all required artifacts to 
             ) = self._evaluate_submission(code_clean, version, attempt)
 
             # Checkpoint after step 5 (before feedback)
-            try:
-                self._save_checkpoint(
-                    version, input_list, last_input_tokens, sota_suggestions_call_id
-                )
-            except Exception as exc:
-                self.logger.exception(
-                    "Failed to save checkpoint for v%s: %s", version, exc
-                )
+            self._save_checkpoint(
+                version, input_list, last_input_tokens, sota_suggestions_call_id
+            )
 
             # Step 6: Gather feedback and build next instruction
             sota_suggestions_call_id, should_break = (
