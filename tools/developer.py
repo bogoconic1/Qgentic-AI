@@ -688,7 +688,6 @@ def _execute_monitor_tool_call(item) -> str:
         raise ValueError(f"Unknown monitor tool: {item.name}")
 
 
-@weave.op()
 def monitor_logs(
     log_output: str,
     seconds_since_last_output: float,
