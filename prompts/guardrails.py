@@ -12,7 +12,13 @@ def leakage_review() -> str:
   - Introducing data leaks via merges or aggregations that incorporate information from the test set or from the future.
 - For each issue found, point to the relevant code snippet or describe the problematic portion. Provide a succinct rationale for why it is risky, along with a suggested fix.
 
-**NOTE:** Loading external files SHOULD NOT be flagged as leakage!
+**IMPORTANT — What is NOT leakage:**
+- Loading external files (CSVs, pretrained models, auxiliary datasets) is NOT leakage.
+- Training on data that naturally overlaps with the test set is NOT leakage. Many real-world datasets contain repeated or formulaic entries (e.g., legal boilerplate, scientific templates, historical records). The same content appearing in both train and test splits is a property of the data distribution, not a pipeline bug.
+- Using the test set's input features (without labels) for inference or to define the prediction target format is NOT leakage.
+- Do NOT recommend removing training examples solely because they overlap with test inputs. Removing legitimate training data degrades model performance without fixing any real contamination.
+
+**Only flag leakage when the pipeline structurally allows test labels or test-derived statistics to influence training.** A model learning from repeated patterns in the training data is learning, not cheating.
 
 After analyzing the script, validate your findings in 1-2 lines: confirm each detection meets your objectives and that suggested mitigations are appropriate.
 
