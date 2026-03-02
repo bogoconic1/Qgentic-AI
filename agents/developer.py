@@ -1579,9 +1579,19 @@ Fix the error. Write logs to {next_log_path} and save all required artifacts to 
             self.logger.info("Attempt %s (time left ~%.1f min)", attempt, minutes_left)
             version = attempt
 
-            response_output, train_py, last_input_tokens = self._generate_code(
-                instructions=system_prompt, messages=input_list
-            )
+            try:
+                response_output, train_py, last_input_tokens = self._generate_code(
+                    instructions=system_prompt, messages=input_list
+                )
+            except (ValueError, RuntimeError) as e:
+                self.logger.warning(
+                    "Code generation failed (attempt %s): %s", attempt, e
+                )
+                input_list.append(
+                    append_message("user", "Your previous response did not contain a ```python code block. Please provide your complete solution inside a single ```python ... ``` fenced block.")
+                )
+                continue
+
             input_list += response_output
 
             version_folder = self._write_code(train_py, version)
