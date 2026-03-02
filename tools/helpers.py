@@ -34,15 +34,38 @@ def _is_non_retryable_http_status(exc):
     return False
 
 
+_503_POLL_INTERVAL = 300  # 5 minutes
+
+
+def _is_503_unavailable(exc):
+    if isinstance(exc, genai_errors.ServerError) and exc.code == 503:
+        return True
+    if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 503:
+        return True
+    return False
+
+
 def _retry_with_backoff(func, *, max_retries, backoff_sequence):
     last_exception = None
+    attempt = 0
 
-    for attempt in range(max_retries + 1):
+    while attempt <= max_retries:
         try:
             return func()
         except RETRYABLE_EXCEPTIONS as e:
             if _is_non_retryable_http_status(e):
                 raise
+
+            if _is_503_unavailable(e):
+                logging.warning(
+                    "503 Unavailable (attempt %d): %s. Polling again in %ds...",
+                    attempt + 1,
+                    str(e),
+                    _503_POLL_INTERVAL,
+                )
+                time.sleep(_503_POLL_INTERVAL)
+                continue
+
             last_exception = e
             if attempt < max_retries:
                 backoff = backoff_sequence[min(attempt, len(backoff_sequence) - 1)]
@@ -62,6 +85,7 @@ def _retry_with_backoff(func, *, max_retries, backoff_sequence):
                     type(e).__name__,
                     str(e),
                 )
+            attempt += 1
         except Exception as e:
             logging.error("Non-retryable error: %s: %s", type(e).__name__, str(e))
             raise
