@@ -1,0 +1,438 @@
+[
+  {
+    "deprecated_api": "Xt",
+    "context": "as parameter to inverse_transform methods in cluster.FeatureAgglomeration, decomposition.MiniBatchNMF, decomposition.NMF, model_selection.GridSearchCV, model_selection.RandomizedSearchCV, pipeline.Pipeline, preprocessing.KBinsDiscretizer",
+    "version": "1.5.0",
+    "reason": "Standardized input name to X; Xt will be removed in 1.7",
+    "replacement": "X",
+    "category": "parameter",
+    "severity": "warning",
+    "deprecated_code": "from sklearn.preprocessing import KBinsDiscretizer\nimport numpy as np\n\nX = np.array([[1, 2, 6], [4, 5, 9], [7, 8, 12]])\ndiscretizer = KBinsDiscretizer(n_bins=3, encode='ordinal', strategy='uniform')\nX_binned = discretizer.fit_transform(X)\n# Deprecated usage: passing 'Xt' as parameter name\ndiscretizer.inverse_transform(Xt=X_binned)",
+    "corrected_code": "from sklearn.preprocessing import KBinsDiscretizer\nimport numpy as np\n\nX = np.array([[1, 2, 6], [4, 5, 9], [7, 8, 12]])\ndiscretizer = KBinsDiscretizer(n_bins=3, encode='ordinal', strategy='uniform')\nX_binned = discretizer.fit_transform(X)\n# Correct usage: passing 'X' as parameter name\ndiscretizer.inverse_transform(X=X_binned)",
+    "change_description": "The parameter name 'Xt' in the inverse_transform method is deprecated and should be replaced with 'X'. This standardizes the input parameter name across scikit-learn. Update all calls to inverse_transform to use 'X' instead of 'Xt'."
+  },
+  {
+    "deprecated_api": "Y",
+    "context": "as parameter to fit, transform, and inverse_transform methods in cross_decomposition.PLSRegression, cross_decomposition.PLSCanonical, cross_decomposition.CCA; fit and transform in cross_decomposition.PLSSVD",
+    "version": "1.5.0",
+    "reason": "Standardized parameter name to y; Y will be removed in 1.7",
+    "replacement": "y",
+    "category": "parameter",
+    "severity": "warning",
+    "deprecated_code": "from sklearn.cross_decomposition import PLSRegression\nimport numpy as np\n\nX = np.random.rand(100, 10)\nY = np.random.rand(100, 2)\n\npls = PLSRegression(n_components=2)\npls.fit(X, Y=Y)\nT = pls.transform(X, Y=Y)\nX_inv = pls.inverse_transform(T, Y=Y)\n",
+    "corrected_code": "from sklearn.cross_decomposition import PLSRegression\nimport numpy as np\n\nX = np.random.rand(100, 10)\ny = np.random.rand(100, 2)\n\npls = PLSRegression(n_components=2)\npls.fit(X, y=y)\nT = pls.transform(X, y=y)\nX_inv = pls.inverse_transform(T, y=y)\n",
+    "change_description": "The parameter name 'Y' used in fit, transform, and inverse_transform methods has been replaced with 'y' to standardize the API. The old 'Y' parameter is deprecated and will be removed in version 1.7."
+  },
+  {
+    "deprecated_api": "multi_class",
+    "context": "in LogisticRegression and LogisticRegressionCV",
+    "version": "1.5.0",
+    "reason": "Parameter will be removed in 1.8; multinomial will always be used for 3+ classes",
+    "replacement": "OneVsRestClassifier(LogisticRegression(...)) for one-vs-rest scheme",
+    "category": "parameter",
+    "severity": "warning",
+    "deprecated_code": "",
+    "corrected_code": "",
+    "change_description": ""
+  },
+  {
+    "deprecated_api": "average",
+    "context": "as value 0 in PassiveAggressiveClassifier, PassiveAggressiveRegressor, SGDClassifier, SGDRegressor, SGDOneClassSVM",
+    "version": "1.5.0",
+    "reason": "Passing average=0 to disable averaging is deprecated; use average=False instead",
+    "replacement": "average=False",
+    "category": "value",
+    "severity": "warning",
+    "deprecated_code": "from sklearn.linear_model import SGDClassifier\nfrom sklearn.datasets import make_classification\n\nX, y = make_classification(n_samples=100, n_features=20, random_state=42)\n\nclf = SGDClassifier(average=0, random_state=42)\nclf.fit(X, y)\nprint(clf.score(X, y))",
+    "corrected_code": "from sklearn.linear_model import SGDClassifier\nfrom sklearn.datasets import make_classification\n\nX, y = make_classification(n_samples=100, n_features=20, random_state=42)\n\nclf = SGDClassifier(average=False, random_state=42)\nclf.fit(X, y)\nprint(clf.score(X, y))",
+    "change_description": "The deprecated code disables averaging by passing average=0 to SGDClassifier. In scikit-learn 1.5.0 and later, this usage is deprecated. The corrected code disables averaging by passing average=False instead."
+  },
+  {
+    "deprecated_api": "store_cv_values",
+    "context": "in RidgeCV and RidgeClassifierCV",
+    "version": "1.5.0",
+    "reason": "Deprecated in favor of store_cv_results",
+    "replacement": "store_cv_results",
+    "category": "parameter",
+    "severity": "warning",
+    "deprecated_code": "from sklearn.linear_model import RidgeCV\nfrom sklearn.datasets import make_regression\n\nX, y = make_regression(n_samples=100, n_features=2, noise=0.1, random_state=42)\n\nridge_cv = RidgeCV(alphas=[0.1, 1.0, 10.0], store_cv_values=True)\nridge_cv.fit(X, y)\ncv_values = ridge_cv.cv_values_",
+    "corrected_code": "from sklearn.linear_model import RidgeCV\nfrom sklearn.datasets import make_regression\n\nX, y = make_regression(n_samples=100, n_features=2, noise=0.1, random_state=42)\n\nridge_cv = RidgeCV(alphas=[0.1, 1.0, 10.0], store_cv_results=True)\nridge_cv.fit(X, y)\ncv_results = ridge_cv.cv_results_",
+    "change_description": "The parameter 'store_cv_values' in RidgeCV is deprecated as of scikit-learn 1.5.0. Use 'store_cv_results' instead. Also, access cross-validation results via the 'cv_results_' attribute rather than 'cv_values_'."
+  },
+  {
+    "deprecated_api": "cv_values_",
+    "context": "in RidgeCV and RidgeClassifierCV",
+    "version": "1.5.0",
+    "reason": "Deprecated in favor of cv_results_",
+    "replacement": "cv_results_",
+    "category": "attribute",
+    "severity": "warning",
+    "deprecated_code": "from sklearn.linear_model import RidgeCV\nfrom sklearn.datasets import make_regression\n\nX, y = make_regression(n_samples=100, n_features=2, noise=0.1, random_state=42)\n\nridge_cv = RidgeCV(alphas=[0.1, 1.0, 10.0], store_cv_values=True)\nridge_cv.fit(X, y)\n\n# Deprecated usage: accessing cv_values_\ncv_values = ridge_cv.cv_values_\nprint(cv_values.shape)",
+    "corrected_code": "from sklearn.linear_model import RidgeCV\nfrom sklearn.datasets import make_regression\n\nX, y = make_regression(n_samples=100, n_features=2, noise=0.1, random_state=42)\n\nridge_cv = RidgeCV(alphas=[0.1, 1.0, 10.0], store_cv_values=True)\nridge_cv.fit(X, y)\n\n# Correct usage: accessing cv_results_ instead of cv_values_\ncv_results = ridge_cv.cv_results_\nprint(cv_results['mean_test_score'])",
+    "change_description": "The attribute 'cv_values_' is deprecated as of scikit-learn 1.5.0. You should use the 'cv_results_' attribute instead, which provides cross-validation results in a dictionary format. Replace any usage of 'cv_values_' with 'cv_results_'."
+  },
+  {
+    "deprecated_api": "n_iter",
+    "context": "in manifold.TSNE",
+    "version": "1.5.0",
+    "reason": "Deprecates n_iter in favor of max_iter; n_iter will be removed in 1.7",
+    "replacement": "max_iter",
+    "category": "parameter",
+    "severity": "warning",
+    "deprecated_code": "from sklearn.manifold import TSNE\nimport numpy as np\n\nX = np.random.rand(100, 5)\ntsne = TSNE(n_components=2, n_iter=500, random_state=42)\nX_embedded = tsne.fit_transform(X)\nprint(X_embedded.shape)",
+    "corrected_code": "from sklearn.manifold import TSNE\nimport numpy as np\n\nX = np.random.rand(100, 5)\ntsne = TSNE(n_components=2, max_iter=500, random_state=42)\nX_embedded = tsne.fit_transform(X)\nprint(X_embedded.shape)",
+    "change_description": "The parameter 'n_iter' in TSNE is deprecated as of scikit-learn 1.5.0. It should be replaced with 'max_iter', which serves the same purpose of specifying the number of optimization iterations. The corrected code uses 'max_iter' instead of 'n_iter'."
+  },
+  {
+    "deprecated_api": "probas_pred",
+    "context": "as keyword argument to metrics.precision_recall_curve",
+    "version": "1.5.0",
+    "reason": "Deprecated in favor of y_score; will be removed in 1.7",
+    "replacement": "y_score",
+    "category": "parameter",
+    "severity": "warning",
+    "deprecated_code": "from sklearn.metrics import precision_recall_curve\nimport numpy as np\n\ny_true = np.array([0, 1, 1, 0, 1])\nprobas = np.array([0.2, 0.8, 0.6, 0.3, 0.9])\n\nprecision, recall, thresholds = precision_recall_curve(y_true, probas_pred=probas)\nprint(precision, recall, thresholds)",
+    "corrected_code": "from sklearn.metrics import precision_recall_curve\nimport numpy as np\n\ny_true = np.array([0, 1, 1, 0, 1])\nprobas = np.array([0.2, 0.8, 0.6, 0.3, 0.9])\n\nprecision, recall, thresholds = precision_recall_curve(y_true, y_score=probas)\nprint(precision, recall, thresholds)",
+    "change_description": "The keyword argument 'probas_pred' in precision_recall_curve is deprecated. Replace 'probas_pred=probas' with 'y_score=probas' to use the supported parameter."
+  },
+  {
+    "deprecated_api": "y_prob",
+    "context": "as keyword argument to metrics.brier_score_loss",
+    "version": "1.5.0",
+    "reason": "Deprecated in favor of y_proba; will be removed in 1.7",
+    "replacement": "y_proba",
+    "category": "parameter",
+    "severity": "warning",
+    "deprecated_code": "",
+    "corrected_code": "",
+    "change_description": ""
+  },
+  {
+    "deprecated_api": "IS_PYPY",
+    "context": "in sklearn.utils",
+    "version": "1.5.0",
+    "reason": "Attribute is deprecated and will be removed in 1.7",
+    "replacement": "",
+    "category": "attribute",
+    "severity": "warning",
+    "deprecated_code": "from sklearn.utils import IS_PYPY\n\nif IS_PYPY:\n    print(\"Running on PyPy, using alternative implementation.\")\nelse:\n    print(\"Running on CPython, using default implementation.\")",
+    "corrected_code": "import platform\n\nif platform.python_implementation() == \"PyPy\":\n    print(\"Running on PyPy, using alternative implementation.\")\nelse:\n    print(\"Running on CPython, using default implementation.\")",
+    "change_description": "The deprecated 'IS_PYPY' attribute from 'sklearn.utils' was removed. Instead, use 'platform.python_implementation() == \"PyPy\"' to check if the Python interpreter is PyPy."
+  },
+  {
+    "deprecated_api": "tosequence",
+    "context": "in sklearn.utils",
+    "version": "1.5.0",
+    "reason": "Function is deprecated and will be removed in 1.7",
+    "replacement": "",
+    "category": "function",
+    "severity": "warning",
+    "deprecated_code": "from sklearn.utils import tosequence\n\narr = [1, 2, 3]\nseq = tosequence(arr)\nprint(seq)\n",
+    "corrected_code": "arr = [1, 2, 3]\nseq = tuple(arr)\nprint(seq)\n",
+    "change_description": "The deprecated 'tosequence' function from 'sklearn.utils' was removed. Instead, use the built-in 'tuple()' function to convert an iterable to a sequence (tuple)."
+  },
+  {
+    "deprecated_api": "parallel_backend",
+    "context": "in sklearn.utils",
+    "version": "1.5.0",
+    "reason": "Deprecated; use joblib.parallel_backend instead",
+    "replacement": "joblib.parallel_backend",
+    "category": "function",
+    "severity": "warning",
+    "deprecated_code": "from sklearn.utils import parallel_backend\nfrom sklearn.ensemble import RandomForestClassifier\nfrom sklearn.datasets import make_classification\n\nX, y = make_classification(n_samples=1000, n_features=20)\nclf = RandomForestClassifier(n_estimators=10, n_jobs=-1)\n\nwith parallel_backend('threading'):\n    clf.fit(X, y)",
+    "corrected_code": "from joblib import parallel_backend\nfrom sklearn.ensemble import RandomForestClassifier\nfrom sklearn.datasets import make_classification\n\nX, y = make_classification(n_samples=1000, n_features=20)\nclf = RandomForestClassifier(n_estimators=10, n_jobs=-1)\n\nwith parallel_backend('threading'):\n    clf.fit(X, y)",
+    "change_description": "The code previously imported and used 'parallel_backend' from 'sklearn.utils', which is deprecated as of scikit-learn 1.5.0. The corrected code imports 'parallel_backend' from 'joblib', as recommended."
+  },
+  {
+    "deprecated_api": "register_parallel_backend",
+    "context": "in sklearn.utils",
+    "version": "1.5.0",
+    "reason": "Deprecated; use joblib.register_parallel_backend instead",
+    "replacement": "joblib.register_parallel_backend",
+    "category": "function",
+    "severity": "warning",
+    "deprecated_code": "from sklearn.utils import register_parallel_backend\n\ndef my_backend():\n    pass  # Custom backend implementation\n\nregister_parallel_backend('my_backend', my_backend)\n",
+    "corrected_code": "from joblib import register_parallel_backend\n\ndef my_backend():\n    pass  # Custom backend implementation\n\nregister_parallel_backend('my_backend', my_backend)\n",
+    "change_description": "The deprecated code imports and uses 'register_parallel_backend' from 'sklearn.utils'. In scikit-learn 1.5.0, this function is deprecated. The corrected code imports and uses 'register_parallel_backend' from 'joblib', as recommended."
+  },
+  {
+    "deprecated_api": "labels",
+    "context": "as bytes in classifiers and classification metrics",
+    "version": "1.5.0",
+    "reason": "Labels encoded as bytes is deprecated and will raise an error in v1.7",
+    "replacement": "Use string or integer labels",
+    "category": "value",
+    "severity": "error",
+    "deprecated_code": "from sklearn.metrics import classification_report\n\ny_true = [b'cat', b'dog', b'cat', b'bird']\ny_pred = [b'cat', b'cat', b'cat', b'bird']\nlabels = [b'cat', b'dog', b'bird']\n\nreport = classification_report(y_true, y_pred, labels=labels)\nprint(report)",
+    "corrected_code": "from sklearn.metrics import classification_report\n\ny_true = ['cat', 'dog', 'cat', 'bird']\ny_pred = ['cat', 'cat', 'cat', 'bird']\nlabels = ['cat', 'dog', 'bird']\n\nreport = classification_report(y_true, y_pred, labels=labels)\nprint(report)",
+    "change_description": "The deprecated code uses byte strings (e.g., b'cat') for labels in both the data and the labels argument. The corrected code uses regular strings (e.g., 'cat') for all labels, as required by scikit-learn 1.5.0 and later."
+  },
+  {
+    "deprecated_api": "_validate_data",
+    "context": "as method of base.BaseEstimator",
+    "version": "1.6.0",
+    "reason": "Replaced by utils.validation.validate_data for third party estimator developers",
+    "replacement": "validate_data",
+    "category": "method",
+    "severity": "warning",
+    "deprecated_code": "from sklearn.base import BaseEstimator\nimport numpy as np\n\nclass MyEstimator(BaseEstimator):\n    def fit(self, X, y=None):\n        X, y = self._validate_data(X, y, ensure_2d=True, dtype=None)\n        # ... fitting logic ...\n        return self",
+    "corrected_code": "from sklearn.utils.validation import validate_data\nfrom sklearn.base import BaseEstimator\nimport numpy as np\n\nclass MyEstimator(BaseEstimator):\n    def fit(self, X, y=None):\n        X, y = validate_data(self, X, y, ensure_2d=True, dtype=None)\n        # ... fitting logic ...\n        return self",
+    "change_description": "The deprecated use of the private method '_validate_data' from BaseEstimator has been replaced with the public 'validate_data' function from 'sklearn.utils.validation'. This is the recommended approach for third-party estimator developers starting from scikit-learn 1.6.0."
+  },
+  {
+    "deprecated_api": "is_classifier",
+    "context": "passing a class object to sklearn.base.is_classifier",
+    "version": "1.6.0",
+    "reason": "Passing a class object is deprecated; pass an instance instead",
+    "replacement": "pass an instance",
+    "category": "pattern",
+    "severity": "warning",
+    "deprecated_code": "from sklearn.base import is_classifier\nfrom sklearn.ensemble import RandomForestClassifier\n\n# Deprecated: passing the class object instead of an instance\nif is_classifier(RandomForestClassifier):\n    print(\"RandomForestClassifier is a classifier.\")",
+    "corrected_code": "from sklearn.base import is_classifier\nfrom sklearn.ensemble import RandomForestClassifier\n\n# Correct: pass an instance of the class\nclf = RandomForestClassifier()\nif is_classifier(clf):\n    print(\"RandomForestClassifier is a classifier.\")",
+    "change_description": "Previously, is_classifier was called with the class object (RandomForestClassifier). This is deprecated as of scikit-learn 1.6.0. The corrected code creates an instance of the class (clf = RandomForestClassifier()) and passes the instance to is_classifier instead."
+  },
+  {
+    "deprecated_api": "is_regressor",
+    "context": "passing a class object to sklearn.base.is_regressor",
+    "version": "1.6.0",
+    "reason": "Passing a class object is deprecated; pass an instance instead",
+    "replacement": "pass an instance",
+    "category": "pattern",
+    "severity": "warning",
+    "deprecated_code": "",
+    "corrected_code": "",
+    "change_description": ""
+  },
+  {
+    "deprecated_api": "is_outlier_detector",
+    "context": "passing a class object to sklearn.base.is_outlier_detector",
+    "version": "1.6.0",
+    "reason": "Passing a class object is deprecated; pass an instance instead",
+    "replacement": "pass an instance",
+    "category": "pattern",
+    "severity": "warning",
+    "deprecated_code": "from sklearn.base import is_outlier_detector\nfrom sklearn.ensemble import IsolationForest\n\n# Deprecated: Passing the class object instead of an instance\nif is_outlier_detector(IsolationForest):\n    print(\"IsolationForest is an outlier detector.\")",
+    "corrected_code": "from sklearn.base import is_outlier_detector\nfrom sklearn.ensemble import IsolationForest\n\n# Correct: Pass an instance of the estimator\nif is_outlier_detector(IsolationForest()):\n    print(\"IsolationForest is an outlier detector.\")",
+    "change_description": "The deprecated code passes the class object (IsolationForest) to is_outlier_detector. The corrected code creates an instance of IsolationForest and passes it to is_outlier_detector, as required in scikit-learn 1.6.0 and later."
+  },
+  {
+    "deprecated_api": "cv",
+    "context": "value 'prefit' in CalibratedClassifierCV",
+    "version": "1.6.0",
+    "reason": "cv=\"prefit\" is deprecated; use FrozenEstimator instead",
+    "replacement": "FrozenEstimator",
+    "category": "value",
+    "severity": "warning",
+    "deprecated_code": "from sklearn.datasets import make_classification\nfrom sklearn.ensemble import RandomForestClassifier\nfrom sklearn.calibration import CalibratedClassifierCV\n\nX, y = make_classification(n_samples=100, n_features=20, random_state=42)\nrf = RandomForestClassifier().fit(X, y)\n# Deprecated usage: cv='prefit'\ncalibrated_clf = CalibratedClassifierCV(rf, cv='prefit')\ncalibrated_clf.fit(X, y)",
+    "corrected_code": "from sklearn.datasets import make_classification\nfrom sklearn.ensemble import RandomForestClassifier\nfrom sklearn.calibration import CalibratedClassifierCV, FrozenEstimator\n\nX, y = make_classification(n_samples=100, n_features=20, random_state=42)\nrf = RandomForestClassifier().fit(X, y)\n# Correct usage: use FrozenEstimator\ncalibrated_clf = CalibratedClassifierCV(FrozenEstimator(rf))\ncalibrated_clf.fit(X, y)",
+    "change_description": "The deprecated code uses cv='prefit' in CalibratedClassifierCV to indicate that the base estimator is already fitted. The corrected code replaces this by wrapping the fitted estimator with FrozenEstimator and omitting the cv parameter, as recommended in scikit-learn 1.6.0 and later."
+  },
+  {
+    "deprecated_api": "copy",
+    "context": "parameter in cluster.Birch",
+    "version": "1.6.0",
+    "reason": "Parameter has no effect and will be removed in 1.8",
+    "replacement": "",
+    "category": "parameter",
+    "severity": "warning",
+    "deprecated_code": "from sklearn.cluster import Birch\nimport numpy as np\n\nX = np.random.rand(100, 2)\n\n# Deprecated usage: specifying 'copy' parameter\nbirch = Birch(n_clusters=3, copy=True)\nbirch.fit(X)\nlabels = birch.labels_\nprint(labels)",
+    "corrected_code": "from sklearn.cluster import Birch\nimport numpy as np\n\nX = np.random.rand(100, 2)\n\n# Corrected usage: omit the 'copy' parameter\nbirch = Birch(n_clusters=3)\nbirch.fit(X)\nlabels = birch.labels_\nprint(labels)",
+    "change_description": "The 'copy' parameter in sklearn.cluster.Birch is deprecated as of version 1.6.0 because it has no effect. To correct the code, simply remove the 'copy' parameter from the Birch constructor."
+  },
+  {
+    "deprecated_api": "algorithm",
+    "context": "parameter in ensemble.AdaBoostClassifier",
+    "version": "1.6.0",
+    "reason": "Parameter will be removed in 1.8",
+    "replacement": "",
+    "category": "parameter",
+    "severity": "warning",
+    "deprecated_code": "from sklearn.ensemble import AdaBoostClassifier\nfrom sklearn.datasets import load_iris\nfrom sklearn.model_selection import train_test_split\n\nX, y = load_iris(return_X_y=True)\nX_train, X_test, y_train, y_test = train_test_split(X, y, random_state=42)\n\n# Deprecated usage of 'algorithm' parameter\nclf = AdaBoostClassifier(n_estimators=50, algorithm='SAMME')\nclf.fit(X_train, y_train)\nprint(clf.score(X_test, y_test))",
+    "corrected_code": "from sklearn.ensemble import AdaBoostClassifier\nfrom sklearn.datasets import load_iris\nfrom sklearn.model_selection import train_test_split\n\nX, y = load_iris(return_X_y=True)\nX_train, X_test, y_train, y_test = train_test_split(X, y, random_state=42)\n\n# Correct usage: do not specify 'algorithm', use default behavior\nclf = AdaBoostClassifier(n_estimators=50)\nclf.fit(X_train, y_train)\nprint(clf.score(X_test, y_test))",
+    "change_description": "The 'algorithm' parameter in AdaBoostClassifier is deprecated as of scikit-learn 1.6.0 and will be removed in 1.8. To update your code, simply omit the 'algorithm' parameter; the default behavior (SAMME.R) will be used."
+  },
+  {
+    "deprecated_api": "copy_X",
+    "context": "parameter in linear_model.TheilSenRegressor",
+    "version": "1.6.0",
+    "reason": "Parameter has no effect and will be removed in 1.8",
+    "replacement": "",
+    "category": "parameter",
+    "severity": "warning",
+    "deprecated_code": "from sklearn.linear_model import TheilSenRegressor\nimport numpy as np\n\nX = np.random.randn(100, 2)\ny = X @ np.array([1.5, -2.0]) + np.random.randn(100)\n\n# Deprecated usage of copy_X\nmodel = TheilSenRegressor(copy_X=True)\nmodel.fit(X, y)\nprint(model.coef_)\n",
+    "corrected_code": "from sklearn.linear_model import TheilSenRegressor\nimport numpy as np\n\nX = np.random.randn(100, 2)\ny = X @ np.array([1.5, -2.0]) + np.random.randn(100)\n\n# Corrected: omit copy_X parameter\nmodel = TheilSenRegressor()\nmodel.fit(X, y)\nprint(model.coef_)\n",
+    "change_description": "The copy_X parameter has been removed from TheilSenRegressor, as it has no effect. Simply omit the copy_X argument when constructing the estimator."
+  },
+  {
+    "deprecated_api": "base_estimator",
+    "context": "parameter in semi_supervised.SelfTrainingClassifier",
+    "version": "1.6.0",
+    "reason": "Deprecated in favor of estimator",
+    "replacement": "estimator",
+    "category": "parameter",
+    "severity": "warning",
+    "deprecated_code": "from sklearn.semi_supervised import SelfTrainingClassifier\nfrom sklearn.tree import DecisionTreeClassifier\n\n# Deprecated usage of 'base_estimator'\nclf = SelfTrainingClassifier(base_estimator=DecisionTreeClassifier())\nclf.fit([[0], [1], [2], [3]], [0, -1, 1, -1])",
+    "corrected_code": "from sklearn.semi_supervised import SelfTrainingClassifier\nfrom sklearn.tree import DecisionTreeClassifier\n\n# Correct usage with 'estimator'\nclf = SelfTrainingClassifier(estimator=DecisionTreeClassifier())\nclf.fit([[0], [1], [2], [3]], [0, -1, 1, -1])",
+    "change_description": "The parameter 'base_estimator' in SelfTrainingClassifier has been deprecated as of scikit-learn 1.6.0. Use the 'estimator' parameter instead to specify the underlying classifier."
+  },
+  {
+    "deprecated_api": "assert_all_finite",
+    "context": "parameter in utils.check_array, utils.check_X_y, utils.as_float_array, metrics.pairwise.check_pairwise_arrays, metrics.pairwise_distances",
+    "version": "1.6.0",
+    "reason": "Parameter renamed to ensure_all_finite; will be removed in 1.8",
+    "replacement": "ensure_all_finite",
+    "category": "parameter",
+    "severity": "warning",
+    "deprecated_code": "from sklearn.utils import check_array\nimport numpy as np\n\ndata = np.array([[1.0, 2.0], [3.0, np.nan]])\n# Deprecated usage: 'assert_all_finite' parameter\nchecked_data = check_array(data, assert_all_finite=False)\nprint(checked_data)",
+    "corrected_code": "from sklearn.utils import check_array\nimport numpy as np\n\ndata = np.array([[1.0, 2.0], [3.0, np.nan]])\n# Correct usage: use 'ensure_all_finite' instead\nchecked_data = check_array(data, ensure_all_finite=False)\nprint(checked_data)",
+    "change_description": "The parameter 'assert_all_finite' in check_array is deprecated and has been renamed to 'ensure_all_finite'. Replace 'assert_all_finite' with 'ensure_all_finite' to avoid deprecation warnings and ensure future compatibility."
+  },
+  {
+    "deprecated_api": "generate_only",
+    "context": "argument in utils.estimator_checks.check_estimator",
+    "version": "1.6.0",
+    "reason": "generate_only=True is deprecated; use estimator_checks_generator instead",
+    "replacement": "estimator_checks_generator",
+    "category": "parameter",
+    "severity": "warning",
+    "deprecated_code": "from sklearn.utils.estimator_checks import check_estimator\nfrom sklearn.linear_model import LogisticRegression\n\ndef test_logistic_regression():\n    # Deprecated usage: generate_only=True\n    checks = check_estimator(LogisticRegression, generate_only=True)\n    for check in checks:\n        print(check)\n",
+    "corrected_code": "from sklearn.utils.estimator_checks import estimator_checks_generator\nfrom sklearn.linear_model import LogisticRegression\n\ndef test_logistic_regression():\n    # Correct usage: use estimator_checks_generator\n    checks = estimator_checks_generator(LogisticRegression)\n    for check in checks:\n        print(check)\n",
+    "change_description": "The deprecated 'generate_only=True' argument in 'check_estimator' is replaced by directly using 'estimator_checks_generator', which yields the same checks as an iterable. This change aligns with scikit-learn 1.6.0 deprecation guidance."
+  },
+  {
+    "deprecated_api": "_xfail_checks",
+    "context": "estimator tag",
+    "version": "1.6.0",
+    "reason": "Tag is removed; use expected_failed_checks parameter instead",
+    "replacement": "expected_failed_checks",
+    "category": "attribute",
+    "severity": "warning",
+    "deprecated_code": "",
+    "corrected_code": "",
+    "change_description": ""
+  },
+  {
+    "deprecated_api": "_estimator_type",
+    "context": "using _estimator_type to set estimator type",
+    "version": "1.6.0",
+    "reason": "Deprecated; inherit from ClassifierMixin, RegressorMixin, TransformerMixin, or OutlierMixin, or set estimator_type in Tags",
+    "replacement": "inherit from appropriate mixin or set estimator_type in Tags",
+    "category": "attribute",
+    "severity": "warning",
+    "deprecated_code": "from sklearn.base import BaseEstimator\n\nclass MyClassifier(BaseEstimator):\n    _estimator_type = \"classifier\"\n    \n    def fit(self, X, y):\n        # fitting logic\n        return self\n    \n    def predict(self, X):\n        # prediction logic\n        return [0] * len(X)",
+    "corrected_code": "from sklearn.base import BaseEstimator, ClassifierMixin\n\nclass MyClassifier(BaseEstimator, ClassifierMixin):\n    def fit(self, X, y):\n        # fitting logic\n        return self\n    \n    def predict(self, X):\n        # prediction logic\n        return [0] * len(X)",
+    "change_description": "The deprecated _estimator_type attribute was removed. Instead, the class now inherits from ClassifierMixin, which properly sets the estimator type in a supported way."
+  },
+  {
+    "deprecated_api": "force_int_remainder_cols",
+    "context": "parameter in compose.ColumnTransformer and compose.make_column_transformer",
+    "version": "1.7.0",
+    "reason": "Parameter is deprecated and will be removed in 1.9; has no effect",
+    "replacement": "",
+    "category": "parameter",
+    "severity": "warning",
+    "deprecated_code": "from sklearn.compose import ColumnTransformer\nfrom sklearn.preprocessing import StandardScaler, OneHotEncoder\n\nct = ColumnTransformer(\n    transformers=[\n        ('num', StandardScaler(), ['age', 'income']),\n        ('cat', OneHotEncoder(), ['gender'])\n    ],\n    remainder='passthrough',\n    force_int_remainder_cols=True\n)\n",
+    "corrected_code": "from sklearn.compose import ColumnTransformer\nfrom sklearn.preprocessing import StandardScaler, OneHotEncoder\n\nct = ColumnTransformer(\n    transformers=[\n        ('num', StandardScaler(), ['age', 'income']),\n        ('cat', OneHotEncoder(), ['gender'])\n    ],\n    remainder='passthrough'\n)\n",
+    "change_description": "The 'force_int_remainder_cols' parameter has been removed from the ColumnTransformer constructor, as it is deprecated and has no effect. Simply omit this parameter."
+  },
+  {
+    "deprecated_api": "sparse",
+    "context": "parameter in metrics.fowlkes_mallows_score",
+    "version": "1.7.0",
+    "reason": "Parameter is deprecated and will be removed in 1.9; has no effect",
+    "replacement": "",
+    "category": "parameter",
+    "severity": "warning",
+    "deprecated_code": "",
+    "corrected_code": "",
+    "change_description": ""
+  },
+  {
+    "deprecated_api": "raise_warning",
+    "context": "parameter in metrics.class_likelihood_ratios",
+    "version": "1.7.0",
+    "reason": "Parameter is deprecated and will be removed in 1.9; UndefinedMetricWarning will always be raised",
+    "replacement": "",
+    "category": "parameter",
+    "severity": "warning",
+    "deprecated_code": "from sklearn.metrics import class_likelihood_ratios\nimport numpy as np\n\ny_true = np.array([0, 1, 1, 0])\ny_pred_proba = np.array([[0.8, 0.2], [0.3, 0.7], [0.4, 0.6], [0.9, 0.1]])\n\n# Deprecated usage: using 'raise_warning' parameter\nratios = class_likelihood_ratios(y_true, y_pred_proba, raise_warning=False)\nprint(ratios)",
+    "corrected_code": "from sklearn.metrics import class_likelihood_ratios\nimport numpy as np\n\ny_true = np.array([0, 1, 1, 0])\ny_pred_proba = np.array([[0.8, 0.2], [0.3, 0.7], [0.4, 0.6], [0.9, 0.1]])\n\n# Correct usage: simply call without 'raise_warning'\nratios = class_likelihood_ratios(y_true, y_pred_proba)\nprint(ratios)",
+    "change_description": "The 'raise_warning' parameter in 'metrics.class_likelihood_ratios' is deprecated as of scikit-learn 1.7.0 and will be removed in 1.9. The function will always raise UndefinedMetricWarning when appropriate, so you should remove the 'raise_warning' argument from your function call."
+  },
+  {
+    "deprecated_api": "y_pred",
+    "context": "argument in metrics.RocCurveDisplay.from_predictions",
+    "version": "1.7.0",
+    "reason": "Argument renamed to y_score; y_pred will be removed in 1.9",
+    "replacement": "y_score",
+    "category": "parameter",
+    "severity": "warning",
+    "deprecated_code": "import numpy as np\nfrom sklearn.metrics import RocCurveDisplay\nfrom sklearn.datasets import make_classification\nfrom sklearn.linear_model import LogisticRegression\n\nX, y = make_classification(n_samples=100, n_classes=2, random_state=42)\nclf = LogisticRegression().fit(X, y)\ny_score = clf.predict_proba(X)[:, 1]\n# Deprecated usage: using 'y_pred' instead of 'y_score'\nRocCurveDisplay.from_predictions(y_true=y, y_pred=y_score)",
+    "corrected_code": "import numpy as np\nfrom sklearn.metrics import RocCurveDisplay\nfrom sklearn.datasets import make_classification\nfrom sklearn.linear_model import LogisticRegression\n\nX, y = make_classification(n_samples=100, n_classes=2, random_state=42)\nclf = LogisticRegression().fit(X, y)\ny_score = clf.predict_proba(X)[:, 1]\n# Correct usage: use 'y_score' argument\nRocCurveDisplay.from_predictions(y_true=y, y_score=y_score)",
+    "change_description": "The argument 'y_pred' in RocCurveDisplay.from_predictions is deprecated and has been renamed to 'y_score'. Replace 'y_pred=...' with 'y_score=...' to ensure compatibility with future versions of scikit-learn."
+  },
+  {
+    "deprecated_api": "n_alphas",
+    "context": "parameter in ElasticNetCV, LassoCV, MultiTaskElasticNetCV, MultiTaskLassoCV",
+    "version": "1.7.0",
+    "reason": "Parameter is deprecated and will be removed in 1.9; use alphas instead",
+    "replacement": "alphas",
+    "category": "parameter",
+    "severity": "warning",
+    "deprecated_code": "from sklearn.linear_model import ElasticNetCV\nfrom sklearn.datasets import make_regression\n\nX, y = make_regression(n_samples=100, n_features=20, noise=0.1, random_state=42)\n\n# Deprecated usage of n_alphas\nmodel = ElasticNetCV(n_alphas=50, random_state=42)\nmodel.fit(X, y)\n",
+    "corrected_code": "from sklearn.linear_model import ElasticNetCV\nfrom sklearn.datasets import make_regression\nimport numpy as np\n\nX, y = make_regression(n_samples=100, n_features=20, noise=0.1, random_state=42)\n\n# Correct usage: specify alphas directly\nalphas = np.logspace(-4, 4, 50)\nmodel = ElasticNetCV(alphas=alphas, random_state=42)\nmodel.fit(X, y)\n",
+    "change_description": "The deprecated 'n_alphas' parameter was removed and replaced with the 'alphas' parameter, which requires explicitly specifying the array of alpha values to use for regularization path. This change is necessary because 'n_alphas' will be removed in scikit-learn 1.9."
+  },
+  {
+    "deprecated_api": "liblinear",
+    "context": "solver in LogisticRegression and LogisticRegressionCV for multiclass classification with one-vs-rest scheme",
+    "version": "1.7.0",
+    "reason": "Using liblinear solver for multiclass one-vs-rest is deprecated and will raise an error in 1.8",
+    "replacement": "Use a solver supporting multinomial loss or wrap in OneVsRestClassifier",
+    "category": "solver",
+    "severity": "error",
+    "deprecated_code": "from sklearn.linear_model import LogisticRegression\nfrom sklearn.datasets import load_iris\n\nX, y = load_iris(return_X_y=True)\n# Deprecated: Using 'liblinear' solver for multiclass classification\nclf = LogisticRegression(solver='liblinear', multi_class='ovr')\nclf.fit(X, y)\n",
+    "corrected_code": "from sklearn.linear_model import LogisticRegression\nfrom sklearn.datasets import load_iris\n\nX, y = load_iris(return_X_y=True)\n# Correct: Use a solver that supports multinomial loss, e.g., 'lbfgs'\nclf = LogisticRegression(solver='lbfgs', multi_class='ovr')\nclf.fit(X, y)\n",
+    "change_description": "The deprecated code uses the 'liblinear' solver for multiclass classification with the one-vs-rest ('ovr') scheme, which is deprecated. The corrected code switches to a solver that supports multinomial loss (such as 'lbfgs'), as recommended by scikit-learn."
+  },
+  {
+    "deprecated_api": "base_estimator",
+    "context": "parameter in multioutput.RegressorChain and multioutput.ClassifierChain",
+    "version": "1.7.0",
+    "reason": "Parameter is deprecated in favour of estimator",
+    "replacement": "estimator",
+    "category": "parameter",
+    "severity": "warning",
+    "deprecated_code": "from sklearn.multioutput import RegressorChain\nfrom sklearn.linear_model import Ridge\nfrom sklearn.datasets import make_regression\n\nX, y = make_regression(n_samples=100, n_targets=3, random_state=42)\nchain = RegressorChain(base_estimator=Ridge())\nchain.fit(X, y)\npreds = chain.predict(X)",
+    "corrected_code": "from sklearn.multioutput import RegressorChain\nfrom sklearn.linear_model import Ridge\nfrom sklearn.datasets import make_regression\n\nX, y = make_regression(n_samples=100, n_targets=3, random_state=42)\nchain = RegressorChain(estimator=Ridge())\nchain.fit(X, y)\npreds = chain.predict(X)",
+    "change_description": "The parameter 'base_estimator' in RegressorChain is deprecated as of scikit-learn 1.7.0. It should be replaced with 'estimator'. The same change applies to ClassifierChain."
+  },
+  {
+    "deprecated_api": "sparse",
+    "context": "as parameter to preprocessing.OneHotEncoder",
+    "version": "1.2.0",
+    "reason": "Parameter name is ambiguous; replaced with sparse_output for clarity",
+    "replacement": "sparse_output",
+    "category": "parameter",
+    "severity": "warning",
+    "deprecated_code": """from sklearn.preprocessing import OneHotEncoder
+import numpy as np
+
+X = np.array([['cat'], ['dog'], ['bird'], ['cat']])
+
+# Deprecated usage: using 'sparse' parameter
+encoder = OneHotEncoder(sparse=True)
+encoded = encoder.fit_transform(X)
+print(type(encoded))  # scipy.sparse matrix""",
+    "corrected_code": """from sklearn.preprocessing import OneHotEncoder
+import numpy as np
+
+X = np.array([['cat'], ['dog'], ['bird'], ['cat']])
+
+# Correct usage: using 'sparse_output' parameter
+encoder = OneHotEncoder(sparse_output=True)
+encoded = encoder.fit_transform(X)
+print(type(encoded))  # scipy.sparse matrix""",
+    "change_description": "The 'sparse' parameter in OneHotEncoder has been renamed to 'sparse_output' for better clarity. The corrected code uses 'sparse_output=True' to achieve the same functionality."
+  }
+]
