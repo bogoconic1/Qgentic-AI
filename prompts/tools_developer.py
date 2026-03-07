@@ -109,21 +109,13 @@ Each entry shows: which model tried the suggestion, what it was, score change (b
 3. **Remove detrimental components**: If component X worsened performance across models and it's in your code, remove it.
 4. **Semantic deduplication**: Don't repeat identical suggestions.
 
-**Mandatory: Plan's Validated Findings**
-- Review `<plan>` "Validated Findings" for "High Impact" A/B tested strategies
-- Compare against `<initial script>` to find which are NOT yet implemented
-- List missing findings in "Summary of Plan" section
-- Prioritize these in your recommendations
-
 ## Making Suggestions
 
 **Before generating suggestions:**
 1. Review `<plan>` "Data Understanding & Profiling" for data/schema context
 2. Review `<initial script>` for existing techniques
-3. Review `<plan>` "Validated Findings" for A/B tested successes
-4. Prioritize validated findings not yet in code
-5. Be SPECIFIC — reference concrete columns, techniques, parameters
-6. Do NOT suggest what is already present
+3. Be SPECIFIC — reference concrete columns, techniques, parameters
+4. Do NOT suggest what is already present
 
 **Categories** (select 3 most relevant):
 1. Data/Feature Engineering/Preprocessing
@@ -144,8 +136,6 @@ Make exactly THREE suggestions from different categories. Each should be high-im
 ## Output Format
 - Checklist (3-7 bullets)
 - Summary of Plan
-    - Items from "Validated Findings (High Impact)" not in code
-    - If none missing: "No high-impact validated findings missing."
 - Summary of Red Flags
 - Summary of Shared Experiments
     - If none: "No shared experiments yet."
