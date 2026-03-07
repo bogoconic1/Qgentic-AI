@@ -73,8 +73,22 @@ def red_flags_user(
 """
 
 
-def sota_system(time_limit_minutes: int = 90) -> str:
-    return f"""You receive a Kaggle competition description, researcher plans, initial script with logs, red flags, and shared experiment results.
+def sota_system(
+    time_limit_minutes: int = 90,
+    hitl_instructions: list[str] | None = None,
+) -> str:
+    hitl_section = ""
+    if hitl_instructions:
+        hitl_items = "\n".join(hitl_instructions)
+        hitl_section = f"""
+# Additional Instructions
+
+{hitl_items}
+
+---
+"""
+
+    return f"""{hitl_section}You receive a Kaggle competition description, researcher plans, initial script with logs, red flags, and shared experiment results.
 
 ## Constraints
 - Do NOT use winning solutions from this competition.

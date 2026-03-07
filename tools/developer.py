@@ -246,6 +246,7 @@ def search_sota_suggestions(
     images: list[Path] | None = None,
     train_stats: dict | None = None,
     hitl_sota: bool = False,
+    hitl_instructions: list[str] | None = None,
 ) -> str:
     """Stage 2: Use web search and tools to generate SOTA suggestions based on red flags."""
     logger.info(
@@ -314,7 +315,10 @@ def search_sota_suggestions(
 
     time_limit_minutes = int(_BASELINE_CODE_TIMEOUT / 60)
 
-    system_prompt = prompt_sota_system(time_limit_minutes=time_limit_minutes)
+    system_prompt = prompt_sota_system(
+        time_limit_minutes=time_limit_minutes,
+        hitl_instructions=hitl_instructions,
+    )
 
     user_prompt = prompt_sota_user(
         description=description,

@@ -72,9 +72,7 @@ def build_system(
 
     hitl_section = ""
     if hitl_instructions:
-        hitl_items = "\n".join(
-            [f"{i + 1}. {instr}" for i, instr in enumerate(hitl_instructions)]
-        )
+        hitl_items = "\n".join(hitl_instructions)
         hitl_section = f"""
 # Additional Instructions
 
