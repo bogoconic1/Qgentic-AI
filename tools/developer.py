@@ -286,30 +286,9 @@ def search_sota_suggestions(
             else "No shared suggestions yet."
         )
 
-    # On even attempts, strip "Validated Findings" section from plan to focus on other recommendations
-    modified_plan_content = plan_content
-    if attempt_number % 2 == 0 and plan_content:
-        validated_start = "# Validated Findings (A/B Tested)"
-        risks_start = "# Risks & Mitigations"
-
-        start_idx = plan_content.find(validated_start)
-        end_idx = plan_content.find(risks_start)
-
-        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
-            logger.info(
-                "Attempt #%d (even): Stripping 'Validated Findings' section (%d chars)",
-                attempt_number,
-                end_idx - start_idx,
-            )
-            modified_plan_content = plan_content[:start_idx] + plan_content[end_idx:]
-        else:
-            logger.warning(
-                "Could not find both section headers to strip Validated Findings"
-            )
-
     plans_section = ""
-    if modified_plan_content:
-        plans_section += f"\n<plan>\n{modified_plan_content}\n</plan>\n"
+    if plan_content:
+        plans_section += f"\n<plan>\n{plan_content}\n</plan>\n"
     if later_recommendations:
         plans_section += f"\n<suggestions>\n{later_recommendations}\n</suggestions>\n"
 
