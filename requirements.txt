@@ -30,7 +30,7 @@ bitsandbytes
 tf-keras
 sentencepiece
 wandb
-weave
+langfuse
 timm
 datasets
 tensorboard

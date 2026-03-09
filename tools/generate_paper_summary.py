@@ -1,5 +1,5 @@
 from dotenv import load_dotenv
-import weave
+from utils.observability import op
 
 from project_config import get_config
 from tools.helpers import call_llm
@@ -56,7 +56,7 @@ Second, you need to **access the paper's content** using this ID (e.g., by retri
 - Experiments/Results: Focus on quantitative data, benchmark scores, comparative gains, and key ablation findings.
 - Purpose: it must contain a brief, descriptive sentence explaining the section's function in the paper."""
 
-    @weave.op()
+    @op()
     def generate_summary(self, model_name: str, user_prompt: str | None = None) -> str:
         if user_prompt:
             prompt = user_prompt.format(model_name=model_name)

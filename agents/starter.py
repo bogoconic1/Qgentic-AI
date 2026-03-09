@@ -12,7 +12,7 @@ from prompts.starter_agent import (
     build_user as prompt_build_user,
 )
 from schemas.starter import StarterSuggestions
-import weave
+from utils.observability import op
 
 
 logger = logging.getLogger(__name__)
@@ -57,7 +57,7 @@ class StarterAgent:
             logger.addHandler(fh)
         logger.setLevel(logging.DEBUG)
 
-    @weave.op()
+    @op()
     def run(self):
         """Run the starter prompt and persist outputs; return parsed suggestions."""
         with open(self.base_dir / "description.md", "r") as f:

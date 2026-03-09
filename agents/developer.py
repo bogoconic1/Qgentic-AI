@@ -9,7 +9,7 @@ import json
 
 from dotenv import load_dotenv
 from project_config import get_config, get_config_value, get_instructions
-import weave
+from utils.observability import op
 import wandb
 
 from tools.developer import (
@@ -306,7 +306,7 @@ class DeveloperAgent:
             else "No NICE_TO_HAVE recommendations available."
         )
 
-    @weave.op()
+    @op()
     def _generate_code(
         self, instructions: str, messages: list[dict[str, str]]
     ) -> tuple[list[dict], str, int | None]:
@@ -1452,7 +1452,7 @@ Fix the error. Write logs to {next_log_path} and save all required artifacts to 
 
         return sota_suggestions_call_id, False
 
-    @weave.op()
+    @op()
     def run(
         self, max_time_seconds: int = 6 * 3600
     ) -> tuple[float, str | None, list[str], list[str]]:

@@ -4,7 +4,7 @@ from typing import Optional, Tuple
 
 from agents.orchestrator import Orchestrator
 from project_config import get_config_value
-import weave
+from utils import observability
 import wandb
 
 
@@ -42,7 +42,7 @@ def _resolve_wandb_target(
 
 
 def _init_tracking(args: argparse.Namespace) -> None:
-    """Initialise wandb and weave using the best available configuration."""
+    """Initialise wandb and Langfuse using the best available configuration."""
 
     entity, project = _resolve_wandb_target(args.wandb_entity, args.wandb_project)
     run_name = getattr(args, "wandb_run_name", None) or f"{args.iteration}-{args.slug}"
@@ -58,7 +58,7 @@ def _init_tracking(args: argparse.Namespace) -> None:
 
     wandb.init(**wandb_kwargs)
     weave_project = f"{entity}/{project}" if entity else project
-    weave.init(project_name=weave_project)
+    observability.init(project_name=weave_project)
 
 
 def main():
@@ -88,7 +88,7 @@ def main():
 
     # Gracefully close tracking backends to avoid hanging background threads
     try:
-        weave.finish()
+        observability.finish()
     except Exception:
         pass
     try:

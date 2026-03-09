@@ -5,8 +5,8 @@ import logging
 from pathlib import Path
 
 from dotenv import load_dotenv
-import weave
-from weave.trace.util import ThreadPoolExecutor
+from utils.observability import op
+from concurrent.futures import ThreadPoolExecutor
 
 from project_config import get_config, get_instructions
 from tools.helpers import call_llm
@@ -152,7 +152,7 @@ class ModelRecommenderAgent:
             enable_google_search=_ENABLE_WEB_SEARCH,
         )
 
-    @weave.op()
+    @op()
     def _recommend_preprocessing(self, model_name: str) -> dict:
         """Get preprocessing recommendations for a model."""
         user_prompt = build_user_prompt(
@@ -178,7 +178,7 @@ class ModelRecommenderAgent:
         )
         return result
 
-    @weave.op()
+    @op()
     def _recommend_loss_function(self, model_name: str) -> dict:
         """Get loss function recommendation for a model."""
         user_prompt = build_user_prompt(
@@ -204,7 +204,7 @@ class ModelRecommenderAgent:
         )
         return result
 
-    @weave.op()
+    @op()
     def _recommend_hyperparameters(self, model_name: str) -> dict:
         """Get hyperparameter and architecture recommendations for a model."""
         user_prompt = build_user_prompt(
@@ -230,7 +230,7 @@ class ModelRecommenderAgent:
         )
         return result
 
-    @weave.op()
+    @op()
     def _recommend_inference(self, model_name: str) -> dict:
         """Get inference strategy recommendations for a model."""
         user_prompt = build_user_prompt(
@@ -256,7 +256,7 @@ class ModelRecommenderAgent:
         )
         return result
 
-    @weave.op()
+    @op()
     def _recommend_for_model(self, model_name: str) -> dict:
         """Generate all recommendations for a single model.
 
@@ -278,7 +278,7 @@ class ModelRecommenderAgent:
         logger.info("[%s] All recommendations completed", model_name)
         return recommendations
 
-    @weave.op()
+    @op()
     def select_models(self) -> list[str]:
         """Three-stage model selection process:
         Stage 1: Select 16 candidate models using LLM with web search
@@ -344,7 +344,7 @@ class ModelRecommenderAgent:
         )
         return final_models
 
-    @weave.op()
+    @op()
     def _fetch_paper_summaries(self, model_names: list[str]) -> dict[str, str]:
         """Fetch paper summaries for all models in parallel using Gemini.
 
@@ -394,7 +394,7 @@ class ModelRecommenderAgent:
 
         return summaries
 
-    @weave.op()
+    @op()
     def _refine_model_selection(
         self, candidate_models: list[str], summaries: dict[str, str]
     ) -> list[str]:
@@ -447,7 +447,7 @@ class ModelRecommenderAgent:
 
         return final_models
 
-    @weave.op()
+    @op()
     def run(
         self, model_list: list[str] | None = None, use_dynamic_selection: bool = False
     ) -> dict:
