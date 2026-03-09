@@ -4,7 +4,7 @@ import re
 
 from dotenv import load_dotenv
 from firecrawl import Firecrawl
-import weave
+from utils.observability import op
 from tools.generate_paper_summary import PaperSummaryClient
 
 load_dotenv()
@@ -19,7 +19,7 @@ for _noisy in ("httpcore", "httpx", "urllib3"):
 logger = logging.getLogger(__name__)
 
 
-@weave.op()
+@op()
 def read_research_paper(arxiv_link: str) -> str:
     """Read and summarize a research paper from arxiv.
 
@@ -45,7 +45,7 @@ def read_research_paper(arxiv_link: str) -> str:
     return summary
 
 
-@weave.op()
+@op()
 def scrape_web_page(url: str) -> str:
     """Scrape a web page and return LLM-ready markdown content.
 

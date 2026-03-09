@@ -32,7 +32,7 @@ from prompts.tools_developer import (
     log_monitor_user as prompt_log_monitor_user,
 )
 from schemas.developer import StackTraceSolution, SOTAResponse, LogMonitorVerdict, RedFlagsResponse
-import weave
+from utils.observability import op
 
 load_dotenv()
 
@@ -72,7 +72,7 @@ def _build_resource_header(
     return "\n".join(lines) + "\n"
 
 
-@weave.op()
+@op()
 def web_search_stack_trace(query: str) -> str:
     """Research how to fix a bug based on the stack trace and error message."""
     logger.info("Dispatching web search for stack trace remediation guidance.")
@@ -160,7 +160,7 @@ def _ingest_images_for_llm(images: list[Path]) -> list[dict] | None:
     return [{"role": "user", "parts": image_content}]
 
 
-@weave.op()
+@op()
 def search_red_flags(
     description: str,
     context: str,
@@ -224,7 +224,7 @@ def _inject_user_guidance(input_list, guidance):
     )
 
 
-@weave.op()
+@op()
 def search_sota_suggestions(
     description: str,
     context: str,
@@ -590,7 +590,7 @@ class ExecutionJob:
         return self.elapsed() > self._timeout_seconds
 
 
-@weave.op()
+@op()
 def execute_code(
     filepath: str, timeout_seconds: int | None = None, conda_env: str | None = None
 ) -> "ExecutionJob":

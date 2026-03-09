@@ -2,7 +2,7 @@ pytest
 pytest-cov
 pydantic
 python-dotenv
-weave
+langfuse
 wandb
 pandas
 numpy

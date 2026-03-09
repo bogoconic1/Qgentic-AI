@@ -6,7 +6,7 @@ from google import genai
 from google.genai import errors as genai_errors
 from google.genai import types as genai_types
 import httpx
-import weave
+from utils.observability import op
 
 from project_config import get_config
 
@@ -149,7 +149,7 @@ def _build_directory_listing(root: str, num_files: int | None = None) -> str:
     return "\n".join(lines)
 
 
-@weave.op()
+@op()
 def call_llm(
     model: str,
     system_instruction: str,

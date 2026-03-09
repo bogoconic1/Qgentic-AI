@@ -16,8 +16,8 @@ from utils.checkpoint import (
     create_db as _create_checkpoint_db,
     delete_checkpoints_after,
 )
-from weave.trace.util import ThreadPoolExecutor
-import weave
+from concurrent.futures import ThreadPoolExecutor
+from utils.observability import op
 
 
 _CONFIG = get_config()
@@ -246,7 +246,7 @@ def _ensure_conda_environments(num_workers: int) -> None:
     print()
 
 
-@weave.op()
+@op()
 def _run_developer_baseline(
     slug: str,
     iteration_suffix: str,
@@ -502,7 +502,7 @@ class Orchestrator:
         conn.close()
         print(f"Rollback to version {target} complete")
 
-    @weave.op()
+    @op()
     def run(self) -> tuple[bool, str]:
         # Phase 1: Starter Agent - Get task type and summary
         starter_suggestion_path = self.outputs_dir / "starter_suggestions.json"

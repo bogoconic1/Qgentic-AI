@@ -16,7 +16,7 @@ from prompts.researcher_agent import (
 )
 from tools.helpers import call_llm
 from google.genai import types
-import weave
+from utils.observability import op
 
 logger = logging.getLogger(__name__)
 
@@ -277,7 +277,7 @@ class ResearcherAgent:
                 "is_error": False,
             }
 
-    @weave.op()
+    @op()
     def build_plan(self, max_steps: int | None = None) -> str:
         system_prompt = self._compose_system()
         starter_suggestions = self._read_starter_suggestions()
