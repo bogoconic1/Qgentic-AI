@@ -16,6 +16,7 @@ catboost
 pyyaml
 exa-py
 firecrawl-py
+pyflakes
 sentence-transformers
 python-dotenv
 kaggle

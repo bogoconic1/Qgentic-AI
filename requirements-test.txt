@@ -12,3 +12,4 @@ google-genai
 PyYAML
 requests
 firecrawl-py
+pyflakes
