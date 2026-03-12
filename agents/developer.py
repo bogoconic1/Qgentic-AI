@@ -57,7 +57,6 @@ _ENABLE_CODE_SAFETY = bool(_GUARDRAIL_CFG["enable_code_safety"])
 _USE_VALIDATION_SCORE = bool(_RUNTIME_CFG["use_validation_score"])
 
 _DEVELOPER_MODEL = _LLM_CFG["developer_model"]
-_HITL_INSTRUCTIONS = get_instructions()["# Developer Instructions"]
 _HITL_SOTA = bool(_DEVELOPER_CFG["hitl_sota"])
 
 _TASK_ROOT = Path(_PATH_CFG["task_root"])
@@ -97,6 +96,7 @@ class DeveloperAgent:
         self.iteration = (
             iteration  # Can be int (legacy) or str like "1_1" (for parallel baselines)
         )
+        self.hitl_instructions = get_instructions(slug)["# Developer Instructions"]
 
         self.task_root = _TASK_ROOT
         self.outputs_dirname = _OUTPUTS_DIRNAME
@@ -236,7 +236,7 @@ class DeveloperAgent:
             model_name=self.model_name,
             slug=self.slug,
             cpu_core_range=self.cpu_core_range,
-            hitl_instructions=_HITL_INSTRUCTIONS,
+            hitl_instructions=self.hitl_instructions,
         )
 
     def _build_user_prompt(self, version: int) -> str:
@@ -1098,7 +1098,7 @@ class DeveloperAgent:
                 images=training_images if training_images else None,
                 train_stats=train_stats,
                 hitl_sota=_HITL_SOTA,
-                hitl_instructions=_HITL_INSTRUCTIONS,
+                hitl_instructions=self.hitl_instructions,
             )
 
             # HITL: Show suggestion and let user accept or override

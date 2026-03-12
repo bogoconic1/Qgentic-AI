@@ -30,7 +30,6 @@ _TASK_ROOT = Path(_PATH_CFG["task_root"])
 _OUTPUTS_DIRNAME = _PATH_CFG["outputs_dirname"]
 
 _DEFAULT_MAX_STEPS = _RUNTIME_CFG["researcher_max_steps"]
-_HITL_INSTRUCTIONS = get_instructions()["# Researcher Instructions"]
 
 # Media ingestion limits/types
 SUPPORTED_IMAGE_TYPES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
@@ -56,6 +55,7 @@ class ResearcherAgent:
         load_dotenv()
         self.slug = slug
         self.iteration = iteration
+        self.hitl_instructions = get_instructions(slug)["# Researcher Instructions"]
 
         self.cpu_core_pool = cpu_core_pool or []
         self.gpu_pool = gpu_pool or []
@@ -169,7 +169,7 @@ class ResearcherAgent:
         return prompt_build_system(
             str(self.base_dir),
             task_types=task_types,
-            hitl_instructions=_HITL_INSTRUCTIONS,
+            hitl_instructions=self.hitl_instructions,
         )
 
     def _read_starter_suggestions(self) -> str:

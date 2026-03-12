@@ -547,7 +547,7 @@ class Orchestrator:
         else:
             model_rec_agent = ModelRecommenderAgent(self.slug, self.iteration)
 
-            hitl_models = get_instructions()["# Models"]
+            hitl_models = get_instructions(self.slug)["# Models"]
 
             if hitl_models:
                 # HITL mode: Use human-specified models, skip LLM selection
@@ -635,7 +635,11 @@ class Orchestrator:
             existing_baseline_results
         ) < len(now_recommendations_all):
             num_models = len(now_recommendations_all)
-            _ensure_conda_environments(num_models)
+            use_conda_isolation = num_models > 1
+            if use_conda_isolation:
+                _ensure_conda_environments(num_models)
+            else:
+                print("Single-model run detected: reusing current Python environment")
 
             tasks = []
             for idx, (model_name, now_recommendations) in enumerate(
@@ -645,7 +649,7 @@ class Orchestrator:
                 dev_iter = f"{self.iteration}_{idx}"
                 later_recs = later_recommendations_all.get(model_name, {})
 
-                conda_env = f"qgentic-model-{idx}"
+                conda_env = f"qgentic-model-{idx}" if use_conda_isolation else None
 
                 # Skip if this model already has results (unless you want to force rerun)
                 # To force rerun specific models, delete them from baseline_results.json

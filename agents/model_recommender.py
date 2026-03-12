@@ -43,7 +43,6 @@ _RUNTIME_CFG = _CONFIG["runtime"]
 
 _MODEL_SELECTOR_MODEL = _LLM_CFG["model_selector_model"]
 _MODEL_RECOMMENDER_MODEL = _LLM_CFG["model_recommender_model"]
-_HITL_MODELS = get_instructions()["# Models"]
 _ENABLE_WEB_SEARCH = _MODEL_REC_CFG["enable_web_search"]
 
 _TASK_ROOT = Path(_PATH_CFG["task_root"])
@@ -68,6 +67,7 @@ class ModelRecommenderAgent:
         load_dotenv()
         self.slug = slug
         self.iteration = iteration
+        self.hitl_models = get_instructions(slug)["# Models"]
 
         self.task_root = _TASK_ROOT
         self.outputs_dirname = _OUTPUTS_DIRNAME
@@ -465,7 +465,7 @@ class ModelRecommenderAgent:
             logger.info("Using dynamic model selection")
             model_list = self.select_models()
         elif model_list is None:
-            model_list = _HITL_MODELS
+            model_list = self.hitl_models
             logger.info("Using HITL models from config: %s", model_list)
 
         if not model_list:
