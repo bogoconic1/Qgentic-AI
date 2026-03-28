@@ -124,18 +124,10 @@ def build_user(
     submission_path: str | Path,
     threshold_directive: str = "",
     version: int = 1,
-    model_recommendations: str = "",
 ) -> str:
-    recommendations_section = ""
-    if version == 1 and model_recommendations:
-        recommendations_section = f"""
-**Model Recommendations:**
-{model_recommendations}
-
-"""
     version_folder = Path(log_path).parent
 
-    base = f"""{recommendations_section}Paths:
+    base = f"""Paths:
 - Base data dir: {base_dir}
 - Outputs dir: {outputs_dir}
 - Version folder: {version_folder}

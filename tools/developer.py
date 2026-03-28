@@ -233,7 +233,6 @@ def search_sota_suggestions(
     failed_ideas: list[str],
     slug: str,
     data_path: str,
-    later_recommendations: str | None = None,
     shared_suggestions: list[str] | None = None,
     external_data_listing: str | None = None,
     plan_content: str | None = None,
@@ -289,9 +288,6 @@ def search_sota_suggestions(
     plans_section = ""
     if plan_content:
         plans_section += f"\n<plan>\n{plan_content}\n</plan>\n"
-    if later_recommendations:
-        plans_section += f"\n<suggestions>\n{later_recommendations}\n</suggestions>\n"
-
     time_limit_minutes = int(_BASELINE_CODE_TIMEOUT / 60)
 
     system_prompt = prompt_sota_system(
