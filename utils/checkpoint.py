@@ -17,7 +17,7 @@ _COL_NAMES = [
     "id",
     "slug",
     "iteration",
-    "model_name",
+    "strategy_name",
     "version",
     "best_score",
     "best_version",
@@ -50,7 +50,7 @@ def create_db(db_path: str | Path = _DB_PATH) -> sqlite3.Connection:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             slug TEXT NOT NULL,
             iteration TEXT NOT NULL,
-            model_name TEXT NOT NULL,
+            strategy_name TEXT NOT NULL,
             version INTEGER NOT NULL,
             best_score REAL,
             best_version INTEGER,
@@ -77,14 +77,14 @@ def save_checkpoint(
     conn: sqlite3.Connection,
     slug: str,
     iteration: str,
-    model_name: str,
+    strategy_name: str,
     version: int,
     state: dict,
 ) -> None:
     conn.execute(
         """
         INSERT OR REPLACE INTO checkpoints (
-            slug, iteration, model_name, version,
+            slug, iteration, strategy_name, version,
             best_score, best_version, best_code_file,
             version_scores, successful_versions, blacklisted_versions,
             blacklisted_ideas, successful_ideas, global_suggestions,
@@ -96,7 +96,7 @@ def save_checkpoint(
         (
             slug,
             iteration,
-            model_name,
+            strategy_name,
             version,
             state["best_score"],
             state["best_version"],

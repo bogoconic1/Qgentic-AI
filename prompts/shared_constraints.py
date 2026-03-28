@@ -2,13 +2,13 @@ from __future__ import annotations
 
 
 def get_hard_constraints(
-    model_name: str | None = None,
+    strategy_name: str | None = None,
 ) -> str:
     lines = ["**Hard Constraints:**"]
 
-    if model_name:
+    if strategy_name:
         lines.append(
-            f"- Use ONLY `{model_name}`. Do not swap the model; you may update preprocessing, postprocessing, or hyperparameters."
+            f"- Use ONLY `{strategy_name}`. Do not swap the model; you may update preprocessing, postprocessing, or hyperparameters."
         )
 
     lines.append(
