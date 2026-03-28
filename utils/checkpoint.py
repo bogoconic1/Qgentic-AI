@@ -1,6 +1,7 @@
 import sqlite3
 import json
 import time
+import os
 from pathlib import Path
 
 _JSONB_FIELDS = [
@@ -41,6 +42,10 @@ _SELECT_COLS = ", ".join(
 
 # Resolve DB path relative to project root (Qgentic-AI/checkpoints.db)
 _DB_PATH = Path(__file__).resolve().parent.parent / "checkpoints.db"
+
+# Keep only the most recent N checkpoints for a run to avoid unbounded DB growth.
+# Override via env var QGENTIC_CHECKPOINT_RETENTION.
+_CHECKPOINT_RETENTION = int(os.getenv("QGENTIC_CHECKPOINT_RETENTION", "50"))
 
 
 def create_db(db_path: str | Path = _DB_PATH) -> sqlite3.Connection:
@@ -114,7 +119,34 @@ def save_checkpoint(
             time.time(),
         ),
     )
+    _prune_old_checkpoints(conn, slug, iteration)
     conn.commit()
+
+
+def _prune_old_checkpoints(
+    conn: sqlite3.Connection, slug: str, iteration: str, keep_last: int | None = None
+) -> None:
+    """Keep only the latest checkpoints for a run to limit disk usage."""
+    if keep_last is None:
+        keep_last = _CHECKPOINT_RETENTION
+    if keep_last <= 0:
+        return
+
+    conn.execute(
+        """
+        DELETE FROM checkpoints
+        WHERE slug = ?
+          AND iteration = ?
+          AND version NOT IN (
+              SELECT version
+              FROM checkpoints
+              WHERE slug = ? AND iteration = ?
+              ORDER BY version DESC
+              LIMIT ?
+          )
+    """,
+        (slug, iteration, slug, iteration, keep_last),
+    )
 
 
 def load_checkpoint(
