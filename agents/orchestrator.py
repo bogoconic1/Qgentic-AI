@@ -188,7 +188,7 @@ def _ensure_conda_environments(num_workers: int) -> None:
     existing_envs = result.stdout
 
     for i in range(1, num_workers + 1):
-        env_name = f"qgentic-model-{i}"
+        env_name = f"qgentic-strategy-{i}"
 
         if reset_per_run:
             # Reset mode: Delete and recreate for clean slate
@@ -249,7 +249,7 @@ def _ensure_conda_environments(num_workers: int) -> None:
 def _run_developer_baseline(
     slug: str,
     iteration_suffix: str,
-    model_name: str,
+    strategy_name: str,
     key: str,
     external_data_listing: str,
     plan_content: str,
@@ -263,7 +263,7 @@ def _run_developer_baseline(
     Args:
         slug: Competition slug
         iteration_suffix: Iteration identifier (e.g., "1_1")
-        model_name: Model name (e.g., "deberta-v3-large")
+        strategy_name: Strategy name (e.g., "deberta-v3-large")
         key: Key for tracking results
         cpu_core_pool: Queue of CPU core ranges to grab from (None = no affinity)
         gpu_pool: Queue of GPU identifiers (MIG UUIDs or GPU IDs) to grab from (None = use GPU 0)
@@ -279,7 +279,7 @@ def _run_developer_baseline(
         dev = DeveloperAgent(
             slug,
             iteration_suffix,
-            model_name=model_name,
+            strategy_name=strategy_name,
             external_data_listing=external_data_listing,
             plan_content=plan_content,
             cpu_core_range=cpu_core_range,
@@ -428,19 +428,19 @@ class Orchestrator:
         print(f"External data listing: {len(external_data_listing)} chars")
         print(f"Plan content: {len(plan_content)} chars")
 
-        # Phase 3: Baseline Developer Stage - Evaluate models in parallel
+        # Phase 3: Baseline Developer Stage - Evaluate strategies in parallel
 
-        model_list = get_instructions()["# Models"]
-        if not model_list:
+        strategy_list = get_instructions()["# Strategies"]
+        if not strategy_list:
             raise RuntimeError(
-                "No models specified. Please add models to INSTRUCTIONS.md under '# Models'."
+                "No strategies specified. Please add strategies to INSTRUCTIONS.md under '# Strategies'."
             )
-        print(f"Using models from INSTRUCTIONS.md: {model_list}")
+        print(f"Using strategies from INSTRUCTIONS.md: {strategy_list}")
 
         if self.rollback_to_version is not None:
             model_iterations = [
                 f"{self.iteration}_{idx}"
-                for idx in range(1, len(model_list) + 1)
+                for idx in range(1, len(strategy_list) + 1)
             ]
             self._rollback(model_iterations)
 
@@ -459,17 +459,17 @@ class Orchestrator:
         cpu_core_pool_list = _create_cpu_core_pool(max_parallel_workers)
 
         # Create resource queues for dynamic allocation (baseline developer uses Queues for flexibility)
-        num_models = len(model_list)
+        num_strategies = len(strategy_list)
 
         cpu_core_pool = None
-        if len(cpu_core_pool_list) > 0 and num_models > 1:
+        if len(cpu_core_pool_list) > 0 and num_strategies > 1:
             cpu_core_pool = Queue()
             for core_range in cpu_core_pool_list:
                 cpu_core_pool.put(core_range)
             print(f"CPU core pool created with {max_parallel_workers} core ranges")
 
         gpu_pool = None
-        if num_models > 1 and len(gpu_pool_list) > 0:
+        if num_strategies > 1 and len(gpu_pool_list) > 0:
             gpu_pool = Queue()
             for gpu_id in gpu_pool_list:
                 gpu_pool.put(gpu_id)
@@ -484,23 +484,23 @@ class Orchestrator:
             with open(baseline_path, "r") as f:
                 existing_baseline_results = json.load(f)
             print(
-                f"Loaded existing baseline results with {len(existing_baseline_results)} models"
+                f"Loaded existing baseline results with {len(existing_baseline_results)} strategies"
             )
 
         if not os.path.exists(self.outputs_dir / "baseline_results.json") or len(
             existing_baseline_results
-        ) < len(model_list):
-            _ensure_conda_environments(num_models)
+        ) < len(strategy_list):
+            _ensure_conda_environments(num_strategies)
 
             tasks = []
-            for idx, model_name in enumerate(model_list, start=1):
-                key = model_name
+            for idx, strategy_name in enumerate(strategy_list, start=1):
+                key = strategy_name
                 dev_iter = f"{self.iteration}_{idx}"
 
-                conda_env = f"qgentic-model-{idx}"
+                conda_env = f"qgentic-strategy-{idx}"
 
-                # Skip if this model already has results (unless you want to force rerun)
-                # To force rerun specific models, delete them from baseline_results.json
+                # Skip if this strategy already has results (unless you want to force rerun)
+                # To force rerun specific strategies, delete them from baseline_results.json
                 if key in existing_baseline_results:
                     print(f"Skipping {key} (iteration {dev_iter}): already completed")
                     continue
@@ -512,7 +512,7 @@ class Orchestrator:
                     (
                         self.slug,
                         dev_iter,
-                        model_name,
+                        strategy_name,
                         key,
                         external_data_listing,
                         plan_content,
@@ -542,7 +542,7 @@ class Orchestrator:
                                 successful_ideas,
                             ) = _run_developer_baseline(*task_args)
                             baseline_results[result_key] = {
-                                "model_name": result_key,
+                                "strategy_name": result_key,
                                 "best_score": best_score,
                                 "best_code_file": best_code_file or "",
                                 "blacklisted_ideas": blacklisted_ideas,
@@ -574,7 +574,7 @@ class Orchestrator:
                                     successful_ideas,
                                 ) = future.result()
                                 baseline_results[result_key] = {
-                                    "model_name": result_key,
+                                    "strategy_name": result_key,
                                     "best_score": best_score,
                                     "best_code_file": best_code_file or "",
                                     "blacklisted_ideas": blacklisted_ideas,
@@ -589,7 +589,7 @@ class Orchestrator:
                                 print(f"Error in baseline task: {e}")
                                 continue
             else:
-                print("No new baseline tasks to run (all models already completed)")
+                print("No new baseline tasks to run (all strategies already completed)")
 
             if baseline_results:
                 baseline_path = self.outputs_dir / "baseline_results.json"

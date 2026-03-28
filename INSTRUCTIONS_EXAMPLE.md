@@ -2,4 +2,4 @@
 
 # Developer Instructions
 
-# Models
+# Strategies

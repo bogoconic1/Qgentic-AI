@@ -74,7 +74,7 @@ class DeveloperAgent:
 
     # Class-level shared state across all parallel DeveloperAgent instances
     # This enables cross-model learning to avoid duplicate failures
-    # Format: "Model <model_name> tried <suggestion> (score improved/worsened/remained by X: A -> B)"
+    # Format: "Strategy <strategy_name> tried <suggestion> (score improved/worsened/remained by X: A -> B)"
     _shared_suggestions: list[str] = []
     _lock = threading.Lock()
 
@@ -82,7 +82,7 @@ class DeveloperAgent:
         self,
         slug: str,
         iteration: int | str,
-        model_name: str | None = None,
+        strategy_name: str | None = None,
         external_data_listing: str | None = None,
         plan_content: str | None = None,
         cpu_core_range: list[int] | None = None,
@@ -175,9 +175,9 @@ class DeveloperAgent:
 
         os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
-        self.model_name: str | None = model_name
+        self.strategy_name: str | None = strategy_name
 
-        assert self.model_name is not None
+        assert self.strategy_name is not None
 
         self.logger.info(
             "Initialized DeveloperAgent for slug=%s iteration=%s",
@@ -229,7 +229,7 @@ class DeveloperAgent:
         return prompt_build_system(
             description=self.description,
             directory_listing=directory_listing,
-            model_name=self.model_name,
+            strategy_name=self.strategy_name,
             slug=self.slug,
             cpu_core_range=self.cpu_core_range,
             hitl_instructions=_HITL_INSTRUCTIONS,
@@ -585,7 +585,7 @@ class DeveloperAgent:
     ) -> None:
         """Register suggestion outcome to shared pool with model name and score impact.
 
-        Format: "Model <model_name> tried <suggestion> (score improved/worsened/remained by X: A -> B)"
+        Format: "Strategy <strategy_name> tried <suggestion> (score improved/worsened/remained by X: A -> B)"
         """
         if not suggestion:
             return
@@ -593,7 +593,7 @@ class DeveloperAgent:
         prev_display = self._format_score_value(previous_score)
         curr_display = self._format_score_value(current_score)
 
-        model_prefix = f"Model {self.model_name} tried"
+        model_prefix = f"Strategy {self.strategy_name} tried"
 
         if prev_display == "N/A" or curr_display == "N/A":
             entry = (
@@ -1045,7 +1045,7 @@ class DeveloperAgent:
             # HITL: Show suggestion and let user accept or override
             if _HITL_SOTA and sota_response:
                 print(f"\n{'=' * 60}")
-                print(f"[HITL] Model: {self.model_name} | Version: {version}")
+                print(f"[HITL] Strategy: {self.strategy_name} | Version: {version}")
                 print(f"[HITL] Suggestion: {sota_response.suggestion}")
                 print(f"[HITL] Reason: {sota_response.suggestion_reasoning}")
                 print(
@@ -1112,7 +1112,7 @@ class DeveloperAgent:
         }
         conn = self._get_checkpoint_db()
         save_checkpoint(
-            conn, self.slug, str(self.iteration), self.model_name, version, state
+            conn, self.slug, str(self.iteration), self.strategy_name, version, state
         )
         self.logger.info("Checkpoint saved for v%s", version)
 
