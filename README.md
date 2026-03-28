@@ -86,7 +86,7 @@ Before running the agent, create these files in `task/<slug>/`:
 
 Optionally, add Human-In-The-Loop (HITL) instructions in `INSTRUCTIONS.md`:
 - `# Researcher Instructions`: Guide research direction
-- `# Models`: Override model selection
+- `# Strategies`: Override strategy selection
 - `# Developer Instructions`: Guide code implementation
 
 ### 5. Launch

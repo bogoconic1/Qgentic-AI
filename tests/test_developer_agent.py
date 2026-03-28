@@ -58,7 +58,7 @@ def test_agent_initialization(test_task_dir, monkeypatch):
     agent = DeveloperAgent(
         slug=test_task_dir["slug"],
         iteration=test_task_dir["iteration"],
-        model_name="test-model",
+        strategy_name="test-strategy",
         plan_content="Test plan",
     )
 
@@ -66,7 +66,7 @@ def test_agent_initialization(test_task_dir, monkeypatch):
     assert agent.iteration == test_task_dir["iteration"]
     assert agent.outputs_dir.exists()
     assert agent.base_dir.exists()
-    assert agent.model_name == "test-model"
+    assert agent.strategy_name == "test-strategy"
 
 
 def test_extract_code(test_task_dir, monkeypatch):
