@@ -1,0 +1,308 @@
+[
+  {
+    "deprecated_api": "Xt",
+    "context": "as parameter to inverse_transform methods in cluster.FeatureAgglomeration, decomposition.MiniBatchNMF, decomposition.NMF, model_selection.GridSearchCV, model_selection.RandomizedSearchCV, pipeline.Pipeline, preprocessing.KBinsDiscretizer",
+    "version": "1.5.0",
+    "reason": "Standardized input name to X; Xt will be removed in 1.7",
+    "replacement": "X",
+    "category": "parameter",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "Y",
+    "context": "as parameter to fit, transform, and inverse_transform methods in cross_decomposition.PLSRegression, cross_decomposition.PLSCanonical, cross_decomposition.CCA; fit and transform in cross_decomposition.PLSSVD",
+    "version": "1.5.0",
+    "reason": "Standardized parameter name to y; Y will be removed in 1.7",
+    "replacement": "y",
+    "category": "parameter",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "multi_class",
+    "context": "in LogisticRegression and LogisticRegressionCV",
+    "version": "1.5.0",
+    "reason": "Parameter will be removed in 1.8; multinomial will always be used for 3+ classes",
+    "replacement": "OneVsRestClassifier(LogisticRegression(...)) for one-vs-rest scheme",
+    "category": "parameter",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "average",
+    "context": "as value 0 in PassiveAggressiveClassifier, PassiveAggressiveRegressor, SGDClassifier, SGDRegressor, SGDOneClassSVM",
+    "version": "1.5.0",
+    "reason": "Passing average=0 to disable averaging is deprecated; use average=False instead",
+    "replacement": "average=False",
+    "category": "value",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "store_cv_values",
+    "context": "in RidgeCV and RidgeClassifierCV",
+    "version": "1.5.0",
+    "reason": "Deprecated in favor of store_cv_results",
+    "replacement": "store_cv_results",
+    "category": "parameter",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "cv_values_",
+    "context": "in RidgeCV and RidgeClassifierCV",
+    "version": "1.5.0",
+    "reason": "Deprecated in favor of cv_results_",
+    "replacement": "cv_results_",
+    "category": "attribute",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "n_iter",
+    "context": "in manifold.TSNE",
+    "version": "1.5.0",
+    "reason": "Deprecates n_iter in favor of max_iter; n_iter will be removed in 1.7",
+    "replacement": "max_iter",
+    "category": "parameter",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "probas_pred",
+    "context": "as keyword argument to metrics.precision_recall_curve",
+    "version": "1.5.0",
+    "reason": "Deprecated in favor of y_score; will be removed in 1.7",
+    "replacement": "y_score",
+    "category": "parameter",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "y_prob",
+    "context": "as keyword argument to metrics.brier_score_loss",
+    "version": "1.5.0",
+    "reason": "Deprecated in favor of y_proba; will be removed in 1.7",
+    "replacement": "y_proba",
+    "category": "parameter",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "IS_PYPY",
+    "context": "in sklearn.utils",
+    "version": "1.5.0",
+    "reason": "Attribute is deprecated and will be removed in 1.7",
+    "replacement": "",
+    "category": "attribute",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "tosequence",
+    "context": "in sklearn.utils",
+    "version": "1.5.0",
+    "reason": "Function is deprecated and will be removed in 1.7",
+    "replacement": "",
+    "category": "function",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "parallel_backend",
+    "context": "in sklearn.utils",
+    "version": "1.5.0",
+    "reason": "Deprecated; use joblib.parallel_backend instead",
+    "replacement": "joblib.parallel_backend",
+    "category": "function",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "register_parallel_backend",
+    "context": "in sklearn.utils",
+    "version": "1.5.0",
+    "reason": "Deprecated; use joblib.register_parallel_backend instead",
+    "replacement": "joblib.register_parallel_backend",
+    "category": "function",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "labels",
+    "context": "as bytes in classifiers and classification metrics",
+    "version": "1.5.0",
+    "reason": "Labels encoded as bytes is deprecated and will raise an error in v1.7",
+    "replacement": "Use string or integer labels",
+    "category": "value",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "_validate_data",
+    "context": "as method of base.BaseEstimator",
+    "version": "1.6.0",
+    "reason": "Replaced by utils.validation.validate_data for third party estimator developers",
+    "replacement": "validate_data",
+    "category": "method",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "is_classifier",
+    "context": "passing a class object to sklearn.base.is_classifier",
+    "version": "1.6.0",
+    "reason": "Passing a class object is deprecated; pass an instance instead",
+    "replacement": "pass an instance",
+    "category": "pattern",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "is_regressor",
+    "context": "passing a class object to sklearn.base.is_regressor",
+    "version": "1.6.0",
+    "reason": "Passing a class object is deprecated; pass an instance instead",
+    "replacement": "pass an instance",
+    "category": "pattern",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "is_outlier_detector",
+    "context": "passing a class object to sklearn.base.is_outlier_detector",
+    "version": "1.6.0",
+    "reason": "Passing a class object is deprecated; pass an instance instead",
+    "replacement": "pass an instance",
+    "category": "pattern",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "cv",
+    "context": "value 'prefit' in CalibratedClassifierCV",
+    "version": "1.6.0",
+    "reason": "cv=\"prefit\" is deprecated; use FrozenEstimator instead",
+    "replacement": "FrozenEstimator",
+    "category": "value",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "copy",
+    "context": "parameter in cluster.Birch",
+    "version": "1.6.0",
+    "reason": "Parameter has no effect and will be removed in 1.8",
+    "replacement": "",
+    "category": "parameter",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "algorithm",
+    "context": "parameter in ensemble.AdaBoostClassifier",
+    "version": "1.6.0",
+    "reason": "Parameter will be removed in 1.8",
+    "replacement": "",
+    "category": "parameter",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "copy_X",
+    "context": "parameter in linear_model.TheilSenRegressor",
+    "version": "1.6.0",
+    "reason": "Parameter has no effect and will be removed in 1.8",
+    "replacement": "",
+    "category": "parameter",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "base_estimator",
+    "context": "parameter in semi_supervised.SelfTrainingClassifier",
+    "version": "1.6.0",
+    "reason": "Deprecated in favor of estimator",
+    "replacement": "estimator",
+    "category": "parameter",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "assert_all_finite",
+    "context": "parameter in utils.check_array, utils.check_X_y, utils.as_float_array, metrics.pairwise.check_pairwise_arrays, metrics.pairwise_distances",
+    "version": "1.6.0",
+    "reason": "Parameter renamed to ensure_all_finite; will be removed in 1.8",
+    "replacement": "ensure_all_finite",
+    "category": "parameter",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "generate_only",
+    "context": "argument in utils.estimator_checks.check_estimator",
+    "version": "1.6.0",
+    "reason": "generate_only=True is deprecated; use estimator_checks_generator instead",
+    "replacement": "estimator_checks_generator",
+    "category": "parameter",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "_xfail_checks",
+    "context": "estimator tag",
+    "version": "1.6.0",
+    "reason": "Tag is removed; use expected_failed_checks parameter instead",
+    "replacement": "expected_failed_checks",
+    "category": "attribute",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "_estimator_type",
+    "context": "using _estimator_type to set estimator type",
+    "version": "1.6.0",
+    "reason": "Deprecated; inherit from ClassifierMixin, RegressorMixin, TransformerMixin, or OutlierMixin, or set estimator_type in Tags",
+    "replacement": "inherit from appropriate mixin or set estimator_type in Tags",
+    "category": "attribute",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "force_int_remainder_cols",
+    "context": "parameter in compose.ColumnTransformer and compose.make_column_transformer",
+    "version": "1.7.0",
+    "reason": "Parameter is deprecated and will be removed in 1.9; has no effect",
+    "replacement": "",
+    "category": "parameter",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "sparse",
+    "context": "parameter in metrics.fowlkes_mallows_score",
+    "version": "1.7.0",
+    "reason": "Parameter is deprecated and will be removed in 1.9; has no effect",
+    "replacement": "",
+    "category": "parameter",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "raise_warning",
+    "context": "parameter in metrics.class_likelihood_ratios",
+    "version": "1.7.0",
+    "reason": "Parameter is deprecated and will be removed in 1.9; UndefinedMetricWarning will always be raised",
+    "replacement": "",
+    "category": "parameter",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "y_pred",
+    "context": "argument in metrics.RocCurveDisplay.from_predictions",
+    "version": "1.7.0",
+    "reason": "Argument renamed to y_score; y_pred will be removed in 1.9",
+    "replacement": "y_score",
+    "category": "parameter",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "n_alphas",
+    "context": "parameter in ElasticNetCV, LassoCV, MultiTaskElasticNetCV, MultiTaskLassoCV",
+    "version": "1.7.0",
+    "reason": "Parameter is deprecated and will be removed in 1.9; use alphas instead",
+    "replacement": "alphas",
+    "category": "parameter",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "liblinear",
+    "context": "solver in LogisticRegression and LogisticRegressionCV for multiclass classification with one-vs-rest scheme",
+    "version": "1.7.0",
+    "reason": "Using liblinear solver for multiclass one-vs-rest is deprecated and will raise an error in 1.8",
+    "replacement": "Use a solver supporting multinomial loss or wrap in OneVsRestClassifier",
+    "category": "solver",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "base_estimator",
+    "context": "parameter in multioutput.RegressorChain and multioutput.ClassifierChain",
+    "version": "1.7.0",
+    "reason": "Parameter is deprecated in favour of estimator",
+    "replacement": "estimator",
+    "category": "parameter",
+    "severity": "warning"
+  }
+]
