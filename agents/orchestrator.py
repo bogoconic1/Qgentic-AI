@@ -9,7 +9,6 @@ from queue import Queue
 from agents.researcher import ResearcherAgent
 from agents.developer import DeveloperAgent
 from agents.starter import StarterAgent
-from agents.model_recommender import ModelRecommenderAgent
 from project_config import get_config, get_instructions
 from tools.helpers import _build_directory_listing
 from utils.checkpoint import (
@@ -251,8 +250,6 @@ def _run_developer_baseline(
     slug: str,
     iteration_suffix: str,
     model_name: str,
-    now_recommendations: dict,
-    later_recommendations: dict,
     key: str,
     external_data_listing: str,
     plan_content: str,
@@ -267,8 +264,6 @@ def _run_developer_baseline(
         slug: Competition slug
         iteration_suffix: Iteration identifier (e.g., "1_1")
         model_name: Model name (e.g., "deberta-v3-large")
-        now_recommendations: NOW-only recommendations dict for this model
-        later_recommendations: LATER-only recommendations dict for this model
         key: Key for tracking results
         cpu_core_pool: Queue of CPU core ranges to grab from (None = no affinity)
         gpu_pool: Queue of GPU identifiers (MIG UUIDs or GPU IDs) to grab from (None = use GPU 0)
@@ -280,17 +275,11 @@ def _run_developer_baseline(
     gpu_identifier = gpu_pool.get() if gpu_pool else None
 
     try:
-        formatted_recommendations = _format_recommendations_for_developer(
-            now_recommendations
-        )
-
         baseline_time_limit = _RUNTIME_CFG["baseline_time_limit"]
         dev = DeveloperAgent(
             slug,
             iteration_suffix,
             model_name=model_name,
-            model_recommendations=formatted_recommendations,
-            later_recommendations=later_recommendations,
             external_data_listing=external_data_listing,
             plan_content=plan_content,
             cpu_core_range=cpu_core_range,
@@ -308,106 +297,6 @@ def _run_developer_baseline(
             cpu_core_pool.put(cpu_core_range)
         if gpu_pool and gpu_identifier is not None:
             gpu_pool.put(gpu_identifier)
-
-
-def _extract_now_recommendations(recommendations: dict) -> dict:
-    """Extract only MUST_HAVE recommendations from model recommendations.
-
-    Returns a dict with the same top-level keys but only MUST_HAVE sections.
-    Preprocessing is raw JSON so categories are filtered by key presence.
-    """
-    now_only = {}
-
-    now_only["preprocessing"] = {}
-    for category, content in recommendations["preprocessing"].items():
-        if "MUST_HAVE" in content:
-            now_only["preprocessing"][category] = {"MUST_HAVE": content["MUST_HAVE"]}
-
-    now_only["loss_function"] = {
-        "MUST_HAVE": recommendations["loss_function"]["MUST_HAVE"]
-    }
-
-    now_only["hyperparameters"] = {
-        "MUST_HAVE": recommendations["hyperparameters"]["MUST_HAVE"]
-    }
-
-    now_only["inference_strategies"] = {
-        "MUST_HAVE": recommendations["inference_strategies"]["MUST_HAVE"]
-    }
-
-    return now_only
-
-
-def _extract_later_recommendations(recommendations: dict) -> dict:
-    """Extract only NICE_TO_HAVE recommendations from model recommendations.
-
-    Returns a dict with the same top-level keys but only NICE_TO_HAVE sections.
-    Preprocessing is raw JSON so categories are filtered by key presence.
-    """
-    later_only = {}
-
-    later_only["preprocessing"] = {}
-    for category, content in recommendations["preprocessing"].items():
-        if "NICE_TO_HAVE" in content:
-            later_only["preprocessing"][category] = {
-                "NICE_TO_HAVE": content["NICE_TO_HAVE"]
-            }
-
-    later_only["loss_function"] = {
-        "NICE_TO_HAVE": recommendations["loss_function"]["NICE_TO_HAVE"]
-    }
-
-    later_only["hyperparameters"] = {
-        "NICE_TO_HAVE": recommendations["hyperparameters"]["NICE_TO_HAVE"]
-    }
-
-    later_only["inference_strategies"] = {
-        "NICE_TO_HAVE": recommendations["inference_strategies"]["NICE_TO_HAVE"]
-    }
-
-    return later_only
-
-
-def _format_recommendations_for_developer(recommendations: dict) -> str:
-    """Format model recommendations for DeveloperAgent.
-
-    Formats the MUST_HAVE recommendations into a readable string that can be passed
-    to DeveloperAgent as guidance.
-    """
-    details = []
-
-    preprocessing = recommendations["preprocessing"]
-    if preprocessing:
-        details.append("## Preprocessing Strategies")
-        for category, content in preprocessing.items():
-            strategies = content["MUST_HAVE"]
-            details.append(f"\n### {category.replace('_', ' ').title()}")
-            for item in strategies:
-                details.append(f"- {item['strategy']}: {item['reasoning']}")
-
-    loss = recommendations["loss_function"]["MUST_HAVE"]
-    if loss["loss_function"]:
-        details.append("\n## Loss Function")
-        details.append(f"- Use {loss['loss_function']}: {loss['reasoning']}")
-
-    hyperparams = recommendations["hyperparameters"]["MUST_HAVE"]
-    if hyperparams["hyperparameters"]:
-        details.append("\n## Hyperparameters")
-        for item in hyperparams["hyperparameters"]:
-            details.append(f"- {item['hyperparameter']}: {item['reasoning']}")
-
-    if hyperparams["architectures"]:
-        details.append("\n### Architecture Recommendations")
-        for item in hyperparams["architectures"]:
-            details.append(f"- {item['architecture']}: {item['reasoning']}")
-
-    inference = recommendations["inference_strategies"]["MUST_HAVE"]
-    if inference:
-        details.append("\n## Inference Strategies")
-        for item in inference:
-            details.append(f"- {item['strategy']}: {item['reasoning']}")
-
-    return "\n".join(details) if details else "No specific recommendations available."
 
 
 class Orchestrator:
@@ -539,52 +428,19 @@ class Orchestrator:
         print(f"External data listing: {len(external_data_listing)} chars")
         print(f"Plan content: {len(plan_content)} chars")
 
-        # Phase 3: Model Recommender Agent - Get model-specific recommendations
-        model_rec_path = self.outputs_dir / "model_recommendations.json"
-        if model_rec_path.exists():
-            with open(model_rec_path, "r") as f:
-                model_recommendations = json.load(f)
-        else:
-            model_rec_agent = ModelRecommenderAgent(self.slug, self.iteration)
+        # Phase 3: Baseline Developer Stage - Evaluate models in parallel
 
-            hitl_models = get_instructions()["# Models"]
-
-            if hitl_models:
-                # HITL mode: Use human-specified models, skip LLM selection
-                print(f"HITL mode: Using manually specified models: {hitl_models}")
-                model_recommendations = model_rec_agent.run(
-                    model_list=hitl_models, use_dynamic_selection=False
-                )
-            else:
-                # Auto mode: Let LLM select models dynamically
-                print("Auto mode: Using LLM dynamic model selection")
-                model_recommendations = model_rec_agent.run(use_dynamic_selection=True)
-
-        now_recommendations_all = {}
-        later_recommendations_all = {}
-
-        for model_name, recommendations in model_recommendations.items():
-            now_recommendations_all[model_name] = _extract_now_recommendations(
-                recommendations
+        model_list = get_instructions()["# Models"]
+        if not model_list:
+            raise RuntimeError(
+                "No models specified. Please add models to INSTRUCTIONS.md under '# Models'."
             )
-            later_recommendations_all[model_name] = _extract_later_recommendations(
-                recommendations
-            )
-
-        now_rec_path = self.outputs_dir / "now_recommendations.json"
-        with open(now_rec_path, "w") as f:
-            json.dump(now_recommendations_all, f, indent=2)
-
-        later_rec_path = self.outputs_dir / "later_recommendations.json"
-        with open(later_rec_path, "w") as f:
-            json.dump(later_recommendations_all, f, indent=2)
-
-        # Phase 4: Baseline Developer Stage - Evaluate models in parallel with NOW recommendations
+        print(f"Using models from INSTRUCTIONS.md: {model_list}")
 
         if self.rollback_to_version is not None:
             model_iterations = [
                 f"{self.iteration}_{idx}"
-                for idx in range(1, len(now_recommendations_all) + 1)
+                for idx in range(1, len(model_list) + 1)
             ]
             self._rollback(model_iterations)
 
@@ -603,7 +459,7 @@ class Orchestrator:
         cpu_core_pool_list = _create_cpu_core_pool(max_parallel_workers)
 
         # Create resource queues for dynamic allocation (baseline developer uses Queues for flexibility)
-        num_models = len(now_recommendations_all)
+        num_models = len(model_list)
 
         cpu_core_pool = None
         if len(cpu_core_pool_list) > 0 and num_models > 1:
@@ -633,17 +489,13 @@ class Orchestrator:
 
         if not os.path.exists(self.outputs_dir / "baseline_results.json") or len(
             existing_baseline_results
-        ) < len(now_recommendations_all):
-            num_models = len(now_recommendations_all)
+        ) < len(model_list):
             _ensure_conda_environments(num_models)
 
             tasks = []
-            for idx, (model_name, now_recommendations) in enumerate(
-                now_recommendations_all.items(), start=1
-            ):
+            for idx, model_name in enumerate(model_list, start=1):
                 key = model_name
                 dev_iter = f"{self.iteration}_{idx}"
-                later_recs = later_recommendations_all.get(model_name, {})
 
                 conda_env = f"qgentic-model-{idx}"
 
@@ -661,8 +513,6 @@ class Orchestrator:
                         self.slug,
                         dev_iter,
                         model_name,
-                        now_recommendations,
-                        later_recs,
                         key,
                         external_data_listing,
                         plan_content,
@@ -697,12 +547,6 @@ class Orchestrator:
                                 "best_code_file": best_code_file or "",
                                 "blacklisted_ideas": blacklisted_ideas,
                                 "successful_ideas": successful_ideas,
-                                "now_recommendations": now_recommendations_all.get(
-                                    result_key, {}
-                                ),
-                                "later_recommendations": later_recommendations_all.get(
-                                    result_key, {}
-                                ),
                             }
                             baseline_path = self.outputs_dir / "baseline_results.json"
                             with open(baseline_path, "w") as f:
@@ -735,12 +579,6 @@ class Orchestrator:
                                     "best_code_file": best_code_file or "",
                                     "blacklisted_ideas": blacklisted_ideas,
                                     "successful_ideas": successful_ideas,
-                                    "now_recommendations": now_recommendations_all.get(
-                                        result_key, {}
-                                    ),
-                                    "later_recommendations": later_recommendations_all.get(
-                                        result_key, {}
-                                    ),
                                 }
                                 baseline_path = (
                                     self.outputs_dir / "baseline_results.json"

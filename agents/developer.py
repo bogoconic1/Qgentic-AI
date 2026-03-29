@@ -83,8 +83,6 @@ class DeveloperAgent:
         slug: str,
         iteration: int | str,
         model_name: str | None = None,
-        model_recommendations: str | None = None,
-        later_recommendations: dict | None = None,
         external_data_listing: str | None = None,
         plan_content: str | None = None,
         cpu_core_range: list[int] | None = None,
@@ -161,7 +159,6 @@ class DeveloperAgent:
 
         self.latest_submission_path: Path | None = None
 
-        self.later_recommendations: dict | None = later_recommendations
         self.threshold_directive: str = ""
         self._checkpoint_conn = None
 
@@ -179,7 +176,6 @@ class DeveloperAgent:
         os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
         self.model_name: str | None = model_name
-        self.model_recommendations: str | None = model_recommendations
 
         assert self.model_name is not None
 
@@ -252,58 +248,6 @@ class DeveloperAgent:
             submission_path=submission_path_display,
             threshold_directive=self.threshold_directive,
             version=version,
-            model_recommendations=self.model_recommendations,
-        )
-
-    def _format_later_recommendations(self) -> str:
-        """Format NICE_TO_HAVE recommendations as a string for SOTA search context."""
-        if not self.later_recommendations:
-            return "No NICE_TO_HAVE recommendations available."
-
-        sections = []
-
-        preprocessing = self.later_recommendations["preprocessing"]
-        if preprocessing:
-            sections.append("## Preprocessing NICE_TO_HAVE Recommendations")
-            for category, content in preprocessing.items():
-                strategies = content["NICE_TO_HAVE"]
-                if strategies:
-                    sections.append(f"\n### {category.replace('_', ' ').title()}")
-                    for item in strategies:
-                        sections.append(f"- {item['strategy']}")
-                        sections.append(f"  {item['reasoning']}")
-
-        losses = self.later_recommendations["loss_function"]["NICE_TO_HAVE"]
-        if losses:
-            sections.append("\n## Loss Function NICE_TO_HAVE Recommendations")
-            for item in losses:
-                sections.append(f"- {item['loss_function']}")
-                sections.append(f"  {item['reasoning']}")
-
-        hyperparams = self.later_recommendations["hyperparameters"]["NICE_TO_HAVE"]
-        if hyperparams["hyperparameters"]:
-            sections.append("\n## Hyperparameters NICE_TO_HAVE Recommendations")
-            for item in hyperparams["hyperparameters"]:
-                sections.append(f"- {item['hyperparameter']}")
-                sections.append(f"  {item['reasoning']}")
-
-        if hyperparams["architectures"]:
-            sections.append("\n### Architecture NICE_TO_HAVE Recommendations")
-            for item in hyperparams["architectures"]:
-                sections.append(f"- {item['architecture']}")
-                sections.append(f"  {item['reasoning']}")
-
-        inference = self.later_recommendations["inference_strategies"]["NICE_TO_HAVE"]
-        if inference:
-            sections.append("\n## Inference Strategies NICE_TO_HAVE Recommendations")
-            for item in inference:
-                sections.append(f"- {item['strategy']}")
-                sections.append(f"  {item['reasoning']}")
-
-        return (
-            "\n".join(sections)
-            if sections
-            else "No NICE_TO_HAVE recommendations available."
         )
 
     @weave.op()
@@ -1026,8 +970,6 @@ class DeveloperAgent:
             Parsed SOTAResponse object or None if gathering/parsing failed
         """
         try:
-            later_context = self._format_later_recommendations()
-
             extended_listing = self._build_extended_data_listing(version)
 
             # STAGE 1: Identify red flags via direct analysis
@@ -1083,7 +1025,6 @@ class DeveloperAgent:
                 executed_suggestion=self.last_suggestion,
                 failed_ideas=self.blacklisted_ideas,  # Keep instance-level for context
                 shared_suggestions=shared_suggestions,  # New: shared across all models
-                later_recommendations=later_context,
                 external_data_listing=extended_listing,
                 plan_content=self.plan_content,
                 attempt_number=attempt_number,
