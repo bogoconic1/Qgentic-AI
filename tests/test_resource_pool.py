@@ -42,7 +42,7 @@ class TestDynamicResourceAllocation(unittest.TestCase):
             4: 0.2,  # Waits for Process 0
         }
 
-        def _run_developer_baseline(slug, iteration_suffix, model_name, key, cpu_core_pool=None, gpu_pool=None, gpu_isolation_mode="none"):
+        def _run_developer_baseline(slug, iteration_suffix, strategy_name, key, cpu_core_pool=None, gpu_pool=None, gpu_isolation_mode="none"):
             """Mock implementation that just does time.sleep() and tracks resource allocation."""
             # Extract process ID from iteration_suffix (e.g., "1_1" -> 0)
             process_id = int(iteration_suffix.split('_')[1]) - 1
@@ -75,7 +75,7 @@ class TestDynamicResourceAllocation(unittest.TestCase):
             task = {
                 "slug": "test-comp",
                 "iteration_suffix": f"1_{i+1}",
-                "model_name": f"model-{i}",
+                "strategy_name": f"strategy-{i}",
                 "key": f"key-{i}",
                 "cpu_core_pool": cpu_pool,
                 "gpu_pool": gpu_pool,

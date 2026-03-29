@@ -174,7 +174,7 @@ def search_red_flags(
         context: Current code and logs
         images: Optional list of image paths (e.g., loss_curve.png, metric_curve.png)
         train_stats: Optional training statistics dict from train_stats.json
-                    (must include: model_name, cv_scores, cv_mean, cv_std)
+                    (must include: strategy_name, cv_scores, cv_mean, cv_std)
 
     Returns:
         RedFlagsResponse with structured analysis fields
