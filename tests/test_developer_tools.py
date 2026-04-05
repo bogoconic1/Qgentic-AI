@@ -277,8 +277,8 @@ def test_search_sota_suggestions_with_plan_content(monkeypatch, test_data_dir):
     user_message = messages[0]["parts"][0]["text"]
     assert "<plan>" in user_message
     assert "XGBoost" in user_message
-    assert "<suggestions>" in user_message
-    assert "feature engineering" in user_message
+    assert "<shared experiments from ALL models>" in user_message
+    assert "No shared suggestions yet." in user_message
 
 
 def test_search_sota_suggestions_with_tools(monkeypatch, test_data_dir):

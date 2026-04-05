@@ -1,5 +1,6 @@
 import logging
 import ast
+import sys
 
 from dotenv import load_dotenv
 from project_config import get_config
@@ -23,7 +24,6 @@ _LEAKAGE_REVIEW_MODEL = _LLM_CFG["leakage_review_model"]
 LOG_LEVEL_METHODS = {"debug", "info", "warning", "error", "critical"}
 
 
-# caution: I did not check logging guardrails - I assume its correct
 def _is_logging_basicconfig_call(call: ast.Call) -> bool:
     """Return True if call node is logging.basicConfig(...)."""
     return (
@@ -70,12 +70,16 @@ def _collect_logger_aliases(nodes: list[ast.stmt]) -> list[str]:
 
 def check_logging_basicconfig_order(code: str) -> dict:
     """
-    Ensure logging.basicConfig is executed before any top-level logging statements.
+    Ensure logging.basicConfig is executed before any top-level logging
+    statements AND before any third-party imports.
 
     Policy:
     - If any top-level logging statement (logging.<level> or logger.<level> where logger
       is assigned from logging.getLogger at top-level) appears before a top-level
       logging.basicConfig call, flag as FAIL.
+    - If logging.basicConfig appears after a third-party import (any import not in
+      sys.stdlib_module_names), flag as FAIL — third-party libraries may configure
+      logging on import, making a later basicConfig a no-op.
     - If no top-level logging statements are present, PASS (cannot assert runtime order).
     - If basicConfig appears only under __main__ guard and there are top-level logging
       statements, FAIL.
@@ -86,14 +90,48 @@ def check_logging_basicconfig_order(code: str) -> dict:
     aliases = _collect_logger_aliases(module.body)
 
     basic_line: int | None = None
+    logging_imported_line: int | None = None
+    first_thirdparty: dict | None = None
     violations: list[dict] = []
 
     for node in module.body:
+        # Track `import logging`
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "logging" and logging_imported_line is None:
+                    logging_imported_line = node.lineno
+                if (
+                    logging_imported_line is not None
+                    and first_thirdparty is None
+                    and alias.name.split(".")[0] not in sys.stdlib_module_names
+                ):
+                    first_thirdparty = {
+                        "module": alias.name,
+                        "line": node.lineno,
+                    }
+
+        # Track `from X import ...`
+        if isinstance(node, ast.ImportFrom) and node.module is not None:
+            top_level = node.module.split(".")[0]
+            if top_level == "logging" and logging_imported_line is None:
+                logging_imported_line = node.lineno
+            if (
+                logging_imported_line is not None
+                and first_thirdparty is None
+                and top_level not in sys.stdlib_module_names
+            ):
+                first_thirdparty = {
+                    "module": node.module,
+                    "line": node.lineno,
+                }
+
+        # Detect logging.basicConfig(...)
         if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
             if _is_logging_basicconfig_call(node.value) and basic_line is None:
                 basic_line = node.lineno
                 continue
 
+        # Detect top-level logging calls before basicConfig
         if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
             call = node.value
             is_log_call = _is_logging_direct_call(call)
@@ -120,6 +158,24 @@ def check_logging_basicconfig_order(code: str) -> dict:
                         "reason": "Logging call appears before logging.basicConfig at top-level.",
                     }
                 )
+
+    # Check if basicConfig comes after a third-party import
+    if (
+        basic_line is not None
+        and first_thirdparty is not None
+        and basic_line > first_thirdparty["line"]
+    ):
+        violations.append(
+            {
+                "line": basic_line,
+                "code": lines[basic_line - 1].strip()
+                if 0 < basic_line <= len(lines)
+                else "",
+                "reason": f"""logging.basicConfig() on line {basic_line} appears after \
+third-party import '{first_thirdparty['module']}' on line {first_thirdparty['line']}. \
+Third-party libraries may configure logging on import, making basicConfig a no-op.""",
+            }
+        )
 
     status = "pass"
     if violations:

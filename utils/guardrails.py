@@ -26,6 +26,8 @@ def evaluate_guardrails(
     log_check: dict = {"status": "skipped", "reason": "disabled in config"}
     if enable_logging_guard:
         log_check = check_logging_basicconfig_order(code_text)
+        if log_check.get("status") == "fail":
+            guard_report["decision"] = "block"
     guard_report["logging_check"] = log_check
 
     leakage_result: LeakageReviewResponse | dict = {
@@ -76,9 +78,11 @@ def build_block_summary(guard_report: dict) -> str:
     if log_check["status"] == "fail":
         if lines:
             lines.append("\n---\n")
-        lines.append("Additional issue (non-blocking):")
+        lines.append("Logging configuration issue:")
         lines.append(
-            "- logging.basicConfig should be called before any top-level logging usage."
+            "- logging.basicConfig() must be called immediately after `import logging`, before any third-party imports (e.g. torch, transformers, kagglehub) which may configure logging on import."
         )
+        for v in log_check.get("violations", []):
+            lines.append(f"  Line {v['line']}: {v['reason']}")
 
     return "\n".join(lines) if lines else "Guardrail check failed."
