@@ -22,3 +22,7 @@ nvm alias default node
 echo "🧾 Verifying installation..."
 node -v
 npm -v
+
+npm install -g @anthropic-ai/claude-code
+npm install -g @withgraphite/graphite-cli@stable
+gt --version
