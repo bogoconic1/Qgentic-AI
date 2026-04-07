@@ -13,7 +13,7 @@ def get_hard_constraints(
 
     lines.append(
         """- **DO NOT** explicitly set `os.environ['CUDA_VISIBLE_DEVICES']`.
-- Place `logging.basicConfig()` at the start of the script.
+- Place `import logging` and `logging.basicConfig(level=logging.INFO, ...)` at the very top of the script, BEFORE any third-party imports (torch, transformers, kagglehub, etc.). Third-party libraries configure logging on import, so basicConfig must come first.
 - Log validation results (per fold and overall), model loading, train/test set size, and any computed quantities that can go wrong (e.g. class weights, thresholds).
 - Log final validation results, best epoch number, total training time, and submission prediction distribution.
 - Do not use `try/except` to suppress errors.
