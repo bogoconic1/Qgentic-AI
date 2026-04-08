@@ -2,6 +2,7 @@ import logging
 
 from guardrails.developer import check_logging_basicconfig_order, llm_leakage_review
 from guardrails.code_safety import check_code_safety, format_safety_feedback
+from guardrails.linting import check_python_lint
 from schemas.guardrails import LeakageReviewResponse
 
 
@@ -14,12 +15,14 @@ def evaluate_guardrails(
     enable_logging_guard: bool,
     enable_leakage_guard: bool,
     enable_code_safety: bool,
+    enable_lint_guard: bool,
 ) -> dict:
     """Run all configured guardrails and return a unified report with decision."""
     guard_report: dict = {
         "logging_check": {},
         "leakage_check": {},
         "safety_check": {},
+        "lint_check": {},
         "decision": "proceed",
     }
 
@@ -47,6 +50,13 @@ def evaluate_guardrails(
             guard_report["decision"] = "block"
     guard_report["safety_check"] = safety_check
 
+    lint_check: dict = {"decision": "proceed", "status": "skipped", "reason": "disabled in config", "errors": []}
+    if enable_lint_guard:
+        lint_check = check_python_lint(code_text)
+        if lint_check["decision"] == "block":
+            guard_report["decision"] = "block"
+    guard_report["lint_check"] = lint_check
+
     return guard_report
 
 
@@ -73,6 +83,14 @@ def build_block_summary(guard_report: dict) -> str:
                 lines.append(
                     f"{idx}. rule_id={f.rule_id}\n   - snippet: {f.snippet}\n   - rationale: {f.rationale}\n   - suggestion: {f.suggestion}"
                 )
+
+    lint_check = guard_report["lint_check"]
+    if lint_check["decision"] == "block":
+        if lines:
+            lines.append("\n---\n")
+        lines.append("Code BLOCKED by pre-execution lint check:")
+        for err in lint_check.get("errors", []):
+            lines.append(f"- {err}")
 
     log_check = guard_report["logging_check"]
     if log_check["status"] == "fail":

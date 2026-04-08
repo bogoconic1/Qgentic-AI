@@ -53,6 +53,7 @@ _DEVELOPER_CFG = _CONFIG["developer"]
 _ENABLE_LOGGING_GUARD = bool(_GUARDRAIL_CFG["logging_basicconfig_order"])
 _ENABLE_LEAKAGE_GUARD = bool(_GUARDRAIL_CFG["leakage_review"])
 _ENABLE_CODE_SAFETY = bool(_GUARDRAIL_CFG["enable_code_safety"])
+_ENABLE_LINT_GUARD = bool(_GUARDRAIL_CFG.get("pre_execution_lint", True))
 
 _USE_VALIDATION_SCORE = bool(_RUNTIME_CFG["use_validation_score"])
 
@@ -1552,6 +1553,7 @@ Fix the error. Write logs to {next_log_path} and save all required artifacts to 
                 enable_logging_guard=_ENABLE_LOGGING_GUARD,
                 enable_leakage_guard=_ENABLE_LEAKAGE_GUARD,
                 enable_code_safety=_ENABLE_CODE_SAFETY,
+                enable_lint_guard=_ENABLE_LINT_GUARD,
             )
 
             self.logger.info(
