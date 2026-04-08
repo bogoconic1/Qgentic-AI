@@ -30,7 +30,6 @@ from utils.checkpoint import (
     save_checkpoint,
     load_latest_checkpoint,
 )
-from utils.grade import run_grade
 from schemas.developer import SOTAResponse
 from utils.code_utils import strip_header_from_code, extract_python_code
 from prompts.developer_agent import (
@@ -54,7 +53,6 @@ _ENABLE_LOGGING_GUARD = bool(_GUARDRAIL_CFG["logging_basicconfig_order"])
 _ENABLE_LEAKAGE_GUARD = bool(_GUARDRAIL_CFG["leakage_review"])
 _ENABLE_CODE_SAFETY = bool(_GUARDRAIL_CFG["enable_code_safety"])
 
-_USE_VALIDATION_SCORE = bool(_RUNTIME_CFG["use_validation_score"])
 
 _DEVELOPER_MODEL = _LLM_CFG["developer_model"]
 _HITL_INSTRUCTIONS = get_instructions()["# Developer Instructions"]
@@ -806,78 +804,41 @@ class DeveloperAgent:
                 self.last_successful_version
             )  # Initialize before try
 
-            if _USE_VALIDATION_SCORE:
-                self.logger.info(
-                    "Using validation score from train_stats.json (use_validation_score=True)"
-                )
-                try:
-                    version_folder = self.outputs_dir / str(version)
-                    train_stats_path = version_folder / "train_stats.json"
+            self.logger.info("Reading validation score from train_stats.json")
+            try:
+                version_folder = self.outputs_dir / str(version)
+                train_stats_path = version_folder / "train_stats.json"
 
-                    if train_stats_path.exists():
-                        with open(train_stats_path, "r") as f:
-                            train_stats = json.load(f)
+                if train_stats_path.exists():
+                    with open(train_stats_path, "r") as f:
+                        train_stats = json.load(f)
 
-                        # Extract cv_worst as the validation score (worst fold score)
-                        run_score = train_stats.get("cv_worst")
+                    # Extract cv_worst as the validation score (worst fold score)
+                    run_score = train_stats.get("cv_worst")
 
-                        if run_score is not None:
-                            self._log_attempt_score(attempt, run_score)
-                            self.logger.info(
-                                "Your validation score (cv_worst) is %s", run_score
-                            )
-
-                            self.version_scores[version] = run_score
-                            self.last_successful_version = version
-                        else:
-                            self.logger.warning(
-                                "cv_worst not found in train_stats.json for version %s",
-                                version,
-                            )
-                    else:
-                        self.logger.warning(
-                            "train_stats.json not found for version %s", version
-                        )
-                except Exception as exc:
-                    self.logger.exception("Failed to read train_stats.json: %s", exc)
-
-                code_context += (
-                    f"<validation_score>\n{run_score}\n</validation_score>\n"
-                )
-            else:
-                grade_feedback = ""
-                try:
-                    info, grade_feedback, returncode, stderr = run_grade(
-                        str(submission_path), self.slug
-                    )
-                    self.logger.info("Grade feedback: %s", grade_feedback)
-                    if returncode != 0:
-                        self.logger.warning(
-                            "Grading command returned non-zero exit (%s). stderr=\n%s",
-                            returncode,
-                            stderr,
-                        )
-                    else:
+                    if run_score is not None:
+                        self._log_attempt_score(attempt, run_score)
                         self.logger.info(
-                            "Grading command completed successfully for version %s",
+                            "Your validation score (cv_worst) is %s", run_score
+                        )
+
+                        self.version_scores[version] = run_score
+                        self.last_successful_version = version
+                    else:
+                        self.logger.warning(
+                            "cv_worst not found in train_stats.json for version %s",
                             version,
                         )
-                        run_score = info.get("score")
-                        self._log_attempt_score(attempt, run_score)
-                        self.logger.info("Your result on the test set is %s", run_score)
-
-                        if run_score is not None:
-                            self.version_scores[version] = run_score
-                            self.last_successful_version = version
-                except Exception as exc:
-                    grade_feedback = f"Failed to run grading tool: {exc}"
-                    self.logger.exception(
-                        "Grading command failed for version %s", version
+                else:
+                    self.logger.warning(
+                        "train_stats.json not found for version %s", version
                     )
+            except Exception as exc:
+                self.logger.exception("Failed to read train_stats.json: %s", exc)
 
-                code_context += (
-                    f"<leaderboard_score>\n{run_score}\n</leaderboard_score>\n"
-                )
+            code_context += (
+                f"<validation_score>\n{run_score}\n</validation_score>\n"
+            )
 
             if previous_successful_version is not None:
                 base_version = previous_successful_version

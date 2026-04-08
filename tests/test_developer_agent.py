@@ -28,14 +28,6 @@ def test_task_dir():
             "Submissions are evaluated using accuracy.\n"
         )
 
-        import yaml
-
-        benchmark_data = {
-            "evaluation": {"metric": "accuracy", "is_lower_better": False},
-            "competition_type": "test",
-        }
-        (task_dir / "benchmark.yaml").write_text(yaml.dump(benchmark_data))
-
         (task_dir / "data").mkdir(parents=True, exist_ok=True)
 
         (outputs_dir / "plan.md").write_text("# Research Plan\nTest plan content.")
