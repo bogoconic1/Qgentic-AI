@@ -3,9 +3,7 @@ set -euo pipefail
 
 # === CONFIG ===
 KAGGLE_JSON_PATH="${KAGGLE_JSON_PATH:-kaggle.json}"
-TASK_NAME="csiro-biomass"
 WORKDIR="${WORKDIR:-$(pwd)}"
-CACHE_DIR="/home/ubuntu/.cache/mle-bench/data/${TASK_NAME}/prepared"
 
 # === FUNCTIONS ===
 
@@ -16,36 +14,15 @@ setup_kaggle() {
     chmod 600 ~/.kaggle/kaggle.json
 }
 
-clone_repos() {
-    echo "[*] Cloning repositories..."
-    mkdir -p "$WORKDIR"
+install_deps() {
+    echo "[*] Installing Python dependencies..."
     cd "$WORKDIR"
     uv pip install -r requirements.txt
-
-    if [[ ! -d mle-bench ]]; then
-        git clone https://github.com/bogoconic1/mle-bench.git
-        sudo apt update && sudo apt install -y git-lfs
-        (cd mle-bench && git lfs fetch --all && git lfs pull && uv pip install -e .)
-    fi
-}
-
-prepare_data() {
-    echo "[*] Preparing data for task: $TASK_NAME..."
-    cd "$WORKDIR/mle-bench"
-    mlebench prepare -c "$TASK_NAME"
-}
-
-copy_task_data() {
-    echo "[*] Copying prepared data into task..."
-    mkdir -p "$WORKDIR/task/$TASK_NAME"
-    cp -r "$CACHE_DIR/public/"* "$WORKDIR/task/$TASK_NAME"
 }
 
 main() {
     setup_kaggle
-    clone_repos
-    prepare_data
-    copy_task_data
+    install_deps
     echo "[✔] Setup complete."
 }
 
