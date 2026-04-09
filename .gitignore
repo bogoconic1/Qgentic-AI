@@ -7,6 +7,8 @@ cache/
 task/
 catboost_info/
 wandb/
+goal_runs/
+GOAL.md
 # C extensions
 *.so
 

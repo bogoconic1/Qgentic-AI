@@ -13,8 +13,7 @@ import weave
 import wandb
 
 from tools.developer import (
-    execute_code,
-    monitor_logs,
+    execute_with_monitor,
     search_red_flags,
     search_sota_suggestions,
     _LOG_MONITOR_INTERVAL,
@@ -474,63 +473,18 @@ class DeveloperAgent:
     def _execute_code(self, code_path: Path, version: int) -> str:
         """Execute code with LLM-based log monitoring.
 
-        Launches the script non-blocking, then polls with monitor_logs() every
-        _LOG_MONITOR_INTERVAL seconds. The monitor LLM inspects recent output
-        and can run bash commands (nvidia-smi, ps, etc.) to check system state.
-        If the monitor returns "kill", the process group is terminated immediately.
-
-        Args:
-            code_path: Path to the code file to execute (e.g., outputs/16_2/1/train.py)
-            version: Version number for logging
-
-        Returns:
-            Execution output string
+        Thin wrapper around ``tools.developer.execute_with_monitor`` so the
+        same launch/monitor loop is shared between the existing developer
+        flow and the standalone goal-mode agent.
         """
-        timeout_seconds = _BASELINE_CODE_TIMEOUT
-
-        job = execute_code(
-            str(code_path),
-            timeout_seconds=timeout_seconds,
+        output = execute_with_monitor(
+            code_path,
+            timeout_seconds=_BASELINE_CODE_TIMEOUT,
+            log_monitor_interval=_LOG_MONITOR_INTERVAL,
+            logger=self.logger,
             conda_env=self.conda_env,
         )
-        self.logger.info(
-            "Launched execution for v%s (pid=%d, timeout=%ds)",
-            version,
-            job.pid,
-            timeout_seconds,
-        )
-
-        while not job.done():
-            if job.check_timeout():
-                self.logger.warning("Hard timeout reached for v%s", version)
-                return job.kill("Hard timeout exceeded")
-
-            try:
-                verdict = monitor_logs(
-                    log_output=job.recent_output(),
-                    seconds_since_last_output=job.idle_time(),
-                    total_elapsed_seconds=job.elapsed(),
-                    pid=job.pid,
-                )
-                self.logger.info(
-                    "Monitor verdict for v%s: %s (%s)",
-                    version,
-                    verdict.action,
-                    verdict.reasoning,
-                )
-                if verdict.action == "kill":
-                    return job.kill(verdict.reasoning)
-            except Exception:
-                self.logger.exception(
-                    "Monitor call failed for v%s — continuing execution", version
-                )
-
-            time.sleep(_LOG_MONITOR_INTERVAL)
-
-        output = job.result()
-        self.logger.info("Execution output captured for version v%s", version)
-        self.logger.debug("Execution output: %s", output)
-
+        self.logger.debug("Execution output for v%s: %s", version, output)
         return output
 
     def _format_suggestion_entry(

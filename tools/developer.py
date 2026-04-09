@@ -748,3 +748,62 @@ def monitor_logs(
         text_format=LogMonitorVerdict,
     )
     return response
+
+
+def execute_with_monitor(
+    code_path: str | Path,
+    *,
+    timeout_seconds: int,
+    log_monitor_interval: int,
+    logger: logging.Logger,
+    conda_env: str | None = None,
+) -> str:
+    """Launch a Python file with LLM-based log monitoring; return captured output.
+
+    Polls the running ExecutionJob every ``log_monitor_interval`` seconds and
+    calls ``monitor_logs`` to decide whether the process should be killed.
+    Returns the output from ``ExecutionJob.result()`` (stdout on success,
+    ``web_search_stack_trace(stderr)`` advisory on failure).
+    """
+    job = execute_code(
+        str(code_path),
+        timeout_seconds=timeout_seconds,
+        conda_env=conda_env,
+    )
+    logger.info(
+        "Launched execution for %s (pid=%d, timeout=%ds)",
+        code_path,
+        job.pid,
+        timeout_seconds,
+    )
+
+    while not job.done():
+        if job.check_timeout():
+            logger.warning("Hard timeout reached for %s", code_path)
+            return job.kill("Hard timeout exceeded")
+
+        try:
+            verdict = monitor_logs(
+                log_output=job.recent_output(),
+                seconds_since_last_output=job.idle_time(),
+                total_elapsed_seconds=job.elapsed(),
+                pid=job.pid,
+            )
+            logger.info(
+                "Monitor verdict for %s: %s (%s)",
+                code_path,
+                verdict.action,
+                verdict.reasoning,
+            )
+            if verdict.action == "kill":
+                return job.kill(verdict.reasoning)
+        except Exception:
+            logger.exception(
+                "Monitor call failed for %s — continuing execution", code_path
+            )
+
+        time.sleep(log_monitor_interval)
+
+    output = job.result()
+    logger.info("Execution output captured for %s", code_path)
+    return output
