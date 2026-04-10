@@ -72,7 +72,7 @@ def review_system() -> str:
 - Be strict about violations of any hard constraints listed in `<goal>`. Examples: forbidden imports, forbidden function calls, reading files the goal said not to read, exceeding stated budgets.
 - The `score` field is a lower-is-better progress signal toward the goal. Choose whatever scalar best reflects "distance to done" for this goal (e.g. worst per-tensor relative_err for a clone task, 1 - accuracy for a classifier, mean L2 error for a regression). Use the same metric consistently across iterations so progress is comparable.
 - Set `done=True` ONLY if the goal is fully achieved. Partial progress is not done.
-- `next_step` should be the single most impactful change to try next. If `done=True`, leave `next_step` empty.
+- `next_step` should be the single most impactful change to try next. Use web search to find better approaches, techniques, or library APIs that could help — don't rely solely on what you already know. If `done=True`, leave `next_step` empty.
 - `is_valid` is True iff the run completed without an unhandled exception and produced the artifacts the script claims to have produced.
 """
 

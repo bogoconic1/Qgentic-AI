@@ -198,6 +198,7 @@ def _generate_code(input_list: list[dict]) -> str:
         system_instruction=codegen_system(),
         messages=input_list,
         text_format=None,
+        enable_google_search=True,
     )
     raw_text = response.text or ""
     code = extract_python_code(raw_text)
@@ -214,4 +215,5 @@ def _review(goal_text: str, code: str, output: str) -> GoalReview:
         system_instruction=review_system(),
         messages=review_user(goal_text, code, output),
         text_format=GoalReview,
+        enable_google_search=True,
     )
