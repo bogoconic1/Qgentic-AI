@@ -86,7 +86,7 @@ def run_goal_mode(
 
     v1_dir = run_dir / "v1"
     input_list: list[dict] = [
-        append_message("user", initial_codegen_user(goal_text, v1_dir))
+        append_message("user", initial_codegen_user(v1_dir))
     ]
 
     deadline = time.monotonic() + max_time_seconds
@@ -102,7 +102,7 @@ def run_goal_mode(
 
         # 1. Generate code
         try:
-            code = _generate_code(input_list)
+            code = _generate_code(input_list, goal_text)
         except Exception:
             logger.exception("Code generation failed at v%s — aborting loop", version)
             break
@@ -205,23 +205,27 @@ def _execute_goal_tool_call(function_call) -> str:
 
 
 @weave.op()
-def _generate_code(input_list: list[dict]) -> str:
+def _generate_code(input_list: list[dict], goal_text: str) -> str:
     """Call the codegen LLM and return the extracted python code.
 
     Mirrors the multi-step tool loop in ``agents/developer.py:_generate_code``:
     up to ``max_tool_steps`` rounds where the LLM may call ``explore_codebase``
     before producing the final ```python``` block. Tool-call results are
     appended to ``input_list`` so the next call sees them.
+
+    The goal is embedded in the system prompt (not the user thread) so that
+    it is preserved across every call regardless of conversation trimming.
     """
     tools = get_developer_tools()
     max_tool_steps = 100
+    system_prompt = codegen_system(goal_text)
 
     for step in range(max_tool_steps + 1):
         is_last_step = step == max_tool_steps
 
         response = call_llm(
             model=_DEVELOPER_MODEL,
-            system_instruction=codegen_system(),
+            system_instruction=system_prompt,
             messages=input_list,
             text_format=None,
             function_declarations=tools if not is_last_step else [],
