@@ -27,7 +27,11 @@ from prompts.goal_developer import (
     review_user,
 )
 from schemas.goal_developer import GoalReview
-from tools.developer import execute_with_monitor
+from tools.developer import (
+    _build_resource_header,
+    execute_code,
+    execute_with_monitor,
+)
 from tools.explore import explore_codebase
 from tools.helpers import call_llm
 from utils.code_utils import extract_python_code
@@ -102,7 +106,7 @@ def run_goal_mode(
 
         # 1. Generate code
         try:
-            code = _generate_code(input_list, goal_text)
+            code = _generate_code(input_list, goal_text, version_dir)
         except Exception:
             logger.exception("Code generation failed at v%s — aborting loop", version)
             break
@@ -192,7 +196,13 @@ Your previous attempt was blocked by the pre-execution guardrails — it never r
     return history
 
 
-def _execute_goal_tool_call(function_call) -> str:
+def _execute_goal_tool_call(
+    function_call,
+    *,
+    version_dir: Path,
+    step: int,
+    call_idx: int,
+) -> str:
     """Dispatch a tool call made during goal-mode code generation."""
     args = dict(function_call.args)
 
@@ -201,17 +211,35 @@ def _execute_goal_tool_call(function_call) -> str:
         logger.info("explore_codebase called: %s", query[:100])
         return explore_codebase(query)
 
+    if function_call.name == "execute_python":
+        code = args["code"]
+        timeout = args.get("timeout_seconds", 300)
+        logger.info(
+            "execute_python called (step %s call %s, %d bytes, timeout=%ds)",
+            step,
+            call_idx,
+            len(code),
+            timeout,
+        )
+        work_dir = version_dir / "codegen_snippets"
+        work_dir.mkdir(parents=True, exist_ok=True)
+        script_file = work_dir / f"{step}_{call_idx}.py"
+        resource_header = _build_resource_header(None, None)
+        script_file.write_text(resource_header + code)
+        job = execute_code(str(script_file), timeout_seconds=timeout)
+        return json.dumps({"output": job.result()})
+
     return json.dumps({"error": f"Unknown tool: {function_call.name}"})
 
 
 @weave.op()
-def _generate_code(input_list: list[dict], goal_text: str) -> str:
+def _generate_code(input_list: list[dict], goal_text: str, version_dir: Path) -> str:
     """Call the codegen LLM and return the extracted python code.
 
     Mirrors the multi-step tool loop in ``agents/developer.py:_generate_code``:
     up to ``max_tool_steps`` rounds where the LLM may call ``explore_codebase``
-    before producing the final ```python``` block. Tool-call results are
-    appended to ``input_list`` so the next call sees them.
+    or ``execute_python`` before producing the final ```python``` block.
+    Tool-call results are appended to ``input_list`` so the next call sees them.
 
     The goal is embedded in the system prompt (not the user thread) so that
     it is preserved across every call regardless of conversation trimming.
@@ -247,9 +275,14 @@ def _generate_code(input_list: list[dict], goal_text: str) -> str:
             return code
 
         function_responses = []
-        for part in parts:
+        for call_idx, part in enumerate(parts, start=1):
             if hasattr(part, "function_call") and part.function_call:
-                tool_result_str = _execute_goal_tool_call(part.function_call)
+                tool_result_str = _execute_goal_tool_call(
+                    part.function_call,
+                    version_dir=version_dir,
+                    step=step + 1,
+                    call_idx=call_idx,
+                )
                 function_responses.append(
                     types.Part.from_function_response(
                         name=part.function_call.name,

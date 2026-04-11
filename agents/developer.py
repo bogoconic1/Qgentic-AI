@@ -13,6 +13,8 @@ import weave
 import wandb
 
 from tools.developer import (
+    _build_resource_header,
+    execute_code,
     execute_with_monitor,
     search_red_flags,
     search_sota_suggestions,
@@ -249,13 +251,14 @@ class DeveloperAgent:
 
     @weave.op()
     def _generate_code(
-        self, instructions: str, messages: list[dict[str, str]]
+        self, instructions: str, messages: list[dict[str, str]], version: int
     ) -> tuple[list[dict], str, int | None]:
         """Generate code via markdown-fenced output.
 
         The model can call explore_codebase to read project source files and
-        installed package source before producing its final code output. Up
-        to 100 tool rounds are allowed before the model must emit code.
+        installed package source, or execute_python to run snippets in a
+        subprocess, before producing its final code output. Up to 100 tool
+        rounds are allowed before the model must emit code.
 
         Returns:
             Tuple of (message_history, train_py_code, input_tokens)
@@ -309,12 +312,15 @@ class DeveloperAgent:
 
                 return output, code, input_tokens
 
-            # Execute tool calls (explore_codebase)
+            # Execute tool calls (explore_codebase / execute_python)
             function_responses = []
-            for part in parts:
+            for call_idx, part in enumerate(parts, start=1):
                 if hasattr(part, "function_call") and part.function_call:
                     result_str = self._execute_developer_tool_call(
-                        part.function_call
+                        part.function_call,
+                        version=version,
+                        step=step + 1,
+                        call_idx=call_idx,
                     )
                     function_responses.append(
                         types.Part.from_function_response(
@@ -332,7 +338,14 @@ class DeveloperAgent:
         # Should not reach here (last step has no tools so model must produce text)
         raise RuntimeError("Code generation exhausted tool steps without producing code")
 
-    def _execute_developer_tool_call(self, function_call) -> str:
+    def _execute_developer_tool_call(
+        self,
+        function_call,
+        *,
+        version: int,
+        step: int,
+        call_idx: int,
+    ) -> str:
         """Dispatch a tool call made during code generation."""
         args = dict(function_call.args)
 
@@ -340,6 +353,31 @@ class DeveloperAgent:
             query = args["query"]
             self.logger.info("explore_codebase called: %s", query[:100])
             return explore_codebase(query)
+
+        if function_call.name == "execute_python":
+            code = args["code"]
+            timeout = args.get("timeout_seconds", 300)
+            self.logger.info(
+                "execute_python called (v%s step %s call %s, %d bytes, timeout=%ds)",
+                version,
+                step,
+                call_idx,
+                len(code),
+                timeout,
+            )
+            work_dir = self.outputs_dir / str(version) / "codegen_snippets"
+            work_dir.mkdir(parents=True, exist_ok=True)
+            script_file = work_dir / f"{step}_{call_idx}.py"
+            resource_header = _build_resource_header(
+                self.cpu_core_range, self.gpu_identifier
+            )
+            script_file.write_text(resource_header + code)
+            job = execute_code(
+                str(script_file),
+                timeout_seconds=timeout,
+                conda_env=self.conda_env,
+            )
+            return json.dumps({"output": job.result()})
 
         return json.dumps({"error": f"Unknown tool: {function_call.name}"})
 
@@ -1438,7 +1476,7 @@ Fix the error. Write logs to {next_log_path} and save all required artifacts to 
 
             try:
                 response_output, train_py, last_input_tokens = self._generate_code(
-                    instructions=system_prompt, messages=input_list
+                    instructions=system_prompt, messages=input_list, version=version
                 )
             except (ValueError, RuntimeError) as e:
                 self.logger.warning(
