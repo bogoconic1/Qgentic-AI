@@ -45,19 +45,21 @@ def fake_pipeline(monkeypatch, tmp_path):
     captured = {"codegen_calls": 0, "review_calls": 0, "executed": []}
 
     def fake_call_llm(*, model, system_instruction, messages, text_format=None, **kwargs):
-        # First positional usage: codegen pass returns raw text response.
-        if text_format is None:
-            captured["codegen_calls"] += 1
-            version = captured["codegen_calls"]
-            version_dir = tmp_path / "run" / f"v{version}"
-            return _fake_llm_response(
-                "Here is the script:\n```python\n" + _hello_script(version_dir) + "```\n"
-            )
-        # text_format=GoalReview path returns a parsed pydantic instance.
+        # Codegen path uses call_llm; the review path now bypasses it and
+        # calls the Anthropic SDK directly, so this mock only handles codegen.
+        captured["codegen_calls"] += 1
+        version = captured["codegen_calls"]
+        version_dir = tmp_path / "run" / f"v{version}"
+        return _fake_llm_response(
+            "Here is the script:\n```python\n" + _hello_script(version_dir) + "```\n"
+        )
+
+    def fake_review(goal_text, code, output):
         captured["review_calls"] += 1
         return captured["review_factory"](captured["review_calls"])
 
     monkeypatch.setattr(goal_developer, "call_llm", fake_call_llm)
+    monkeypatch.setattr(goal_developer, "_review", fake_review)
 
     def fake_execute_with_monitor(code_path, *, timeout_seconds, log_monitor_interval, logger, conda_env=None):
         # Actually run the script so out.txt is materialised — exercises the real subprocess too slowly.
