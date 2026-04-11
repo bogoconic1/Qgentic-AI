@@ -39,3 +39,4 @@ seaborn
 torchgeo
 scikit-image
 google-genai
+anthropic
