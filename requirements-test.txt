@@ -9,6 +9,7 @@ numpy
 kaggle
 kagglehub
 google-genai
+anthropic
 PyYAML
 requests
 firecrawl-py

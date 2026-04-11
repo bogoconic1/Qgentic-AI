@@ -15,6 +15,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+import anthropic
 import weave
 from google.genai import types
 
@@ -51,6 +52,13 @@ _DEVELOPER_MODEL = _LLM_CFG["developer_model"]
 _DEVELOPER_TOOL_MODEL = _LLM_CFG["developer_tool_model"]
 _BASELINE_CODE_TIMEOUT = _RUNTIME_CFG["baseline_code_timeout"]
 _LOG_MONITOR_INTERVAL = _RUNTIME_CFG["log_monitor_interval"]
+
+# Goal-mode review uses Anthropic Claude Opus 4.6 with structured output
+# (`output_format=GoalReview`) and the server-side `web_search_20260209`
+# tool, both in a single `messages.parse` call.
+_REVIEW_MODEL = "claude-opus-4-6"
+_REVIEW_MAX_TOKENS = 16384
+_ANTHROPIC_CLIENT = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY from env / .env
 
 _ENABLE_LOGGING_GUARD = bool(_GUARDRAIL_CFG["logging_basicconfig_order"])
 _ENABLE_LEAKAGE_GUARD = bool(_GUARDRAIL_CFG["leakage_review"])
@@ -305,11 +313,30 @@ def _generate_code(input_list: list[dict], goal_text: str, version_dir: Path) ->
 
 @weave.op()
 def _review(goal_text: str, code: str, output: str) -> GoalReview:
-    """Run the one-shot review LLM call and return the parsed GoalReview."""
-    return call_llm(
-        model=_DEVELOPER_TOOL_MODEL,
-        system_instruction=review_system(),
-        messages=review_user(goal_text, code, output),
-        text_format=GoalReview,
-        enable_google_search=True,
+    """Run the one-shot review LLM call and return the parsed GoalReview.
+
+    Uses Anthropic Claude Opus 4.6 with structured output (``output_format``)
+    and the server-side ``web_search_20260209`` tool, both in a single
+    ``messages.parse`` call. The model can web-search for better techniques
+    while reasoning about the run, then emits a JSON GoalReview that matches
+    the pydantic schema directly.
+    """
+    parsed = _ANTHROPIC_CLIENT.messages.parse(
+        model=_REVIEW_MODEL,
+        max_tokens=_REVIEW_MAX_TOKENS,
+        system=review_system(),
+        messages=[
+            {
+                "role": "user",
+                "content": review_user(goal_text, code, output),
+            }
+        ],
+        output_format=GoalReview,
+        tools=[
+            {
+                "name": "web_search",
+                "type": "web_search_20260209",
+            }
+        ],
     )
+    return parsed.parsed_output
