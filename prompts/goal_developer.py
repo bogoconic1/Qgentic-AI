@@ -13,8 +13,12 @@ from pathlib import Path
 from schemas.goal_developer import GoalReview
 
 
-def codegen_system() -> str:
-    return """You write a single Python script (`train.py`) that iterates toward the goal stated in `<goal>`. Each iteration produces one complete script; the previous attempt is visible above in the conversation thread, along with the reviewer's verdict.
+def codegen_system(goal_text: str) -> str:
+    return f"""You write a single Python script (`train.py`) that iterates toward the goal stated in `<goal>` below. Each iteration produces one complete script; the previous attempt is visible above in the conversation thread, along with the reviewer's verdict.
+
+<goal>
+{goal_text}
+</goal>
 
 **Hard Constraints:**
 - Place `import logging` and `logging.basicConfig(level=logging.INFO, ...)` at the very top of the script, BEFORE any third-party imports (torch, transformers, numpy, etc.). Third-party libraries configure logging on import, so basicConfig must come first. A pre-execution guardrail enforces this and will block the script otherwise.
@@ -32,12 +36,8 @@ When the user message includes a previous review with a `next_step`, evolve your
 """
 
 
-def initial_codegen_user(goal_text: str, version_dir: Path) -> str:
-    return f"""<goal>
-{goal_text}
-</goal>
-
-<version_dir>{version_dir}</version_dir>
+def initial_codegen_user(version_dir: Path) -> str:
+    return f"""<version_dir>{version_dir}</version_dir>
 
 This is iteration 1. Write the first attempt from scratch.
 
