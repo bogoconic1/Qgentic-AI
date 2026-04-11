@@ -14,8 +14,18 @@ from schemas.goal_developer import GoalReview
 
 
 def _fake_llm_response(text: str) -> SimpleNamespace:
-    """Mimic the shape of a genai response with a `.text` attribute."""
-    return SimpleNamespace(text=text)
+    """Mimic the shape of a genai text response.
+
+    The new tool-loop in `_generate_code` reads `response.candidates[0].content.parts`
+    to check for function calls before falling back to `response.text`. We model the
+    response as having a single text-only part (no `function_call` attribute) so the
+    loop's `has_function_calls` check correctly evaluates to False and the loop returns
+    the extracted code.
+    """
+    text_part = SimpleNamespace(text=text)  # intentionally has no `function_call` attr
+    content = SimpleNamespace(parts=[text_part])
+    candidate = SimpleNamespace(content=content)
+    return SimpleNamespace(text=text, candidates=[candidate])
 
 
 def _hello_script(version_dir: Path) -> str:
