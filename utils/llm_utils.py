@@ -168,33 +168,22 @@ def get_monitor_tools():
 
 
 # ---------------------------------------------------------------------------
-# Library investigator tools (read-only, scoped to site-packages)
+# Explore tools (read-only, scoped to runtime.explore_allowed_roots)
 # ---------------------------------------------------------------------------
 
 
-def get_library_investigator_tools():
-    """Get tools for the library investigator sub-agent.
-
-    Four read-only tools scoped to the venv's site-packages directory.
-    """
+def get_explore_tools():
+    """Get the read-only tools available to the codebase exploration sub-agent."""
     return [
         types.FunctionDeclaration(
-            name="list_packages",
-            description="List all installed Python packages in the virtual environment's site-packages directory. Returns package directory names (excludes dist-info, egg-info, and private directories).",
-            parameters_json_schema={
-                "type": "object",
-                "properties": {},
-            },
-        ),
-        types.FunctionDeclaration(
             name="read_file",
-            description="Read a Python source file from site-packages. Path is relative to site-packages (e.g., 'transformers/trainer.py'). Returns numbered lines. Files over 300 lines are truncated unless start_line/end_line are specified.",
+            description="Read a source file. Path is absolute or relative to the current working directory. Returns numbered lines. Files over 300 lines are truncated unless start_line/end_line are specified.",
             parameters_json_schema={
                 "type": "object",
                 "properties": {
                     "path": {
                         "type": "string",
-                        "description": "File path relative to site-packages (e.g., 'trl/trainer/sft_trainer.py')",
+                        "description": "Absolute path or path relative to cwd (e.g. '/workspace/Qgentic-AI/agents/developer.py').",
                     },
                     "start_line": {
                         "type": "integer",
@@ -210,49 +199,91 @@ def get_library_investigator_tools():
         ),
         types.FunctionDeclaration(
             name="glob_files",
-            description="Find files matching a glob pattern within a package directory. For example, glob_files('transformers', '**/*trainer*.py') finds all trainer-related files.",
+            description="Find files matching a glob pattern under a root directory. Returns up to 50 matches as paths relative to the root.",
             parameters_json_schema={
                 "type": "object",
                 "properties": {
-                    "package": {
+                    "root": {
                         "type": "string",
-                        "description": "Package directory name (e.g., 'transformers', 'trl')",
+                        "description": "Directory under one of the allowed roots to glob from.",
                     },
                     "pattern": {
                         "type": "string",
-                        "description": "Glob pattern (e.g., '**/*.py', '**/sft*.py')",
+                        "description": "Glob pattern (e.g., '**/*.py', '**/sft*.py').",
                     },
                 },
-                "required": ["package", "pattern"],
+                "required": ["root", "pattern"],
             },
         ),
         types.FunctionDeclaration(
             name="grep_code",
-            description="Search for a regex pattern in Python source files within a package. Returns matching lines with file paths and line numbers.",
+            description="Recursively search a regex pattern in files under a root directory. Returns matching lines with file paths and line numbers.",
             parameters_json_schema={
                 "type": "object",
                 "properties": {
-                    "package": {
+                    "root": {
                         "type": "string",
-                        "description": "Package directory name (e.g., 'transformers', 'xgboost')",
+                        "description": "Directory under one of the allowed roots to search in.",
                     },
                     "pattern": {
                         "type": "string",
-                        "description": "Regular expression pattern to search for (e.g., 'class SFTTrainer', 'def forward')",
+                        "description": "Regular expression pattern (extended regex; passed to grep -E).",
+                    },
+                    "file_glob": {
+                        "type": "string",
+                        "description": "File glob to restrict the search (default '*.py'; pass '*' for all files).",
                     },
                     "max_results": {
                         "type": "integer",
-                        "description": "Maximum number of matching lines to return (default: 20)",
+                        "description": "Maximum number of matching lines to return (default: 20).",
                     },
                 },
-                "required": ["package", "pattern"],
+                "required": ["root", "pattern"],
+            },
+        ),
+        types.FunctionDeclaration(
+            name="list_dir",
+            description="List the immediate children of a directory. Directories are suffixed with '/'.",
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Directory path under one of the allowed roots.",
+                    },
+                    "max_entries": {
+                        "type": "integer",
+                        "description": "Maximum number of entries to return (default: 100).",
+                    },
+                },
+                "required": ["path"],
+            },
+        ),
+        types.FunctionDeclaration(
+            name="bash_readonly",
+            description=(
+                "Run a single read-only shell command. ONLY these commands are allowed: "
+                "ls, cat, head, tail, wc, file, find, grep, tree, du, stat, "
+                "git status, git log, git diff, git show, git blame, git ls-files, git ls-tree. "
+                "Pipes (|), redirection (>, <, >>), command chaining (;, &&, ||), backticks, and $() are forbidden — "
+                "use the dedicated read_file/glob_files/grep_code/list_dir tools instead."
+            ),
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "The shell command to run (e.g. 'ls -la /workspace/Qgentic-AI/agents').",
+                    },
+                },
+                "required": ["command"],
             },
         ),
     ]
 
 
 # ---------------------------------------------------------------------------
-# Developer tools (investigate_library for code generation)
+# Developer tools (explore_codebase for code generation)
 # ---------------------------------------------------------------------------
 
 
@@ -260,14 +291,14 @@ def get_developer_tools():
     """Get tools available to the DeveloperAgent during code generation."""
     return [
         types.FunctionDeclaration(
-            name="investigate_library",
-            description="Investigate the actual source code of an installed Python library to understand its API before writing code. A sub-agent will explore the library's source files in site-packages and return accurate constructor signatures, method signatures, and usage patterns. Use this when you need to understand how to use a library correctly.",
+            name="explore_codebase",
+            description="Explore the codebase and installed Python packages to answer questions about implementations, APIs, file layouts, and existing patterns. A read-only sub-agent uses Read/Glob/Grep/Bash tools across the configured roots and returns a markdown report. Use this whenever you need to understand existing code before writing new code.",
             parameters_json_schema={
                 "type": "object",
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "Natural language query describing what you need to understand (e.g., 'How to use trl SFTTrainer with a Qwen3-4B model, including SFTConfig and data formatting')",
+                        "description": "Natural-language question about the codebase or installed libraries.",
                     }
                 },
                 "required": ["query"],

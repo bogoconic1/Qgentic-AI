@@ -6,7 +6,6 @@ llm:
   starter_model: "gemini-3.1-pro-preview"
   leakage_review_model: "gemini-3.1-pro-preview"
   finetuned_code_api_model: "gemini-3.1-pro-preview"
-  library_investigator_model: "gemini-3.1-pro-preview"
 runtime:
   researcher_max_steps: 512
   llm_max_retries: 5
@@ -28,7 +27,16 @@ runtime:
   log_monitor_interval: 120  # Seconds between LLM log monitor calls during code execution
   is_lower_better: false  # Metric direction: true if lower scores are better (e.g. MSE), false if higher is better (e.g. R²)
   gold_threshold: null  # Target score to reach (null = no target)
-  library_investigator_max_steps: 15
+  # Codebase exploration sub-agent
+  explore_max_steps: 100  # Max tool-call rounds the explore subagent can use per invocation
+  explore_allowed_roots:
+    # Paths the explore subagent is allowed to read.
+    # The site-packages directory of the active Python interpreter (i.e. whichever
+    # conda/venv launched the orchestrator) is auto-added at runtime — you do NOT
+    # need to list it here. To expose a *different* env's site-packages (e.g. if
+    # the orchestrator runs in a thin env but you want explore to read libraries
+    # from a heavyweight env), add the absolute path explicitly below.
+    - /workspace
 paths:
   task_root: "task"
   outputs_dirname: "outputs"

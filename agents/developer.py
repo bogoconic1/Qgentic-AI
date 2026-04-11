@@ -22,7 +22,7 @@ from tools.developer import (
 from utils.guardrails import evaluate_guardrails, build_block_summary
 from tools.helpers import call_llm, _build_directory_listing
 from google.genai import types
-from tools.library_investigator import investigate_library
+from tools.explore import explore_codebase
 from utils.llm_utils import append_message, get_developer_tools
 from utils.checkpoint import (
     create_db as _create_checkpoint_db,
@@ -253,9 +253,9 @@ class DeveloperAgent:
     ) -> tuple[list[dict], str, int | None]:
         """Generate code via markdown-fenced output.
 
-        The model can call investigate_library to read installed package source
-        code before producing its final code output. Up to 3 tool rounds are
-        allowed before the model must emit code.
+        The model can call explore_codebase to read project source files and
+        installed package source before producing its final code output. Up
+        to 100 tool rounds are allowed before the model must emit code.
 
         Returns:
             Tuple of (message_history, train_py_code, input_tokens)
@@ -265,7 +265,7 @@ class DeveloperAgent:
         )
 
         tools = get_developer_tools()
-        max_tool_steps = 3
+        max_tool_steps = 100
         input_tokens = None
 
         for step in range(max_tool_steps + 1):
@@ -309,7 +309,7 @@ class DeveloperAgent:
 
                 return output, code, input_tokens
 
-            # Execute tool calls (investigate_library)
+            # Execute tool calls (explore_codebase)
             function_responses = []
             for part in parts:
                 if hasattr(part, "function_call") and part.function_call:
@@ -336,10 +336,10 @@ class DeveloperAgent:
         """Dispatch a tool call made during code generation."""
         args = dict(function_call.args)
 
-        if function_call.name == "investigate_library":
+        if function_call.name == "explore_codebase":
             query = args["query"]
-            self.logger.info("investigate_library called: %s", query[:100])
-            return investigate_library(query)
+            self.logger.info("explore_codebase called: %s", query[:100])
+            return explore_codebase(query)
 
         return json.dumps({"error": f"Unknown tool: {function_call.name}"})
 
