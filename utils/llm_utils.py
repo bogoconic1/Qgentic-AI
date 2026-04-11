@@ -304,4 +304,28 @@ def get_developer_tools():
                 "required": ["query"],
             },
         ),
+        types.FunctionDeclaration(
+            name="execute_python",
+            description=(
+                "Run a Python snippet in a fresh subprocess and get back stdout, "
+                "stderr, and the exit code. Use this to VERIFY behavior — test an "
+                "import, probe an API, check a library version, prototype a function, "
+                "run a quick computation. The snippet runs with a timeout. Use this "
+                "tool when you would otherwise be guessing whether something works."
+            ),
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "code": {
+                        "type": "string",
+                        "description": "Python source code to execute.",
+                    },
+                    "timeout_seconds": {
+                        "type": "integer",
+                        "description": "Hard timeout in seconds (default: 300).",
+                    },
+                },
+                "required": ["code"],
+            },
+        ),
     ]
