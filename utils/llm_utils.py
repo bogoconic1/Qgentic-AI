@@ -292,7 +292,18 @@ def get_developer_tools():
     return [
         types.FunctionDeclaration(
             name="explore_codebase",
-            description="Explore the codebase and installed Python packages to answer questions about implementations, APIs, file layouts, and existing patterns. A read-only sub-agent uses Read/Glob/Grep/Bash tools across the configured roots and returns a markdown report. Use this whenever you need to understand existing code before writing new code.",
+            description=(
+                "Ask a natural-language question about the codebase or installed Python "
+                "packages and get back a markdown report with file:line citations. The "
+                "sub-agent reads source files using read_file/glob_files/grep_code/list_dir "
+                "across configured roots — it does NOT execute Python or shell commands. "
+                "To verify whether a snippet runs, use `execute_python` instead.\n\n"
+                "Use this for static investigation: 'How does X work?', 'What's the "
+                "signature of Y?', 'Where is Z defined?', 'Show me callers of W'. Brief "
+                "the sub-agent like a smart colleague who just walked into the room — it "
+                "hasn't seen this conversation. Terse command-style prompts produce "
+                "shallow, generic work."
+            ),
             parameters_json_schema={
                 "type": "object",
                 "properties": {
