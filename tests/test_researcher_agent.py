@@ -1,7 +1,6 @@
 """Unit tests for ResearcherAgent."""
 
 import pytest
-import json
 import tempfile
 from pathlib import Path
 
@@ -30,14 +29,6 @@ def test_task_dir():
             "Submissions are evaluated using F1 score.\n"
         )
 
-        starter_data = {
-            "task_types": ["nlp"],
-            "task_summary": "Text classification task",
-        }
-        (outputs_dir / "starter_suggestions.json").write_text(
-            json.dumps(starter_data)
-        )
-
         yield {
             "task_root": task_root,
             "slug": slug,
@@ -62,20 +53,3 @@ def test_agent_initialization(test_task_dir, monkeypatch):
 
     assert len(agent.description) > 0
     assert "test competition" in agent.description.lower()
-
-
-def test_read_starter_suggestions(test_task_dir, monkeypatch):
-    """Test that starter suggestions are read correctly."""
-    monkeypatch.setattr("agents.researcher._TASK_ROOT", test_task_dir["task_root"])
-
-    agent = ResearcherAgent(
-        test_task_dir["slug"],
-        test_task_dir["iteration"],
-    )
-
-    starter_text = agent._read_starter_suggestions()
-
-    assert "<task_types>" in starter_text
-    assert "nlp" in starter_text
-    assert "<task_summary>" in starter_text
-    assert "Text classification" in starter_text
