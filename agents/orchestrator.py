@@ -8,6 +8,7 @@ from queue import Queue
 
 from agents.developer import DeveloperAgent
 from project_config import get_config, get_instructions
+from tools.research import deep_research
 from tools.helpers import _build_directory_listing
 from utils.checkpoint import (
     create_db as _create_checkpoint_db,
@@ -397,14 +398,18 @@ class Orchestrator:
         # Phase 0: Ensure raw competition data is on disk before any agent runs.
         download_competition_data(self.slug, self.base_dir)
 
-        # Phase 1: Researcher subagent — re-wired in a follow-up PR.
-        plan_path = self.outputs_dir / "plan.md"
-        if not plan_path.exists():
-            raise RuntimeError(
-                "plan.md not found. The researcher subagent is not yet wired in; "
-                "provide plan.md manually until the follow-up PR lands."
-            )
-        plan_content = plan_path.read_text()
+        # Phase 1: Deep Research — produce PLAN_1.md via the researcher subagent.
+        description = (self.base_dir / "description.md").read_text()
+        research_iter = 1
+        instruction = (
+            f"Research Kaggle competition '{self.slug}'. Use web_research + "
+            f"web_fetch to study the domain, prior art, and top approaches. "
+            f"Return a markdown PLAN that a developer can execute on — "
+            f"include domain context, validated hypotheses, data strategy, "
+            f"feature engineering priorities, and modeling direction.\n\n"
+            f"<competition_description>\n{description}\n</competition_description>"
+        )
+        plan_content = deep_research(instruction, self.slug, self.run_id, research_iter)
 
         external_data_listing = self._get_external_data_listing()
         print(f"External data listing: {len(external_data_listing)} chars")
