@@ -49,18 +49,9 @@ _BASELINE_CODE_TIMEOUT = _RUNTIME_CFG["baseline_code_timeout"]
 _LOG_MONITOR_INTERVAL = _RUNTIME_CFG["log_monitor_interval"]
 
 
-def _build_resource_header(
-    cpu_core_range: list[int] | None, gpu_identifier: str | None
-) -> str:
-    """Build a Python header that sets CPU affinity and GPU assignment."""
-    lines = ["import os\n"]
-    if cpu_core_range:
-        lines.append("import psutil")
-        lines.append(f"psutil.Process().cpu_affinity({cpu_core_range})\n")
-    if gpu_identifier is not None:
-        lines.append(f'os.environ["CUDA_VISIBLE_DEVICES"] = "{gpu_identifier}"')
-    lines.append('os.environ["OPENBLAS_NUM_THREADS"] = "32"\n')
-    return "\n".join(lines) + "\n"
+def _build_resource_header() -> str:
+    """Build a Python header that caps BLAS thread count for subprocess scripts."""
+    return 'import os\nos.environ["OPENBLAS_NUM_THREADS"] = "32"\n\n'
 
 
 @weave.op()
