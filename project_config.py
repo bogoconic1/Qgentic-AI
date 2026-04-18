@@ -31,7 +31,6 @@ def get_config_value(*keys: str, default: Any | None = None) -> Any:
 _INSTRUCTIONS_HEADINGS = [
     "# Researcher Instructions",
     "# Developer Instructions",
-    "# Strategies",
 ]
 
 
@@ -53,7 +52,7 @@ def _extract_section(text: str, heading: str, next_heading: str | None) -> list[
 def get_instructions() -> dict[str, list[str]]:
     """Parse INSTRUCTIONS.md and return content under each known H1 heading.
 
-    Headings (in order): # Researcher Instructions, # Developer Instructions, # Strategies.
+    Headings (in order): # Researcher Instructions, # Developer Instructions.
     Every non-empty line between one heading and the next belongs to that section.
     """
     instructions_path = Path(__file__).resolve().parent / "INSTRUCTIONS.md"

@@ -61,7 +61,6 @@ File contents:
 def build_system(
     description: str,
     directory_listing: str,
-    strategy_name: str,
     slug: str,
     hitl_instructions: list[str] | None = None,
 ) -> str:
@@ -76,11 +75,11 @@ def build_system(
 ---
 """
 
-    constraints = get_hard_constraints(strategy_name=strategy_name)
+    constraints = get_hard_constraints()
 
     helper_files_section = _read_helper_files(slug)
 
-    return f"""You write train.py for Kaggle competitions using **only** the specified model `{strategy_name}`.
+    return f"""You write train.py for Kaggle competitions.
 
 **Environment:** Single GPU (40GB VRAM)
 
@@ -107,7 +106,7 @@ The script must save these files to the paths specified in the user prompt:
 1. **`submission.csv`**: Test predictions formatted per competition requirements.
 2. **`valid_preds.csv`**: Validation predictions with fold numbers, raw predictions, ground truth labels, and row IDs.
 3. **`model_*.{{ext}}`**: Saved model files. Save per-fold if using CV.
-4. **`train_stats.json`**: Must contain `strategy_name`, `cv_scores`, `cv_mean`, `cv_std`, `cv_worst`, `submission_distribution`, key hyperparameters, and `errors` (list of exceptions encountered).
+4. **`train_stats.json`**: Must contain `cv_scores`, `cv_mean`, `cv_std`, `cv_worst`, `submission_distribution`, key hyperparameters, and `errors` (list of exceptions encountered).
 5. **`loss_curve.png`** and **`metric_curve.png`**: One subplot per fold showing train/val curves. Use `plt.switch_backend('Agg')`. Do not call `plt.show()`.
 """
 

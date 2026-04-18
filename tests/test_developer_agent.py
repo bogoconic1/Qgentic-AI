@@ -51,7 +51,6 @@ def test_agent_initialization(test_task_dir, monkeypatch):
         slug=test_task_dir["slug"],
         run_id="20260418_000000",
         iteration=test_task_dir["iteration"],
-        strategy_name="test-strategy",
         plan_content="Test plan",
     )
 
@@ -59,7 +58,6 @@ def test_agent_initialization(test_task_dir, monkeypatch):
     assert agent.iteration == test_task_dir["iteration"]
     assert agent.outputs_dir.exists()
     assert agent.base_dir.exists()
-    assert agent.strategy_name == "test-strategy"
 
 
 def test_extract_code(test_task_dir, monkeypatch):

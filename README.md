@@ -94,9 +94,8 @@ Before running, create these files in `task/<slug>/`:
 - **`metric.py`**: Competition-specific evaluation metric
 
 Optionally, add Human-In-The-Loop (HITL) instructions in `INSTRUCTIONS.md`:
-- `# Researcher Instructions`: Guide research direction
-- `# Strategies`: Override strategy selection
-- `# Developer Instructions`: Guide code implementation
+- `# Researcher Instructions`: Guide research direction — fed into every Deep Research sub-agent invocation.
+- `# Developer Instructions`: Guide code implementation — fed into every Developer iteration.
 
 ### Launch
 
