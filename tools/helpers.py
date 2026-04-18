@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 import time
 
 from google import genai
@@ -105,40 +106,35 @@ def _retry_with_backoff(func, *, max_retries, backoff_sequence):
     raise last_exception
 
 
+_RUN_ID_PATTERN = re.compile(r"^\d{8}_\d{6}$")
+
+
 def _build_directory_listing(root: str, num_files: int | None = None) -> str:
     cfg = get_config()
     runtime_cfg = cfg["runtime"]
-    path_cfg = cfg["paths"]
     limit = (
         num_files
         if num_files is not None
         else runtime_cfg["directory_listing_max_files"]
     )
     lines: list[str] = []
-    outputs_dirname = path_cfg["outputs_dirname"]
 
     for current_root, dirs, files in os.walk(root):
         rel_root = os.path.relpath(current_root, root)
 
-        # Determine traversal policy for the outputs tree: allow only external_data_*/ contents
+        # Determine traversal policy for the run_id tree: allow only external_data/ contents
         segments = [] if rel_root in (".", "") else rel_root.split(os.sep)
         files_to_show = files
 
-        if segments and segments[0] == outputs_dirname:
-            # At <root>/outputs
+        if segments and _RUN_ID_PATTERN.match(segments[0]):
+            # At <root>/<run_id>
             if len(segments) == 1:
-                # Only descend into iteration directories that are numeric; hide files at this level
-                dirs[:] = sorted([d for d in dirs if d.isdigit()])
-                files_to_show = []
-            # At <root>/outputs/<iteration>
-            elif len(segments) == 2:
-                # Only descend into the external_data subdirectory; hide files at this level
+                # Only descend into external_data; hide per-iteration noise
                 dirs[:] = sorted([d for d in dirs if d == "external_data"])
                 files_to_show = []
             else:
-                # At or below <root>/outputs/<iteration>/*
-                # Allow full traversal within external_data; block others entirely
-                if len(segments) >= 3 and segments[2] == "external_data":
+                # At or below <root>/<run_id>/*
+                if segments[1] == "external_data":
                     dirs[:] = sorted(dirs)
                     files_to_show = files
                 else:
