@@ -6,7 +6,6 @@ import subprocess
 import re
 from queue import Queue
 
-from agents.researcher import ResearcherAgent
 from agents.developer import DeveloperAgent
 from project_config import get_config, get_instructions
 from tools.helpers import _build_directory_listing
@@ -396,25 +395,14 @@ class Orchestrator:
         # Phase 0: Ensure raw competition data is on disk before any agent runs.
         download_competition_data(self.slug, self.base_dir)
 
-        # Phase 1: Researcher Agent - Generate research plan
+        # Phase 1: Researcher subagent — re-wired in a follow-up PR.
         plan_path = self.outputs_dir / "plan.md"
-        if plan_path.exists():
-            with open(plan_path, "r") as f:
-                plan_content = f.read()
-        else:
-            max_workers, gpu_pool, _ = _calculate_max_parallel_workers_and_pools()
-            cpu_core_pool = _create_cpu_core_pool(max_workers)
-            agent = ResearcherAgent(
-                self.slug,
-                self.iteration,
-                cpu_core_pool=cpu_core_pool,
-                gpu_pool=gpu_pool,
+        if not plan_path.exists():
+            raise RuntimeError(
+                "plan.md not found. The researcher subagent is not yet wired in; "
+                "provide plan.md manually until the follow-up PR lands."
             )
-            plan_content = agent.build_plan()
-            if not plan_content:
-                raise RuntimeError("No plan produced by ResearcherAgent.")
-            with open(plan_path, "w") as f:
-                f.write(plan_content)
+        plan_content = plan_path.read_text()
 
         external_data_listing = self._get_external_data_listing()
         print(f"External data listing: {len(external_data_listing)} chars")
