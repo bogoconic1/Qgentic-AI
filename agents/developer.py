@@ -39,7 +39,6 @@ _LLM_CFG = _CONFIG["llm"]
 _PATH_CFG = _CONFIG["paths"]
 _RUNTIME_CFG = _CONFIG["runtime"]
 _GUARDRAIL_CFG = _CONFIG["guardrails"]
-_DEVELOPER_CFG = _CONFIG["developer"]
 
 _ENABLE_LOGGING_GUARD = bool(_GUARDRAIL_CFG["logging_basicconfig_order"])
 _ENABLE_LEAKAGE_GUARD = bool(_GUARDRAIL_CFG["leakage_review"])
@@ -68,10 +67,6 @@ class DeveloperAgent:
         strategy_name: str | None = None,
         external_data_listing: str | None = None,
         plan_content: str | None = None,
-        cpu_core_range: list[int] | None = None,
-        gpu_identifier: str | None = None,
-        gpu_isolation_mode: str = "none",
-        conda_env: str | None = None,
     ):
         load_dotenv()
         self.slug = slug
@@ -93,17 +88,6 @@ class DeveloperAgent:
         self.outputs_dir.mkdir(parents=True, exist_ok=True)
         self.developer_log_path = self.outputs_dir / f"developer_{iteration}.txt"
         self._configure_logger()
-
-        self.cpu_core_range = (
-            cpu_core_range  # List of CPU cores to use (e.g., [0,1,2,...,41])
-        )
-        self.gpu_identifier = (
-            gpu_identifier  # GPU identifier: MIG UUID or GPU ID (as string)
-        )
-        self.gpu_isolation_mode = gpu_isolation_mode  # "mig", "multi-gpu", or "none"
-        self.conda_env = (
-            conda_env  # Conda environment name for isolated package installation
-        )
 
         # Metric direction and target from config
         _is_lower_better = _RUNTIME_CFG["is_lower_better"]
@@ -142,7 +126,6 @@ class DeveloperAgent:
         os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
         self.strategy_name: str | None = strategy_name
-
         assert self.strategy_name is not None
 
         self.logger.info(
@@ -151,11 +134,8 @@ class DeveloperAgent:
             self.iteration,
         )
         self.logger.debug("Outputs directory resolved to: %s", self.outputs_dir)
-        if self.conda_env:
-            self.logger.info("Conda environment assigned: %s", self.conda_env)
 
     def _configure_logger(self) -> None:
-        # Create a unique logger for this instance to avoid cross-contamination in parallel execution
         self.logger = logging.getLogger(f"{__name__}.{self.slug}.{self.iteration}")
 
         self.logger.handlers = []
@@ -181,23 +161,11 @@ class DeveloperAgent:
             self.base_dir,
             len(directory_listing),
         )
-        if self.cpu_core_range is not None:
-            self.logger.info(
-                "CPU core range set for parallel execution: %d cores",
-                len(self.cpu_core_range),
-            )
-        if self.gpu_identifier is not None:
-            self.logger.info(
-                "GPU identifier assigned: %s (mode: %s)",
-                self.gpu_identifier,
-                self.gpu_isolation_mode,
-            )
         return prompt_build_system(
             description=self.description,
             directory_listing=directory_listing,
             strategy_name=self.strategy_name,
             slug=self.slug,
-            cpu_core_range=self.cpu_core_range,
             hitl_instructions=_HITL_INSTRUCTIONS,
         )
 
@@ -335,51 +303,25 @@ class DeveloperAgent:
             work_dir = self.outputs_dir / str(version) / "codegen_snippets"
             work_dir.mkdir(parents=True, exist_ok=True)
             script_file = work_dir / f"{step}_{call_idx}.py"
-            resource_header = _build_resource_header(
-                self.cpu_core_range, self.gpu_identifier
-            )
-            script_file.write_text(resource_header + code)
-            job = execute_code(
-                str(script_file),
-                timeout_seconds=timeout,
-                conda_env=self.conda_env,
-            )
+            script_file.write_text(_build_resource_header() + code)
+            job = execute_code(str(script_file), timeout_seconds=timeout)
             return json.dumps({"output": job.result()})
 
         return json.dumps({"error": f"Unknown tool: {function_call.name}"})
 
     def _postprocess_code(self, code: str) -> tuple[str, int]:
-        """Insert resource allocation and BASE_DIR setup at the top of generated code.
+        """Insert BASE_DIR setup at the top of generated code.
 
         Returns:
             Tuple of (postprocessed_code, num_header_lines_added)
         """
-        lines = []
-        lines.append("import os")
-
-        if self.cpu_core_range is not None:
-            lines.append("import psutil  # For CPU affinity")
-            lines.append("")
-            lines.append(
-                "# CPU affinity (pin to specific cores to prevent resource overlap)"
-            )
-            lines.append(
-                f"psutil.Process(os.getpid()).cpu_affinity({self.cpu_core_range})"
-            )
-
-        if self.gpu_identifier is not None:
-            lines.append(
-                f'os.environ["CUDA_VISIBLE_DEVICES"] = "{self.gpu_identifier}"'
-            )
-        lines.append(
-            f'BASE_DIR = "task/{self.slug}" if not os.getenv(\'KAGGLE_KERNEL_RUN_TYPE\') else "/kaggle/input/{self.slug}"'
-        )
-        lines.append("")
-
+        lines = [
+            "import os",
+            f'BASE_DIR = "task/{self.slug}" if not os.getenv(\'KAGGLE_KERNEL_RUN_TYPE\') else "/kaggle/input/{self.slug}"',
+            "",
+        ]
         header = "\n".join(lines)
-        num_header_lines = len(lines)
-
-        return header + "\n" + code, num_header_lines
+        return header + "\n" + code, len(lines)
 
     def _get_parent_iteration_folder(self) -> Path:
         """Get parent run folder for shared per-run artifacts (external_data, etc.).
@@ -481,7 +423,6 @@ class DeveloperAgent:
             timeout_seconds=_BASELINE_CODE_TIMEOUT,
             log_monitor_interval=_LOG_MONITOR_INTERVAL,
             logger=self.logger,
-            conda_env=self.conda_env,
         )
         self.logger.debug("Execution output for v%s: %s", version, output)
         return output
