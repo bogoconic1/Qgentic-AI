@@ -30,7 +30,6 @@ def red_flags_system() -> str:
     return """You receive a Kaggle competition description, code script, and training logs. Identify red flags by reviewing the code and logs.
 
 ## Constraints
-- Do NOT use winning solutions from this competition.
 - Explicitly highlight any bugs in the code.
 
 ## Analysis Guidelines
@@ -91,13 +90,12 @@ def sota_system(
     return f"""{hitl_section}You receive a Kaggle competition description, researcher plans, initial script with logs, red flags, and shared experiment results.
 
 ## Constraints
-- Do NOT use winning solutions from this competition.
 - Do NOT change the model family in the initial script. Increasing model capacity (e.g. deberta-v3-base → deberta-v3-large, adding layers) IS allowed.
 - If code bugs are identified (including in <red_flags>), FIX THESE FIRST.
 
 ## Tools
 1. **execute_python**: Run Python scripts (5 min timeout). Access to data directory, model outputs, valid_preds.csv, train_stats.json.
-2. **scrape_web_page**: Read web pages for documentation and tutorials. Avoid competition-specific winner solutions.
+2. **scrape_web_page**: Read web pages for documentation and tutorials.
 3. **read_research_paper**: Read and summarize arXiv papers.
 
 ## Shared Experiments Analysis (Do First)

@@ -160,31 +160,10 @@ class ResearcherAgent:
         return [{"role": "user", "parts": content}]
 
     def _compose_system(self) -> str:
-        json_path = self.outputs_dir / "starter_suggestions.json"
-
-        with open(json_path, "r") as f:
-            starter_data = json.load(f)
-
-        task_types = starter_data["task_types"]
         return prompt_build_system(
             str(self.base_dir),
-            task_types=task_types,
             hitl_instructions=_HITL_INSTRUCTIONS,
         )
-
-    def _read_starter_suggestions(self) -> str:
-        json_path = self.outputs_dir / "starter_suggestions.json"
-        with open(json_path, "r") as f:
-            starter_suggestions = json.load(f)
-        task_types = ", ".join(starter_suggestions["task_types"])
-        task_summary = starter_suggestions["task_summary"]
-        return f"""<task_types>
-{task_types}
-</task_types>
-<task_summary>
-{task_summary}
-</task_summary>
-"""
 
     def _execute_tool_call(self, item, input_list: list = None, step: int = 0):
         """Execute a single tool call and return result dict.
@@ -280,7 +259,6 @@ class ResearcherAgent:
     @weave.op()
     def build_plan(self, max_steps: int | None = None) -> str:
         system_prompt = self._compose_system()
-        starter_suggestions = self._read_starter_suggestions()
 
         max_steps = max_steps or _DEFAULT_MAX_STEPS
         logger.info("Researcher run started with max_steps=%s", max_steps)
@@ -288,7 +266,7 @@ class ResearcherAgent:
         tools = get_tools()
         logger.info("Using model: %s", _RESEARCHER_AGENT_MODEL)
 
-        initial_prompt = prompt_initial_user(self.description, starter_suggestions)
+        initial_prompt = prompt_initial_user(self.description)
         input_list = [append_message("user", initial_prompt)]
 
         for step in range(max_steps):

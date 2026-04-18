@@ -8,7 +8,6 @@ from queue import Queue
 
 from agents.researcher import ResearcherAgent
 from agents.developer import DeveloperAgent
-from agents.starter import StarterAgent
 from project_config import get_config, get_instructions
 from tools.helpers import _build_directory_listing
 from utils.checkpoint import (
@@ -397,18 +396,7 @@ class Orchestrator:
         # Phase 0: Ensure raw competition data is on disk before any agent runs.
         download_competition_data(self.slug, self.base_dir)
 
-        # Phase 1: Starter Agent - Get task type and summary
-        starter_suggestion_path = self.outputs_dir / "starter_suggestions.json"
-        if not starter_suggestion_path.exists():
-            starter = StarterAgent(self.slug, self.iteration)
-            starter.run()
-
-        if not starter_suggestion_path.exists():
-            raise RuntimeError(
-                "Starter suggestions not found after running StarterAgent"
-            )
-
-        # Phase 2: Researcher Agent - Generate research plan
+        # Phase 1: Researcher Agent - Generate research plan
         plan_path = self.outputs_dir / "plan.md"
         if plan_path.exists():
             with open(plan_path, "r") as f:
@@ -432,7 +420,7 @@ class Orchestrator:
         print(f"External data listing: {len(external_data_listing)} chars")
         print(f"Plan content: {len(plan_content)} chars")
 
-        # Phase 3: Baseline Developer Stage - Evaluate strategies in parallel
+        # Phase 2: Baseline Developer Stage - Evaluate strategies in parallel
 
         strategy_list = get_instructions()["# Strategies"]
         if not strategy_list:
