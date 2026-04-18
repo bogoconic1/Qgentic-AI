@@ -1,5 +1,6 @@
 import argparse
 import os
+import time
 from typing import Optional, Tuple
 
 from agents.orchestrator import Orchestrator
@@ -45,7 +46,7 @@ def _init_tracking(args: argparse.Namespace) -> None:
     """Initialise wandb and weave using the best available configuration."""
 
     entity, project = _resolve_wandb_target(args.wandb_entity, args.wandb_project)
-    run_name = getattr(args, "wandb_run_name", None) or f"{args.iteration}-{args.slug}"
+    run_name = getattr(args, "wandb_run_name", None) or f"{args.run_id}-{args.slug}"
 
     if not project:
         # Fall back to disabled mode so downstream wandb.log calls are no-ops.
@@ -64,13 +65,18 @@ def _init_tracking(args: argparse.Namespace) -> None:
 def main():
     parser = argparse.ArgumentParser(description="Run Researcher+Developer pipeline")
     parser.add_argument("--slug", type=str, help="Competition slug under task/<slug>")
-    parser.add_argument("--iteration", type=int, help="Iteration number (e.g., 1)")
+    parser.add_argument(
+        "--run-id",
+        type=str,
+        default=None,
+        help="Run identifier (default: current timestamp %Y%m%d_%H%M%S)",
+    )
     parser.add_argument("--wandb-entity", type=str, help="Weights & Biases entity name")
     parser.add_argument("--wandb-project", type=str, help="Weights & Biases project name")
     parser.add_argument(
         "--wandb-run-name",
         type=str,
-        help="Optional wandb run name override (defaults to '<iteration>-<slug>')",
+        help="Optional wandb run name override (defaults to '<run_id>-<slug>')",
     )
     parser.add_argument(
         "--rollback-to-version",
@@ -80,10 +86,13 @@ def main():
     )
     args = parser.parse_args()
 
+    if args.run_id is None:
+        args.run_id = time.strftime("%Y%m%d_%H%M%S")
+
     os.environ["TASK_SLUG"] = args.slug
     _init_tracking(args)
 
-    orchestrator = Orchestrator(args.slug, args.iteration, rollback_to_version=args.rollback_to_version)
+    orchestrator = Orchestrator(args.slug, args.run_id, rollback_to_version=args.rollback_to_version)
     orchestrator.run()
 
     # Gracefully close tracking backends to avoid hanging background threads
