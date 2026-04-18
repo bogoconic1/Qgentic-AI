@@ -23,7 +23,6 @@ _RUNTIME_CFG = _CONFIG["runtime"]
 _PATH_CFG = _CONFIG["paths"]
 _DEVELOPER_CFG = _CONFIG["developer"]
 _TASK_ROOT = Path(_PATH_CFG["task_root"])
-_OUTPUTS_DIRNAME = _PATH_CFG["outputs_dirname"]
 _HITL_SOTA = bool(_DEVELOPER_CFG["hitl_sota"])
 
 
@@ -247,6 +246,7 @@ def _ensure_conda_environments(num_workers: int) -> None:
 @weave.op()
 def _run_developer_baseline(
     slug: str,
+    run_id: str,
     iteration_suffix: str,
     strategy_name: str,
     key: str,
@@ -261,7 +261,8 @@ def _run_developer_baseline(
 
     Args:
         slug: Competition slug
-        iteration_suffix: Iteration identifier (e.g., "1_1")
+        run_id: Orchestrator run identifier (timestamp dir under task/<slug>/)
+        iteration_suffix: Per-strategy suffix under the run (e.g., "1", "2", "3")
         strategy_name: Strategy name (e.g., "deberta-v3-large")
         key: Key for tracking results
         cpu_core_pool: Queue of CPU core ranges to grab from (None = no affinity)
@@ -277,6 +278,7 @@ def _run_developer_baseline(
         baseline_time_limit = _RUNTIME_CFG["baseline_time_limit"]
         dev = DeveloperAgent(
             slug,
+            run_id,
             iteration_suffix,
             strategy_name=strategy_name,
             external_data_listing=external_data_listing,
@@ -300,13 +302,13 @@ def _run_developer_baseline(
 
 class Orchestrator:
     def __init__(
-        self, slug: str, iteration: int, rollback_to_version: int | None = None
+        self, slug: str, run_id: str, rollback_to_version: int | None = None
     ):
         self.slug = slug
-        self.iteration = iteration
+        self.run_id = run_id
         self.rollback_to_version = rollback_to_version
         self.base_dir = _TASK_ROOT / slug
-        self.outputs_dir = self.base_dir / _OUTPUTS_DIRNAME / str(iteration)
+        self.outputs_dir = self.base_dir / self.run_id
 
     def _get_external_data_listing(self) -> str:
         """Get directory listing of external_data_* folders in outputs/<iteration>."""
@@ -337,7 +339,7 @@ class Orchestrator:
         Also removes baseline_results.json so affected models get re-run.
         """
         target = self.rollback_to_version
-        parent_outputs = self.base_dir / _OUTPUTS_DIRNAME
+        parent_outputs = self.outputs_dir
 
         found = False
         for iter_suffix in model_iterations:
@@ -419,7 +421,7 @@ class Orchestrator:
 
         if self.rollback_to_version is not None:
             model_iterations = [
-                f"{self.iteration}_{idx}"
+                str(idx)
                 for idx in range(1, len(strategy_list) + 1)
             ]
             self._rollback(model_iterations)
@@ -475,7 +477,7 @@ class Orchestrator:
             tasks = []
             for idx, strategy_name in enumerate(strategy_list, start=1):
                 key = strategy_name
-                dev_iter = f"{self.iteration}_{idx}"
+                dev_iter = str(idx)
 
                 conda_env = f"qgentic-strategy-{idx}"
 
@@ -491,6 +493,7 @@ class Orchestrator:
                 tasks.append(
                     (
                         self.slug,
+                        self.run_id,
                         dev_iter,
                         strategy_name,
                         key,

@@ -55,7 +55,6 @@ _BASELINE_TIME_LIMIT = _RUNTIME_CFG["baseline_time_limit"]
 _BASELINE_CODE_TIMEOUT = _RUNTIME_CFG["baseline_code_timeout"]
 _LOG_MONITOR_INTERVAL = _RUNTIME_CFG["log_monitor_interval"]
 _PATH_CFG = _CONFIG["paths"]
-_OUTPUTS_DIRNAME = _PATH_CFG["outputs_dirname"]
 
 
 def _build_resource_header(
@@ -233,6 +232,7 @@ def search_sota_suggestions(
     failed_ideas: list[str],
     slug: str,
     data_path: str,
+    run_id: str,
     shared_suggestions: list[str] | None = None,
     external_data_listing: str | None = None,
     plan_content: str | None = None,
@@ -372,6 +372,7 @@ def search_sota_suggestions(
                     description=description,
                     data_path=data_path,
                     slug=slug,
+                    run_id=run_id,
                     cpu_core_range=cpu_core_range,
                     gpu_identifier=gpu_identifier,
                     file_suffix=file_suffix,
@@ -419,6 +420,7 @@ def _execute_sota_tool_call(
     description,
     data_path,
     slug,
+    run_id,
     cpu_core_range,
     gpu_identifier,
     file_suffix,
@@ -429,6 +431,7 @@ def _execute_sota_tool_call(
 
     Args:
         item: Gemini function_call object
+        run_id: Orchestrator run identifier (timestamp dir under task/<slug>/)
         step: Current tool loop step (for unique filenames)
         version: Current developer version (for output directory)
     """
@@ -438,7 +441,7 @@ def _execute_sota_tool_call(
         code = args["code"]
         logger.info("SOTA tool: execute_python (code_len=%d, step=%d)", len(code), step)
 
-        version_dir = Path(data_path) / _OUTPUTS_DIRNAME / file_suffix / str(version)
+        version_dir = Path(data_path) / run_id / file_suffix / str(version)
         version_dir.mkdir(parents=True, exist_ok=True)
         script_file = version_dir / f"execute_python_{step}.py"
 
