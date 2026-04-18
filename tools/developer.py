@@ -432,8 +432,6 @@ def _execute_sota_tool_call(
         step: Current tool loop step (for unique filenames)
         version: Current developer version (for output directory)
     """
-    from tools.researcher import scrape_web_page, read_research_paper
-
     args = dict(item.args)
 
     if item.name == "execute_python":
@@ -450,18 +448,6 @@ def _execute_sota_tool_call(
         job = execute_code(str(script_file), timeout_seconds=300)
         output = job.result()
         return json.dumps({"output": output})
-
-    elif item.name == "scrape_web_page":
-        url = args["url"]
-        logger.info("SOTA tool: scrape_web_page(%s)", url)
-        result = scrape_web_page(url)
-        return json.dumps({"content": result})
-
-    elif item.name == "read_research_paper":
-        arxiv_link = args["arxiv_link"]
-        logger.info("SOTA tool: read_research_paper(%s)", arxiv_link)
-        result = read_research_paper(arxiv_link)
-        return json.dumps({"summary": result})
 
     else:
         raise ValueError(f"Unknown SOTA tool: {item.name}")
