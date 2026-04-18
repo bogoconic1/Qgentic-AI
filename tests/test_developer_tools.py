@@ -80,30 +80,28 @@ def test_execute_code_timeout(test_script_timeout):
     assert "killed" in result.lower() or "timeout" in result.lower()
 
 
-def test_execute_code_error_with_web_search(test_script_error, monkeypatch):
-    """Test code execution with error triggers web search."""
+def test_execute_code_error_returns_raw_stderr(test_script_error):
+    """Test that a failing script returns raw stderr (no enrichment).
 
-    def fake_web_search(query):
-        return (
-            query
-            + "\nThis is how you can fix the error: \nMock solution for test error"
-        )
-
-    monkeypatch.setattr("tools.developer.web_search_stack_trace", fake_web_search)
-
+    Stack-trace enrichment via ``web_search_stack_trace`` is now the caller's
+    responsibility; ``ExecutionJob.result()`` returns the unfiltered stream
+    content.
+    """
     job = execute_code(test_script_error, timeout_seconds=10)
     result = job.result()
 
     assert "ValueError" in result or "Test error message" in result
-    assert "This is how you can fix the error" in result
-    assert "Mock solution" in result
+    assert "This is how you can fix the error" not in result
 
 
 def test_web_search_stack_trace(monkeypatch):
     """Test web_search_stack_trace with mocked LLM call."""
     from schemas.developer import StackTraceSolution
 
+    call_count = [0]
+
     def fake_call_llm(*args, **kwargs):
+        call_count[0] += 1
         return StackTraceSolution(
             reasoning="The error is caused by X.",
             web_search_findings="Found solution on Stack Overflow",
@@ -115,41 +113,10 @@ def test_web_search_stack_trace(monkeypatch):
     query = "Traceback (most recent call last):\n  File 'test.py', line 1\nValueError: test"
     result = web_search_stack_trace(query)
 
+    assert call_count[0] == 1, "Should call the LLM exactly once (web-search path only)"
     assert "Traceback" in result
     assert "This is how you can fix the error" in result
     assert "doing Y" in result
-
-
-def test_web_search_stack_trace_fallback(monkeypatch):
-    """Test web_search_stack_trace falls back to web search when fine-tuned model response is too short."""
-    from schemas.developer import StackTraceSolution
-
-    call_count = [0]
-
-    def fake_call_llm(*args, **kwargs):
-        call_count[0] += 1
-        if call_count[0] == 1:
-            # Fine-tuned model returns a too-short response (< 35 chars)
-            return StackTraceSolution(
-                reasoning="Cannot solve.",
-                web_search_findings="",
-                solution="I cannot solve this error.",
-            )
-        # Web search fallback returns a proper solution
-        return StackTraceSolution(
-            reasoning="Check types for compatibility.",
-            web_search_findings="Found on SO",
-            solution="Fallback solution text that is long enough to pass validation",
-        )
-
-    monkeypatch.setattr("tools.developer.call_llm", fake_call_llm)
-
-    query = "Traceback (most recent call last):\nTypeError: cannot convert"
-    result = web_search_stack_trace(query)
-
-    assert call_count[0] == 2, "Should have called LLM twice (fine-tuned + fallback)"
-    assert "Fallback solution text" in result
-    assert "This is how you can fix the error" in result
 
 
 def test_encode_image_to_data_url_basic(test_data_dir):
