@@ -140,6 +140,81 @@ def get_monitor_tools():
 
 
 # ---------------------------------------------------------------------------
+# Deep Research tools (web_research + web_fetch + write_python_code)
+# ---------------------------------------------------------------------------
+
+
+def get_deep_research_tools():
+    """Inner tools available to the Deep Research sub-agent."""
+    return [
+        types.FunctionDeclaration(
+            name="web_research",
+            description=(
+                "Discover web pages for a query via Exa neural search. "
+                "Returns a list of results, each with url, title, full page text, "
+                "and published_date — not a snippet, the whole text. This is the "
+                "ONLY way to discover URLs; never guess or reconstruct URLs."
+            ),
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Natural-language search query.",
+                    },
+                    "num_results": {
+                        "type": "integer",
+                        "description": (
+                            "Optional number of results to return. Omit to use "
+                            "the Exa default."
+                        ),
+                    },
+                },
+                "required": ["query"],
+            },
+        ),
+        types.FunctionDeclaration(
+            name="web_fetch",
+            description=(
+                "Fetch a single URL's main content as markdown via Firecrawl. "
+                "Full page content is returned — no truncation. Only call with "
+                "URLs you got from a prior `web_research` result or from a "
+                "markdown link inside a prior `web_fetch` result."
+            ),
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "Absolute URL to fetch.",
+                    },
+                },
+                "required": ["url"],
+            },
+        ),
+        types.FunctionDeclaration(
+            name="write_python_code",
+            description=(
+                "Write a Python script to the research scripts dir and execute "
+                "it in a subprocess. Full stdout/stderr is returned. Use for "
+                "EDA, API probing, quick computations — anything you'd run in "
+                "a notebook to validate an idea."
+            ),
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "code": {
+                        "type": "string",
+                        "description": "Complete Python source to execute.",
+                    },
+                },
+                "required": ["code"],
+            },
+        ),
+    ]
+
+
+# ---------------------------------------------------------------------------
 # Explore tools (read-only, scoped to runtime.explore_allowed_roots)
 # ---------------------------------------------------------------------------
 
