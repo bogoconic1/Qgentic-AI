@@ -1,18 +1,9 @@
 from __future__ import annotations
 
 
-def get_hard_constraints(
-    strategy_name: str | None = None,
-) -> str:
-    lines = ["**Hard Constraints:**"]
-
-    if strategy_name:
-        lines.append(
-            f"- Use ONLY `{strategy_name}`. Do not swap the model; you may update preprocessing, postprocessing, or hyperparameters."
-        )
-
-    lines.append(
-        """- **DO NOT** explicitly set `os.environ['CUDA_VISIBLE_DEVICES']`.
+def get_hard_constraints() -> str:
+    return """**Hard Constraints:**
+- **DO NOT** explicitly set `os.environ['CUDA_VISIBLE_DEVICES']`.
 - Place `import logging` and `logging.basicConfig(level=logging.INFO, ...)` at the very top of the script, BEFORE any third-party imports (torch, transformers, kagglehub, etc.). Third-party libraries configure logging on import, so basicConfig must come first.
 - Log validation results (per fold and overall), model loading, train/test set size, and any computed quantities that can go wrong (e.g. class weights, thresholds).
 - Log final validation results, best epoch number, total training time, and submission prediction distribution.
@@ -23,6 +14,3 @@ def get_hard_constraints(
 import kagglehub
 path = kagglehub.dataset_download("<author>/<dataset_name>")
 ```"""
-    )
-
-    return "\n".join(lines)
