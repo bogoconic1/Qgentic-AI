@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from tools import research as research_module
+from agents import researcher as research_module
 
 
 class _StubExa:

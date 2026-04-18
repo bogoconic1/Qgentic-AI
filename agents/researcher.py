@@ -1,14 +1,16 @@
-"""Deep Research sub-agent.
+"""Deep Research sub-agent, exposed as ``ResearcherAgent``.
 
-A sub-agent that the main (or orchestrator) agent can call with a research
-instruction. It runs a multi-step tool loop over three tools — `web_research`
-(Exa discovery), `web_fetch` (Firecrawl scrape), and `write_python_code`
+A sub-agent the Main Agent (or orchestrator) instantiates with a run's
+``(slug, run_id, research_iter)`` and then calls ``run(instruction)`` on.
+It runs a multi-step tool loop over three inner tools — ``web_research``
+(Exa discovery), ``web_fetch`` (Firecrawl scrape), and ``write_python_code``
 (subprocess exec) — and emits a markdown report. Gemini's built-in
-`google_search` is disabled inside the sub-agent so that every URL the LLM
+``google_search`` is disabled inside the sub-agent so every URL the LLM
 dereferences is traceable back to a prior tool result (no invented URLs).
 
-No truncation is applied to `web_research` / `web_fetch` outputs — full content
-flows back to the LLM so the research can go as deep as the step budget allows.
+No truncation is applied to ``web_research`` / ``web_fetch`` outputs — full
+content flows back to the LLM so the research can go as deep as the step
+budget allows.
 
 Per-invocation layout (owned by this module):
 
@@ -204,106 +206,118 @@ def _execute_tool_call(item, state: dict) -> str:
 # ---------------------------------------------------------------------------
 
 
-@weave.op()
-def deep_research(instruction: str, slug: str, run_id: str, research_iter: int) -> str:
-    """Run the Deep Research sub-agent and return a markdown report.
+class ResearcherAgent:
+    """Deep Research sub-agent.
 
-    Creates `task/<slug>/<run_id>/research_<research_iter>/`, runs the tool
-    loop, and persists the final markdown as `PLAN_<research_iter>.md` inside
-    that directory. The markdown is also returned to the caller.
-
-    Args:
-        instruction: Free-form research instruction — as long as needed.
-        slug: Competition slug (maps to `task/<slug>/`).
-        run_id: Orchestrator run identifier (timestamp dir under task/<slug>/).
-        research_iter: Per-caller invocation counter — starts at 1, increments
-            each time the caller invokes deep_research for the same run.
-
-    Returns:
-        Free-form markdown report with URL citations.
+    Parallel to ``Orchestrator`` in shape: construct with
+    ``(slug, run_id, research_iter)`` and call ``run(instruction)`` to
+    produce a markdown report.
     """
-    research_dir = _TASK_ROOT / slug / run_id / f"research_{research_iter}"
-    scripts_dir = research_dir / "scripts"
-    web_research_dir = research_dir / "web_research"
-    web_fetch_dir = research_dir / "web_fetch"
-    for d in (scripts_dir, web_research_dir, web_fetch_dir):
-        d.mkdir(parents=True, exist_ok=True)
 
-    logger.info(
-        "deep_research slug=%s run_id=%s iter=%d dir=%s instruction=%r",
-        slug,
-        run_id,
-        research_iter,
-        research_dir,
-        instruction,
-    )
+    def __init__(self, slug: str, run_id: str, research_iter: int):
+        self.slug = slug
+        self.run_id = run_id
+        self.research_iter = research_iter
+        self.research_dir = _TASK_ROOT / slug / run_id / f"research_{research_iter}"
+        self.scripts_dir = self.research_dir / "scripts"
+        self.web_research_dir = self.research_dir / "web_research"
+        self.web_fetch_dir = self.research_dir / "web_fetch"
 
-    system_prompt = build_system(hitl_instructions=_HITL_INSTRUCTIONS)
-    user_prompt = build_user(instruction)
-    tools = get_deep_research_tools()
-    state: dict = {
-        "research_dir": research_dir,
-        "scripts_dir": scripts_dir,
-        "tool_seq": {},
-    }
-    input_list = [append_message("user", user_prompt)]
+    @weave.op()
+    def run(self, instruction: str) -> str:
+        """Run the Deep Research loop and return a markdown report.
 
-    markdown = ""
-    for step in range(_DEEP_RESEARCH_MAX_STEPS):
-        is_last_step = step == _DEEP_RESEARCH_MAX_STEPS - 1
-        logger.info("deep_research step %d/%d", step + 1, _DEEP_RESEARCH_MAX_STEPS)
+        Creates ``task/<slug>/<run_id>/research_<research_iter>/``, runs the
+        tool loop, and persists the final markdown as ``PLAN_<research_iter>.md``
+        inside that directory. The markdown is also returned.
 
-        response = call_llm(
-            model=_DEEP_RESEARCH_LLM_MODEL,
-            system_instruction=system_prompt,
-            function_declarations=tools if not is_last_step else [],
-            messages=input_list,
-            enable_google_search=False,
+        Args:
+            instruction: Free-form research instruction — as long as needed.
+
+        Returns:
+            Free-form markdown report with URL citations.
+        """
+        for d in (self.scripts_dir, self.web_research_dir, self.web_fetch_dir):
+            d.mkdir(parents=True, exist_ok=True)
+
+        logger.info(
+            "ResearcherAgent.run slug=%s run_id=%s iter=%d dir=%s instruction=%r",
+            self.slug,
+            self.run_id,
+            self.research_iter,
+            self.research_dir,
+            instruction,
         )
 
-        parts = response.candidates[0].content.parts
-        has_function_calls = any(
-            part.function_call
-            for part in parts
-            if hasattr(part, "function_call")
-        )
+        system_prompt = build_system(hitl_instructions=_HITL_INSTRUCTIONS)
+        user_prompt = build_user(instruction)
+        tools = get_deep_research_tools()
+        state: dict = {
+            "research_dir": self.research_dir,
+            "scripts_dir": self.scripts_dir,
+            "tool_seq": {},
+        }
+        input_list = [append_message("user", user_prompt)]
 
-        if not has_function_calls:
-            logger.info("deep_research completed at step %d", step + 1)
-            markdown = response.text or ""
-            break
-
-        function_responses = []
-        for part in parts:
-            if hasattr(part, "function_call") and part.function_call:
-                tool_result_str = _execute_tool_call(part.function_call, state)
-                function_responses.append(
-                    types.Part.from_function_response(
-                        name=part.function_call.name,
-                        response={"result": tool_result_str},
-                    )
-                )
-
-        input_list.append(response.candidates[0].content)
-        if function_responses:
-            input_list.append(
-                types.Content(role="function", parts=function_responses)
+        markdown = ""
+        for step in range(_DEEP_RESEARCH_MAX_STEPS):
+            is_last_step = step == _DEEP_RESEARCH_MAX_STEPS - 1
+            logger.info(
+                "ResearcherAgent step %d/%d", step + 1, _DEEP_RESEARCH_MAX_STEPS
             )
-    else:
-        logger.warning(
-            "deep_research exhausted %d steps — forcing final report", _DEEP_RESEARCH_MAX_STEPS
-        )
-        response = call_llm(
-            model=_DEEP_RESEARCH_LLM_MODEL,
-            system_instruction=system_prompt
-            + "\n\nReturn your final markdown report now, based on everything you have gathered.",
-            messages=input_list,
-            enable_google_search=False,
-        )
-        markdown = response.text or ""
 
-    plan_path = research_dir / f"PLAN_{research_iter}.md"
-    plan_path.write_text(markdown)
-    logger.info("deep_research wrote %s (%d chars)", plan_path, len(markdown))
+            response = call_llm(
+                model=_DEEP_RESEARCH_LLM_MODEL,
+                system_instruction=system_prompt,
+                function_declarations=tools if not is_last_step else [],
+                messages=input_list,
+                enable_google_search=False,
+            )
 
-    return markdown
+            parts = response.candidates[0].content.parts
+            has_function_calls = any(
+                part.function_call
+                for part in parts
+                if hasattr(part, "function_call")
+            )
+
+            if not has_function_calls:
+                logger.info("ResearcherAgent completed at step %d", step + 1)
+                markdown = response.text or ""
+                break
+
+            function_responses = []
+            for part in parts:
+                if hasattr(part, "function_call") and part.function_call:
+                    tool_result_str = _execute_tool_call(part.function_call, state)
+                    function_responses.append(
+                        types.Part.from_function_response(
+                            name=part.function_call.name,
+                            response={"result": tool_result_str},
+                        )
+                    )
+
+            input_list.append(response.candidates[0].content)
+            if function_responses:
+                input_list.append(
+                    types.Content(role="function", parts=function_responses)
+                )
+        else:
+            logger.warning(
+                "ResearcherAgent exhausted %d steps — forcing final report",
+                _DEEP_RESEARCH_MAX_STEPS,
+            )
+            response = call_llm(
+                model=_DEEP_RESEARCH_LLM_MODEL,
+                system_instruction=system_prompt
+                + "\n\nReturn your final markdown report now, based on everything you have gathered.",
+                messages=input_list,
+                enable_google_search=False,
+            )
+            markdown = response.text or ""
+
+        plan_path = self.research_dir / f"PLAN_{self.research_iter}.md"
+        plan_path.write_text(markdown)
+        logger.info("ResearcherAgent wrote %s (%d chars)", plan_path, len(markdown))
+
+        return markdown
