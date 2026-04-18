@@ -94,12 +94,6 @@ def main() -> None:
         help="Maximum number of iterations (default: 500).",
     )
     parser.add_argument(
-        "--max-time-seconds",
-        type=int,
-        default=432 * 3600,
-        help="Wall-clock budget in seconds (default: 432 hours).",
-    )
-    parser.add_argument(
         "--wandb-entity",
         type=str,
         default=None,
@@ -142,7 +136,6 @@ def main() -> None:
             goal_text=goal_text,
             run_dir=run_dir,
             max_versions=args.max_versions,
-            max_time_seconds=args.max_time_seconds,
         )
     finally:
         # Gracefully close tracking backends to avoid hanging background threads.

@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import json
 import logging
-import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -86,9 +85,8 @@ def run_goal_mode(
     goal_text: str,
     run_dir: Path,
     max_versions: int = 50,
-    max_time_seconds: int = 6 * 3600,
 ) -> list[HistoryEntry]:
-    """Run the goal-mode loop until the reviewer reports done or limits hit.
+    """Run the goal-mode loop until the reviewer reports done or ``max_versions`` is hit.
 
     Writes per-version artifacts under ``run_dir/v{N}/`` and a summary
     ``history.json`` under ``run_dir/``. Returns the full history.
@@ -101,13 +99,7 @@ def run_goal_mode(
         append_message("user", initial_codegen_user(v1_dir))
     ]
 
-    deadline = time.monotonic() + max_time_seconds
-
     for version in range(1, max_versions + 1):
-        if time.monotonic() >= deadline:
-            logger.info("max_time_seconds reached before v%s", version)
-            break
-
         version_dir = run_dir / f"v{version}"
         version_dir.mkdir(parents=True, exist_ok=True)
         next_dir = run_dir / f"v{version + 1}"

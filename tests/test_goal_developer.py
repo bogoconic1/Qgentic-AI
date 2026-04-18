@@ -98,7 +98,6 @@ def test_terminates_on_done(fake_pipeline, tmp_path):
         goal_text="Write `hello` to out.txt",
         run_dir=tmp_path / "run",
         max_versions=10,
-        max_time_seconds=60,
     )
     assert len(history) == 1
     assert history[0].review is not None and history[0].review.done is True
@@ -121,7 +120,6 @@ def test_iterates_until_max_versions(fake_pipeline, tmp_path):
         goal_text="Write `hello` to out.txt",
         run_dir=tmp_path / "run",
         max_versions=3,
-        max_time_seconds=60,
     )
     assert len(history) == 3
     assert all(entry.review and entry.review.done is False for entry in history)
@@ -150,7 +148,6 @@ def test_review_failure_yields_degraded_entry(fake_pipeline, tmp_path):
         goal_text="Write `hello` to out.txt",
         run_dir=tmp_path / "run",
         max_versions=3,
-        max_time_seconds=60,
     )
     assert len(history) == 2
     assert history[0].review is not None
@@ -180,7 +177,6 @@ def test_guardrails_block_skips_execution(monkeypatch, fake_pipeline, tmp_path):
         goal_text="Write `hello` to out.txt",
         run_dir=tmp_path / "run",
         max_versions=3,
-        max_time_seconds=60,
     )
     # v1 was blocked, v2 ran and the reviewer marked it done.
     assert len(history) == 2
@@ -197,7 +193,6 @@ def test_history_json_persisted(fake_pipeline, tmp_path):
         goal_text="Write `hello` to out.txt",
         run_dir=tmp_path / "run",
         max_versions=10,
-        max_time_seconds=60,
     )
     history_path = tmp_path / "run" / "history.json"
     assert history_path.exists()
