@@ -1,9 +1,6 @@
 # Qgentic-AI
 
-Qgentic-AI is an automated ML engineering stack. LLM-driven agents take a problem description, produce a technical plan, generate code, run it locally, analyse the results, and keep refining the solution. It supports two modes:
-
-- **Competition mode** — a Researcher and Developer agent pair iterate on Kaggle-style competitions with CV metrics.
-- **Goal mode** — a standalone generate-execute-review loop iterates toward a free-form goal described in `GOAL.md` (no metric required).
+Qgentic-AI is an automated ML engineering stack. LLM-driven agents take a problem description, produce a technical plan, generate code, run it locally, analyse the results, and keep refining the solution. Targeted at Kaggle-style competitions today; the stack is extensible to non-competition goals.
 
 ## Problem Statement
 
@@ -103,39 +100,6 @@ python launch_agent.py --slug "enter slug" --iteration 1
 
 - `researcher.txt` / `developer.txt` capture detailed logs.
 - Weights & Biases tracking is configured via `config.yaml` under `tracking.wandb`.
-
----
-
-## Goal Mode
-
-A standalone generate-execute-review loop for problems that don't have a CV metric — data generation, inference speed optimization, or any task you can describe in natural language.
-
-### How it works
-
-1. You write a `GOAL.md` in the repo root describing what you want and any hard constraints.
-2. The agent generates a `train.py` script, executes it with the same guardrails and log monitoring as competition mode, then a reviewer LLM judges the result and produces a structured `GoalReview` (score, done, violations, next_step).
-3. If not done, the reviewer's `next_step` feeds into the next iteration. The conversation thread grows across iterations so the codegen LLM sees the full history.
-4. Artifacts land under `goal_runs/<run_id>/v<N>/` with `train.py`, `train.txt` (execution log), and `review.json` per version, plus a summary `history.json` at the run root.
-
-### Launch
-
-```bash
-python goal_mode.py
-python goal_mode.py --goal-file GOAL.md --run-id my_run --max-versions 30
-python goal_mode.py --wandb-entity myteam --wandb-project myproject
-```
-
-### Options
-
-| Flag | Default | Description |
-| --- | --- | --- |
-| `--goal-file` | `GOAL.md` | Path to the goal description |
-| `--run-id` | timestamp | Identifier for this run |
-| `--max-versions` | 500 | Maximum iterations |
-| `--max-time-seconds` | 432 hours | Wall-clock budget |
-| `--wandb-entity` | from config | W&B entity |
-| `--wandb-project` | from config | W&B project |
-| `--wandb-run-name` | `goal-<run_id>` | W&B run name |
 
 ---
 
