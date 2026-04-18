@@ -15,7 +15,7 @@ from typing import Optional, Tuple
 import wandb
 import weave
 
-from agents.goal_developer import run_goal_mode
+from agents.developer import run_developer
 from project_config import get_config_value
 
 
@@ -132,7 +132,7 @@ def main() -> None:
     _init_tracking(args.wandb_entity, args.wandb_project, run_name)
 
     try:
-        history = run_goal_mode(
+        history = run_developer(
             goal_text=goal_text,
             run_dir=run_dir,
             max_versions=args.max_versions,
@@ -148,13 +148,7 @@ def main() -> None:
         except Exception:
             pass
 
-    final = history[-1] if history else None
-    final_done = bool(final and final.review and final.review.done)
-    final_score = final.review.score if final and final.review else None
-    print(
-        f"goal_mode finished: {len(history)} iterations, done={final_done}, "
-        f"final_score={final_score}, run_dir={run_dir}"
-    )
+    print(f"goal_mode finished: {len(history)} iterations, run_dir={run_dir}")
 
 
 if __name__ == "__main__":

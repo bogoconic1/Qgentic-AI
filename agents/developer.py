@@ -1,10 +1,11 @@
-"""Standalone goal-mode developer agent.
+"""Standalone developer agent.
 
-Reads a free-form goal description, iterates a generate-execute-review loop
-until the reviewer reports `done` or the limits are exhausted. Independent
-of the existing developer flow at the orchestration level — but reuses the
-shared low-level helpers (`call_llm`, `execute_with_monitor`,
-`evaluate_guardrails`, `extract_python_code`).
+Reads a free-form goal description, iterates a generate-execute loop until
+``max_versions`` is hit. Reuses the shared low-level helpers (``call_llm``,
+``execute_with_monitor``, ``evaluate_guardrails``, ``extract_python_code``).
+
+Review is currently a no-op (see ``_review`` below) — the Main Agent will
+take over review responsibilities when it lands (#230).
 """
 
 from __future__ import annotations
@@ -14,19 +15,16 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
-import anthropic
 import weave
 from google.genai import types
 
 from project_config import get_config
-from prompts.goal_developer import (
+from prompts.developer import (
     codegen_system,
     initial_codegen_user,
     next_codegen_user,
-    review_system,
-    review_user,
 )
-from schemas.goal_developer import GoalReview
+from schemas.developer import Review
 from tools.developer import (
     _build_resource_header,
     execute_code,
@@ -52,13 +50,6 @@ _DEVELOPER_TOOL_MODEL = _LLM_CFG["developer_tool_model"]
 _BASELINE_CODE_TIMEOUT = _RUNTIME_CFG["baseline_code_timeout"]
 _LOG_MONITOR_INTERVAL = _RUNTIME_CFG["log_monitor_interval"]
 
-# Goal-mode review uses Anthropic Claude Opus 4.6 with structured output
-# (`output_format=GoalReview`) and the server-side `web_search_20260209`
-# tool, both in a single `messages.parse` call.
-_REVIEW_MODEL = "claude-opus-4-6"
-_REVIEW_MAX_TOKENS = 16384
-_ANTHROPIC_CLIENT = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY from env / .env
-
 _ENABLE_LOGGING_GUARD = bool(_GUARDRAIL_CFG["logging_basicconfig_order"])
 _ENABLE_LEAKAGE_GUARD = bool(_GUARDRAIL_CFG["leakage_review"])
 _ENABLE_CODE_SAFETY = bool(_GUARDRAIL_CFG["enable_code_safety"])
@@ -66,11 +57,11 @@ _ENABLE_CODE_SAFETY = bool(_GUARDRAIL_CFG["enable_code_safety"])
 
 @dataclass
 class HistoryEntry:
-    """One iteration of the goal-mode loop, persisted to history.json."""
+    """One iteration of the developer loop, persisted to history.json."""
 
     version: int
     code: str
-    review: GoalReview | None  # None when guardrails blocked the version pre-execution
+    review: Review | None  # None when guardrails blocked the version pre-execution
 
     def to_dict(self) -> dict:
         return {
@@ -81,12 +72,12 @@ class HistoryEntry:
 
 
 @weave.op()
-def run_goal_mode(
+def run_developer(
     goal_text: str,
     run_dir: Path,
     max_versions: int = 50,
 ) -> list[HistoryEntry]:
-    """Run the goal-mode loop until the reviewer reports done or ``max_versions`` is hit.
+    """Run the developer loop until ``max_versions`` is hit.
 
     Writes per-version artifacts under ``run_dir/v{N}/`` and a summary
     ``history.json`` under ``run_dir/``. Returns the full history.
@@ -153,40 +144,14 @@ Your previous attempt was blocked by the pre-execution guardrails — it never r
         )
         (version_dir / "train.txt").write_text(output)
 
-        # 5. Review (one-shot LLM call, NOT part of input_list)
-        try:
-            review = _review(goal_text, code, output)
-        except Exception as exc:
-            logger.exception(
-                "Review LLM call failed at v%s — synthesizing degraded review",
-                version,
-            )
-            review = GoalReview(
-                reasoning=f"review call raised: {exc}",
-                is_valid=False,
-                violations=["review_call_error"],
-                score=float("inf"),
-                done=False,
-                next_step="The review LLM call failed. Try a simpler approach next.",
-            )
-        (version_dir / "review.json").write_text(review.model_dump_json(indent=2))
+        # 5. Review — no-op; Main Agent will take over (#230).
+        review = _review(goal_text, code, output)
 
         history.append(HistoryEntry(version=version, code=code, review=review))
-        logger.info(
-            "v%s: score=%s done=%s violations=%s",
-            version,
-            review.score,
-            review.done,
-            review.violations,
-        )
-
-        if review.done:
-            logger.info("v%s: goal reached, terminating loop", version)
-            break
 
         # 6. Append the next user instruction
         input_list.append(
-            append_message("user", next_codegen_user(output, review, next_dir))
+            append_message("user", next_codegen_user(output, next_dir))
         )
 
     (run_dir / "history.json").write_text(
@@ -196,14 +161,14 @@ Your previous attempt was blocked by the pre-execution guardrails — it never r
     return history
 
 
-def _execute_goal_tool_call(
+def _execute_developer_tool_call(
     function_call,
     *,
     version_dir: Path,
     step: int,
     call_idx: int,
 ) -> str:
-    """Dispatch a tool call made during goal-mode code generation."""
+    """Dispatch a tool call made during code generation."""
     args = dict(function_call.args)
 
     if function_call.name == "explore_codebase":
@@ -235,8 +200,7 @@ def _execute_goal_tool_call(
 def _generate_code(input_list: list[dict], goal_text: str, version_dir: Path) -> str:
     """Call the codegen LLM and return the extracted python code.
 
-    Mirrors the multi-step tool loop in ``agents/developer.py:_generate_code``:
-    up to ``max_tool_steps`` rounds where the LLM may call ``explore_codebase``
+    Up to ``max_tool_steps`` rounds where the LLM may call ``explore_codebase``
     or ``execute_python`` before producing the final ```python``` block.
     Tool-call results are appended to ``input_list`` so the next call sees them.
 
@@ -276,7 +240,7 @@ def _generate_code(input_list: list[dict], goal_text: str, version_dir: Path) ->
         function_responses = []
         for call_idx, part in enumerate(parts, start=1):
             if hasattr(part, "function_call") and part.function_call:
-                tool_result_str = _execute_goal_tool_call(
+                tool_result_str = _execute_developer_tool_call(
                     part.function_call,
                     version_dir=version_dir,
                     step=step + 1,
@@ -302,32 +266,6 @@ def _generate_code(input_list: list[dict], goal_text: str, version_dir: Path) ->
     raise RuntimeError("Code generation exhausted tool steps without producing code")
 
 
-@weave.op()
-def _review(goal_text: str, code: str, output: str) -> GoalReview:
-    """Run the one-shot review LLM call and return the parsed GoalReview.
-
-    Uses Anthropic Claude Opus 4.6 with structured output (``output_format``)
-    and the server-side ``web_search_20260209`` tool, both in a single
-    ``messages.parse`` call. The model can web-search for better techniques
-    while reasoning about the run, then emits a JSON GoalReview that matches
-    the pydantic schema directly.
-    """
-    parsed = _ANTHROPIC_CLIENT.messages.parse(
-        model=_REVIEW_MODEL,
-        max_tokens=_REVIEW_MAX_TOKENS,
-        system=review_system(),
-        messages=[
-            {
-                "role": "user",
-                "content": review_user(goal_text, code, output),
-            }
-        ],
-        output_format=GoalReview,
-        tools=[
-            {
-                "name": "web_search",
-                "type": "web_search_20260209",
-            }
-        ],
-    )
-    return parsed.parsed_output
+def _review(goal_text: str, code: str, output: str) -> Review:
+    """TODO: re-enable when Main Agent takes over review (#230)."""
+    return Review()
