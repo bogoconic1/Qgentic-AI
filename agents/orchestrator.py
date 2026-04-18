@@ -3,7 +3,7 @@ from datetime import datetime
 import json
 
 from agents.developer import DeveloperAgent
-from project_config import get_config, get_instructions
+from project_config import get_config
 from tools.research import deep_research
 from tools.helpers import _build_directory_listing
 from utils.checkpoint import (
@@ -18,30 +18,6 @@ _CONFIG = get_config()
 _RUNTIME_CFG = _CONFIG["runtime"]
 _PATH_CFG = _CONFIG["paths"]
 _TASK_ROOT = Path(_PATH_CFG["task_root"])
-
-
-@weave.op()
-def _run_developer_baseline(
-    slug: str,
-    run_id: str,
-    iteration_suffix: str,
-    strategy_name: str,
-    key: str,
-    external_data_listing: str,
-    plan_content: str,
-):
-    """Run a single baseline DeveloperAgent and return results."""
-    baseline_time_limit = _RUNTIME_CFG["baseline_time_limit"]
-    dev = DeveloperAgent(
-        slug,
-        run_id,
-        iteration_suffix,
-        strategy_name=strategy_name,
-        external_data_listing=external_data_listing,
-        plan_content=plan_content,
-    )
-    best_score, best_code_file = dev.run(max_time_seconds=baseline_time_limit)
-    return key, best_score, best_code_file
 
 
 class Orchestrator:
@@ -76,56 +52,39 @@ class Orchestrator:
 
         return "\n".join(lines)
 
-    def _rollback(self, model_iterations: list[str]) -> None:
-        """Roll back all models to self.rollback_to_version.
-
-        Moves version folders beyond N into _trash/<timestamp>/ and deletes checkpoint
-        rows beyond N. Also removes baseline_results.json so affected models get re-run.
-        """
+    def _rollback(self) -> None:
+        """Roll back the current run's developer outputs to self.rollback_to_version."""
         target = self.rollback_to_version
-        parent_outputs = self.outputs_dir
+        model_dir = self.outputs_dir
 
-        found = False
-        for iter_suffix in model_iterations:
-            model_dir = parent_outputs / iter_suffix
-            if (model_dir / str(target)).exists():
-                found = True
-                break
-        if not found:
+        if not (model_dir / str(target)).exists():
             raise ValueError(
-                f"Rollback failed: version {target} not found in any model outputs ({model_iterations})"
+                f"Rollback failed: version {target} not found in {model_dir}"
             )
 
         timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
         conn = _create_checkpoint_db()
 
-        for iter_suffix in model_iterations:
-            model_dir = parent_outputs / iter_suffix
-            if not model_dir.exists():
+        trash_dir = model_dir / "_trash" / timestamp
+        moved_any = False
+
+        for entry in sorted(model_dir.iterdir()):
+            if not entry.is_dir() or entry.name.startswith("_"):
                 continue
+            try:
+                version_num = int(entry.name)
+            except ValueError:
+                continue
+            if version_num > target:
+                if not moved_any:
+                    trash_dir.mkdir(parents=True, exist_ok=True)
+                    moved_any = True
+                dest = trash_dir / entry.name
+                entry.rename(dest)
+                print(f"Rollback: moved {entry} -> {dest}")
 
-            trash_dir = model_dir / "_trash" / timestamp
-            moved_any = False
-
-            for entry in sorted(model_dir.iterdir()):
-                if not entry.is_dir() or entry.name.startswith("_"):
-                    continue
-                try:
-                    version_num = int(entry.name)
-                except ValueError:
-                    continue
-                if version_num > target:
-                    if not moved_any:
-                        trash_dir.mkdir(parents=True, exist_ok=True)
-                        moved_any = True
-                    dest = trash_dir / entry.name
-                    entry.rename(dest)
-                    print(f"Rollback: moved {entry} -> {dest}")
-
-            delete_checkpoints_after(conn, self.slug, iter_suffix, target)
-            print(
-                f"Rollback: deleted checkpoints after v{target} for iteration {iter_suffix}"
-            )
+        delete_checkpoints_after(conn, self.slug, self.run_id, target)
+        print(f"Rollback: deleted checkpoints after v{target} for run {self.run_id}")
 
         baseline_path = self.outputs_dir / "baseline_results.json"
         if baseline_path.exists():
@@ -157,65 +116,32 @@ class Orchestrator:
         print(f"External data listing: {len(external_data_listing)} chars")
         print(f"Plan content: {len(plan_content)} chars")
 
-        # Phase 2: Baseline Developer Stage — run strategies sequentially.
-        strategy_list = get_instructions()["# Strategies"]
-        if not strategy_list:
-            raise RuntimeError(
-                "No strategies specified. Please add strategies to INSTRUCTIONS.md under '# Strategies'."
-            )
-        print(f"Using strategies from INSTRUCTIONS.md: {strategy_list}")
-
         if self.rollback_to_version is not None:
-            model_iterations = [
-                str(idx)
-                for idx in range(1, len(strategy_list) + 1)
-            ]
-            self._rollback(model_iterations)
+            self._rollback()
 
-        existing_baseline_results = {}
+        # Phase 2: Developer — one baseline run per invocation.
         baseline_path = self.outputs_dir / "baseline_results.json"
         if baseline_path.exists():
             with open(baseline_path, "r") as f:
-                existing_baseline_results = json.load(f)
-            print(
-                f"Loaded existing baseline results with {len(existing_baseline_results)} strategies"
-            )
+                existing = json.load(f)
+            print(f"Baseline already completed: {existing}")
+            return True, str(baseline_path)
 
-        baseline_results = existing_baseline_results.copy()
+        baseline_time_limit = _RUNTIME_CFG["baseline_time_limit"]
+        dev = DeveloperAgent(
+            self.slug,
+            self.run_id,
+            "1",
+            external_data_listing=external_data_listing,
+            plan_content=plan_content,
+        )
+        best_score, best_code_file = dev.run(max_time_seconds=baseline_time_limit)
 
-        for idx, strategy_name in enumerate(strategy_list, start=1):
-            key = strategy_name
-            dev_iter = str(idx)
-
-            if key in existing_baseline_results:
-                print(f"Skipping {key} (iteration {dev_iter}): already completed")
-                continue
-
-            print(f"Running {key} (iteration {dev_iter}) sequentially")
-            try:
-                result_key, best_score, best_code_file = _run_developer_baseline(
-                    self.slug,
-                    self.run_id,
-                    dev_iter,
-                    strategy_name,
-                    key,
-                    external_data_listing,
-                    plan_content,
-                )
-                baseline_results[result_key] = {
-                    "strategy_name": result_key,
-                    "best_score": best_score,
-                    "best_code_file": best_code_file or "",
-                }
-                with open(baseline_path, "w") as f:
-                    json.dump(baseline_results, f, indent=2)
-            except Exception as e:
-                print(f"Error in baseline task {key}: {e}")
-                continue
-
-        if not baseline_results:
-            raise RuntimeError("All developer baseline runs failed")
-
+        baseline_results = {
+            "best_score": best_score,
+            "best_code_file": best_code_file or "",
+        }
+        self.outputs_dir.mkdir(parents=True, exist_ok=True)
         with open(baseline_path, "w") as f:
             json.dump(baseline_results, f, indent=2)
         return True, str(baseline_path)
