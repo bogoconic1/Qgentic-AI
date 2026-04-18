@@ -93,10 +93,6 @@ Before running, create these files in `task/<slug>/`:
 - **`cv_splits.json`**: Cross-validation fold indices
 - **`metric.py`**: Competition-specific evaluation metric
 
-Optionally, add Human-In-The-Loop (HITL) instructions in `INSTRUCTIONS.md`:
-- `# Researcher Instructions`: Guide research direction — fed into every Deep Research sub-agent invocation.
-- `# Developer Instructions`: Guide code implementation — fed into every Developer iteration.
-
 ### Launch
 
 ```bash

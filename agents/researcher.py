@@ -37,7 +37,7 @@ from exa_py import Exa
 from firecrawl import Firecrawl
 from google.genai import types
 
-from project_config import get_config, get_instructions
+from project_config import get_config
 from prompts.research import build_system, build_user
 from tools.developer import _build_resource_header, execute_code
 from tools.helpers import call_llm
@@ -58,7 +58,6 @@ _TASK_ROOT = Path(_PATH_CFG["task_root"])
 _DEEP_RESEARCH_LLM_MODEL = _LLM_CFG["developer_tool_model"]
 _DEEP_RESEARCH_MAX_STEPS = _RUNTIME_CFG["deep_research_max_steps"]
 _WRITE_PYTHON_CODE_TIMEOUT_SECONDS = _RUNTIME_CFG["write_python_code_timeout_seconds"]
-_HITL_INSTRUCTIONS = get_instructions()["# Researcher Instructions"]
 
 
 # ---------------------------------------------------------------------------
@@ -214,10 +213,17 @@ class ResearcherAgent:
     produce a markdown report.
     """
 
-    def __init__(self, slug: str, run_id: str, research_iter: int):
+    def __init__(
+        self,
+        slug: str,
+        run_id: str,
+        research_iter: int,
+        goal_text: str | None = None,
+    ):
         self.slug = slug
         self.run_id = run_id
         self.research_iter = research_iter
+        self.goal_text = goal_text
         self.research_dir = _TASK_ROOT / slug / run_id / f"research_{research_iter}"
         self.scripts_dir = self.research_dir / "scripts"
         self.web_research_dir = self.research_dir / "web_research"
@@ -249,7 +255,7 @@ class ResearcherAgent:
             instruction,
         )
 
-        system_prompt = build_system(hitl_instructions=_HITL_INSTRUCTIONS)
+        system_prompt = build_system(goal_text=self.goal_text)
         user_prompt = build_user(instruction)
         tools = get_deep_research_tools()
         state: dict = {

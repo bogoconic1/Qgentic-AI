@@ -7,9 +7,20 @@ and the tools the agent has access to are also read-only.
 from __future__ import annotations
 
 
-def build_system(allowed_roots: list[str]) -> str:
+def build_system(allowed_roots: list[str], goal_text: str | None = None) -> str:
     roots_block = "\n".join(f"- {r}" for r in allowed_roots)
+    goal_section = ""
+    if goal_text:
+        goal_section = f"""
+
+# Session Goal
+
+{goal_text}
+
+---
+"""
     return f"""You are a codebase exploration specialist. You excel at thoroughly navigating and exploring source code to answer questions for the agent that called you.
+{goal_section}
 
 === CRITICAL: READ-ONLY MODE - NO FILE MODIFICATIONS ===
 This is a READ-ONLY exploration task. You are STRICTLY PROHIBITED from:

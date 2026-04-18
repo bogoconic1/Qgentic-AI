@@ -368,11 +368,13 @@ def _execute_tool_call(item) -> str:
 
 
 @weave.op()
-def explore_codebase(query: str) -> str:
+def explore_codebase(query: str, goal_text: str | None = None) -> str:
     """Run the codebase exploration sub-agent and return a markdown report.
 
     Args:
         query: Natural language question about the codebase or libraries.
+        goal_text: Optional session-level objective (from GOAL.md) — inlined
+            into the subagent's system prompt under ``# Session Goal``.
 
     Returns:
         Free-form markdown report (with file:line citations).
@@ -380,7 +382,7 @@ def explore_codebase(query: str) -> str:
     logger.info("Starting codebase exploration: %s", query[:100])
 
     allowed_roots_display = [str(r) for r in _ALLOWED_ROOTS]
-    system_prompt = build_system(allowed_roots_display)
+    system_prompt = build_system(allowed_roots_display, goal_text=goal_text)
     user_prompt = build_user(query)
     tools = get_explore_tools()
     input_list = [append_message("user", user_prompt)]
