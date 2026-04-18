@@ -6,10 +6,6 @@ from pathlib import Path
 _JSONB_FIELDS = [
     "version_scores",
     "successful_versions",
-    "blacklisted_versions",
-    "blacklisted_ideas",
-    "successful_ideas",
-    "global_suggestions",
     "input_list",
 ]
 
@@ -24,14 +20,8 @@ _COL_NAMES = [
     "best_code_file",
     "version_scores",
     "successful_versions",
-    "blacklisted_versions",
-    "blacklisted_ideas",
-    "successful_ideas",
-    "global_suggestions",
     "input_list",
     "last_input_tokens",
-    "last_suggestion",
-    "sota_suggestions_call_id",
     "created_at",
 ]
 
@@ -39,7 +29,6 @@ _SELECT_COLS = ", ".join(
     f"json({col})" if col in _JSONB_FIELDS else col for col in _COL_NAMES
 )
 
-# Resolve DB path relative to project root (Qgentic-AI/checkpoints.db)
 _DB_PATH = Path(__file__).resolve().parent.parent / "checkpoints.db"
 
 
@@ -57,14 +46,8 @@ def create_db(db_path: str | Path = _DB_PATH) -> sqlite3.Connection:
             best_code_file TEXT,
             version_scores BLOB,
             successful_versions BLOB,
-            blacklisted_versions BLOB,
-            blacklisted_ideas BLOB,
-            successful_ideas BLOB,
-            global_suggestions BLOB,
             input_list BLOB,
             last_input_tokens INTEGER,
-            last_suggestion TEXT,
-            sota_suggestions_call_id INTEGER,
             created_at REAL NOT NULL,
             UNIQUE(slug, iteration, version)
         )
@@ -86,12 +69,10 @@ def save_checkpoint(
         INSERT OR REPLACE INTO checkpoints (
             slug, iteration, strategy_name, version,
             best_score, best_version, best_code_file,
-            version_scores, successful_versions, blacklisted_versions,
-            blacklisted_ideas, successful_ideas, global_suggestions,
-            input_list, last_input_tokens, last_suggestion,
-            sota_suggestions_call_id,
+            version_scores, successful_versions,
+            input_list, last_input_tokens,
             created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, jsonb(?), jsonb(?), jsonb(?), ?, ?)
     """,
         (
             slug,
@@ -103,14 +84,8 @@ def save_checkpoint(
             state["best_code_file"],
             json.dumps(state["version_scores"]),
             json.dumps(state["successful_versions"]),
-            json.dumps(state["blacklisted_versions"]),
-            json.dumps(state["blacklisted_ideas"]),
-            json.dumps(state["successful_ideas"]),
-            json.dumps(state["global_suggestions"]),
             json.dumps(state["input_list"]),
             state["last_input_tokens"],
-            state["last_suggestion"],
-            state["sota_suggestions_call_id"],
             time.time(),
         ),
     )
