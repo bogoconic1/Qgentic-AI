@@ -1,36 +1,42 @@
-"""Standalone developer agent.
+"""Developer subagent — one training iteration per call.
 
-Reads a free-form goal description, iterates a generate-execute loop until
-``max_versions`` is hit. Reuses the shared low-level helpers (``call_llm``,
-``execute_with_monitor``, ``evaluate_guardrails``, ``extract_python_code``).
+Parallel to ``ResearcherAgent`` in shape: construct with
+``(slug, run_id, dev_iter, goal_text, conda_env)`` and call ``run(idea)`` to
+produce one training iteration worth of artifacts. An unbounded internal
+retry loop iterates attempts (``developer_<dev_iter>/<k>/``) until one
+produces a valid ``train_stats.json``; the subagent only exits on success
+or a runtime precondition failure that happens before the loop starts.
 
-Review is currently a no-op (see ``_review`` below) — the Main Agent will
-take over review responsibilities when it lands (#230).
+Evaluation is the developer's responsibility — the generated ``train.py``
+computes its own score and writes ``train_stats.json`` at end-of-run.
+There is no separate ``metric.py`` artifact.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
-from dataclasses import dataclass
+import math
 from pathlib import Path
+from typing import Any
 
 import weave
 from google.genai import types
 
+from agents.explorer import explore_codebase
 from project_config import get_config
 from prompts.developer import (
+    codegen_initial_user,
+    codegen_retry_user,
     codegen_system,
-    initial_codegen_user,
-    next_codegen_user,
 )
-from schemas.developer import Review
 from tools.developer import (
     _build_resource_header,
     execute_code,
     execute_with_monitor,
+    web_search_stack_trace,
 )
-from agents.explorer import explore_codebase
 from tools.helpers import call_llm
 from utils.code_utils import extract_python_code
 from utils.guardrails import build_block_summary, evaluate_guardrails
@@ -44,230 +50,322 @@ _CONFIG = get_config()
 _LLM_CFG = _CONFIG["llm"]
 _RUNTIME_CFG = _CONFIG["runtime"]
 _GUARDRAIL_CFG = _CONFIG["guardrails"]
+_PATH_CFG = _CONFIG["paths"]
 
 _DEVELOPER_MODEL = _LLM_CFG["developer_model"]
-_DEVELOPER_TOOL_MODEL = _LLM_CFG["developer_tool_model"]
 _BASELINE_CODE_TIMEOUT = _RUNTIME_CFG["baseline_code_timeout"]
 _LOG_MONITOR_INTERVAL = _RUNTIME_CFG["log_monitor_interval"]
+_TASK_ROOT = Path(_PATH_CFG["task_root"])
 
 _ENABLE_LOGGING_GUARD = bool(_GUARDRAIL_CFG["logging_basicconfig_order"])
 _ENABLE_LEAKAGE_GUARD = bool(_GUARDRAIL_CFG["leakage_review"])
 _ENABLE_CODE_SAFETY = bool(_GUARDRAIL_CFG["enable_code_safety"])
 
-
-@dataclass
-class HistoryEntry:
-    """One iteration of the developer loop, persisted to history.json."""
-
-    version: int
-    code: str
-    review: Review | None  # None when guardrails blocked the version pre-execution
-
-    def to_dict(self) -> dict:
-        return {
-            "version": self.version,
-            "code": self.code,
-            "review": self.review.model_dump() if self.review is not None else None,
-        }
+_MAX_CODEGEN_TOOL_STEPS = 100
+_STDOUT_TAIL_LINES = 200
 
 
-@weave.op()
-def run_developer(
-    goal_text: str,
-    run_dir: Path,
-    max_versions: int = 50,
-) -> list[HistoryEntry]:
-    """Run the developer loop until ``max_versions`` is hit.
+def _build_base_dir_header(slug: str) -> str:
+    """Prepended to every generated `train.py` so BASE_DIR works locally + on Kaggle."""
+    return (
+        'import os\n'
+        'from pathlib import Path\n'
+        f'SLUG = "{slug}"\n'
+        'IS_KAGGLE = os.getenv("KAGGLE_KERNEL_RUN_TYPE") is not None\n'
+        'BASE_DIR = Path(f"/kaggle/input/{SLUG}") if IS_KAGGLE else Path(f"task/{SLUG}")\n'
+        '\n'
+    )
 
-    Writes per-version artifacts under ``run_dir/v{N}/`` and a summary
-    ``history.json`` under ``run_dir/``. Returns the full history.
+
+def _has_traceback(stderr: str) -> bool:
+    return "Traceback (most recent call last)" in stderr
+
+
+def _extract_hints(enriched: str) -> str | None:
+    marker = "This is how you can fix the error:"
+    if marker not in enriched:
+        return None
+    return enriched.split(marker, 1)[1].strip() or None
+
+
+def _tail(text: str, n_lines: int = _STDOUT_TAIL_LINES) -> str:
+    return "\n".join(text.splitlines()[-n_lines:])
+
+
+class DeveloperAgent:
+    """One-training-iteration subagent.
+
+    Parallel to ``Orchestrator`` / ``ResearcherAgent`` in shape. Construct
+    with the per-call identity (``slug``, ``run_id``, ``dev_iter``, the
+    session's ``goal_text`` from ``GOAL.md``, and an optional ``conda_env``),
+    then call ``run(idea)``. Returns a structured payload describing success
+    or precondition failure.
     """
-    run_dir.mkdir(parents=True, exist_ok=True)
-    history: list[HistoryEntry] = []
 
-    v1_dir = run_dir / "v1"
-    input_list: list[dict] = [
-        append_message("user", initial_codegen_user(v1_dir))
-    ]
+    def __init__(
+        self,
+        slug: str,
+        run_id: str,
+        dev_iter: int,
+        goal_text: str,
+        conda_env: str | None = None,
+    ):
+        self.slug = slug
+        self.run_id = run_id
+        self.dev_iter = dev_iter
+        self.goal_text = goal_text
+        self.conda_env = conda_env
+        self.base_dir = _TASK_ROOT / slug / run_id / f"developer_{dev_iter}"
+        self.base_dir.mkdir(parents=True, exist_ok=True)
 
-    for version in range(1, max_versions + 1):
-        version_dir = run_dir / f"v{version}"
-        version_dir.mkdir(parents=True, exist_ok=True)
-        next_dir = run_dir / f"v{version + 1}"
+    def _find_previous_code(self) -> str | None:
+        """Return the text of the last successful ``train.py`` from prior dev_iter, if any."""
+        if self.dev_iter <= 1:
+            return None
+        for prev_iter in range(self.dev_iter - 1, 0, -1):
+            prev_base = _TASK_ROOT / self.slug / self.run_id / f"developer_{prev_iter}"
+            if not prev_base.exists():
+                continue
+            successful = sorted(
+                (
+                    d
+                    for d in prev_base.iterdir()
+                    if d.is_dir()
+                    and d.name.isdigit()
+                    and (d / "train_stats.json").exists()
+                ),
+                key=lambda p: int(p.name),
+            )
+            if successful:
+                train_py = successful[-1] / "train.py"
+                if train_py.exists():
+                    return train_py.read_text()
+        return None
 
-        # 1. Generate code
-        try:
-            code = _generate_code(input_list, goal_text, version_dir)
-        except Exception:
-            logger.exception("Code generation failed at v%s — aborting loop", version)
-            break
-
-        # Echo the canonical code block back into the thread as the assistant turn.
-        input_list.append(append_message("assistant", f"```python\n{code}\n```"))
-
-        # 2. Persist train.py before any further checks
-        train_py = version_dir / "train.py"
-        train_py.write_text(code)
-        logger.info("v%s: wrote %s", version, train_py)
-
-        # 3. Pre-execution guardrails (logging order, leakage, code safety)
-        guard_report = evaluate_guardrails(
-            code_text=code,
-            enable_logging_guard=_ENABLE_LOGGING_GUARD,
-            enable_leakage_guard=_ENABLE_LEAKAGE_GUARD,
-            enable_code_safety=_ENABLE_CODE_SAFETY,
+    @weave.op()
+    def run(self, idea: str | None = None) -> dict[str, Any]:
+        """Run one developer iteration; retry on failure until success."""
+        previous_code = self._find_previous_code()
+        system_prompt = codegen_system(
+            goal_text=self.goal_text,
+            idea=idea,
+            previous_code=previous_code,
         )
-        logger.info("v%s: guardrail decision = %s", version, guard_report["decision"])
 
-        if guard_report["decision"] == "block":
-            block_summary = build_block_summary(guard_report)
-            (version_dir / "guardrails_block.txt").write_text(block_summary)
-            history.append(HistoryEntry(version=version, code=code, review=None))
+        input_list: list[dict] = [
+            append_message("user", codegen_initial_user(self.base_dir / "1")),
+        ]
+
+        stderr_cache: dict[str, str | None] = {}
+        k = 0
+        while True:
+            k += 1
+            attempt_dir = self.base_dir / str(k)
+            attempt_dir.mkdir(parents=True, exist_ok=True)
+            logger.info(
+                "DeveloperAgent slug=%s dev_iter=%d attempt=%d dir=%s",
+                self.slug,
+                self.dev_iter,
+                k,
+                attempt_dir,
+            )
+
+            try:
+                code = self._generate_code(input_list, system_prompt, attempt_dir)
+            except Exception as exc:
+                logger.exception(
+                    "codegen failed at attempt %d — feeding back and retrying", k
+                )
+                input_list.append(
+                    append_message(
+                        "user",
+                        f"Code generation failed: {exc}. Produce a train.py for attempt {k + 1}.",
+                    )
+                )
+                continue
+
+            input_list.append(append_message("assistant", f"```python\n{code}\n```"))
+
+            final_code = _build_base_dir_header(self.slug) + code
+            train_py = attempt_dir / "train.py"
+            train_py.write_text(final_code)
+
+            guard_report = evaluate_guardrails(
+                code_text=code,
+                enable_logging_guard=_ENABLE_LOGGING_GUARD,
+                enable_leakage_guard=_ENABLE_LEAKAGE_GUARD,
+                enable_code_safety=_ENABLE_CODE_SAFETY,
+            )
+            if guard_report["decision"] == "block":
+                block_summary = build_block_summary(guard_report)
+                (attempt_dir / "guardrails_block.txt").write_text(block_summary)
+                input_list.append(
+                    append_message(
+                        "user",
+                        f"<guardrails_block>\n{block_summary}\n</guardrails_block>\n\nYour previous attempt was blocked by the pre-execution guardrails — it never ran. Fix the issues and produce a new train.py for attempt {k + 1}.",
+                    )
+                )
+                continue
+
+            output = execute_with_monitor(
+                train_py,
+                timeout_seconds=_BASELINE_CODE_TIMEOUT,
+                log_monitor_interval=_LOG_MONITOR_INTERVAL,
+                logger=logger,
+                conda_env=self.conda_env,
+            )
+            (attempt_dir / "train.txt").write_text(output)
+
+            stats_path = attempt_dir / "train_stats.json"
+            if stats_path.exists():
+                try:
+                    stats = json.loads(stats_path.read_text())
+                    score = float(stats.get("score"))
+                    if math.isfinite(score):
+                        return {
+                            "status": "success",
+                            "code": final_code,
+                            "code_path": str(train_py),
+                            "summary": {
+                                "score": score,
+                                "stats": stats,
+                                "stdout_tail": _tail(output),
+                                "attempts_made": k,
+                                "final_error": None,
+                            },
+                        }
+                except (json.JSONDecodeError, TypeError, ValueError) as exc:
+                    logger.warning(
+                        "train_stats.json present but unparseable at %s: %s",
+                        stats_path,
+                        exc,
+                    )
+
+            trace_hash = hashlib.md5(output.encode()).hexdigest()
+            if trace_hash in stderr_cache:
+                hints = stderr_cache[trace_hash]
+            else:
+                hints = None
+                if _has_traceback(output):
+                    try:
+                        enriched = web_search_stack_trace(output)
+                        hints = _extract_hints(enriched)
+                    except Exception:
+                        logger.exception("web_search_stack_trace failed at attempt %d", k)
+                stderr_cache[trace_hash] = hints
+
             input_list.append(
                 append_message(
                     "user",
-                    f"""<guardrails_block>
-{block_summary}
-</guardrails_block>
-
-Your previous attempt was blocked by the pre-execution guardrails — it never ran. Fix the issues above and produce a new train.py. Save artifacts under {next_dir}/.""",
+                    codegen_retry_user(
+                        output=output,
+                        hints=hints,
+                        missing_stats=not stats_path.exists(),
+                        attempt_dir=self.base_dir / str(k + 1),
+                    ),
                 )
             )
-            continue
 
-        # 4. Execute with LLM-based log monitoring
-        output = execute_with_monitor(
-            train_py,
-            timeout_seconds=_BASELINE_CODE_TIMEOUT,
-            log_monitor_interval=_LOG_MONITOR_INTERVAL,
-            logger=logger,
-        )
-        (version_dir / "train.txt").write_text(output)
+    def _generate_code(
+        self,
+        input_list: list[dict],
+        system_prompt: str,
+        attempt_dir: Path,
+    ) -> str:
+        """Inner codegen tool-loop — identical shape to the pre-rewrite version."""
+        tools = get_developer_tools()
 
-        # 5. Review — no-op; Main Agent will take over (#230).
-        review = _review(goal_text, code, output)
+        for step in range(_MAX_CODEGEN_TOOL_STEPS + 1):
+            is_last_step = step == _MAX_CODEGEN_TOOL_STEPS
 
-        history.append(HistoryEntry(version=version, code=code, review=review))
+            response = call_llm(
+                model=_DEVELOPER_MODEL,
+                system_instruction=system_prompt,
+                messages=input_list,
+                text_format=None,
+                function_declarations=tools if not is_last_step else [],
+                enable_google_search=True,
+            )
 
-        # 6. Append the next user instruction
-        input_list.append(
-            append_message("user", next_codegen_user(output, next_dir))
-        )
+            parts = response.candidates[0].content.parts
+            has_function_calls = any(
+                part.function_call
+                for part in parts
+                if hasattr(part, "function_call")
+            )
 
-    (run_dir / "history.json").write_text(
-        json.dumps([entry.to_dict() for entry in history], indent=2)
-    )
-    logger.info("history.json written with %d entries", len(history))
-    return history
-
-
-def _execute_developer_tool_call(
-    function_call,
-    *,
-    goal_text: str,
-    version_dir: Path,
-    step: int,
-    call_idx: int,
-) -> str:
-    """Dispatch a tool call made during code generation."""
-    args = dict(function_call.args)
-
-    if function_call.name == "explore_codebase":
-        query = args["query"]
-        logger.info("explore_codebase called: %s", query[:100])
-        return explore_codebase(query, goal_text=goal_text)
-
-    if function_call.name == "execute_python":
-        code = args["code"]
-        timeout = args.get("timeout_seconds", 300)
-        logger.info(
-            "execute_python called (step %s call %s, %d bytes, timeout=%ds)",
-            step,
-            call_idx,
-            len(code),
-            timeout,
-        )
-        work_dir = version_dir / "codegen_snippets"
-        work_dir.mkdir(parents=True, exist_ok=True)
-        script_file = work_dir / f"{step}_{call_idx}.py"
-        script_file.write_text(_build_resource_header() + code)
-        job = execute_code(str(script_file), timeout_seconds=timeout)
-        return json.dumps({"output": job.result()})
-
-    return json.dumps({"error": f"Unknown tool: {function_call.name}"})
-
-
-@weave.op()
-def _generate_code(input_list: list[dict], goal_text: str, version_dir: Path) -> str:
-    """Call the codegen LLM and return the extracted python code.
-
-    Up to ``max_tool_steps`` rounds where the LLM may call ``explore_codebase``
-    or ``execute_python`` before producing the final ```python``` block.
-    Tool-call results are appended to ``input_list`` so the next call sees them.
-
-    The goal is embedded in the system prompt (not the user thread) so that
-    it is preserved across every call regardless of conversation trimming.
-    """
-    tools = get_developer_tools()
-    max_tool_steps = 100
-    system_prompt = codegen_system(goal_text)
-
-    for step in range(max_tool_steps + 1):
-        is_last_step = step == max_tool_steps
-
-        response = call_llm(
-            model=_DEVELOPER_MODEL,
-            system_instruction=system_prompt,
-            messages=input_list,
-            text_format=None,
-            function_declarations=tools if not is_last_step else [],
-            enable_google_search=True,
-        )
-
-        parts = response.candidates[0].content.parts
-        has_function_calls = any(
-            part.function_call
-            for part in parts
-            if hasattr(part, "function_call")
-        )
-
-        if not has_function_calls:
-            raw_text = response.text or ""
-            code = extract_python_code(raw_text)
-            if not code:
-                raise ValueError("No ```python code block found in model response")
-            return code
-
-        function_responses = []
-        for call_idx, part in enumerate(parts, start=1):
-            if hasattr(part, "function_call") and part.function_call:
-                tool_result_str = _execute_developer_tool_call(
-                    part.function_call,
-                    goal_text=goal_text,
-                    version_dir=version_dir,
-                    step=step + 1,
-                    call_idx=call_idx,
-                )
-                function_responses.append(
-                    types.Part.from_function_response(
-                        name=part.function_call.name,
-                        response={"result": tool_result_str},
+            if not has_function_calls:
+                raw_text = response.text or ""
+                code = extract_python_code(raw_text)
+                if not code:
+                    raise ValueError(
+                        "No ```python code block found in model response"
                     )
-                )
+                return code
 
-        input_list.append(
-            response.candidates[0].content.model_dump(mode="json", exclude_none=True)
-        )
-        if function_responses:
+            function_responses = []
+            for call_idx, part in enumerate(parts, start=1):
+                if hasattr(part, "function_call") and part.function_call:
+                    tool_result_str = self._execute_developer_tool_call(
+                        part.function_call,
+                        attempt_dir=attempt_dir,
+                        step=step + 1,
+                        call_idx=call_idx,
+                    )
+                    function_responses.append(
+                        types.Part.from_function_response(
+                            name=part.function_call.name,
+                            response={"result": tool_result_str},
+                        )
+                    )
+
             input_list.append(
-                types.Content(role="function", parts=function_responses).model_dump(
+                response.candidates[0].content.model_dump(
                     mode="json", exclude_none=True
                 )
             )
+            if function_responses:
+                input_list.append(
+                    types.Content(
+                        role="function", parts=function_responses
+                    ).model_dump(mode="json", exclude_none=True)
+                )
 
-    raise RuntimeError("Code generation exhausted tool steps without producing code")
+        raise RuntimeError(
+            "Code generation exhausted tool steps without producing code"
+        )
 
+    def _execute_developer_tool_call(
+        self,
+        function_call,
+        *,
+        attempt_dir: Path,
+        step: int,
+        call_idx: int,
+    ) -> str:
+        """Dispatch a tool call made during code generation."""
+        args = dict(function_call.args)
 
-def _review(goal_text: str, code: str, output: str) -> Review:
-    """TODO: re-enable when Main Agent takes over review (#230)."""
-    return Review()
+        if function_call.name == "explore_codebase":
+            query = args["query"]
+            logger.info("explore_codebase called: %s", query[:100])
+            return explore_codebase(query, goal_text=self.goal_text)
+
+        if function_call.name == "execute_python":
+            code = args["code"]
+            timeout = args.get("timeout_seconds", 300)
+            logger.info(
+                "execute_python called (step %s call %s, %d bytes, timeout=%ds)",
+                step,
+                call_idx,
+                len(code),
+                timeout,
+            )
+            work_dir = attempt_dir / "codegen_snippets"
+            work_dir.mkdir(parents=True, exist_ok=True)
+            script_file = work_dir / f"{step}_{call_idx}.py"
+            script_file.write_text(_build_resource_header() + code)
+            job = execute_code(str(script_file), timeout_seconds=timeout)
+            return json.dumps({"output": job.result()})
+
+        return json.dumps({"error": f"Unknown tool: {function_call.name}"})

@@ -1,8 +1,10 @@
-"""Prompt builders for the standalone developer agent.
+"""Prompt builders for the developer agent.
 
-Pure template-string functions. The agent (`agents/developer.py`) threads the
-codegen calls through a single growing message list — these builders just
-substitute strings into triple-quoted templates.
+The developer subagent produces one `train.py` per attempt. `codegen_system`
+is built once per DeveloperAgent.run() call (static per-call context: goal,
+idea, previous code); the per-attempt user turns are produced by
+`codegen_initial_user` (first attempt) and `codegen_retry_user` (feedback
+after a failed attempt).
 """
 
 from __future__ import annotations
@@ -10,42 +12,92 @@ from __future__ import annotations
 from pathlib import Path
 
 
-def codegen_system(goal_text: str) -> str:
-    return f"""You write a single Python script (`train.py`) that iterates toward the goal stated in `<goal>` below. Each iteration produces one complete script; the previous attempt is visible above in the conversation thread.
+def codegen_system(
+    goal_text: str,
+    idea: str | None = None,
+    previous_code: str | None = None,
+) -> str:
+    idea_section = ""
+    if idea:
+        idea_section = f"\n<idea>\n{idea}\n</idea>\n"
+
+    previous_section = ""
+    if previous_code:
+        previous_section = (
+            "\n<previous_code>\n"
+            "The train.py from the last successful developer call — "
+            "evolve this script to apply the idea above.\n"
+            "```python\n"
+            f"{previous_code}\n"
+            "```\n"
+            "</previous_code>\n"
+        )
+
+    return f"""You are a developer producing a single Python script (`train.py`) that completes one training iteration toward the session goal below. Output one complete script per attempt; the previous attempt's code and any failure feedback are visible above in the conversation thread.
 
 <goal>
 {goal_text}
 </goal>
+{idea_section}{previous_section}
+## Hard constraints
 
-**Hard Constraints:**
 - Place `import logging` and `logging.basicConfig(level=logging.INFO, ...)` at the very top of the script, BEFORE any third-party imports (torch, transformers, numpy, etc.). Third-party libraries configure logging on import, so basicConfig must come first. A pre-execution guardrail enforces this and will block the script otherwise.
 - Use the `logging` module (not `print`) for all observability. Log: what the script is doing at each major step, sizes / shapes / counts of anything loaded, intermediate quantities that can go wrong (thresholds, class weights, normalizations), final results, total runtime, and any errors caught.
 - Do not use `try/except` to suppress errors. Let exceptions propagate so they appear in the log.
-- Treat any constraints listed in `<goal>` as inviolable.
+- **Your `train.py` MUST compute its own score and write `train_stats.json` next to the script — use `Path(__file__).parent / "train_stats.json"` — with at least `{{"score": <float>, ...}}` at end of run.** The framework uses the presence + parseability of `train_stats.json` to decide whether the attempt succeeded. No `train_stats.json` (or a non-finite score) = failed attempt = retry with feedback.
+- Write any submission or auxiliary artifacts (e.g. `submission.csv`, `valid_preds.csv`) to `Path(__file__).parent` so they land alongside `train.py`.
+- A BASE_DIR constant is prepended by the framework — use `BASE_DIR / "<file>"` to read competition data. Locally this resolves to `task/<slug>/`; on Kaggle it resolves to `/kaggle/input/<slug>/`.
 
-## Output
+## Output format
+
 - Return a single Python script inside one ```python ... ``` fenced block. No prose outside it.
 - Start the file with a docstring containing your reasoning, the approach, and what changed since the previous version (if any).
-- Save every artifact the script produces inside the version directory printed in the user message.
 - The script must be self-contained and runnable as `python train.py`. stdout/stderr are captured automatically into `train.txt` next to the script.
 """
 
 
-def initial_codegen_user(version_dir: Path) -> str:
-    return f"""<version_dir>{version_dir}</version_dir>
+def codegen_initial_user(attempt_dir: Path) -> str:
+    return f"""Write the train.py for this attempt.
 
-This is iteration 1. Write the first attempt from scratch.
+Output directory (where `train.py`, `train_stats.json`, and any other artifacts will live): `{attempt_dir}`
 
-Output one ```python ... ``` fenced block. Save all artifacts under {version_dir}/.
+Output one ```python ... ``` fenced block. Do not emit prose outside the block.
 """
 
 
-def next_codegen_user(output: str, version_dir: Path) -> str:
-    return f"""<execution_output>
-{output}
-</execution_output>
+def codegen_retry_user(
+    output: str,
+    hints: str | None,
+    missing_stats: bool,
+    attempt_dir: Path,
+) -> str:
+    sections: list[str] = [
+        "<execution_output>",
+        output,
+        "</execution_output>",
+    ]
 
-<version_dir>{version_dir}</version_dir>
+    if hints:
+        sections += [
+            "",
+            "<hints>",
+            hints,
+            "</hints>",
+        ]
 
-Evolve your previous attempt based on the execution output above. Output one ```python ... ``` fenced block. Save all artifacts under {version_dir}/.
-"""
+    if missing_stats:
+        sections += [
+            "",
+            "<missing_artifact>",
+            "`train_stats.json` was not produced. Your train.py must compute its own score and write it to `Path(__file__).parent / \"train_stats.json\"` with at least `{\"score\": <float>}` at end of run.",
+            "</missing_artifact>",
+        ]
+
+    sections += [
+        "",
+        f"Produce a corrected train.py for the next attempt. Output directory: `{attempt_dir}`",
+        "",
+        "Output one ```python ... ``` fenced block.",
+    ]
+
+    return "\n".join(sections)
