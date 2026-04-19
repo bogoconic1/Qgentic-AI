@@ -1,31 +1,17 @@
 llm:
   main_agent_model: "gemini-3.1-pro-preview"
-  developer_model: "gemini-3.1-pro-preview"
-  developer_tool_model: "gemini-3.1-pro-preview"
-  leakage_review_model: "gemini-3.1-pro-preview"
 runtime:
-  write_python_code_timeout_seconds: 300             # Per-call timeout for write_python_code subprocess
   llm_max_retries: 5
   llm_backoff_sequence: [1, 5, 10, 30, 60]
   compaction_threshold_tokens: 200000  # compact when last call's prompt_token_count exceeds this
   compaction_keep_last: 4               # turns kept verbatim after summary
-  baseline_code_timeout: 43200  # 12 hours for baseline code execution
-  log_monitor_interval: 120  # Seconds between LLM log monitor calls during code execution
-  # Codebase exploration sub-agent
+  # Filesystem tool allowlist — paths MainAgent's read_file/list_dir/etc. may touch.
+  # The site-packages directory of the active Python interpreter is auto-added at
+  # runtime; do not list it here. Add any additional absolute paths below.
   explore_allowed_roots:
-    # Paths the explore subagent is allowed to read.
-    # The site-packages directory of the active Python interpreter (i.e. whichever
-    # conda/venv launched the orchestrator) is auto-added at runtime — you do NOT
-    # need to list it here. To expose a *different* env's site-packages (e.g. if
-    # the orchestrator runs in a thin env but you want explore to read libraries
-    # from a heavyweight env), add the absolute path explicitly below.
     - /workspace
 paths:
   task_root: "task"
-guardrails:
-  logging_basicconfig_order: true
-  leakage_review: true
-  enable_code_safety: true
 tracking:
   wandb:
     entity: bogoconic1 # replace with your W&B entity

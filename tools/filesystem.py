@@ -1,13 +1,8 @@
-"""Codebase exploration sub-agent.
+"""Read-only filesystem tools for MainAgent.
 
-A read-only sub-agent that the developer codegen LLM calls when it needs to
-understand existing code before writing new code. Uses a multi-step tool
-loop to read files, glob, grep, list directories, and run read-only shell
-commands across a configurable set of allowed root paths.
-
-Exposed as a plain module-level function ``explore_codebase(query) -> str``
-(no state to carry, so no class wrapper). Free-form markdown output (no
-Pydantic schema).
+Plain helper functions (no agent wrapper). Scoped by a module-level list of
+allowed roots from ``runtime.explore_allowed_roots`` plus the active interpreter's
+``site-packages``. Every path validated against that allowlist before any read.
 """
 
 from __future__ import annotations
@@ -19,72 +14,34 @@ import subprocess
 import sysconfig
 from pathlib import Path
 
-import weave
-from google.genai import types
-
 from project_config import get_config
-from prompts.explore import build_system, build_user
-from tools.helpers import call_llm
-from utils.llm_utils import append_message, get_explore_tools
-from utils.output import truncate_for_llm
 
 
 logger = logging.getLogger(__name__)
 
 
 _CONFIG = get_config()
-_LLM_CFG = _CONFIG["llm"]
 _RUNTIME_CFG = _CONFIG["runtime"]
-_DEVELOPER_TOOL_MODEL = _LLM_CFG["developer_tool_model"]
-
 _USER_ROOTS = [Path(r).resolve() for r in _RUNTIME_CFG["explore_allowed_roots"]]
 _SITE_PACKAGES = Path(sysconfig.get_path("purelib")).resolve()
 _ALLOWED_ROOTS: list[Path] = _USER_ROOTS + [_SITE_PACKAGES]
 
 
-# ---------------------------------------------------------------------------
-# Bash command allowlist
-# ---------------------------------------------------------------------------
-
-
 _BASH_ALLOWED_COMMANDS = frozenset(
     {
-        "ls",
-        "cat",
-        "head",
-        "tail",
-        "wc",
-        "file",
-        "find",
-        "grep",
-        "tree",
-        "du",
-        "stat",
+        "ls", "cat", "head", "tail", "wc", "file",
+        "find", "grep", "tree", "du", "stat",
     }
 )
 _BASH_ALLOWED_GIT_SUBCOMMANDS = frozenset(
-    {
-        "status",
-        "log",
-        "diff",
-        "show",
-        "blame",
-        "ls-files",
-        "ls-tree",
-    }
+    {"status", "log", "diff", "show", "blame", "ls-files", "ls-tree"}
 )
 _BASH_FORBIDDEN_SUBSTRINGS = (";", "&&", "||", "|", ">", "<", "`", "$(")
 _BASH_OUTPUT_CAP_BYTES = 8 * 1024
 _BASH_TIMEOUT_SECONDS = 15
 
 
-# ---------------------------------------------------------------------------
-# Validation
-# ---------------------------------------------------------------------------
-
-
 def _validate_path(path: Path) -> str | None:
-    """Return an error string if the resolved path is outside every allowed root."""
     try:
         resolved = path.resolve()
     except Exception as exc:
@@ -102,20 +59,15 @@ def _validate_path(path: Path) -> str | None:
 
 
 def _validate_bash_command(command: str) -> str | None:
-    """Validate a bash command against the read-only allowlist.
-
-    Rejects forbidden substrings (pipes, redirection, chaining, backticks,
-    command substitution) and any leading command not in the allowlist.
-    """
     if not command or not command.strip():
         return "Empty command"
 
     for token in _BASH_FORBIDDEN_SUBSTRINGS:
         if token in command:
             return (
-                f"Forbidden token {token!r} in command. Pipes, redirection, "
-                f"chaining, backticks, and $() are not allowed — use the "
-                f"dedicated read_file/glob_files/grep_code/list_dir tools instead."
+                f"Forbidden token {token!r}. Pipes, redirection, chaining, "
+                f"backticks, and $() are not allowed — use read_file / "
+                f"glob_files / grep_code / list_dir instead."
             )
 
     try:
@@ -139,18 +91,13 @@ def _validate_bash_command(command: str) -> str | None:
 
     if head not in _BASH_ALLOWED_COMMANDS:
         return (
-            f"Command {head!r} is not allowed. Allowed commands: "
+            f"Command {head!r} is not allowed. Allowed: "
             f"{sorted(_BASH_ALLOWED_COMMANDS)} (and 'git' with read-only subcommands)"
         )
     return None
 
 
-# ---------------------------------------------------------------------------
-# Tool implementations (read-only, allowlisted paths)
-# ---------------------------------------------------------------------------
-
-
-def _tool_read_file(
+def tool_read_file(
     path: str, start_line: int | None = None, end_line: int | None = None
 ) -> str:
     full_path = Path(path)
@@ -196,7 +143,7 @@ def _tool_read_file(
     return json.dumps({"content": numbered, "total_lines": total_lines})
 
 
-def _tool_glob_files(root: str, pattern: str) -> str:
+def tool_glob_files(root: str, pattern: str) -> str:
     root_path = Path(root)
     error = _validate_path(root_path)
     if error:
@@ -220,7 +167,7 @@ def _tool_glob_files(root: str, pattern: str) -> str:
     return json.dumps({"matches": matches, "total": total, "truncated": total > 50})
 
 
-def _tool_grep_code(
+def tool_grep_code(
     root: str,
     pattern: str,
     file_glob: str = "*.py",
@@ -260,7 +207,7 @@ def _tool_grep_code(
     )
 
 
-def _tool_list_dir(path: str, max_entries: int = 100) -> str:
+def tool_list_dir(path: str, max_entries: int = 100) -> str:
     full_path = Path(path)
     error = _validate_path(full_path)
     if error:
@@ -293,7 +240,7 @@ def _tool_list_dir(path: str, max_entries: int = 100) -> str:
     )
 
 
-def _tool_bash_readonly(command: str) -> str:
+def tool_bash_readonly(command: str) -> str:
     error = _validate_bash_command(command)
     if error:
         return json.dumps({"error": error})
@@ -329,97 +276,3 @@ def _tool_bash_readonly(command: str) -> str:
             "truncated": truncated,
         }
     )
-
-
-# ---------------------------------------------------------------------------
-# Tool dispatcher
-# ---------------------------------------------------------------------------
-
-
-def _execute_tool_call(item) -> str:
-    args = dict(item.args)
-
-    if item.name == "read_file":
-        return _tool_read_file(
-            args["path"],
-            args.get("start_line"),
-            args.get("end_line"),
-        )
-    if item.name == "glob_files":
-        return _tool_glob_files(args["root"], args["pattern"])
-    if item.name == "grep_code":
-        return _tool_grep_code(
-            args["root"],
-            args["pattern"],
-            args.get("file_glob", "*.py"),
-            args.get("max_results", 20),
-        )
-    if item.name == "list_dir":
-        return _tool_list_dir(args["path"], args.get("max_entries", 100))
-    if item.name == "bash_readonly":
-        return _tool_bash_readonly(args["command"])
-
-    return json.dumps({"error": f"Unknown tool: {item.name}"})
-
-
-# ---------------------------------------------------------------------------
-# Public entry point
-# ---------------------------------------------------------------------------
-
-
-@weave.op()
-def explore_codebase(query: str) -> str:
-    """Run the codebase exploration sub-agent and return a markdown report.
-
-    Args:
-        query: Natural language question about the codebase or libraries.
-
-    Returns:
-        Free-form markdown report (with file:line citations).
-    """
-    logger.info("Starting codebase exploration: %s", query[:100])
-
-    allowed_roots_display = [str(r) for r in _ALLOWED_ROOTS]
-    system_prompt = build_system(allowed_roots_display)
-    user_prompt = build_user(query)
-    tools = get_explore_tools()
-    input_list = [append_message("user", user_prompt)]
-
-    step = 0
-    while True:
-        step += 1
-        logger.info("Explore step %d", step)
-
-        response = call_llm(
-            model=_DEVELOPER_TOOL_MODEL,
-            system_instruction=system_prompt,
-            function_declarations=tools,
-            messages=input_list,
-            enable_google_search=True,
-        )
-
-        parts = response.candidates[0].content.parts
-        has_function_calls = any(
-            part.function_call for part in parts if hasattr(part, "function_call")
-        )
-
-        if not has_function_calls:
-            logger.info("Explore completed at step %d", step)
-            return truncate_for_llm(response.text or "")
-
-        function_responses = []
-        for part in parts:
-            if hasattr(part, "function_call") and part.function_call:
-                tool_result_str = _execute_tool_call(part.function_call)
-                function_responses.append(
-                    types.Part.from_function_response(
-                        name=part.function_call.name,
-                        response={"result": tool_result_str},
-                    )
-                )
-
-        input_list.append(response.candidates[0].content)
-        if function_responses:
-            input_list.append(
-                types.Content(role="function", parts=function_responses)
-            )

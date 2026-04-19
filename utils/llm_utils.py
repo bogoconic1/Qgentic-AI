@@ -1,6 +1,6 @@
-"""
-LLM utility functions for Gemini response handling and tool definitions.
-"""
+"""LLM utility functions — response helpers + MainAgent tool declarations."""
+
+from __future__ import annotations
 
 import base64
 import logging
@@ -9,21 +9,14 @@ from pathlib import Path
 
 from google.genai import types
 
+
 logger = logging.getLogger(__name__)
 
 
 def encode_image_to_data_url(
     image_path: str | Path, max_size_bytes: int = 4_500_000
 ) -> str:
-    """Encode an image file to a data URL.
-
-    Args:
-        image_path: Path to the image file
-        max_size_bytes: Maximum file size in bytes (default 4.5MB)
-
-    Returns:
-        Data URL string in format: data:{mime};base64,{data}
-    """
+    """Encode an image file to a data URL: ``data:{mime};base64,{data}``."""
     path = Path(image_path) if isinstance(image_path, str) else image_path
 
     mime, _ = mimetypes.guess_type(path.name)
@@ -44,115 +37,195 @@ def encode_image_to_data_url(
 
     if len(image_bytes) > max_size_bytes:
         raise ValueError(
-            f"Image {path.name} exceeds size limit ({len(image_bytes) / 1024 / 1024:.2f}MB > {max_size_bytes / 1024 / 1024:.2f}MB)"
+            f"Image {path.name} exceeds size limit "
+            f"({len(image_bytes) / 1024 / 1024:.2f}MB > {max_size_bytes / 1024 / 1024:.2f}MB)"
         )
 
     data = base64.b64encode(image_bytes).decode("utf-8")
     return f"data:{mime};base64,{data}"
 
 
-def extract_text_from_response(response) -> str:
-    """
-    Extract text from a Gemini response.
-
-    Args:
-        response: Google Gemini response object
-
-    Returns:
-        Extracted text string
-
-    Examples:
-        >>> text = extract_text_from_response(gemini_response)
-    """
-    return response.text
-
-
 def append_message(role: str, message: str) -> dict:
-    """
-    Create a message in Gemini format.
+    """Create a Gemini-format message dict.
 
-    Args:
-        role: Message role ("user", "assistant", "model", etc.)
-        message: Message content (text string)
-
-    Returns:
-        Formatted message dict for Gemini
-
-    Examples:
-        >>> append_message("user", "Hello")
-        {'role': 'user', 'parts': [{'text': 'Hello'}]}
-
-        >>> append_message("assistant", "Hi")
-        {'role': 'model', 'parts': [{'text': 'Hi'}]}
+    ``role='assistant'`` is translated to ``'model'`` (Gemini's wire term).
     """
     gemini_role = "model" if role == "assistant" else role
     return {"role": gemini_role, "parts": [{"text": message}]}
 
 
-def get_tools():
-    """
-    Get tools as Gemini FunctionDeclaration objects.
+def get_main_agent_tools():
+    """Full tool palette exposed to MainAgent (11 tools).
 
-    Returns:
-        List of FunctionDeclaration objects
+    Union of every tool the four former agents exposed, minus the sub-agent
+    wrapper tools themselves. MainAgent's dispatcher routes each call to a
+    helper in ``tools/runtime.py``, ``tools/filesystem.py``,
+    ``tools/research_net.py``, or ``utils/idea_pool.py``.
     """
     return [
         types.FunctionDeclaration(
-            name="analyze",
-            description="Write and execute a Python script. The script runs in the task data directory with access to all data files, model outputs, and predictions. Print results to stdout.",
+            name="execute_python",
+            description=(
+                "Write a Python snippet to `main_agent_snippets/<filename>` and "
+                "run it in a fresh subprocess. You pick the filename — e.g. "
+                "'probe_task_012.py', 'build_task001.py', 'validate_all.py' — "
+                "so you can re-run it later, evolve it, or reference it in "
+                "logs. Must end with `.py`; no directory separators (no '/', "
+                "no '..'); re-using a filename overwrites the previous version. "
+                "Returns combined stdout/stderr (long output is truncated — the "
+                "full file stays on disk). On non-zero exit, stderr is "
+                "auto-enriched with a web-searched remediation hint. Use for "
+                "EDA, probes, authoring per-task builders (the snippet can "
+                "write files via `Path.write_text`), running an ONNX-"
+                "construction script, validating a candidate network, etc."
+            ),
             parameters_json_schema={
                 "type": "object",
                 "properties": {
+                    "filename": {
+                        "type": "string",
+                        "description": (
+                            "Filename ending in '.py'. Saved under "
+                            "`main_agent_snippets/`. Re-using a name overwrites "
+                            "the previous script."
+                        ),
+                    },
                     "code": {
                         "type": "string",
-                        "description": "Complete Python script to execute.",
-                    }
+                        "description": "Complete Python source to execute.",
+                    },
+                    "timeout_seconds": {
+                        "type": "integer",
+                        "description": "Hard timeout in seconds (default: 300).",
+                    },
                 },
-                "required": ["code"],
+                "required": ["filename", "code"],
             },
         ),
-    ]
-
-
-# ---------------------------------------------------------------------------
-# Monitor tools (execute_bash for system diagnostics during training)
-# ---------------------------------------------------------------------------
-
-
-def get_monitor_tools():
-    """Get monitor tools (execute_bash) as Gemini FunctionDeclaration objects."""
-    return [
         types.FunctionDeclaration(
-            name="execute_bash",
-            description="Execute a bash command for system diagnostics. Use for checking GPU utilization (nvidia-smi), process status (ps, top), memory (free), disk (df), etc.",
+            name="read_file",
+            description=(
+                "Read a source file. Path is absolute or relative to cwd. Returns "
+                "numbered lines. Files over 300 lines are truncated unless "
+                "start_line/end_line are specified."
+            ),
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Absolute path or path relative to cwd.",
+                    },
+                    "start_line": {
+                        "type": "integer",
+                        "description": "Start line number (1-indexed). Optional.",
+                    },
+                    "end_line": {
+                        "type": "integer",
+                        "description": "End line number (1-indexed, inclusive). Optional.",
+                    },
+                },
+                "required": ["path"],
+            },
+        ),
+        types.FunctionDeclaration(
+            name="glob_files",
+            description=(
+                "Find files matching a glob pattern under a root directory. "
+                "Returns up to 50 matches as paths relative to the root."
+            ),
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "root": {
+                        "type": "string",
+                        "description": "Directory under one of the allowed roots to glob from.",
+                    },
+                    "pattern": {
+                        "type": "string",
+                        "description": "Glob pattern (e.g., '**/*.py').",
+                    },
+                },
+                "required": ["root", "pattern"],
+            },
+        ),
+        types.FunctionDeclaration(
+            name="grep_code",
+            description=(
+                "Recursively search a regex pattern in files under a root "
+                "directory. Returns matching lines with file paths and line numbers."
+            ),
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "root": {
+                        "type": "string",
+                        "description": "Directory under one of the allowed roots to search in.",
+                    },
+                    "pattern": {
+                        "type": "string",
+                        "description": "Regular expression pattern (extended regex; passed to grep -E).",
+                    },
+                    "file_glob": {
+                        "type": "string",
+                        "description": "File glob to restrict the search (default '*.py').",
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Maximum number of matching lines to return (default: 20).",
+                    },
+                },
+                "required": ["root", "pattern"],
+            },
+        ),
+        types.FunctionDeclaration(
+            name="list_dir",
+            description=(
+                "List the immediate children of a directory. Directories are "
+                "suffixed with '/'."
+            ),
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Directory path under one of the allowed roots.",
+                    },
+                    "max_entries": {
+                        "type": "integer",
+                        "description": "Maximum number of entries to return (default: 100).",
+                    },
+                },
+                "required": ["path"],
+            },
+        ),
+        types.FunctionDeclaration(
+            name="bash_readonly",
+            description=(
+                "Run a single read-only shell command. ONLY allowed: ls, cat, "
+                "head, tail, wc, file, find, grep, tree, du, stat, git status, "
+                "git log, git diff, git show, git blame, git ls-files, git "
+                "ls-tree. Pipes (|), redirection (>, <, >>), chaining (;, &&, "
+                "||), backticks, and $() are forbidden — use read_file / "
+                "glob_files / grep_code / list_dir instead."
+            ),
             parameters_json_schema={
                 "type": "object",
                 "properties": {
                     "command": {
                         "type": "string",
-                        "description": "Bash command to execute.",
-                    }
+                        "description": "The shell command to run.",
+                    },
                 },
                 "required": ["command"],
             },
-        )
-    ]
-
-
-# ---------------------------------------------------------------------------
-# Deep Research tools (web_research + web_fetch + write_python_code)
-# ---------------------------------------------------------------------------
-
-
-def get_deep_research_tools():
-    """Inner tools available to the Deep Research sub-agent."""
-    return [
+        ),
         types.FunctionDeclaration(
             name="web_research",
             description=(
-                "Discover web pages for a query via Exa neural search. "
-                "Returns a list of results, each with url, title, full page text, "
-                "and published_date — not a snippet, the whole text. This is the "
+                "Discover web pages for a query via Exa neural search. Returns a "
+                "list of results, each with url, title, full page text, and "
+                "published_date — not a snippet, the whole text. This is the "
                 "ONLY way to discover URLs; never guess or reconstruct URLs."
             ),
             parameters_json_schema={
@@ -164,10 +237,7 @@ def get_deep_research_tools():
                     },
                     "num_results": {
                         "type": "integer",
-                        "description": (
-                            "Optional number of results to return. Omit to use "
-                            "the Exa default."
-                        ),
+                        "description": "Optional number of results to return.",
                     },
                 },
                 "required": ["query"],
@@ -190,224 +260,6 @@ def get_deep_research_tools():
                     },
                 },
                 "required": ["url"],
-            },
-        ),
-        types.FunctionDeclaration(
-            name="write_python_code",
-            description=(
-                "Write a Python script to the research scripts dir and execute "
-                "it in a subprocess. Full stdout/stderr is returned. Use for "
-                "EDA, API probing, quick computations — anything you'd run in "
-                "a notebook to validate an idea."
-            ),
-            parameters_json_schema={
-                "type": "object",
-                "properties": {
-                    "code": {
-                        "type": "string",
-                        "description": "Complete Python source to execute.",
-                    },
-                },
-                "required": ["code"],
-            },
-        ),
-    ]
-
-
-# ---------------------------------------------------------------------------
-# Explore tools (read-only, scoped to runtime.explore_allowed_roots)
-# ---------------------------------------------------------------------------
-
-
-def get_explore_tools():
-    """Get the read-only tools available to the codebase exploration sub-agent."""
-    return [
-        types.FunctionDeclaration(
-            name="read_file",
-            description="Read a source file. Path is absolute or relative to the current working directory. Returns numbered lines. Files over 300 lines are truncated unless start_line/end_line are specified.",
-            parameters_json_schema={
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "Absolute path or path relative to cwd (e.g. '/workspace/Qgentic-AI/agents/developer.py').",
-                    },
-                    "start_line": {
-                        "type": "integer",
-                        "description": "Start line number (1-indexed). Optional.",
-                    },
-                    "end_line": {
-                        "type": "integer",
-                        "description": "End line number (1-indexed, inclusive). Optional.",
-                    },
-                },
-                "required": ["path"],
-            },
-        ),
-        types.FunctionDeclaration(
-            name="glob_files",
-            description="Find files matching a glob pattern under a root directory. Returns up to 50 matches as paths relative to the root.",
-            parameters_json_schema={
-                "type": "object",
-                "properties": {
-                    "root": {
-                        "type": "string",
-                        "description": "Directory under one of the allowed roots to glob from.",
-                    },
-                    "pattern": {
-                        "type": "string",
-                        "description": "Glob pattern (e.g., '**/*.py', '**/sft*.py').",
-                    },
-                },
-                "required": ["root", "pattern"],
-            },
-        ),
-        types.FunctionDeclaration(
-            name="grep_code",
-            description="Recursively search a regex pattern in files under a root directory. Returns matching lines with file paths and line numbers.",
-            parameters_json_schema={
-                "type": "object",
-                "properties": {
-                    "root": {
-                        "type": "string",
-                        "description": "Directory under one of the allowed roots to search in.",
-                    },
-                    "pattern": {
-                        "type": "string",
-                        "description": "Regular expression pattern (extended regex; passed to grep -E).",
-                    },
-                    "file_glob": {
-                        "type": "string",
-                        "description": "File glob to restrict the search (default '*.py'; pass '*' for all files).",
-                    },
-                    "max_results": {
-                        "type": "integer",
-                        "description": "Maximum number of matching lines to return (default: 20).",
-                    },
-                },
-                "required": ["root", "pattern"],
-            },
-        ),
-        types.FunctionDeclaration(
-            name="list_dir",
-            description="List the immediate children of a directory. Directories are suffixed with '/'.",
-            parameters_json_schema={
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "Directory path under one of the allowed roots.",
-                    },
-                    "max_entries": {
-                        "type": "integer",
-                        "description": "Maximum number of entries to return (default: 100).",
-                    },
-                },
-                "required": ["path"],
-            },
-        ),
-        types.FunctionDeclaration(
-            name="bash_readonly",
-            description=(
-                "Run a single read-only shell command. ONLY these commands are allowed: "
-                "ls, cat, head, tail, wc, file, find, grep, tree, du, stat, "
-                "git status, git log, git diff, git show, git blame, git ls-files, git ls-tree. "
-                "Pipes (|), redirection (>, <, >>), command chaining (;, &&, ||), backticks, and $() are forbidden — "
-                "use the dedicated read_file/glob_files/grep_code/list_dir tools instead."
-            ),
-            parameters_json_schema={
-                "type": "object",
-                "properties": {
-                    "command": {
-                        "type": "string",
-                        "description": "The shell command to run (e.g. 'ls -la /workspace/Qgentic-AI/agents').",
-                    },
-                },
-                "required": ["command"],
-            },
-        ),
-    ]
-
-
-# ---------------------------------------------------------------------------
-# Developer tools (explore_codebase for code generation)
-# ---------------------------------------------------------------------------
-
-
-def get_main_agent_tools():
-    """Get the tool palette available to the Main Agent."""
-    return [
-        types.FunctionDeclaration(
-            name="develop",
-            description=(
-                "Runs one developer iteration and OWNS SUBMISSION AUTHORING: the "
-                "developer subagent writes a `train.py` that produces whatever "
-                "artifact the session goal requires (CSV, ONNX graph, model "
-                "weights, generated text, ZIP bundle, …) and dumps "
-                "`train_stats.json` with a score. Retries internally until "
-                "valid stats land. Returns a structured payload with the final "
-                "code, its path on disk, and a summary (score, stats, "
-                "stdout_tail, attempts_made). Omit `idea_id` on the very first "
-                "call (baseline from the session goal); otherwise pass the "
-                "integer id of the entry you selected from INDEX.md (the "
-                "`[NNN]` prefix) — the framework resolves it to the full "
-                "idea body. DO NOT hand-author submission artifacts yourself "
-                "via `analyze` — that is always wrong; it belongs here."
-            ),
-            parameters_json_schema={
-                "type": "object",
-                "properties": {
-                    "idea_id": {
-                        "type": "integer",
-                        "description": "Id of the idea entry to develop (the `[NNN]` prefix in INDEX.md). Omit for baseline.",
-                    },
-                },
-                "required": [],
-            },
-        ),
-        types.FunctionDeclaration(
-            name="research",
-            description=(
-                "Runs one Deep Research iteration: web_fetch + web_search + internal "
-                "Python to produce a markdown report answering the instruction. Use "
-                "for domain grounding, library docs, prior-art sweeps, empirical "
-                "sniff-tests on the dataset."
-            ),
-            parameters_json_schema={
-                "type": "object",
-                "properties": {
-                    "instruction": {
-                        "type": "string",
-                        "description": "Free-form research instruction.",
-                    },
-                },
-                "required": ["instruction"],
-            },
-        ),
-        types.FunctionDeclaration(
-            name="analyze",
-            description=(
-                "Run a Python snippet in a fresh subprocess for INSPECTION and "
-                "ANALYSIS. Returns stdout/stderr. Legitimate uses: read files, "
-                "inspect artifacts produced by prior `develop` / `research` "
-                "calls, reproduce a reported score, grep code for leakage "
-                "patterns, compute analyses (per-class F1, calibration, "
-                "confusion matrices) over `valid_preds.csv`, list directory "
-                "contents. NOT for authoring submission artifacts (call "
-                "`develop`), NOT for modifying the Python environment "
-                "(`pip install`, `apt`, `conda`), NOT for long training runs. "
-                "If you find yourself iterating variants of a solution via "
-                "this tool, stop and call `develop(idea=...)` instead."
-            ),
-            parameters_json_schema={
-                "type": "object",
-                "properties": {
-                    "code": {
-                        "type": "string",
-                        "description": "Complete Python source to execute.",
-                    },
-                },
-                "required": ["code"],
             },
         ),
         types.FunctionDeclaration(
@@ -449,61 +301,6 @@ def get_main_agent_tools():
                     "description": {"type": "string"},
                 },
                 "required": ["idea_id", "description"],
-            },
-        ),
-    ]
-
-
-def get_developer_tools():
-    """Get tools available to the developer agents during code generation."""
-    return [
-        types.FunctionDeclaration(
-            name="explore_codebase",
-            description=(
-                "Ask a natural-language question about the codebase or installed Python "
-                "packages and get back a markdown report with file:line citations. The "
-                "sub-agent reads source files using read_file/glob_files/grep_code/list_dir "
-                "across configured roots — it does NOT execute Python or shell commands. "
-                "To verify whether a snippet runs, use `analyze` instead.\n\n"
-                "Use this for static investigation: 'How does X work?', 'What's the "
-                "signature of Y?', 'Where is Z defined?', 'Show me callers of W'. Brief "
-                "the sub-agent like a smart colleague who just walked into the room — it "
-                "hasn't seen this conversation. Terse command-style prompts produce "
-                "shallow, generic work."
-            ),
-            parameters_json_schema={
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Natural-language question about the codebase or installed libraries.",
-                    }
-                },
-                "required": ["query"],
-            },
-        ),
-        types.FunctionDeclaration(
-            name="analyze",
-            description=(
-                "Run a Python snippet in a fresh subprocess and get back stdout, "
-                "stderr, and the exit code. Use this to VERIFY behavior — test an "
-                "import, probe an API, check a library version, prototype a function, "
-                "run a quick computation. The snippet runs with a timeout. Use this "
-                "tool when you would otherwise be guessing whether something works."
-            ),
-            parameters_json_schema={
-                "type": "object",
-                "properties": {
-                    "code": {
-                        "type": "string",
-                        "description": "Python source code to execute.",
-                    },
-                    "timeout_seconds": {
-                        "type": "integer",
-                        "description": "Hard timeout in seconds (default: 300).",
-                    },
-                },
-                "required": ["code"],
             },
         ),
     ]
