@@ -28,6 +28,7 @@ from tools.developer import _build_resource_header, execute_code
 from tools.helpers import call_llm
 from utils.idea_pool import add_idea, load_index, remove_idea, update_idea
 from utils.llm_utils import append_message, get_main_agent_tools
+from utils.output import truncate_for_llm
 
 
 _INITIAL_USER_TURN = (
@@ -151,14 +152,14 @@ class MainAgent:
                 research_iter=self.research_iter,
                 goal_text=self.goal_text,
             )
-            return res.run(instruction=args["instruction"])
+            return truncate_for_llm(res.run(instruction=args["instruction"]))
 
         if name == "analyze":
             snippet_num = len(list(self.snippets_dir.glob("*.py"))) + 1
             script_file = self.snippets_dir / f"{snippet_num:03d}.py"
             script_file.write_text(_build_resource_header() + args["code"])
             job = execute_code(str(script_file), timeout_seconds=_EXECUTE_PYTHON_TIMEOUT)
-            return json.dumps({"output": job.result()})
+            return json.dumps({"output": truncate_for_llm(job.result(), script_file.with_suffix(".txt"))})
 
         if name == "add_idea":
             idea_id = add_idea(self.ideas_dir, args["title"], args["description"])

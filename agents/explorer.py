@@ -26,6 +26,7 @@ from project_config import get_config
 from prompts.explore import build_system, build_user
 from tools.helpers import call_llm
 from utils.llm_utils import append_message, get_explore_tools
+from utils.output import truncate_for_llm
 
 
 logger = logging.getLogger(__name__)
@@ -406,7 +407,7 @@ def explore_codebase(query: str, goal_text: str | None = None) -> str:
 
         if not has_function_calls:
             logger.info("Explore completed at step %d", step + 1)
-            return response.text or ""
+            return truncate_for_llm(response.text or "")
 
         function_responses = []
         for part in parts:
@@ -434,4 +435,4 @@ def explore_codebase(query: str, goal_text: str | None = None) -> str:
         messages=input_list,
         enable_google_search=True,
     )
-    return response.text or ""
+    return truncate_for_llm(response.text or "")

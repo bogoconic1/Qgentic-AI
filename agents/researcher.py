@@ -8,9 +8,9 @@ It runs a multi-step tool loop over three inner tools — ``web_research``
 ``google_search`` is disabled inside the sub-agent so every URL the LLM
 dereferences is traceable back to a prior tool result (no invented URLs).
 
-No truncation is applied to ``web_research`` / ``web_fetch`` outputs — full
-content flows back to the LLM so the research can go as deep as the step
-budget allows.
+Tool outputs (``web_research``, ``web_fetch``, ``write_python_code``) are
+truncated to 30k chars before flowing back to the LLM. Full content is
+preserved in per-call audit records on disk.
 
 Per-invocation layout (owned by this module):
 
@@ -42,6 +42,7 @@ from prompts.research import build_system, build_user
 from tools.developer import _build_resource_header, execute_code
 from tools.helpers import call_llm
 from utils.llm_utils import append_message, get_deep_research_tools
+from utils.output import truncate_for_llm
 
 
 load_dotenv()
@@ -130,7 +131,7 @@ def _tool_write_python_code(code: str, seq: int, scripts_dir: Path) -> str:
         logger.exception("write_python_code execution failed")
         return json.dumps({"error": f"execution failed: {exc}"})
 
-    return json.dumps({"output": output})
+    return json.dumps({"output": truncate_for_llm(output, script_path.with_suffix(".txt"))})
 
 
 def _render_tool_record_markdown(
@@ -191,13 +192,14 @@ def _execute_tool_call(item, state: dict) -> str:
     else:
         raise ValueError(f"Unknown tool: {tool_name}")
 
+    # Write audit record with FULL result before truncating for the LLM.
     if tool_name in ("web_research", "web_fetch"):
         record_path = state["research_dir"] / tool_name / f"{tool_seq}.md"
         record_path.write_text(
             _render_tool_record_markdown(tool_name, tool_seq, args, result_json)
         )
 
-    return result_json
+    return truncate_for_llm(result_json)
 
 
 # ---------------------------------------------------------------------------

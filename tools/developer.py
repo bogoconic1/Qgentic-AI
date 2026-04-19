@@ -24,6 +24,7 @@ from prompts.tools_developer import (
     log_monitor_user as prompt_log_monitor_user,
 )
 from schemas.developer import StackTraceSolution, LogMonitorVerdict
+from utils.output import truncate_for_llm
 import weave
 
 load_dotenv()
@@ -76,7 +77,7 @@ def web_search_stack_trace(query: str) -> str:
         text_format=StackTraceSolution,
     )
 
-    return (
+    return truncate_for_llm(
         query
         + "\n"
         + "This is how you can fix the error: \n"
