@@ -35,7 +35,6 @@ runtime:
     - /workspace
 paths:
   task_root: "task"
-  outputs_dirname: "outputs"
   external_data_dirname: "external-data"
 guardrails:
   logging_basicconfig_order: true

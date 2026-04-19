@@ -60,15 +60,14 @@ _HITL_INSTRUCTIONS = get_instructions()["# Developer Instructions"]
 _HITL_SOTA = bool(_DEVELOPER_CFG["hitl_sota"])
 
 _TASK_ROOT = Path(_PATH_CFG["task_root"])
-_OUTPUTS_DIRNAME = _PATH_CFG["outputs_dirname"]
 
 
 class DeveloperAgent:
     """Turns the Researcher plan into a runnable training script.
 
-    - Generates train.py in version folder: outputs/{iteration}/{version}/train.py
+    - Generates train.py in version folder: task/{slug}/{run_id}/{iteration}/{version}/train.py
     - Executes it and iterates while within a time budget
-    - Success condition: writes submission.csv at outputs/{iteration}/{version}/submission.csv
+    - Success condition: writes submission.csv at task/{slug}/{run_id}/{iteration}/{version}/submission.csv
     """
 
     # Class-level shared state across all parallel DeveloperAgent instances
@@ -80,6 +79,7 @@ class DeveloperAgent:
     def __init__(
         self,
         slug: str,
+        run_id: str,
         iteration: int | str,
         strategy_name: str | None = None,
         external_data_listing: str | None = None,
@@ -91,12 +91,10 @@ class DeveloperAgent:
     ):
         load_dotenv()
         self.slug = slug
-        self.iteration = (
-            iteration  # Can be int (legacy) or str like "1_1" (for parallel baselines)
-        )
+        self.run_id = run_id
+        self.iteration = iteration  # Per-strategy suffix (e.g. "1", "2", "3")
 
         self.task_root = _TASK_ROOT
-        self.outputs_dirname = _OUTPUTS_DIRNAME
         self.base_dir = self.task_root / slug
 
         # Fail fast if required helper files are missing
@@ -107,7 +105,7 @@ class DeveloperAgent:
         if not metric_path.exists():
             raise FileNotFoundError(f"Required file missing: {metric_path}")
 
-        self.outputs_dir = self.base_dir / self.outputs_dirname / str(iteration)
+        self.outputs_dir = self.base_dir / self.run_id / str(iteration)
         self.outputs_dir.mkdir(parents=True, exist_ok=True)
         self.developer_log_path = self.outputs_dir / f"developer_{iteration}.txt"
         self._configure_logger()
@@ -415,18 +413,12 @@ class DeveloperAgent:
         return header + "\n" + code, num_header_lines
 
     def _get_parent_iteration_folder(self) -> Path:
-        """Get parent iteration folder for copying shared files.
-
-        For example:
-        - If self.iteration is "16_2", returns outputs/16
-        - If self.iteration is "16", returns outputs/16
+        """Get parent run folder for shared per-run artifacts (external_data, etc.).
 
         Returns:
-            Path to parent iteration folder (e.g., task/csiro-biomass/outputs/16)
+            Path to the run container (e.g., task/csiro-biomass/<run_id>/)
         """
-        iteration_str = str(self.iteration)
-        base_iteration = iteration_str.split("_")[0]
-        return self.base_dir / self.outputs_dirname / base_iteration
+        return self.base_dir / self.run_id
 
     def _write_code(self, train_py: str, version: int) -> Path:
         """Write train.py and supporting files to a version folder.
@@ -983,6 +975,7 @@ class DeveloperAgent:
                 attempt_number=attempt_number,
                 slug=self.slug,
                 data_path=str(self.base_dir),
+                run_id=self.run_id,
                 cpu_core_range=self.cpu_core_range,
                 gpu_identifier=self.gpu_identifier,
                 file_suffix=str(

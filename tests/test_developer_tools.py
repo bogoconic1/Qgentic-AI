@@ -222,6 +222,7 @@ def test_search_sota_suggestions(monkeypatch, test_data_dir):
         failed_ideas=["Idea 1", "Idea 2"],
         slug="test-competition",
         data_path=test_data_dir,
+        run_id="20260418_000000",
         shared_suggestions=None,
         external_data_listing=None,
         plan_content=None,
@@ -267,6 +268,7 @@ def test_search_sota_suggestions_with_plan_content(monkeypatch, test_data_dir):
         failed_ideas=[],
         slug="test-competition",
         data_path=test_data_dir,
+        run_id="20260418_000000",
         shared_suggestions=None,
         external_data_listing=None,
         plan_content=plan_content,
@@ -310,6 +312,7 @@ def test_search_sota_suggestions_with_tools(monkeypatch, test_data_dir):
         failed_ideas=[],
         slug="test-competition",
         data_path=test_data_dir,
+        run_id="20260418_000000",
         cpu_core_range=[0, 1],
         gpu_identifier="0",
     )
@@ -352,6 +355,7 @@ def test_search_sota_suggestions_early_exit_forces_structured_output(
         failed_ideas=[],
         slug="test-comp",
         data_path=test_data_dir,
+        run_id="20260418_000000",
     )
 
     assert hasattr(result, "suggestion")
@@ -390,6 +394,7 @@ def test_search_sota_suggestions_without_tools(monkeypatch, test_data_dir):
         failed_ideas=[],
         slug="test-competition",
         data_path=test_data_dir,
+        run_id="20260418_000000",
     )
 
     assert hasattr(result, "suggestion")

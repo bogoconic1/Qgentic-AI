@@ -49,6 +49,7 @@ def test_agent_initialization(test_task_dir, monkeypatch):
 
     agent = DeveloperAgent(
         slug=test_task_dir["slug"],
+        run_id="20260418_000000",
         iteration=test_task_dir["iteration"],
         strategy_name="test-strategy",
         plan_content="Test plan",
