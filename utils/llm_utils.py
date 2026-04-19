@@ -111,34 +111,6 @@ def get_tools():
                 "required": ["code"],
             },
         ),
-        types.FunctionDeclaration(
-            name="read_research_paper",
-            description="Read and summarize academic research papers from arXiv relevant to the machine learning task. Returns structured markdown summary with Abstract, Introduction, Related Work, Method/Architecture, Experiments/Results, and Conclusion sections.",
-            parameters_json_schema={
-                "type": "object",
-                "properties": {
-                    "arxiv_link": {
-                        "type": "string",
-                        "description": "ArXiv paper link (e.g., 'https://arxiv.org/pdf/2510.22916' or just '2510.22916')",
-                    }
-                },
-                "required": ["arxiv_link"],
-            },
-        ),
-        types.FunctionDeclaration(
-            name="scrape_web_page",
-            description="Scrape web pages and return markdown content from technical documentation, blog posts, and tutorials. Useful for accessing domain-specific knowledge, implementation guides, or best practices that complement academic papers.",
-            parameters_json_schema={
-                "type": "object",
-                "properties": {
-                    "url": {
-                        "type": "string",
-                        "description": "The webpage URL to scrape (e.g., 'https://developer.nvidia.com/blog/...')",
-                    }
-                },
-                "required": ["url"],
-            },
-        ),
     ]
 
 

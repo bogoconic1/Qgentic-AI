@@ -95,8 +95,6 @@ def sota_system(
 
 ## Tools
 1. **execute_python**: Run Python scripts (5 min timeout). Access to data directory, model outputs, valid_preds.csv, train_stats.json.
-2. **scrape_web_page**: Read web pages for documentation and tutorials.
-3. **read_research_paper**: Read and summarize arXiv papers.
 
 ## Shared Experiments Analysis (Do First)
 Each entry shows: which model tried the suggestion, what it was, score change (before → after).
