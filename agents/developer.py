@@ -1,11 +1,11 @@
 """Developer subagent — one training iteration per call.
 
 Parallel to ``ResearcherAgent`` in shape: construct with
-``(slug, run_id, dev_iter, goal_text, conda_env)`` and call ``run(idea)`` to
-produce one training iteration worth of artifacts. An unbounded internal
-retry loop iterates attempts (``developer_<dev_iter>/<k>/``) until one
-produces a valid ``train_stats.json``; the subagent only exits on success
-or a runtime precondition failure that happens before the loop starts.
+``(slug, run_id, dev_iter, conda_env)`` and call ``run(idea)`` to produce
+one training iteration worth of artifacts. An unbounded internal retry
+loop iterates attempts (``developer_<dev_iter>/<k>/``) until one produces
+a valid ``train_stats.json``; the subagent only exits on success or a
+runtime precondition failure that happens before the loop starts.
 
 Evaluation is the developer's responsibility — the generated ``train.py``
 computes its own score and writes ``train_stats.json`` at end-of-run.
@@ -63,7 +63,6 @@ _ENABLE_LOGGING_GUARD = bool(_GUARDRAIL_CFG["logging_basicconfig_order"])
 _ENABLE_LEAKAGE_GUARD = bool(_GUARDRAIL_CFG["leakage_review"])
 _ENABLE_CODE_SAFETY = bool(_GUARDRAIL_CFG["enable_code_safety"])
 
-_MAX_CODEGEN_TOOL_STEPS = 100
 _STDOUT_TAIL_LINES = 200
 
 
@@ -98,10 +97,11 @@ class DeveloperAgent:
     """One-training-iteration subagent.
 
     Parallel to ``Orchestrator`` / ``ResearcherAgent`` in shape. Construct
-    with the per-call identity (``slug``, ``run_id``, ``dev_iter``, the
-    session's ``goal_text`` from ``GOAL.md``, and an optional ``conda_env``),
-    then call ``run(idea)``. Returns a structured payload describing success
-    or precondition failure.
+    with the per-call identity (``slug``, ``run_id``, ``dev_iter``, and an
+    optional ``conda_env``), then call ``run(idea)``. Returns a structured
+    payload describing success or precondition failure. The caller is
+    responsible for passing a self-sufficient ``idea`` string — the
+    developer does not see the session goal directly.
     """
 
     def __init__(
@@ -109,13 +109,11 @@ class DeveloperAgent:
         slug: str,
         run_id: str,
         dev_iter: int,
-        goal_text: str,
         conda_env: str | None = None,
     ):
         self.slug = slug
         self.run_id = run_id
         self.dev_iter = dev_iter
-        self.goal_text = goal_text
         self.conda_env = conda_env
         self.base_dir = _TASK_ROOT / slug / run_id / f"developer_{dev_iter}"
         self.base_dir.mkdir(parents=True, exist_ok=True)
@@ -145,11 +143,10 @@ class DeveloperAgent:
         return None
 
     @weave.op()
-    def run(self, idea: str | None = None) -> dict[str, Any]:
+    def run(self, idea: str) -> dict[str, Any]:
         """Run one developer iteration; retry on failure until success."""
         previous_code = self._find_previous_code()
         system_prompt = codegen_system(
-            goal_text=self.goal_text,
             idea=idea,
             previous_code=previous_code,
         )
@@ -279,11 +276,12 @@ class DeveloperAgent:
         attempt_dir: Path,
         last_input_tokens: int | None = None,
     ) -> tuple[str, int | None]:
-        """Inner codegen tool-loop — identical shape to the pre-rewrite version."""
+        """Inner codegen tool-loop — runs until the model emits a text response with a code block."""
         tools = get_developer_tools()
+        step = 0
 
-        for step in range(_MAX_CODEGEN_TOOL_STEPS + 1):
-            is_last_step = step == _MAX_CODEGEN_TOOL_STEPS
+        while True:
+            step += 1
 
             if should_compact(last_input_tokens):
                 input_list[:] = compact_messages(input_list, model=_DEVELOPER_MODEL)
@@ -293,7 +291,7 @@ class DeveloperAgent:
                 system_instruction=system_prompt,
                 messages=input_list,
                 text_format=None,
-                function_declarations=tools if not is_last_step else [],
+                function_declarations=tools,
                 enable_google_search=True,
                 include_usage=True,
             )
@@ -320,7 +318,7 @@ class DeveloperAgent:
                     tool_result_str = self._execute_developer_tool_call(
                         part.function_call,
                         attempt_dir=attempt_dir,
-                        step=step + 1,
+                        step=step,
                         call_idx=call_idx,
                     )
                     function_responses.append(
@@ -342,10 +340,6 @@ class DeveloperAgent:
                     ).model_dump(mode="json", exclude_none=True)
                 )
 
-        raise RuntimeError(
-            "Code generation exhausted tool steps without producing code"
-        )
-
     def _execute_developer_tool_call(
         self,
         function_call,
@@ -360,7 +354,7 @@ class DeveloperAgent:
         if function_call.name == "explore_codebase":
             query = args["query"]
             logger.info("explore_codebase called: %s", query[:100])
-            return truncate_for_llm(explore_codebase(query, goal_text=self.goal_text))
+            return truncate_for_llm(explore_codebase(query))
 
         if function_call.name == "analyze":
             code = args["code"]

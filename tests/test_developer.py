@@ -104,9 +104,8 @@ def test_success_on_first_attempt(fake_pipeline, tmp_path):
         slug="test-slug",
         run_id="r1",
         dev_iter=1,
-        goal_text="Produce a finite score.",
     )
-    payload = dev.run(idea=None)
+    payload = dev.run(idea="Produce a finite score.")
 
     assert payload["status"] == "success"
     assert payload["summary"]["attempts_made"] == 1
@@ -132,9 +131,8 @@ def test_retries_until_stats_written(fake_pipeline, tmp_path):
         slug="test-slug",
         run_id="r1",
         dev_iter=1,
-        goal_text="Produce a finite score.",
     )
-    payload = dev.run(idea=None)
+    payload = dev.run(idea="Produce a finite score.")
 
     assert payload["status"] == "success"
     assert payload["summary"]["attempts_made"] == 2
@@ -176,9 +174,8 @@ def test_guardrails_block_counts_as_failed_attempt(monkeypatch, fake_pipeline, t
         slug="test-slug",
         run_id="r1",
         dev_iter=1,
-        goal_text="Produce a finite score.",
     )
-    payload = dev.run(idea=None)
+    payload = dev.run(idea="Produce a finite score.")
 
     assert payload["status"] == "success"
     assert payload["summary"]["attempts_made"] == 2
@@ -201,7 +198,6 @@ def test_previous_code_threaded_into_system_prompt(fake_pipeline, tmp_path):
         slug="test-slug",
         run_id="r1",
         dev_iter=2,
-        goal_text="Improve the prior run.",
     )
     payload = dev.run(idea="try a bigger model")
 

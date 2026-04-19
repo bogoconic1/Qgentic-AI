@@ -4,22 +4,14 @@ llm:
   developer_tool_model: "gemini-3.1-pro-preview"
   leakage_review_model: "gemini-3.1-pro-preview"
 runtime:
-  # Deep Research sub-agent
-  deep_research_max_steps: 512                       # Max tool-call rounds per deep_research invocation
   write_python_code_timeout_seconds: 300             # Per-call timeout for write_python_code subprocess
   llm_max_retries: 5
   llm_backoff_sequence: [1, 5, 10, 30, 60]
   compaction_threshold_tokens: 200000  # compact when last call's prompt_token_count exceeds this
   compaction_keep_last: 4               # turns kept verbatim after summary
-  directory_listing_max_files: 10
-  # Time limits (in seconds)
-  baseline_time_limit: 432000  # 5 days for baseline development
   baseline_code_timeout: 43200  # 12 hours for baseline code execution
   log_monitor_interval: 120  # Seconds between LLM log monitor calls during code execution
-  is_lower_better: false  # Metric direction: true if lower scores are better (e.g. MSE), false if higher is better (e.g. R²)
-  gold_threshold: null  # Target score to reach (null = no target)
   # Codebase exploration sub-agent
-  explore_max_steps: 100  # Max tool-call rounds the explore subagent can use per invocation
   explore_allowed_roots:
     # Paths the explore subagent is allowed to read.
     # The site-packages directory of the active Python interpreter (i.e. whichever
@@ -30,7 +22,6 @@ runtime:
     - /workspace
 paths:
   task_root: "task"
-  external_data_dirname: "external-data"
 guardrails:
   logging_basicconfig_order: true
   leakage_review: true

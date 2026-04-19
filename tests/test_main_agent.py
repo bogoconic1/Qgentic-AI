@@ -49,13 +49,12 @@ def patched_main_agent(monkeypatch, tmp_path):
     dev_calls: list = []
 
     class FakeDeveloperAgent:
-        def __init__(self, slug, run_id, dev_iter, goal_text):
+        def __init__(self, slug, run_id, dev_iter):
             dev_calls.append(
                 {
                     "slug": slug,
                     "run_id": run_id,
                     "dev_iter": dev_iter,
-                    "goal_text": goal_text,
                 }
             )
             self.dev_iter = dev_iter
@@ -80,13 +79,12 @@ def patched_main_agent(monkeypatch, tmp_path):
     research_calls: list = []
 
     class FakeResearcherAgent:
-        def __init__(self, slug, run_id, research_iter, goal_text):
+        def __init__(self, slug, run_id, research_iter):
             research_calls.append(
                 {
                     "slug": slug,
                     "run_id": run_id,
                     "research_iter": research_iter,
-                    "goal_text": goal_text,
                 }
             )
 
@@ -118,15 +116,13 @@ def test_dispatches_each_tool(patched_main_agent, monkeypatch):
     for _ in range(6):
         agent._step([])
 
-    # developer + researcher subagents invoked once each with threaded goal_text
+    # developer + researcher subagents invoked once each
     assert len(patched_main_agent["dev_calls"]) == 1
-    assert patched_main_agent["dev_calls"][0]["goal_text"] == "do the thing"
     assert patched_main_agent["dev_calls"][0]["dev_iter"] == 1
     # develop resolved idea_id=1 → full file body (includes the updated description "body v2")
     assert "body v2" in patched_main_agent["dev_calls"][0]["idea"]
     assert len(patched_main_agent["research_calls"]) == 1
     assert patched_main_agent["research_calls"][0]["research_iter"] == 1
-    assert patched_main_agent["research_calls"][0]["goal_text"] == "do the thing"
 
     # idea pool mutated: add → update → remove leaves pool empty
     assert "try it" not in (agent.ideas_dir / "INDEX.md").read_text()
@@ -146,6 +142,20 @@ def test_dispatches_each_tool(patched_main_agent, monkeypatch):
         "analyze",
         "remove_idea",
     ]
+
+
+def test_baseline_develop_passes_goal_as_idea(patched_main_agent, monkeypatch):
+    """`develop()` with no idea_id falls through to idea=<goal_text>."""
+    agent = MainAgent(slug="test", run_id="r1", goal_text="the session goal body")
+    responses = iter([_fake_fc("develop")])
+    monkeypatch.setattr(
+        main_agent, "call_llm", lambda **kwargs: (next(responses), 0)
+    )
+
+    agent._step([])
+
+    assert len(patched_main_agent["dev_calls"]) == 1
+    assert patched_main_agent["dev_calls"][0]["idea"] == "the session goal body"
 
 
 def test_text_only_response_is_logged_and_ignored(patched_main_agent, monkeypatch, caplog):
