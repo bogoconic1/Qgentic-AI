@@ -16,7 +16,7 @@ import weave
 
 from agents.main_agent import MainAgent
 from project_config import get_config, get_config_value
-from utils.competition_data import download_competition_data
+from utils.competition_data import download_competition_data, generate_description_md
 
 
 _TASK_ROOT = Path(get_config()["paths"]["task_root"])
@@ -119,6 +119,7 @@ def main() -> None:
 
     try:
         download_competition_data(args.slug, base_dir)
+        generate_description_md(args.slug, base_dir)
         MainAgent(slug=args.slug, run_id=args.run_id, goal_text=goal_text).run()
     finally:
         try:
