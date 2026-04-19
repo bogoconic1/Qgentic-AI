@@ -41,6 +41,7 @@ from tools.helpers import call_llm
 from utils.code_utils import extract_python_code
 from utils.guardrails import build_block_summary, evaluate_guardrails
 from utils.llm_utils import append_message, get_developer_tools
+from utils.output import truncate_for_llm
 
 
 logger = logging.getLogger(__name__)
@@ -215,6 +216,7 @@ class DeveloperAgent:
                 conda_env=self.conda_env,
             )
             (attempt_dir / "train.txt").write_text(output)
+            output = truncate_for_llm(output, attempt_dir / "train.txt")
 
             stats_path = attempt_dir / "train_stats.json"
             if stats_path.exists():
@@ -349,7 +351,7 @@ class DeveloperAgent:
         if function_call.name == "explore_codebase":
             query = args["query"]
             logger.info("explore_codebase called: %s", query[:100])
-            return explore_codebase(query, goal_text=self.goal_text)
+            return truncate_for_llm(explore_codebase(query, goal_text=self.goal_text))
 
         if function_call.name == "analyze":
             code = args["code"]
@@ -366,6 +368,6 @@ class DeveloperAgent:
             script_file = work_dir / f"{step}_{call_idx}.py"
             script_file.write_text(_build_resource_header() + code)
             job = execute_code(str(script_file), timeout_seconds=timeout)
-            return json.dumps({"output": job.result()})
+            return json.dumps({"output": truncate_for_llm(job.result(), script_file.with_suffix(".txt"))})
 
         return json.dumps({"error": f"Unknown tool: {function_call.name}"})
