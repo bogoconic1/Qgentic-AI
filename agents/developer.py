@@ -39,6 +39,7 @@ from tools.developer import (
 )
 from tools.helpers import call_llm
 from utils.code_utils import extract_python_code
+from utils.compact import compact_messages, should_compact
 from utils.guardrails import build_block_summary, evaluate_guardrails
 from utils.llm_utils import append_message, get_developer_tools
 from utils.output import truncate_for_llm
@@ -158,6 +159,7 @@ class DeveloperAgent:
         ]
 
         stderr_cache: dict[str, str | None] = {}
+        last_input_tokens: int | None = None
         k = 0
         while True:
             k += 1
@@ -172,7 +174,9 @@ class DeveloperAgent:
             )
 
             try:
-                code = self._generate_code(input_list, system_prompt, attempt_dir)
+                code, last_input_tokens = self._generate_code(
+                    input_list, system_prompt, attempt_dir, last_input_tokens
+                )
             except Exception as exc:
                 logger.exception(
                     "codegen failed at attempt %d — feeding back and retrying", k
@@ -273,20 +277,25 @@ class DeveloperAgent:
         input_list: list[dict],
         system_prompt: str,
         attempt_dir: Path,
-    ) -> str:
+        last_input_tokens: int | None = None,
+    ) -> tuple[str, int | None]:
         """Inner codegen tool-loop — identical shape to the pre-rewrite version."""
         tools = get_developer_tools()
 
         for step in range(_MAX_CODEGEN_TOOL_STEPS + 1):
             is_last_step = step == _MAX_CODEGEN_TOOL_STEPS
 
-            response = call_llm(
+            if should_compact(last_input_tokens):
+                input_list[:] = compact_messages(input_list, model=_DEVELOPER_MODEL)
+
+            response, last_input_tokens = call_llm(
                 model=_DEVELOPER_MODEL,
                 system_instruction=system_prompt,
                 messages=input_list,
                 text_format=None,
                 function_declarations=tools if not is_last_step else [],
                 enable_google_search=True,
+                include_usage=True,
             )
 
             parts = response.candidates[0].content.parts
@@ -303,7 +312,7 @@ class DeveloperAgent:
                     raise ValueError(
                         "No ```python code block found in model response"
                     )
-                return code
+                return code, last_input_tokens
 
             function_responses = []
             for call_idx, part in enumerate(parts, start=1):

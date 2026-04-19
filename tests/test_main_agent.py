@@ -111,7 +111,9 @@ def test_dispatches_each_tool(patched_main_agent, monkeypatch):
             _fake_fc("remove_idea", idea_id=1),
         ]
     )
-    monkeypatch.setattr(main_agent, "call_llm", lambda **kwargs: next(responses))
+    monkeypatch.setattr(
+        main_agent, "call_llm", lambda **kwargs: (next(responses), 0)
+    )
 
     for _ in range(6):
         agent._step([])
@@ -148,7 +150,9 @@ def test_dispatches_each_tool(patched_main_agent, monkeypatch):
 
 def test_text_only_response_is_logged_and_ignored(patched_main_agent, monkeypatch, caplog):
     agent = MainAgent(slug="test", run_id="r1", goal_text="do the thing")
-    monkeypatch.setattr(main_agent, "call_llm", lambda **kwargs: _fake_text("hello"))
+    monkeypatch.setattr(
+        main_agent, "call_llm", lambda **kwargs: (_fake_text("hello"), 0)
+    )
 
     with caplog.at_level("WARNING"):
         agent._step([])
