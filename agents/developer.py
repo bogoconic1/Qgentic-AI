@@ -2,13 +2,11 @@ import logging
 import math
 import os
 import shutil
-import time
-import threading
 from pathlib import Path
 import json
 
 from dotenv import load_dotenv
-from project_config import get_config, get_config_value, get_instructions
+from project_config import get_config, get_instructions
 import weave
 import wandb
 
@@ -16,8 +14,6 @@ from tools.developer import (
     _build_resource_header,
     execute_code,
     execute_with_monitor,
-    search_red_flags,
-    search_sota_suggestions,
     _LOG_MONITOR_INTERVAL,
     _BASELINE_CODE_TIMEOUT,
 )
@@ -31,16 +27,11 @@ from utils.checkpoint import (
     save_checkpoint,
     load_latest_checkpoint,
 )
-from schemas.developer import SOTAResponse
 from utils.code_utils import strip_header_from_code, extract_python_code
 from prompts.developer_agent import (
     build_system as prompt_build_system,
     build_user as prompt_build_user,
 )
-
-
-# Module-level logger (not used by instances to avoid cross-contamination in parallel execution)
-_module_logger = logging.getLogger(__name__)
 
 
 _CONFIG = get_config()
@@ -57,7 +48,6 @@ _ENABLE_CODE_SAFETY = bool(_GUARDRAIL_CFG["enable_code_safety"])
 
 _DEVELOPER_MODEL = _LLM_CFG["developer_model"]
 _HITL_INSTRUCTIONS = get_instructions()["# Developer Instructions"]
-_HITL_SOTA = bool(_DEVELOPER_CFG["hitl_sota"])
 
 _TASK_ROOT = Path(_PATH_CFG["task_root"])
 
@@ -69,12 +59,6 @@ class DeveloperAgent:
     - Executes it and iterates while within a time budget
     - Success condition: writes submission.csv at task/{slug}/{run_id}/{iteration}/{version}/submission.csv
     """
-
-    # Class-level shared state across all parallel DeveloperAgent instances
-    # This enables cross-model learning to avoid duplicate failures
-    # Format: "Strategy <strategy_name> tried <suggestion> (score improved/worsened/remained by X: A -> B)"
-    _shared_suggestions: list[str] = []
-    _lock = threading.Lock()
 
     def __init__(
         self,
@@ -132,27 +116,12 @@ class DeveloperAgent:
         self.best_score: float = float("inf") if self.is_lower_better else float("-inf")
 
         self.previous_runs: list[tuple[str, float]] = []
-        self.blacklisted_ideas: list[str] = []
-        self.successful_ideas: list[
-            str
-        ] = []  # Suggestions that led to successful, non-blacklisted executions
-        self.successful_versions: set[int] = (
-            set()
-        )  # Versions that executed successfully (generated submission)
-        self.blacklisted_versions: set[int] = (
-            set()
-        )  # Versions that were explicitly blacklisted by SOTA
-        self.version_scores: dict[int, float] = {}  # Map version number to its score
-        self.global_suggestions: list[
-            str
-        ] = []  # All suggestions with score impact: "suggestion (score improved/worsened/remained by DDD: XXX -> YYY)"
-        self.last_suggestion: str | None = None
+        self.successful_versions: set[int] = set()
+        self.version_scores: dict[int, float] = {}
         self.best_code: str | None = None
         self.best_code_file: str | None = None
         self.best_version: int | None = None
-        self.last_successful_version: int | None = (
-            None  # For score comparison: most recent version with a score
-        )
+        self.last_successful_version: int | None = None
 
         self.latest_submission_path: Path | None = None
 
@@ -517,236 +486,6 @@ class DeveloperAgent:
         self.logger.debug("Execution output for v%s: %s", version, output)
         return output
 
-    def _format_suggestion_entry(
-        self, suggestion: str, previous_score: float | None, current_score: float | None
-    ) -> str:
-        """Format a suggestion entry with score impact information.
-
-        Returns formatted string like:
-        - "suggestion (score improved by DDD: XXX -> YYY)"
-        - "suggestion (score worsened by DDD: XXX -> YYY)"
-        - "suggestion (score remained the same: XXX -> YYY)"
-        """
-        prev_display = self._format_score_value(previous_score)
-        curr_display = self._format_score_value(current_score)
-
-        if prev_display == "N/A" or curr_display == "N/A":
-            return f"{suggestion} (score: {prev_display} -> {curr_display})"
-
-        delta = current_score - previous_score
-        abs_delta = abs(delta)
-
-        if abs_delta < 1e-9:  # Essentially the same
-            impact = "remained the same"
-            return f"{suggestion} (score {impact}: {prev_display} -> {curr_display})"
-        elif (delta > 0 and not self.is_lower_better) or (
-            delta < 0 and self.is_lower_better
-        ):
-            impact = f"improved by {abs_delta:.6f}"
-        else:
-            impact = f"worsened by {abs_delta:.6f}"
-
-        return f"{suggestion} (score {impact}: {prev_display} -> {curr_display})"
-
-    def _register_blacklist(self, suggestion: str, reason: str | None = None) -> None:
-        if not suggestion:
-            return
-        entry = suggestion
-        if reason:
-            entry = f"{suggestion} -- {reason}"
-
-        if entry not in self.blacklisted_ideas:
-            self.blacklisted_ideas.append(entry)
-
-    def _register_shared_suggestion(
-        self,
-        suggestion: str,
-        previous_score: float | None,
-        current_score: float | None,
-        is_blacklisted: bool = False,
-    ) -> None:
-        """Register suggestion outcome to shared pool with model name and score impact.
-
-        Format: "Strategy <strategy_name> tried <suggestion> (score improved/worsened/remained by X: A -> B)"
-        """
-        if not suggestion:
-            return
-
-        prev_display = self._format_score_value(previous_score)
-        curr_display = self._format_score_value(current_score)
-
-        model_prefix = f"Strategy {self.strategy_name} tried"
-
-        if prev_display == "N/A" or curr_display == "N/A":
-            entry = (
-                f"{model_prefix} {suggestion} (score: {prev_display} -> {curr_display})"
-            )
-        else:
-            delta = current_score - previous_score
-            abs_delta = abs(delta)
-
-            if abs_delta < 1e-9:
-                impact = "remained the same"
-                entry = f"{model_prefix} {suggestion} (score {impact}: {prev_display} -> {curr_display})"
-            elif (delta > 0 and not self.is_lower_better) or (
-                delta < 0 and self.is_lower_better
-            ):
-                impact = f"improved by {abs_delta:.6f}"
-                entry = f"{model_prefix} {suggestion} (score {impact}: {prev_display} -> {curr_display})"
-            else:
-                impact = f"worsened by {abs_delta:.6f}"
-                entry = f"{model_prefix} {suggestion} (score {impact}: {prev_display} -> {curr_display})"
-
-        # Add to shared pool (thread-safe)
-        with DeveloperAgent._lock:
-            if entry not in DeveloperAgent._shared_suggestions:
-                DeveloperAgent._shared_suggestions.append(entry)
-                status = "blacklisted" if is_blacklisted else "successful"
-                self.logger.info("Added to shared suggestions (%s): %s", status, entry)
-
-    def _get_shared_suggestions(self) -> list[str]:
-        """Get snapshot of all shared suggestions from all models."""
-        with DeveloperAgent._lock:
-            return DeveloperAgent._shared_suggestions.copy()
-
-    def _find_most_recent_valid_version(
-        self, current_version: int
-    ) -> tuple[int, str | None]:
-        """Find the most recent version that is valid for rollback (folder-based).
-
-        A version is valid if:
-        1. Version folder exists
-        2. submission.csv exists in the version folder (successful execution)
-        3. Version was NOT blacklisted by SOTA suggestions
-
-        Args:
-            current_version: The current version number
-
-        Returns:
-            Tuple of (version_number, code_content_markdown)
-            - code_content_markdown contains train.py (headers stripped)
-            Returns (1, None) if no valid version found
-        """
-        for v in range(current_version - 1, 0, -1):
-            version_folder = self.outputs_dir / str(v)
-            if not version_folder.exists():
-                continue
-
-            submission_path = version_folder / "submission.csv"
-            if not submission_path.exists():
-                self.logger.debug(
-                    f"v{v} skipped: no submission.csv in {version_folder}"
-                )
-                continue
-
-            is_blacklisted = v in self.blacklisted_versions
-            if is_blacklisted:
-                self.logger.debug(f"v{v} skipped: blacklisted")
-                continue
-
-            self.logger.info(f"Found most recent valid version for rollback: v{v}")
-
-            try:
-                train_path = version_folder / "train.py"
-                if train_path.exists():
-                    train_py = strip_header_from_code(train_path)
-                else:
-                    train_py = "# train.py not found"
-
-                code_content = f"train.py:\n```python\n{train_py}\n```"
-
-                return v, code_content
-            except Exception as e:
-                self.logger.error(f"Failed to read code from v{v}: {e}")
-                continue
-
-        # No valid version found
-        self.logger.warning(
-            "No valid rollback version found; falling back to v1 (initial version)"
-        )
-        return 1, None
-
-    def _build_extended_data_listing(self, version: int) -> str:
-        """Build directory listing for SOTA suggestions including base dir and current models.
-
-        Includes:
-        - All files and train/test folders from task/<slug>/
-        - external_data_* folders from outputs/<iteration>/
-        - models_{version}/ folder from outputs/<iteration>/
-
-        Args:
-            version: Current version number
-
-        Returns:
-            Directory listing string
-        """
-        lines = []
-
-        lines.append("=== Base Directory (task data) ===")
-        base_listing = self._build_base_dir_listing()
-        lines.append(base_listing)
-
-        if (
-            self.external_data_listing
-            and self.external_data_listing != "No external data directories found."
-        ):
-            lines.append("\n=== External Data ===")
-            lines.append(self.external_data_listing)
-
-        models_dir = self.outputs_dir / f"models_{version}"
-        if models_dir.exists() and models_dir.is_dir():
-            lines.append(f"\n=== Models (version {version}) ===")
-            lines.append(f"models_{version}/")
-            dir_listing = _build_directory_listing(str(models_dir))
-            lines.append(dir_listing)
-
-        return "\n".join(lines)
-
-    def _build_base_dir_listing(self) -> str:
-        """Build directory listing for base task directory (train/, test/, root files).
-
-        Returns:
-            Directory listing showing train/, test/ folders and root-level files
-        """
-        lines = []
-        base_dir = Path(self.base_dir)
-
-        root_files = sorted([f.name for f in base_dir.iterdir() if f.is_file()])
-
-        lines.append("./")
-        for file_name in root_files:
-            lines.append(f"    {file_name}")
-
-        train_dir = base_dir / "train"
-        if train_dir.exists() and train_dir.is_dir():
-            lines.append("    train/")
-            train_listing = _build_directory_listing(str(train_dir))
-            for line in train_listing.split("\n"):
-                if line.strip():
-                    lines.append(f"    {line}")
-
-        test_dir = base_dir / "test"
-        if test_dir.exists() and test_dir.is_dir():
-            lines.append("    test/")
-            test_listing = _build_directory_listing(str(test_dir))
-            for line in test_listing.split("\n"):
-                if line.strip():
-                    lines.append(f"    {line}")
-
-        return "\n".join(lines)
-
-    def _call_sota_suggestions(self, attempt_number: int = 1, **kwargs):
-        """
-        Call SOTA suggestions tool with appropriate parameters.
-
-        Args:
-            attempt_number: Which attempt this is (1, 2, 3, ...) for interleaving strategy
-            **kwargs: Arguments to pass to search_sota_suggestions
-
-        Returns:
-            Parsed SOTAResponse object or None if parsing fails
-        """
-        return search_sota_suggestions(attempt_number=attempt_number, **kwargs)
 
     def _evaluate_submission(
         self, code_clean: str, version: int, attempt: int
@@ -901,141 +640,13 @@ class DeveloperAgent:
             submission_exists,
         )
 
-    def _gather_sota_feedback(
-        self, code_context: str, version: int, attempt_number: int = 1
-    ):
-        """Gather SOTA feedback through red flags analysis and SOTA suggestions.
-
-        Args:
-            code_context: Code with execution logs and analysis
-            version: Current version number to include models_{version}/ in directory listing
-            attempt_number: Which attempt this is (1, 2, 3, ...) for interleaving strategy
-
-        Returns:
-            Parsed SOTAResponse object or None if gathering/parsing failed
-        """
-        try:
-            extended_listing = self._build_extended_data_listing(version)
-
-            # STAGE 1: Identify red flags via direct analysis
-            self.logger.info("Stage 1: Identifying red flags via direct analysis...")
-
-            version_folder = self.outputs_dir / str(version)
-            training_images = []
-            for img_name in ["loss_curve.png", "metric_curve.png"]:
-                img_path = version_folder / img_name
-                if img_path.exists():
-                    training_images.append(img_path)
-                else:
-                    self.logger.debug(f"Training image not found: {img_path}")
-
-            train_stats_path = version_folder / "train_stats.json"
-            train_stats = None
-            if train_stats_path.exists():
-                try:
-                    with open(train_stats_path, "r") as f:
-                        train_stats = json.load(f)
-                    self.logger.info(
-                        "Loaded train_stats.json with %d keys", len(train_stats)
-                    )
-                except Exception as e:
-                    self.logger.warning(f"Failed to read train_stats.json: {e}")
-
-            red_flags_response = search_red_flags(
-                description=self.description,
-                context=code_context,
-                images=training_images if training_images else None,
-                train_stats=train_stats,
-            )
-            self.logger.info("Red flags analysis completed")
-
-            final_summary = red_flags_response.final_summary
-
-            # STAGE 2: Generate SOTA suggestions based on red flags
-            self.logger.info(
-                "Stage 2: Generating SOTA suggestions based on red flags..."
-            )
-
-            shared_suggestions = self._get_shared_suggestions()
-
-            self.logger.info(
-                "Using %d shared suggestions from all models (including this one)",
-                len(shared_suggestions),
-            )
-
-            sota_response = self._call_sota_suggestions(
-                description=self.description,
-                context=code_context,
-                red_flags=final_summary,
-                executed_suggestion=self.last_suggestion,
-                failed_ideas=self.blacklisted_ideas,  # Keep instance-level for context
-                shared_suggestions=shared_suggestions,  # New: shared across all models
-                external_data_listing=extended_listing,
-                plan_content=self.plan_content,
-                attempt_number=attempt_number,
-                slug=self.slug,
-                data_path=str(self.base_dir),
-                run_id=self.run_id,
-                cpu_core_range=self.cpu_core_range,
-                gpu_identifier=self.gpu_identifier,
-                file_suffix=str(
-                    self.iteration
-                ),  # Pass iteration as file suffix to prevent race conditions
-                version=version,
-                images=training_images if training_images else None,
-                train_stats=train_stats,
-                hitl_sota=_HITL_SOTA,
-                hitl_instructions=_HITL_INSTRUCTIONS,
-            )
-
-            # HITL: Show suggestion and let user accept or override
-            if _HITL_SOTA and sota_response:
-                print(f"\n{'=' * 60}")
-                print(f"[HITL] Strategy: {self.strategy_name} | Version: {version}")
-                print(f"[HITL] Suggestion: {sota_response.suggestion}")
-                print(f"[HITL] Reason: {sota_response.suggestion_reasoning}")
-                print(
-                    f"[HITL] Blacklist previous: {sota_response.blacklist} ({sota_response.blacklist_reasoning})"
-                )
-                print(f"{'=' * 60}")
-                user_input = input(
-                    "[HITL] Press Enter to accept, or type replacement: "
-                ).strip()
-                if user_input:
-                    user_code = input(
-                        "[HITL] Enter code snippet (or press Enter to skip): "
-                    ).strip()
-                    sota_response = SOTAResponse(
-                        plan_summary=sota_response.plan_summary,
-                        red_flags_summary=sota_response.red_flags_summary,
-                        shared_experiences_summary=sota_response.shared_experiences_summary,
-                        research_summary=sota_response.research_summary,
-                        blacklist_reasoning=sota_response.blacklist_reasoning,
-                        blacklist=sota_response.blacklist,
-                        suggestion_reasoning="Human override",
-                        suggestion=user_input,
-                        suggestion_code=user_code,
-                    )
-                    self.logger.info(
-                        "HITL: User overrode suggestion with: %s", user_input
-                    )
-                else:
-                    self.logger.info("HITL: User accepted automated suggestion")
-
-            return sota_response
-        except Exception:
-            self.logger.exception("Failed to fetch red flags or SOTA suggestions")
-            return None
-
     def _get_checkpoint_db(self):
         """Open (or return cached) checkpoint database connection."""
         if self._checkpoint_conn is None:
             self._checkpoint_conn = _create_checkpoint_db()
         return self._checkpoint_conn
 
-    def _save_checkpoint(
-        self, version, input_list, last_input_tokens, sota_suggestions_call_id
-    ):
+    def _save_checkpoint(self, version, input_list, last_input_tokens):
         """Save a per-version checkpoint to SQLite after step 5 (evaluate submission)."""
         best_score = self.best_score
         if best_score is not None and math.isinf(best_score):
@@ -1047,14 +658,8 @@ class DeveloperAgent:
             "best_code_file": self.best_code_file,
             "version_scores": {str(k): v for k, v in self.version_scores.items()},
             "successful_versions": list(self.successful_versions),
-            "blacklisted_versions": list(self.blacklisted_versions),
-            "blacklisted_ideas": self.blacklisted_ideas,
-            "successful_ideas": self.successful_ideas,
-            "global_suggestions": self.global_suggestions,
             "input_list": input_list,
             "last_input_tokens": last_input_tokens,
-            "last_suggestion": self.last_suggestion,
-            "sota_suggestions_call_id": sota_suggestions_call_id,
         }
         conn = self._get_checkpoint_db()
         save_checkpoint(
@@ -1065,8 +670,8 @@ class DeveloperAgent:
     def _load_latest_checkpoint(self):
         """Load the most recent checkpoint and restore instance state.
 
-        Returns dict with run() locals (input_list, last_input_tokens,
-        sota_suggestions_call_id, version) or None if no checkpoint exists.
+        Returns dict with run() locals (input_list, last_input_tokens, version)
+        or None if no checkpoint exists.
         """
         conn = self._get_checkpoint_db()
         row = load_latest_checkpoint(conn, self.slug, str(self.iteration))
@@ -1082,13 +687,7 @@ class DeveloperAgent:
         self.best_code_file = row["best_code_file"]
         self.version_scores = {int(k): v for k, v in row["version_scores"].items()}
         self.successful_versions = set(row["successful_versions"])
-        self.blacklisted_versions = set(row["blacklisted_versions"])
-        self.blacklisted_ideas = row["blacklisted_ideas"]
-        self.successful_ideas = row["successful_ideas"]
-        self.global_suggestions = row["global_suggestions"]
-        self.last_suggestion = row["last_suggestion"]
 
-        # Reconstruct derived state
         self.previous_runs = [(None, None)] * len(self.version_scores)
         if self.version_scores:
             self.last_successful_version = max(self.version_scores.keys())
@@ -1097,489 +696,75 @@ class DeveloperAgent:
             if train_path.exists():
                 self.best_code = strip_header_from_code(train_path)
 
-        # Re-populate class-level shared suggestions from this model's history
-        with DeveloperAgent._lock:
-            for entry in self.global_suggestions:
-                if entry not in DeveloperAgent._shared_suggestions:
-                    DeveloperAgent._shared_suggestions.append(entry)
-
         return {
             "input_list": row["input_list"],
             "last_input_tokens": row["last_input_tokens"],
-            "sota_suggestions_call_id": row["sota_suggestions_call_id"],
             "version": row["version"],
         }
 
-    def _run_feedback_and_build_next_instruction(
-        self,
-        version,
-        code_context,
-        run_score,
-        previous_successful_version,
-        base_score,
-        submission_exists,
-        output,
-        input_list,
-        sota_suggestions_call_id,
-    ):
-        """Run step 6: gather feedback and append next instruction to input_list.
-
-        Returns (updated_sota_suggestions_call_id, should_break).
-        """
-        if submission_exists:
-            sota_suggestions_call_id += 1
-            sota_response = self._gather_sota_feedback(
-                code_context, version=version, attempt_number=sota_suggestions_call_id
-            )
-
-            if sota_response:
-                suggestion_text = sota_response.suggestion.strip()
-                blacklist_flag = bool(sota_response.blacklist)
-                blacklist_reason = sota_response.blacklist_reasoning.strip()
-                suggestion_code = sota_response.suggestion_code.strip()
-            else:
-                suggestion_text = ""
-                blacklist_flag = False
-                blacklist_reason = ""
-                suggestion_code = ""
-
-            self.logger.info(
-                "SOTA suggestion: %s (blacklist=%s, code_len=%d)",
-                suggestion_text,
-                blacklist_flag,
-                len(suggestion_code),
-            )
-
-            if previous_successful_version is None:
-                initial_entry = f"Initial implementation (score: {self._format_score_value(run_score)})"
-                self.global_suggestions.append(initial_entry)
-                self.logger.info("Recorded initial implementation: %s", initial_entry)
-            elif self.last_suggestion:
-                current_score = run_score
-                suggestion_entry = self._format_suggestion_entry(
-                    self.last_suggestion, base_score, current_score
-                )
-                self.global_suggestions.append(suggestion_entry)
-                self.logger.info(
-                    "Recorded suggestion with impact: %s", suggestion_entry
-                )
-                self._register_shared_suggestion(
-                    self.last_suggestion,
-                    base_score,
-                    current_score,
-                    is_blacklisted=blacklist_flag,
-                )
-
-            if blacklist_flag and self.last_suggestion:
-                self._register_blacklist(self.last_suggestion, blacklist_reason)
-                self.blacklisted_versions.add(version)
-                self.logger.info(
-                    "Previous suggestion marked as blacklisted: %s (reason: %s) - marking v%s as blacklisted",
-                    self.last_suggestion,
-                    blacklist_reason or "N/A",
-                    version,
-                )
-            elif (
-                not blacklist_flag
-                and self.last_suggestion
-                and version in self.successful_versions
-            ):
-                if self.last_suggestion not in self.successful_ideas:
-                    self.successful_ideas.append(self.last_suggestion)
-                    self.logger.info(
-                        "Previous suggestion marked as successful: %s (v%s executed successfully and not blacklisted)",
-                        self.last_suggestion,
-                        version,
-                    )
-
-            if suggestion_text:
-                self.logger.info("Summary of SOTA suggestion: %s", suggestion_text)
-            else:
-                self.logger.info(
-                    "SOTA response did not include a new suggestion summary."
-                )
-
-            if suggestion_text and suggestion_text.strip() == "No suggestions.":
-                self.logger.info(
-                    "Model indicated 'No suggestions.' - breaking out of loop and returning best result"
-                )
-                self.logger.info(
-                    "Final best score: %s (version %s)",
-                    self.best_score,
-                    self.best_version,
-                )
-                return sota_suggestions_call_id, True
-
-            if suggestion_text:
-                self.last_suggestion = suggestion_text
-            elif blacklist_flag:
-                self.last_suggestion = None
-
-            next_log_path = self.outputs_dir / f"{version + 1}/train.txt"
-            next_submission_path = self.outputs_dir / f"{version + 1}/submission.csv"
-            next_version_folder = self.outputs_dir / str(version + 1)
-
-            suggestion_block = ""
-            if suggestion_text:
-                suggestion_block += f"<suggestion>\n{suggestion_text}\n</suggestion>\n"
-            else:
-                suggestion_block += (
-                    "<suggestion>\nNo suggestion provided.\n</suggestion>\n"
-                )
-
-            if suggestion_code:
-                suggestion_block += (
-                    "Suggested code snippet:\n```python\n" + suggestion_code + "\n```\n"
-                )
-            else:
-                suggestion_block += "Suggested code snippet: No code provided.\n"
-
-            rollback_code = None
-            if blacklist_flag:
-                _, rollback_code = self._find_most_recent_valid_version(version)
-
-            next_instr = (
-                f"{suggestion_block}\n"
-                f"Remember:\n"
-                f"- write logs to {next_log_path}\n"
-                f"- save artifacts to {next_version_folder}/: submission.csv, valid_preds.csv, train_stats.json, models, loss_curve.png, metric_curve.png"
-            )
-
-            if blacklist_flag and rollback_code:
-                input_list.append(
-                    append_message(
-                        "user",
-                        "The previous code has been blacklisted. Here is the most recent valid (successful and non-blacklisted) version for your reference (please start work from this version): \n"
-                        + rollback_code,
-                    )
-                )
-            elif blacklist_flag:
-                self.logger.warning(
-                    "Blacklist triggered but no valid rollback version available"
-                )
-
-            input_list.append(append_message("user", next_instr))
-
-        else:
-            next_log_path = self.outputs_dir / f"{version + 1}/train.txt"
-            next_submission_path = self.outputs_dir / f"{version + 1}/submission.csv"
-            next_version_folder = self.outputs_dir / str(version + 1)
-            version_folder = self.outputs_dir / str(version)
-
-            is_timeout = "Code execution timed out after" in output
-            is_oom = "CUDA out of memory" in output or "OutOfMemoryError" in output
-
-            if is_timeout or is_oom:
-                error_type = "Timeout" if is_timeout else "OOM"
-                self.logger.info(
-                    f"{error_type} detected - running red flags analysis on logs and code"
-                )
-
-                if is_timeout:
-                    error_context = "\n<timeout_error>\nThe script was not able to execute within 1 hour. Please investigate.\n</timeout_error>\n"
-                else:
-                    error_context = "\n<oom_error>\nCUDA out of memory error detected. The model or batch size is too large for available GPU memory. Please investigate.\n</oom_error>\n"
-
-                code_context_error = code_context + error_context
-
-                train_stats_path = version_folder / "train_stats.json"
-                train_stats = None
-                if train_stats_path.exists():
-                    try:
-                        with open(train_stats_path, "r") as f:
-                            train_stats = json.load(f)
-                        self.logger.info(
-                            "Loaded train_stats.json for error analysis (%d keys)",
-                            len(train_stats),
-                        )
-                    except Exception as e:
-                        self.logger.warning(f"Failed to read train_stats.json: {e}")
-
-                try:
-                    red_flags_response = search_red_flags(
-                        description=self.description,
-                        context=code_context_error,
-                        train_stats=train_stats,
-                    )
-                    self.logger.info(
-                        f"Red flags analysis complete for {error_type}"
-                    )
-
-                    final_summary = red_flags_response.final_summary
-
-                    error_message = "TIMEOUT" if is_timeout else "OUT OF MEMORY"
-                    next_instr = f"""
-Your code FAILED during execution due to {error_message}!
-{output}
-
-Performance analysis:
-{final_summary}
-
-Fix the error. Write logs to {next_log_path} and save all required artifacts to {next_version_folder}/."""
-                except Exception:
-                    self.logger.exception(
-                        f"Failed to run red flags analysis for {error_type}"
-                    )
-                    error_message = "TIMEOUT" if is_timeout else "OUT OF MEMORY"
-                    next_instr = f"""
-Your code FAILED during execution due to {error_message}!
-This is the stack trace and advice on how to fix the error:
-{output}
-
-Fix the error. Write logs to {next_log_path} and save all required artifacts to {next_version_folder}/."""
-            else:
-                next_instr = f"""
-Your code FAILED during execution!
-This is the stack trace and advice on how to fix the error:
-{output}
-
-Fix the error. Write logs to {next_log_path} and save all required artifacts to {next_version_folder}/."""
-
-            input_list.append(append_message("user", next_instr))
-
-        return sota_suggestions_call_id, False
-
-    @weave.op()
     def run(
         self, max_time_seconds: int = 6 * 3600
-    ) -> tuple[float, str | None, list[str], list[str]]:
+    ) -> tuple[float, str | None]:
+        """Run a single developer version (v1): generate → guardrails → execute → evaluate.
+
+        The iterative feedback loop (red_flags + SOTA) has been removed. The caller
+        drives multi-iteration behavior externally (see PR 228 for the new
+        iteration-review + re-research loop).
+        """
         self.logger.info(
             "Starting developer run for slug=%s iteration=%s",
             self.slug,
             self.iteration,
         )
-        self.logger.info("cpu core range: %s", self.cpu_core_range)
-        self.logger.info(
-            "gpu identifier: %s (mode: %s)",
-            self.gpu_identifier,
-            self.gpu_isolation_mode,
-        )
-
-        start_time = time.time()
-        deadline = start_time + max_time_seconds
-
-        run_score = 0
-        last_input_tokens = None
 
         system_prompt = self._compose_system()
+        version = 1
+        user_prompt = self._build_user_prompt(version=version)
+        input_list = [append_message("user", user_prompt)]
 
-        self.logger.info(
-            "External data listing (%d chars): %s",
-            len(self.external_data_listing),
-            self.external_data_listing[:200] + "..."
-            if len(self.external_data_listing) > 200
-            else self.external_data_listing,
+        try:
+            response_output, train_py, last_input_tokens = self._generate_code(
+                instructions=system_prompt, messages=input_list, version=version
+            )
+        except (ValueError, RuntimeError) as e:
+            self.logger.warning("Code generation failed: %s", e)
+            return self.best_score, self.best_code_file
+
+        input_list += response_output
+        version_folder = self._write_code(train_py, version)
+
+        train_py_path = version_folder / "train.py"
+        with open(str(train_py_path), "r") as f:
+            code_text = f.read()
+        code_clean = strip_header_from_code(train_py_path)
+
+        guard_report = evaluate_guardrails(
+            code_text=code_text,
+            enable_logging_guard=_ENABLE_LOGGING_GUARD,
+            enable_leakage_guard=_ENABLE_LEAKAGE_GUARD,
+            enable_code_safety=_ENABLE_CODE_SAFETY,
         )
         self.logger.info(
-            "Plan content (%d chars): %s",
-            len(self.plan_content),
-            self.plan_content[:200] + "..."
-            if len(self.plan_content) > 200
-            else self.plan_content,
+            "Guardrail decision v%s: %s", version, guard_report["decision"]
         )
-
-        checkpoint = self._load_latest_checkpoint()
-        if checkpoint:
-            input_list = checkpoint["input_list"]
-            last_input_tokens = checkpoint["last_input_tokens"]
-            sota_suggestions_call_id = checkpoint["sota_suggestions_call_id"]
-            attempt = checkpoint["version"]
-            self.logger.info(
-                "Resumed from checkpoint v%s (best_score=%s)", attempt, self.best_score
+        if guard_report["decision"] == "block":
+            self.logger.warning(
+                "Guardrails blocked v%s: %s", version, build_block_summary(guard_report)
             )
+            return self.best_score, self.best_code_file
 
-            # Replay step 6 for the checkpointed version (checkpoint is saved after step 5)
-            resumed_version = attempt
-            version_folder = self.outputs_dir / str(resumed_version)
-            train_py_path = version_folder / "train.py"
-            if train_py_path.exists():
-                code_clean = strip_header_from_code(train_py_path)
-                code_context, run_score, prev_ver, base_score, sub_exists = (
-                    self._evaluate_submission(
-                        code_clean, resumed_version, resumed_version
-                    )
-                )
-                sota_suggestions_call_id, _ = (
-                    self._run_feedback_and_build_next_instruction(
-                        resumed_version,
-                        code_context,
-                        run_score,
-                        prev_ver,
-                        base_score,
-                        sub_exists,
-                        "",
-                        input_list,
-                        sota_suggestions_call_id,
-                    )
-                )
-            self.logger.info(
-                "Step 6 replayed for v%s, entering main loop", resumed_version
-            )
-        else:
-            user_prompt = self._build_user_prompt(version=1)
-            input_list = [append_message("user", user_prompt)]
-            attempt = 0
-            sota_suggestions_call_id = 0
-        while True:
-            now = time.time()
-            if max_time_seconds is not None and now >= deadline:
-                self.logger.info(
-                    "Time budget exhausted (%.2f minutes)",
-                    (deadline - start_time) / 60.0,
-                )
-                break
+        self._execute_code(train_py_path, version)
+        self._evaluate_submission(code_clean, version, version)
+        self._save_checkpoint(version, input_list, last_input_tokens)
 
-            # Adaptive trimming: if previous call used >80% of token limit, remove 4 messages
-            max_input_tokens = get_config_value(
-                "runtime", "max_developer_input_tokens", default=250000
-            )
-            threshold = max_input_tokens * 0.8
+        artifact = wandb.Artifact(f"{self.iteration}-{self.slug}", type="files")
+        allowed_extensions = {".py", ".txt", ".csv"}
+        for path in self.outputs_dir.iterdir():
+            if path.is_file() and path.suffix.lower() in allowed_extensions:
+                artifact.add_file(str(path), overwrite=True)
+        try:
+            artifact.save()
+        except Exception as e:
+            self.logger.exception("Failed to save wandb artifact: %s", e)
 
-            if last_input_tokens and last_input_tokens > threshold:
-                self.logger.info(
-                    "Token threshold exceeded: %d > %d (80%% of %d), removing messages",
-                    last_input_tokens,
-                    int(threshold),
-                    max_input_tokens,
-                )
-                for _ in range(min(4, len(input_list) - 1)):
-                    input_list.pop(0)
-
-                # Ensure first message is from user (required by API)
-                while input_list and input_list[0].get("role") != "user":
-                    input_list.pop(0)
-
-                self.logger.info(
-                    "Trimmed to %d messages for attempt %s",
-                    len(input_list),
-                    attempt + 1,
-                )
-
-            attempt += 1
-
-            artifact = wandb.Artifact(f"{self.iteration}-{self.slug}", type="files")
-
-            minutes_left = (
-                ((deadline - now) / 60.0)
-                if max_time_seconds is not None
-                else float("inf")
-            )
-            self.logger.info("Attempt %s (time left ~%.1f min)", attempt, minutes_left)
-            version = attempt
-
-            try:
-                response_output, train_py, last_input_tokens = self._generate_code(
-                    instructions=system_prompt, messages=input_list, version=version
-                )
-            except (ValueError, RuntimeError) as e:
-                self.logger.warning(
-                    "Code generation failed (attempt %s): %s", attempt, e
-                )
-                input_list.append(
-                    append_message("user", "Your previous response did not contain a ```python code block. Please provide your complete solution inside a single ```python ... ``` fenced block.")
-                )
-                continue
-
-            input_list += response_output
-
-            version_folder = self._write_code(train_py, version)
-
-            # ---------------------------
-            # Pre-exec guardrail checks
-            # ---------------------------
-            train_py_path = version_folder / "train.py"
-            with open(str(train_py_path), "r") as f:
-                code_text = f.read()
-
-            code_clean = strip_header_from_code(train_py_path)
-
-            guard_report = evaluate_guardrails(
-                code_text=code_text,
-                enable_logging_guard=_ENABLE_LOGGING_GUARD,
-                enable_leakage_guard=_ENABLE_LEAKAGE_GUARD,
-                enable_code_safety=_ENABLE_CODE_SAFETY,
-            )
-
-            self.logger.info(
-                "Guardrail decision v%s: %s", version, guard_report["decision"]
-            )
-
-            if guard_report["decision"] == "block":
-                summary_text = build_block_summary(guard_report)
-                next_log_path = self.outputs_dir / f"{version + 1}/train.txt"
-                next_submission_path = (
-                    self.outputs_dir / f"{version + 1}/submission.csv"
-                )
-                next_version_folder = self.outputs_dir / str(version + 1)
-                fix_instr = f"\nRegenerate the script addressing the above guardrail issues. Write logs to {next_log_path} and save all required artifacts to {next_version_folder}/."
-                guardrail_prompt = summary_text + fix_instr
-                input_list.append(append_message("user", guardrail_prompt))
-                self.logger.info(
-                    "User prompt with guardrail feedback: %s", guardrail_prompt
-                )
-                continue
-
-            # Execute the code
-            output = self._execute_code(train_py_path, version)
-
-            # Evaluate submission and build enriched context
-            (
-                code_context,
-                run_score,
-                previous_successful_version,
-                base_score,
-                submission_exists,
-            ) = self._evaluate_submission(code_clean, version, attempt)
-
-            # Checkpoint after step 5 (before feedback)
-            self._save_checkpoint(
-                version, input_list, last_input_tokens, sota_suggestions_call_id
-            )
-
-            # Step 6: Gather feedback and build next instruction
-            sota_suggestions_call_id, should_break = (
-                self._run_feedback_and_build_next_instruction(
-                    version,
-                    code_context,
-                    run_score,
-                    previous_successful_version,
-                    base_score,
-                    submission_exists,
-                    output,
-                    input_list,
-                    sota_suggestions_call_id,
-                )
-            )
-            if should_break:
-                break
-
-            self.logger.info("previous runs count: %s", len(self.previous_runs))
-
-            allowed_extensions = {".py", ".txt", ".csv"}
-            for path in self.outputs_dir.iterdir():
-                if not path.is_file():
-                    self.logger.debug(
-                        "Skipping non-file path when logging artifact: %s", path
-                    )
-                    continue
-
-                if path.suffix.lower() in allowed_extensions:
-                    artifact.add_file(str(path), overwrite=True)
-                else:
-                    self.logger.debug(
-                        "Skipping file due to extension filtering: %s (extension: %s)",
-                        path.name,
-                        path.suffix,
-                    )
-
-            try:
-                artifact.save()
-            except Exception as e:
-                self.logger.exception("Failed to save wandb artifact: %s", e)
-
-        return (
-            self.best_score,
-            self.best_code_file,
-            self.blacklisted_ideas,
-            self.successful_ideas,
-        )
+        return self.best_score, self.best_code_file

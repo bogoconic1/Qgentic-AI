@@ -289,10 +289,8 @@ def _run_developer_baseline(
             gpu_isolation_mode=gpu_isolation_mode,
             conda_env=conda_env,
         )
-        best_score, best_code_file, blacklisted_ideas, successful_ideas = dev.run(
-            max_time_seconds=baseline_time_limit
-        )
-        return key, best_score, best_code_file, blacklisted_ideas, successful_ideas
+        best_score, best_code_file = dev.run(max_time_seconds=baseline_time_limit)
+        return key, best_score, best_code_file
     finally:
         # Return resources to pools for next task
         if cpu_core_pool and cpu_core_range is not None:
@@ -526,15 +524,11 @@ class Orchestrator:
                                 result_key,
                                 best_score,
                                 best_code_file,
-                                blacklisted_ideas,
-                                successful_ideas,
                             ) = _run_developer_baseline(*task_args)
                             baseline_results[result_key] = {
                                 "strategy_name": result_key,
                                 "best_score": best_score,
                                 "best_code_file": best_code_file or "",
-                                "blacklisted_ideas": blacklisted_ideas,
-                                "successful_ideas": successful_ideas,
                             }
                             baseline_path = self.outputs_dir / "baseline_results.json"
                             with open(baseline_path, "w") as f:
@@ -558,15 +552,11 @@ class Orchestrator:
                                     result_key,
                                     best_score,
                                     best_code_file,
-                                    blacklisted_ideas,
-                                    successful_ideas,
                                 ) = future.result()
                                 baseline_results[result_key] = {
                                     "strategy_name": result_key,
                                     "best_score": best_score,
                                     "best_code_file": best_code_file or "",
-                                    "blacklisted_ideas": blacklisted_ideas,
-                                    "successful_ideas": successful_ideas,
                                 }
                                 baseline_path = (
                                     self.outputs_dir / "baseline_results.json"
