@@ -14,3 +14,8 @@ class LogMonitorVerdict(BaseModel):
 
     reasoning: str
     action: str  # "continue" or "kill"
+
+
+class Review(BaseModel):
+    """TODO: re-enable when Main Agent takes over review (#230)."""
+    pass
