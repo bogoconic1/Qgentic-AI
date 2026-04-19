@@ -164,6 +164,7 @@ Your previous attempt was blocked by the pre-execution guardrails — it never r
 def _execute_developer_tool_call(
     function_call,
     *,
+    goal_text: str,
     version_dir: Path,
     step: int,
     call_idx: int,
@@ -174,7 +175,7 @@ def _execute_developer_tool_call(
     if function_call.name == "explore_codebase":
         query = args["query"]
         logger.info("explore_codebase called: %s", query[:100])
-        return explore_codebase(query)
+        return explore_codebase(query, goal_text=goal_text)
 
     if function_call.name == "execute_python":
         code = args["code"]
@@ -242,6 +243,7 @@ def _generate_code(input_list: list[dict], goal_text: str, version_dir: Path) ->
             if hasattr(part, "function_call") and part.function_call:
                 tool_result_str = _execute_developer_tool_call(
                     part.function_call,
+                    goal_text=goal_text,
                     version_dir=version_dir,
                     step=step + 1,
                     call_idx=call_idx,

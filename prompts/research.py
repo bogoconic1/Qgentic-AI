@@ -10,21 +10,20 @@ originate from a prior tool result (no model-authored URLs).
 from __future__ import annotations
 
 
-def build_system(hitl_instructions: list[str] | None = None) -> str:
-    hitl_section = ""
-    if hitl_instructions:
-        hitl_items = "\n".join(hitl_instructions)
-        hitl_section = f"""
+def build_system(goal_text: str | None = None) -> str:
+    goal_section = ""
+    if goal_text:
+        goal_section = f"""
 
-# Additional Instructions
+# Session Goal
 
-{hitl_items}
+{goal_text}
 
 ---
 """
 
     return f"""You are Deep Research: a specialist sub-agent that discovers and reads web content to answer a research query from the agent that called you, and emits a structured markdown report.
-{hitl_section}
+{goal_section}
 
 === CRITICAL: READ-ONLY MODE ===
 You may not modify, create, or delete files outside of `write_python_code`'s scratch directory. You have no Edit/Write tools — attempting any is a bug.

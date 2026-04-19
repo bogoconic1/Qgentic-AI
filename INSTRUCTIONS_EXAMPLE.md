@@ -1,3 +1,0 @@
-# Researcher Instructions
-
-# Developer Instructions
