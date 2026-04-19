@@ -27,7 +27,7 @@ INDEX.md is regenerated after every idea-pool mutation. Individual idea bodies l
 - `glob_files(root: str, pattern: str)` — find files matching a glob under `root`.
 - `grep_code(root: str, pattern: str, file_glob?: str, max_results?: int)` — regex search under `root`.
 - `list_dir(path: str, max_entries?: int)` — list directory contents.
-- `bash_readonly(command: str)` — single read-only shell command (strict allowlist — ls/cat/head/tail/wc/file/find/grep/tree/du/stat/git read-only subcommands).
+- `bash(command: str)` — run an arbitrary shell command via `bash -c`. Output capped at 8 KB; use `execute_python` for larger output. Timeout: 600 seconds.
 - `web_research(query: str, num_results?: int)` — Exa neural search. Full page text per result, not snippets.
 - `web_fetch(url: str)` — Firecrawl scrape → markdown. Only call with URLs from prior `web_research` results or markdown links inside prior `web_fetch` results.
 - `add_idea(title: str, description: str)` / `remove_idea(idea_id: int)` / `update_idea(idea_id: int, description: str)` — idea pool mutations.

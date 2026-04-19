@@ -200,14 +200,13 @@ def get_main_agent_tools():
             },
         ),
         types.FunctionDeclaration(
-            name="bash_readonly",
+            name="bash",
             description=(
-                "Run a single read-only shell command. ONLY allowed: ls, cat, "
-                "head, tail, wc, file, find, grep, tree, du, stat, git status, "
-                "git log, git diff, git show, git blame, git ls-files, git "
-                "ls-tree. Pipes (|), redirection (>, <, >>), chaining (;, &&, "
-                "||), backticks, and $() are forbidden — use read_file / "
-                "glob_files / grep_code / list_dir instead."
+                "Run an arbitrary shell command via `bash -c`. No allowlist — "
+                "use for `cp` / `mv` / `mkdir` / pipes / redirection / `zip` / "
+                "`unzip` / anything else the session needs. Output is capped "
+                "at 8 KB; use `execute_python` if you need larger output or "
+                "structured return values. Timeout: 600 seconds."
             ),
             parameters_json_schema={
                 "type": "object",

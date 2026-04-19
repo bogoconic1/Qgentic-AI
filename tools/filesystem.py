@@ -1,15 +1,15 @@
-"""Read-only filesystem tools for MainAgent.
+"""Filesystem tools for MainAgent.
 
-Plain helper functions (no agent wrapper). Scoped by a module-level list of
-allowed roots from ``runtime.explore_allowed_roots`` plus the active interpreter's
-``site-packages``. Every path validated against that allowlist before any read.
+Plain helper functions (no agent wrapper). Read tools scope their paths to the
+module-level allowed-roots list (from ``runtime.explore_allowed_roots`` plus the
+active interpreter's ``site-packages``). ``tool_bash`` runs arbitrary shell
+commands with no allowlist — MainAgent owns its workspace.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-import shlex
 import subprocess
 import sysconfig
 from pathlib import Path
@@ -27,18 +27,8 @@ _SITE_PACKAGES = Path(sysconfig.get_path("purelib")).resolve()
 _ALLOWED_ROOTS: list[Path] = _USER_ROOTS + [_SITE_PACKAGES]
 
 
-_BASH_ALLOWED_COMMANDS = frozenset(
-    {
-        "ls", "cat", "head", "tail", "wc", "file",
-        "find", "grep", "tree", "du", "stat",
-    }
-)
-_BASH_ALLOWED_GIT_SUBCOMMANDS = frozenset(
-    {"status", "log", "diff", "show", "blame", "ls-files", "ls-tree"}
-)
-_BASH_FORBIDDEN_SUBSTRINGS = (";", "&&", "||", "|", ">", "<", "`", "$(")
 _BASH_OUTPUT_CAP_BYTES = 8 * 1024
-_BASH_TIMEOUT_SECONDS = 15
+_BASH_TIMEOUT_SECONDS = 600
 
 
 def _validate_path(path: Path) -> str | None:
@@ -56,45 +46,6 @@ def _validate_path(path: Path) -> str | None:
         f"Path {resolved} is outside the allowed roots "
         f"({', '.join(str(r) for r in _ALLOWED_ROOTS)})"
     )
-
-
-def _validate_bash_command(command: str) -> str | None:
-    if not command or not command.strip():
-        return "Empty command"
-
-    for token in _BASH_FORBIDDEN_SUBSTRINGS:
-        if token in command:
-            return (
-                f"Forbidden token {token!r}. Pipes, redirection, chaining, "
-                f"backticks, and $() are not allowed — use read_file / "
-                f"glob_files / grep_code / list_dir instead."
-            )
-
-    try:
-        parts = shlex.split(command)
-    except ValueError as exc:
-        return f"Failed to parse command: {exc}"
-    if not parts:
-        return "Empty command after parsing"
-
-    head = parts[0]
-    if head == "git":
-        if len(parts) < 2:
-            return "git command requires a subcommand"
-        subcmd = parts[1]
-        if subcmd not in _BASH_ALLOWED_GIT_SUBCOMMANDS:
-            return (
-                f"git subcommand {subcmd!r} is not allowed. Allowed: "
-                f"{sorted(_BASH_ALLOWED_GIT_SUBCOMMANDS)}"
-            )
-        return None
-
-    if head not in _BASH_ALLOWED_COMMANDS:
-        return (
-            f"Command {head!r} is not allowed. Allowed: "
-            f"{sorted(_BASH_ALLOWED_COMMANDS)} (and 'git' with read-only subcommands)"
-        )
-    return None
 
 
 def tool_read_file(
@@ -240,27 +191,26 @@ def tool_list_dir(path: str, max_entries: int = 100) -> str:
     )
 
 
-def tool_bash_readonly(command: str) -> str:
-    error = _validate_bash_command(command)
-    if error:
-        return json.dumps({"error": error})
+def tool_bash(command: str) -> str:
+    """Run an arbitrary shell command via ``bash -c``. No allowlist.
 
-    try:
-        parts = shlex.split(command)
-    except ValueError as exc:
-        return json.dumps({"error": f"Failed to parse command: {exc}"})
+    Returns combined stdout+stderr (capped at 8KB), the exit code, and a
+    truncation flag. Timeouts after ``_BASH_TIMEOUT_SECONDS`` seconds.
+    """
+    if not command or not command.strip():
+        return json.dumps({"error": "Empty command"})
 
     try:
         result = subprocess.run(
-            parts,
+            command,
+            shell=True,
+            executable="/bin/bash",
             capture_output=True,
             text=True,
             timeout=_BASH_TIMEOUT_SECONDS,
         )
     except subprocess.TimeoutExpired:
         return json.dumps({"error": f"Command timed out after {_BASH_TIMEOUT_SECONDS}s"})
-    except FileNotFoundError as exc:
-        return json.dumps({"error": f"Command not found: {exc}"})
     except Exception as exc:
         return json.dumps({"error": f"Command failed: {exc}"})
 

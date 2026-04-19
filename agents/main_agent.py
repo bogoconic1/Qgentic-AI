@@ -27,7 +27,7 @@ from google.genai import types
 from project_config import get_config
 from prompts.main_agent import build_system
 from tools.filesystem import (
-    tool_bash_readonly,
+    tool_bash,
     tool_glob_files,
     tool_grep_code,
     tool_list_dir,
@@ -176,8 +176,8 @@ class MainAgent:
             return truncate_for_llm(
                 tool_list_dir(args["path"], args.get("max_entries", 100))
             )
-        if name == "bash_readonly":
-            return truncate_for_llm(tool_bash_readonly(args["command"]))
+        if name == "bash":
+            return truncate_for_llm(tool_bash(args["command"]))
         if name == "web_research":
             return self._tool_web_research(args)
         if name == "web_fetch":
