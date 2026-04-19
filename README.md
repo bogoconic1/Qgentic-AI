@@ -86,20 +86,27 @@ The original Kaggle pipeline: Researcher + Developer agents iterate on a competi
 
 Before running, create these files in `task/<slug>/`:
 
-- **`description.md`**: Competition description and evaluation criteria
-- **`cv_splits.json`**: Cross-validation fold indices
-- **`metric.py`**: Competition-specific evaluation metric
+- **`GOAL.md`**: Session-wide objective, threaded into every agent's system prompt.
+- **`description.md`**: Competition description and evaluation criteria (read by the developer's generated `train.py`).
+
+The Main Agent bootstraps everything else — it writes ideas, research reports, and per-iteration developer outputs under `task/<slug>/<run_id>/` itself.
 
 ### Launch
 
 ```bash
-python launch_agent.py --slug "enter slug" --iteration 1
+python launch_agent.py --slug "enter slug"
+python launch_agent.py --slug "enter slug" --run-id my_run --goal-file path/to/GOAL.md
 ```
+
+`--slug` triggers a `kagglehub` download into `task/<slug>/`. Run id defaults to a timestamp. Main Agent runs indefinitely — SIGINT/SIGKILL when satisfied.
 
 ### Monitoring
 
-- `researcher.txt` / `developer.txt` capture detailed logs.
-- Weights & Biases tracking is configured via `config.yaml` under `tracking.wandb`.
+- `task/<slug>/<run_id>/main_agent_chat.jsonl` — append-only audit log of every MainAgent step (assistant turn + tool result).
+- `task/<slug>/<run_id>/developer_<N>/<k>/` — per-attempt developer artifacts (`train.py`, `train.txt`, `train_stats.json`, `submission.csv`, …).
+- `task/<slug>/<run_id>/research_<N>/` — per-call researcher artifacts (`PLAN_<N>.md` + `web_research/`/`web_fetch/` audit records).
+- `task/<slug>/<run_id>/ideas/` — idea pool (memdir-style `INDEX.md` + one file per idea).
+- Weights & Biases / Weave tracking is configured via `config.yaml` under `tracking.wandb`.
 
 ---
 
