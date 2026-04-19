@@ -15,6 +15,7 @@ from utils.checkpoint import (
     create_db as _create_checkpoint_db,
     delete_checkpoints_after,
 )
+from utils.competition_data import download_competition_data
 from weave.trace.util import ThreadPoolExecutor
 import weave
 
@@ -393,6 +394,9 @@ class Orchestrator:
 
     @weave.op()
     def run(self) -> tuple[bool, str]:
+        # Phase 0: Ensure raw competition data is on disk before any agent runs.
+        download_competition_data(self.slug, self.base_dir)
+
         # Phase 1: Starter Agent - Get task type and summary
         starter_suggestion_path = self.outputs_dir / "starter_suggestions.json"
         if not starter_suggestion_path.exists():
