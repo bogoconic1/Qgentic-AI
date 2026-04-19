@@ -351,11 +351,11 @@ class DeveloperAgent:
             logger.info("explore_codebase called: %s", query[:100])
             return explore_codebase(query, goal_text=self.goal_text)
 
-        if function_call.name == "execute_python":
+        if function_call.name == "analyze":
             code = args["code"]
             timeout = args.get("timeout_seconds", 300)
             logger.info(
-                "execute_python called (step %s call %s, %d bytes, timeout=%ds)",
+                "analyze called (step %s call %s, %d bytes, timeout=%ds)",
                 step,
                 call_idx,
                 len(code),
