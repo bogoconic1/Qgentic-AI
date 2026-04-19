@@ -98,7 +98,7 @@ def get_tools():
     """
     return [
         types.FunctionDeclaration(
-            name="execute_python",
+            name="analyze",
             description="Write and execute a Python script. The script runs in the task data directory with access to all data files, model outputs, and predictions. Print results to stdout.",
             parameters_json_schema={
                 "type": "object",
@@ -334,6 +334,126 @@ def get_explore_tools():
 # ---------------------------------------------------------------------------
 
 
+def get_main_agent_tools():
+    """Get the tool palette available to the Main Agent."""
+    return [
+        types.FunctionDeclaration(
+            name="develop",
+            description=(
+                "Runs one developer iteration and OWNS SUBMISSION AUTHORING: the "
+                "developer subagent writes a `train.py` that produces whatever "
+                "artifact the session goal requires (CSV, ONNX graph, model "
+                "weights, generated text, ZIP bundle, …) and dumps "
+                "`train_stats.json` with a score. Retries internally until "
+                "valid stats land. Returns a structured payload with the final "
+                "code, its path on disk, and a summary (score, stats, "
+                "stdout_tail, attempts_made). Omit `idea_id` on the very first "
+                "call (baseline from the session goal); otherwise pass the "
+                "integer id of the entry you selected from INDEX.md (the "
+                "`[NNN]` prefix) — the framework resolves it to the full "
+                "idea body. DO NOT hand-author submission artifacts yourself "
+                "via `analyze` — that is always wrong; it belongs here."
+            ),
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "idea_id": {
+                        "type": "integer",
+                        "description": "Id of the idea entry to develop (the `[NNN]` prefix in INDEX.md). Omit for baseline.",
+                    },
+                },
+                "required": [],
+            },
+        ),
+        types.FunctionDeclaration(
+            name="research",
+            description=(
+                "Runs one Deep Research iteration: web_fetch + web_search + internal "
+                "Python to produce a markdown report answering the instruction. Use "
+                "for domain grounding, library docs, prior-art sweeps, empirical "
+                "sniff-tests on the dataset."
+            ),
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "instruction": {
+                        "type": "string",
+                        "description": "Free-form research instruction.",
+                    },
+                },
+                "required": ["instruction"],
+            },
+        ),
+        types.FunctionDeclaration(
+            name="analyze",
+            description=(
+                "Run a Python snippet in a fresh subprocess for INSPECTION and "
+                "ANALYSIS. Returns stdout/stderr. Legitimate uses: read files, "
+                "inspect artifacts produced by prior `develop` / `research` "
+                "calls, reproduce a reported score, grep code for leakage "
+                "patterns, compute analyses (per-class F1, calibration, "
+                "confusion matrices) over `valid_preds.csv`, list directory "
+                "contents. NOT for authoring submission artifacts (call "
+                "`develop`), NOT for modifying the Python environment "
+                "(`pip install`, `apt`, `conda`), NOT for long training runs. "
+                "If you find yourself iterating variants of a solution via "
+                "this tool, stop and call `develop(idea=...)` instead."
+            ),
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "code": {
+                        "type": "string",
+                        "description": "Complete Python source to execute.",
+                    },
+                },
+                "required": ["code"],
+            },
+        ),
+        types.FunctionDeclaration(
+            name="add_idea",
+            description="Add a new entry to the idea pool. Returns the assigned integer id.",
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "description": "Short title — becomes the filename slug and the INDEX.md entry.",
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Full markdown body of the idea.",
+                    },
+                },
+                "required": ["title", "description"],
+            },
+        ),
+        types.FunctionDeclaration(
+            name="remove_idea",
+            description="Remove an idea from the pool by id.",
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "idea_id": {"type": "integer"},
+                },
+                "required": ["idea_id"],
+            },
+        ),
+        types.FunctionDeclaration(
+            name="update_idea",
+            description="Replace the body of an existing idea. Title stays the same.",
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "idea_id": {"type": "integer"},
+                    "description": {"type": "string"},
+                },
+                "required": ["idea_id", "description"],
+            },
+        ),
+    ]
+
+
 def get_developer_tools():
     """Get tools available to the developer agents during code generation."""
     return [
@@ -344,7 +464,7 @@ def get_developer_tools():
                 "packages and get back a markdown report with file:line citations. The "
                 "sub-agent reads source files using read_file/glob_files/grep_code/list_dir "
                 "across configured roots — it does NOT execute Python or shell commands. "
-                "To verify whether a snippet runs, use `execute_python` instead.\n\n"
+                "To verify whether a snippet runs, use `analyze` instead.\n\n"
                 "Use this for static investigation: 'How does X work?', 'What's the "
                 "signature of Y?', 'Where is Z defined?', 'Show me callers of W'. Brief "
                 "the sub-agent like a smart colleague who just walked into the room — it "
@@ -363,7 +483,7 @@ def get_developer_tools():
             },
         ),
         types.FunctionDeclaration(
-            name="execute_python",
+            name="analyze",
             description=(
                 "Run a Python snippet in a fresh subprocess and get back stdout, "
                 "stderr, and the exit code. Use this to VERIFY behavior — test an "
