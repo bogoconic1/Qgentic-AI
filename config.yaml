@@ -4,6 +4,9 @@ llm:
   leakage_review_model: "gemini-3.1-pro-preview"
   finetuned_code_api_model: "gemini-3.1-pro-preview"
 runtime:
+  # Deep Research sub-agent
+  deep_research_max_steps: 512                       # Max tool-call rounds per deep_research invocation
+  write_python_code_timeout_seconds: 300             # Per-call timeout for write_python_code subprocess
   llm_max_retries: 5
   llm_backoff_sequence: [1, 5, 10, 30, 60]
   max_developer_input_tokens: 250000
