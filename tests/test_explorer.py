@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from tools import explore as explore_module
+from agents import explorer as explore_module
 
 
 @pytest.fixture

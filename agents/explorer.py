@@ -1,11 +1,13 @@
 """Codebase exploration sub-agent.
 
-A read-only sub-agent that the developer / goal-mode codegen LLMs can call
-when they need to understand existing code before writing new code. Uses a
-multi-step tool loop to read files, glob, grep, list directories, and run
-read-only shell commands across a configurable set of allowed root paths.
+A read-only sub-agent that the developer codegen LLM calls when it needs to
+understand existing code before writing new code. Uses a multi-step tool
+loop to read files, glob, grep, list directories, and run read-only shell
+commands across a configurable set of allowed root paths.
 
-Free-form markdown output (no Pydantic schema).
+Exposed as a plain module-level function ``explore_codebase(query) -> str``
+(no state to carry, so no class wrapper). Free-form markdown output (no
+Pydantic schema).
 """
 
 from __future__ import annotations

@@ -30,7 +30,7 @@ from tools.developer import (
     execute_code,
     execute_with_monitor,
 )
-from tools.explore import explore_codebase
+from agents.explorer import explore_codebase
 from tools.helpers import call_llm
 from utils.code_utils import extract_python_code
 from utils.guardrails import build_block_summary, evaluate_guardrails
