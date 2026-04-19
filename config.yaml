@@ -9,7 +9,8 @@ runtime:
   write_python_code_timeout_seconds: 300             # Per-call timeout for write_python_code subprocess
   llm_max_retries: 5
   llm_backoff_sequence: [1, 5, 10, 30, 60]
-  max_developer_input_tokens: 250000
+  compaction_threshold_tokens: 200000  # compact when last call's prompt_token_count exceeds this
+  compaction_keep_last: 4               # turns kept verbatim after summary
   directory_listing_max_files: 10
   # Time limits (in seconds)
   baseline_time_limit: 432000  # 5 days for baseline development

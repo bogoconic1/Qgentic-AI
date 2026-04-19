@@ -26,6 +26,7 @@ from project_config import get_config
 from prompts.main_agent import build_system
 from tools.developer import _build_resource_header, execute_code
 from tools.helpers import call_llm
+from utils.compact import compact_messages, should_compact
 from utils.idea_pool import add_idea, load_index, remove_idea, update_idea
 from utils.llm_utils import append_message, get_main_agent_tools
 from utils.output import truncate_for_llm
@@ -66,6 +67,7 @@ class MainAgent:
         # send. Subsequent steps accumulate model responses + tool results in
         # this list.
         self.input_list: list[dict] = [append_message("user", _INITIAL_USER_TURN)]
+        self.last_input_tokens: int | None = None
         # Ensure INDEX.md exists so `load_index` has something to read.
         if not (self.ideas_dir / "INDEX.md").exists():
             (self.ideas_dir / "INDEX.md").write_text("# Idea pool\n\n")
@@ -82,12 +84,17 @@ class MainAgent:
             goal_text=self.goal_text,
             index_md=load_index(self.ideas_dir),
         )
-        response = call_llm(
+        if should_compact(self.last_input_tokens):
+            self.input_list = compact_messages(
+                self.input_list, model=_MAIN_AGENT_MODEL
+            )
+        response, self.last_input_tokens = call_llm(
             model=_MAIN_AGENT_MODEL,
             system_instruction=system_prompt,
             messages=self.input_list,
             function_declarations=tools,
             enable_google_search=False,
+            include_usage=True,
         )
 
         parts = response.candidates[0].content.parts

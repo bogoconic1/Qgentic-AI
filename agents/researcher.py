@@ -41,6 +41,7 @@ from project_config import get_config
 from prompts.research import build_system, build_user
 from tools.developer import _build_resource_header, execute_code
 from tools.helpers import call_llm
+from utils.compact import compact_messages, should_compact
 from utils.llm_utils import append_message, get_deep_research_tools
 from utils.output import truncate_for_llm
 
@@ -265,7 +266,8 @@ class ResearcherAgent:
             "scripts_dir": self.scripts_dir,
             "tool_seq": {},
         }
-        input_list = [append_message("user", user_prompt)]
+        input_list: list[dict] = [append_message("user", user_prompt)]
+        last_input_tokens: int | None = None
 
         markdown = ""
         for step in range(_DEEP_RESEARCH_MAX_STEPS):
@@ -274,12 +276,18 @@ class ResearcherAgent:
                 "ResearcherAgent step %d/%d", step + 1, _DEEP_RESEARCH_MAX_STEPS
             )
 
-            response = call_llm(
+            if should_compact(last_input_tokens):
+                input_list = compact_messages(
+                    input_list, model=_DEEP_RESEARCH_LLM_MODEL
+                )
+
+            response, last_input_tokens = call_llm(
                 model=_DEEP_RESEARCH_LLM_MODEL,
                 system_instruction=system_prompt,
                 function_declarations=tools if not is_last_step else [],
                 messages=input_list,
                 enable_google_search=False,
+                include_usage=True,
             )
 
             parts = response.candidates[0].content.parts
@@ -305,16 +313,26 @@ class ResearcherAgent:
                         )
                     )
 
-            input_list.append(response.candidates[0].content)
+            input_list.append(
+                response.candidates[0].content.model_dump(
+                    mode="json", exclude_none=True
+                )
+            )
             if function_responses:
                 input_list.append(
-                    types.Content(role="function", parts=function_responses)
+                    types.Content(
+                        role="function", parts=function_responses
+                    ).model_dump(mode="json", exclude_none=True)
                 )
         else:
             logger.warning(
                 "ResearcherAgent exhausted %d steps — forcing final report",
                 _DEEP_RESEARCH_MAX_STEPS,
             )
+            if should_compact(last_input_tokens):
+                input_list = compact_messages(
+                    input_list, model=_DEEP_RESEARCH_LLM_MODEL
+                )
             response = call_llm(
                 model=_DEEP_RESEARCH_LLM_MODEL,
                 system_instruction=system_prompt

@@ -60,7 +60,8 @@ def fake_pipeline(monkeypatch, tmp_path):
         captured["system_prompts"].append(system_instruction)
         k = captured["codegen_calls"]
         code = captured["script_factory"](k)
-        return _fake_llm_response(f"Here is the script:\n```python\n{code}\n```\n")
+        response = _fake_llm_response(f"Here is the script:\n```python\n{code}\n```\n")
+        return (response, 0) if kwargs.get("include_usage") else response
 
     monkeypatch.setattr(developer, "call_llm", fake_call_llm)
 
