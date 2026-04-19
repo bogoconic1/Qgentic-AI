@@ -43,7 +43,6 @@ _CONFIG = get_config()
 _LLM_CFG = _CONFIG["llm"]
 _DEVELOPER_TOOL_MODEL = _LLM_CFG["developer_tool_model"]
 _RUNTIME_CFG = _CONFIG["runtime"]
-_BASELINE_TIME_LIMIT = _RUNTIME_CFG["baseline_time_limit"]
 _BASELINE_CODE_TIMEOUT = _RUNTIME_CFG["baseline_code_timeout"]
 _LOG_MONITOR_INTERVAL = _RUNTIME_CFG["log_monitor_interval"]
 

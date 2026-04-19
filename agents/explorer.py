@@ -36,7 +36,6 @@ _CONFIG = get_config()
 _LLM_CFG = _CONFIG["llm"]
 _RUNTIME_CFG = _CONFIG["runtime"]
 _DEVELOPER_TOOL_MODEL = _LLM_CFG["developer_tool_model"]
-_MAX_STEPS = _RUNTIME_CFG["explore_max_steps"]
 
 _USER_ROOTS = [Path(r).resolve() for r in _RUNTIME_CFG["explore_allowed_roots"]]
 _SITE_PACKAGES = Path(sysconfig.get_path("purelib")).resolve()
@@ -369,13 +368,11 @@ def _execute_tool_call(item) -> str:
 
 
 @weave.op()
-def explore_codebase(query: str, goal_text: str | None = None) -> str:
+def explore_codebase(query: str) -> str:
     """Run the codebase exploration sub-agent and return a markdown report.
 
     Args:
         query: Natural language question about the codebase or libraries.
-        goal_text: Optional session-level objective (from GOAL.md) — inlined
-            into the subagent's system prompt under ``# Session Goal``.
 
     Returns:
         Free-form markdown report (with file:line citations).
@@ -383,19 +380,20 @@ def explore_codebase(query: str, goal_text: str | None = None) -> str:
     logger.info("Starting codebase exploration: %s", query[:100])
 
     allowed_roots_display = [str(r) for r in _ALLOWED_ROOTS]
-    system_prompt = build_system(allowed_roots_display, goal_text=goal_text)
+    system_prompt = build_system(allowed_roots_display)
     user_prompt = build_user(query)
     tools = get_explore_tools()
     input_list = [append_message("user", user_prompt)]
 
-    for step in range(_MAX_STEPS):
-        is_last_step = step == _MAX_STEPS - 1
-        logger.info("Explore step %d/%d", step + 1, _MAX_STEPS)
+    step = 0
+    while True:
+        step += 1
+        logger.info("Explore step %d", step)
 
         response = call_llm(
             model=_DEVELOPER_TOOL_MODEL,
             system_instruction=system_prompt,
-            function_declarations=tools if not is_last_step else [],
+            function_declarations=tools,
             messages=input_list,
             enable_google_search=True,
         )
@@ -406,7 +404,7 @@ def explore_codebase(query: str, goal_text: str | None = None) -> str:
         )
 
         if not has_function_calls:
-            logger.info("Explore completed at step %d", step + 1)
+            logger.info("Explore completed at step %d", step)
             return truncate_for_llm(response.text or "")
 
         function_responses = []
@@ -425,14 +423,3 @@ def explore_codebase(query: str, goal_text: str | None = None) -> str:
             input_list.append(
                 types.Content(role="function", parts=function_responses)
             )
-
-    # Exhausted steps — force a final text response
-    logger.warning("Explore exhausted %d steps, forcing final report", _MAX_STEPS)
-    response = call_llm(
-        model=_DEVELOPER_TOOL_MODEL,
-        system_instruction=system_prompt
-        + "\n\nReturn your findings now based on what you have gathered.",
-        messages=input_list,
-        enable_google_search=True,
-    )
-    return truncate_for_llm(response.text or "")

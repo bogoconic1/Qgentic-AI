@@ -13,13 +13,10 @@ from pathlib import Path
 
 
 def codegen_system(
-    goal_text: str,
-    idea: str | None = None,
+    idea: str,
     previous_code: str | None = None,
 ) -> str:
-    idea_section = ""
-    if idea:
-        idea_section = f"\n<idea>\n{idea}\n</idea>\n"
+    idea_section = f"\n<idea>\n{idea}\n</idea>\n"
 
     previous_section = ""
     if previous_code:
@@ -33,11 +30,7 @@ def codegen_system(
             "</previous_code>\n"
         )
 
-    return f"""You are a developer producing a single Python script (`train.py`) that completes one training iteration toward the session goal below. Output one complete script per attempt; the previous attempt's code and any failure feedback are visible above in the conversation thread.
-
-<goal>
-{goal_text}
-</goal>
+    return f"""You are a developer producing a single Python script (`train.py`) that implements the task specified by the `<idea>` block below. Output one complete script per attempt; the previous attempt's code and any failure feedback are visible above in the conversation thread.
 {idea_section}{previous_section}
 ## Hard constraints
 

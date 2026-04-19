@@ -58,7 +58,6 @@ _PATH_CFG = _CONFIG["paths"]
 
 _TASK_ROOT = Path(_PATH_CFG["task_root"])
 _DEEP_RESEARCH_LLM_MODEL = _LLM_CFG["developer_tool_model"]
-_DEEP_RESEARCH_MAX_STEPS = _RUNTIME_CFG["deep_research_max_steps"]
 _WRITE_PYTHON_CODE_TIMEOUT_SECONDS = _RUNTIME_CFG["write_python_code_timeout_seconds"]
 
 
@@ -221,12 +220,10 @@ class ResearcherAgent:
         slug: str,
         run_id: str,
         research_iter: int,
-        goal_text: str | None = None,
     ):
         self.slug = slug
         self.run_id = run_id
         self.research_iter = research_iter
-        self.goal_text = goal_text
         self.research_dir = _TASK_ROOT / slug / run_id / f"research_{research_iter}"
         self.scripts_dir = self.research_dir / "scripts"
         self.web_research_dir = self.research_dir / "web_research"
@@ -258,7 +255,7 @@ class ResearcherAgent:
             instruction,
         )
 
-        system_prompt = build_system(goal_text=self.goal_text)
+        system_prompt = build_system()
         user_prompt = build_user(instruction)
         tools = get_deep_research_tools()
         state: dict = {
@@ -270,11 +267,10 @@ class ResearcherAgent:
         last_input_tokens: int | None = None
 
         markdown = ""
-        for step in range(_DEEP_RESEARCH_MAX_STEPS):
-            is_last_step = step == _DEEP_RESEARCH_MAX_STEPS - 1
-            logger.info(
-                "ResearcherAgent step %d/%d", step + 1, _DEEP_RESEARCH_MAX_STEPS
-            )
+        step = 0
+        while True:
+            step += 1
+            logger.info("ResearcherAgent step %d", step)
 
             if should_compact(last_input_tokens):
                 input_list = compact_messages(
@@ -284,7 +280,7 @@ class ResearcherAgent:
             response, last_input_tokens = call_llm(
                 model=_DEEP_RESEARCH_LLM_MODEL,
                 system_instruction=system_prompt,
-                function_declarations=tools if not is_last_step else [],
+                function_declarations=tools,
                 messages=input_list,
                 enable_google_search=False,
                 include_usage=True,
@@ -298,7 +294,7 @@ class ResearcherAgent:
             )
 
             if not has_function_calls:
-                logger.info("ResearcherAgent completed at step %d", step + 1)
+                logger.info("ResearcherAgent completed at step %d", step)
                 markdown = response.text or ""
                 break
 
@@ -324,23 +320,6 @@ class ResearcherAgent:
                         role="function", parts=function_responses
                     ).model_dump(mode="json", exclude_none=True)
                 )
-        else:
-            logger.warning(
-                "ResearcherAgent exhausted %d steps — forcing final report",
-                _DEEP_RESEARCH_MAX_STEPS,
-            )
-            if should_compact(last_input_tokens):
-                input_list = compact_messages(
-                    input_list, model=_DEEP_RESEARCH_LLM_MODEL
-                )
-            response = call_llm(
-                model=_DEEP_RESEARCH_LLM_MODEL,
-                system_instruction=system_prompt
-                + "\n\nReturn your final markdown report now, based on everything you have gathered.",
-                messages=input_list,
-                enable_google_search=False,
-            )
-            markdown = response.text or ""
 
         plan_path = self.research_dir / f"PLAN_{self.research_iter}.md"
         plan_path.write_text(markdown)

@@ -5,8 +5,9 @@ step: `developer` / `researcher` (subagents), `analyze` (leaf), and
 memory ops (`add_idea` / `remove_idea` / `update_idea`). No termination in
 software — user SIGKILLs the process when satisfied.
 
-Session-level context: `GOAL.md` (threaded into every subagent's system
-prompt) and `task/<slug>/<run_id>/ideas/INDEX.md` (always-resident, regenerated
+Session-level context: `GOAL.md` (only in MainAgent's own system prompt —
+subagents receive task-scoped strings via `idea` / `instruction` / `query`)
+and `task/<slug>/<run_id>/ideas/INDEX.md` (always-resident, regenerated
 after every idea-pool mutation).
 """
 
@@ -134,19 +135,19 @@ class MainAgent:
 
     def _dispatch(self, name: str, args: dict) -> str:
         if name == "develop":
-            idea_text: str | None = None
             if "idea_id" in args:
                 idea_id = int(args["idea_id"])
                 matches = list(self.ideas_dir.glob(f"{idea_id:03d}_*.md"))
                 if not matches:
                     return json.dumps({"error": f"unknown idea_id: {idea_id}"})
                 idea_text = matches[0].read_text()
+            else:
+                idea_text = self.goal_text
             self.dev_iter += 1
             dev = DeveloperAgent(
                 slug=self.slug,
                 run_id=self.run_id,
                 dev_iter=self.dev_iter,
-                goal_text=self.goal_text,
             )
             payload = dev.run(idea=idea_text)
             return json.dumps(payload)
@@ -157,7 +158,6 @@ class MainAgent:
                 slug=self.slug,
                 run_id=self.run_id,
                 research_iter=self.research_iter,
-                goal_text=self.goal_text,
             )
             return truncate_for_llm(res.run(instruction=args["instruction"]))
 
