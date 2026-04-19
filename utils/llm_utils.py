@@ -335,7 +335,7 @@ def get_explore_tools():
 
 
 def get_developer_tools():
-    """Get tools available to the DeveloperAgent during code generation."""
+    """Get tools available to the developer agents during code generation."""
     return [
         types.FunctionDeclaration(
             name="explore_codebase",

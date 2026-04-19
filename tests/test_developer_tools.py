@@ -1,4 +1,4 @@
-"""Unit tests for DeveloperAgent tools."""
+"""Unit tests for shared developer tools (tools/developer.py)."""
 
 import pytest
 import tempfile
