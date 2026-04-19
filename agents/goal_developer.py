@@ -232,8 +232,7 @@ def _execute_goal_tool_call(
         work_dir = version_dir / "codegen_snippets"
         work_dir.mkdir(parents=True, exist_ok=True)
         script_file = work_dir / f"{step}_{call_idx}.py"
-        resource_header = _build_resource_header(None, None)
-        script_file.write_text(resource_header + code)
+        script_file.write_text(_build_resource_header() + code)
         job = execute_code(str(script_file), timeout_seconds=timeout)
         return json.dumps({"output": job.result()})
 

@@ -63,13 +63,8 @@ def build_system(
     directory_listing: str,
     strategy_name: str,
     slug: str,
-    cpu_core_range: list[int] | None = None,
     hitl_instructions: list[str] | None = None,
 ) -> str:
-    resource_info = ""
-    if cpu_core_range is not None:
-        resource_info = f"\nNumber of CPUs: {len(cpu_core_range)} cores"
-
     hitl_section = ""
     if hitl_instructions:
         hitl_items = "\n".join(hitl_instructions)
@@ -87,7 +82,7 @@ def build_system(
 
     return f"""You write train.py for Kaggle competitions using **only** the specified model `{strategy_name}`.
 
-**Environment:** Single GPU (40GB VRAM) {resource_info}
+**Environment:** Single GPU (40GB VRAM)
 
 {hitl_section}{constraints}
 

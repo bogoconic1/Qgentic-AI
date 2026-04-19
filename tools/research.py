@@ -116,7 +116,7 @@ def _tool_web_fetch(url: str) -> str:
 def _tool_write_python_code(code: str, seq: int, scripts_dir: Path) -> str:
     """Save + exec a Python script in the scripts dir. Return full stdout/stderr."""
     script_path = scripts_dir / f"{seq}.py"
-    script_path.write_text(_build_resource_header(None, None) + code)
+    script_path.write_text(_build_resource_header() + code)
     logger.info("write_python_code seq=%d path=%s", seq, script_path)
 
     try:
