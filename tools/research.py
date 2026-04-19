@@ -35,7 +35,7 @@ from exa_py import Exa
 from firecrawl import Firecrawl
 from google.genai import types
 
-from project_config import get_config
+from project_config import get_config, get_instructions
 from prompts.research import build_system, build_user
 from tools.developer import _build_resource_header, execute_code
 from tools.helpers import call_llm
@@ -56,6 +56,7 @@ _TASK_ROOT = Path(_PATH_CFG["task_root"])
 _DEEP_RESEARCH_LLM_MODEL = _LLM_CFG["developer_tool_model"]
 _DEEP_RESEARCH_MAX_STEPS = _RUNTIME_CFG["deep_research_max_steps"]
 _WRITE_PYTHON_CODE_TIMEOUT_SECONDS = _RUNTIME_CFG["write_python_code_timeout_seconds"]
+_HITL_INSTRUCTIONS = get_instructions()["# Researcher Instructions"]
 
 
 # ---------------------------------------------------------------------------
@@ -237,7 +238,7 @@ def deep_research(instruction: str, slug: str, run_id: str, research_iter: int) 
         instruction,
     )
 
-    system_prompt = build_system()
+    system_prompt = build_system(hitl_instructions=_HITL_INSTRUCTIONS)
     user_prompt = build_user(instruction)
     tools = get_deep_research_tools()
     state: dict = {

@@ -10,8 +10,21 @@ originate from a prior tool result (no model-authored URLs).
 from __future__ import annotations
 
 
-def build_system() -> str:
-    return """You are Deep Research: a specialist sub-agent that discovers and reads web content to answer a research query from the agent that called you, and emits a structured markdown report.
+def build_system(hitl_instructions: list[str] | None = None) -> str:
+    hitl_section = ""
+    if hitl_instructions:
+        hitl_items = "\n".join(hitl_instructions)
+        hitl_section = f"""
+
+# Additional Instructions
+
+{hitl_items}
+
+---
+"""
+
+    return f"""You are Deep Research: a specialist sub-agent that discovers and reads web content to answer a research query from the agent that called you, and emits a structured markdown report.
+{hitl_section}
 
 === CRITICAL: READ-ONLY MODE ===
 You may not modify, create, or delete files outside of `write_python_code`'s scratch directory. You have no Edit/Write tools — attempting any is a bug.
@@ -41,7 +54,7 @@ When you have enough material, stop calling tools and emit your **final markdown
 Every concrete claim must cite a URL — either inline as `(https://...)` after the claim, or as a footnote-style `[^n]` with URLs listed at the bottom. No naked assertions.
 
 If your final message has no tool call and no text, the parent treats the research as failed — don't do that. Always emit the report, even if it's a short "I couldn't find useful material because …" summary.
-"""
+"""  # noqa: E501
 
 
 def build_user(instruction: str) -> str:

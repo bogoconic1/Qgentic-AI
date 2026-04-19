@@ -64,7 +64,6 @@ class DeveloperAgent:
         slug: str,
         run_id: str,
         iteration: int | str,
-        strategy_name: str | None = None,
         external_data_listing: str | None = None,
         plan_content: str | None = None,
     ):
@@ -125,9 +124,6 @@ class DeveloperAgent:
 
         os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
-        self.strategy_name: str | None = strategy_name
-        assert self.strategy_name is not None
-
         self.logger.info(
             "Initialized DeveloperAgent for slug=%s iteration=%s",
             self.slug,
@@ -164,7 +160,6 @@ class DeveloperAgent:
         return prompt_build_system(
             description=self.description,
             directory_listing=directory_listing,
-            strategy_name=self.strategy_name,
             slug=self.slug,
             hitl_instructions=_HITL_INSTRUCTIONS,
         )
@@ -603,9 +598,7 @@ class DeveloperAgent:
             "last_input_tokens": last_input_tokens,
         }
         conn = self._get_checkpoint_db()
-        save_checkpoint(
-            conn, self.slug, str(self.iteration), self.strategy_name, version, state
-        )
+        save_checkpoint(conn, self.slug, str(self.iteration), version, state)
         self.logger.info("Checkpoint saved for v%s", version)
 
     def _load_latest_checkpoint(self):
