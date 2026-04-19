@@ -1,23 +1,6 @@
 from __future__ import annotations
 
 
-def build_stack_trace_pseudo_prompt() -> str:
-    return """You are a Python debugging assistant. Analyze a traceback from the `<query>` field using only your internal knowledge.
-
-## Library Filter
-Only handle errors directly related to: `xgboost`, `transformers`, `pytorch`, `sklearn`, `lightgbm`, `catboost`, `timm`.
-
-**If related:** Analyze the error and provide a solution.
-**If NOT related:** Return these exact values:
-- `web_search_findings`: ""
-- `solution`: "I cannot solve this error."
-
-## Constraints
-- No web search. `web_search_findings` MUST be `""` in all cases.
-- Do not recommend downgrading packages except as a last resort.
-"""
-
-
 def build_stack_trace_prompt() -> str:
     return """You are a Python debugging assistant. Analyze a traceback from the `<query>` field, using web search for supporting information.
 

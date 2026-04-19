@@ -20,7 +20,6 @@ from utils.llm_utils import (
 )
 from prompts.tools_developer import (
     build_stack_trace_prompt as prompt_stack_trace,
-    build_stack_trace_pseudo_prompt as prompt_stack_trace_pseudo,
     log_monitor_system as prompt_log_monitor_system,
     log_monitor_user as prompt_log_monitor_user,
 )
@@ -42,7 +41,6 @@ logger = logging.getLogger(__name__)
 _CONFIG = get_config()
 _LLM_CFG = _CONFIG["llm"]
 _DEVELOPER_TOOL_MODEL = _LLM_CFG["developer_tool_model"]
-_FINETUNED_CODE_API_MODEL = _LLM_CFG["finetuned_code_api_model"]
 _RUNTIME_CFG = _CONFIG["runtime"]
 _BASELINE_TIME_LIMIT = _RUNTIME_CFG["baseline_time_limit"]
 _BASELINE_CODE_TIMEOUT = _RUNTIME_CFG["baseline_code_timeout"]
@@ -56,46 +54,19 @@ def _build_resource_header() -> str:
 
 @weave.op()
 def web_search_stack_trace(query: str) -> str:
-    """Research how to fix a bug based on the stack trace and error message."""
+    """Research how to fix a bug based on the stack trace and error message.
+
+    Dispatches a single web-search-grounded LLM call against the trace and
+    returns the original query annotated with the model's suggested fix.
+    """
     logger.info("Dispatching web search for stack trace remediation guidance.")
     trace_index = query.find("Traceback (most recent call last)")
     if trace_index != -1:
         query = query[trace_index:]
     logger.debug("Stack trace query: %s", query)
 
-    logger.info("Attempting fine-tuned model endpoint first...")
-
-    ft_system_prompt = prompt_stack_trace_pseudo()
-    ft_user_prompt = "<query>\n" + query + "\n</query>"
-
-    ft_response = call_llm(
-        model=_FINETUNED_CODE_API_MODEL,
-        system_instruction=ft_system_prompt,
-        messages=ft_user_prompt,
-        text_format=StackTraceSolution,
-        temperature=1.0,
-        max_retries=3,
-        enable_google_search=False,
-        top_p=1.0,
-        thinking_budget=None,
-    )
-
-    solution_text = ft_response.solution.strip()
-    is_valid_response = (
-        len(solution_text) >= 35 and "I cannot solve this error." not in solution_text
-    )
-
-    if is_valid_response:
-        logger.info("Fine-tuned model provided a solution, using it.")
-        return query + "\n" + "This is how you can fix the error: \n" + solution_text
-
-    logger.info(
-        "Fine-tuned model cannot answer (response too short or failure message), falling back to web search workflow."
-    )
     system_prompt = prompt_stack_trace()
-
     messages = [append_message("user", "<query>\n" + query + "\n</query>")]
-    logger.debug("Web search messages: %s", messages)
 
     response = call_llm(
         model=_DEVELOPER_TOOL_MODEL,
@@ -176,7 +147,9 @@ class ExecutionJob:
     def result(self) -> str:
         """Get execution result. Blocks until the process finishes if not done.
 
-        Returns stdout on success, or web_search_stack_trace(stderr) on error.
+        Returns raw stdout on success, raw stderr on failure. Callers who want
+        stack-trace enrichment can feed the stderr through
+        ``web_search_stack_trace`` themselves.
         """
         self._proc.wait()
         self._stdout_thread.join(timeout=5)
@@ -194,7 +167,7 @@ class ExecutionJob:
             self._filepath,
             self._proc.returncode,
         )
-        return web_search_stack_trace(stderr_text)
+        return stderr_text
 
     def kill(self, reason: str) -> str:
         """Kill the process group and return a diagnostic message."""
@@ -408,8 +381,8 @@ def execute_with_monitor(
 
     Polls the running ExecutionJob every ``log_monitor_interval`` seconds and
     calls ``monitor_logs`` to decide whether the process should be killed.
-    Returns the output from ``ExecutionJob.result()`` (stdout on success,
-    ``web_search_stack_trace(stderr)`` advisory on failure).
+    Returns the output from ``ExecutionJob.result()`` — raw stdout on success,
+    raw stderr on failure.
     """
     job = execute_code(
         str(code_path),
