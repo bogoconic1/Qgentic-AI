@@ -85,7 +85,19 @@ def check_logging_basicconfig_order(code: str) -> dict:
       statements, FAIL.
     Returns a dict report with status, basicConfig_line, and violations.
     """
-    module = ast.parse(code)
+    try:
+        module = ast.parse(code)
+    except SyntaxError as exc:
+        return {
+            "status": "fail",
+            "basicConfig_line": None,
+            "violations": [
+                {
+                    "line": getattr(exc, "lineno", 0) or 0,
+                    "reason": f"syntax error while parsing generated code: {exc}",
+                }
+            ],
+        }
     lines = code.splitlines()
     aliases = _collect_logger_aliases(module.body)
 
