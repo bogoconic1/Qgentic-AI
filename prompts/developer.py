@@ -37,9 +37,10 @@ def codegen_system(
 - Place `import logging` and `logging.basicConfig(level=logging.INFO, ...)` at the very top of the script, BEFORE any third-party imports (torch, transformers, numpy, etc.). Third-party libraries configure logging on import, so basicConfig must come first. A pre-execution guardrail enforces this and will block the script otherwise.
 - Use the `logging` module (not `print`) for all observability. Log: what the script is doing at each major step, sizes / shapes / counts of anything loaded, intermediate quantities that can go wrong (thresholds, class weights, normalizations), final results, total runtime, and any errors caught.
 - Do not use `try/except` to suppress errors. Let exceptions propagate so they appear in the log.
-- **Your `train.py` MUST compute its own score and write `train_stats.json` next to the script — use `Path(__file__).parent / "train_stats.json"` — with at least `{{"score": <float>, ...}}` at end of run.** The framework uses the presence + parseability of `train_stats.json` to decide whether the attempt succeeded. No `train_stats.json` (or a non-finite score) = failed attempt = retry with feedback.
-- Write any submission or auxiliary artifacts (e.g. `submission.csv`, `valid_preds.csv`) to `Path(__file__).parent` so they land alongside `train.py`.
+- **Your `train.py` MUST compute its own score and write `train_stats.json` next to the script — use `Path(__file__).parent / "train_stats.json"` — with at least `{{"score": <float>}}` at end of run.** The framework uses the presence + parseability of `train_stats.json` to decide whether the attempt succeeded. No `train_stats.json` (or a non-finite score) = failed attempt = retry with feedback. The `<idea>` block may require additional keys — follow whatever schema it specifies.
+- Write any submission or auxiliary artifacts (e.g. `submission.csv`, `valid_preds.csv`, `submission.zip`) to `Path(__file__).parent` so they land alongside `train.py`.
 - A BASE_DIR constant is prepended by the framework — use `BASE_DIR / "<file>"` to read competition data. Locally this resolves to `task/<slug>/`; on Kaggle it resolves to `/kaggle/input/<slug>/`.
+- All task-specific requirements — what to build, which validation gate to run, which score formula to use, which inputs/outputs are expected, which edge cases to exclude, any domain-specific constraints — come from the `<idea>` block above. Do not rely on prior knowledge of the competition; follow the idea literally.
 
 ## Output format
 

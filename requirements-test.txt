@@ -13,3 +13,4 @@ anthropic
 PyYAML
 requests
 firecrawl-py
+exa-py
