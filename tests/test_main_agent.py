@@ -34,6 +34,20 @@ def _fake_text(text: str):
     return SimpleNamespace(candidates=[candidate])
 
 
+def _fake_multi(*calls: tuple[str, dict]):
+    """Build a response whose parts are several function_calls in the given order."""
+    parts = []
+    dumped_parts = []
+    for name, args in calls:
+        fc = SimpleNamespace(name=name, args=dict(args))
+        parts.append(SimpleNamespace(function_call=fc))
+        dumped_parts.append({"function_call": {"name": name, "args": dict(args)}})
+    content = SimpleNamespace(parts=parts)
+    content.model_dump = lambda **_: {"role": "model", "parts": dumped_parts}
+    candidate = SimpleNamespace(content=content)
+    return SimpleNamespace(candidates=[candidate])
+
+
 @pytest.fixture
 def patched_main_agent(monkeypatch, tmp_path):
     monkeypatch.setattr(main_agent, "_TASK_ROOT", tmp_path / "task")
@@ -156,6 +170,70 @@ def test_baseline_develop_passes_goal_as_idea(patched_main_agent, monkeypatch):
 
     assert len(patched_main_agent["dev_calls"]) == 1
     assert patched_main_agent["dev_calls"][0]["idea"] == "the session goal body"
+
+
+def test_parallel_dispatch_preserves_order(patched_main_agent, monkeypatch):
+    """Multiple function_calls in one turn execute and keep original ordering."""
+    agent = MainAgent(slug="test", run_id="r1", goal_text="do the thing")
+
+    # Seed the idea pool with two ideas the LLM can develop.
+    agent._dispatch("add_idea", {"title": "alpha", "description": "idea-alpha"})
+    agent._dispatch("add_idea", {"title": "beta", "description": "idea-beta"})
+
+    # Single LLM turn returning three parallel calls in a specific order.
+    response = _fake_multi(
+        ("analyze", {"code": "print('first')"}),
+        ("develop", {"idea_id": 1}),
+        ("develop", {"idea_id": 2}),
+    )
+    monkeypatch.setattr(main_agent, "call_llm", lambda **kwargs: (response, 0))
+
+    agent._step([])
+
+    # Both develop calls ran; each got its own dev_iter.
+    assert len(patched_main_agent["dev_calls"]) == 2
+    assert sorted(c["dev_iter"] for c in patched_main_agent["dev_calls"]) == [1, 2]
+
+    # function_response Content appended to input_list matches function_call order.
+    func_content = agent.input_list[-1]
+    assert func_content["role"] == "function"
+    emitted_names = [p["function_response"]["name"] for p in func_content["parts"]]
+    assert emitted_names == ["analyze", "develop", "develop"]
+
+    # Chat log: assistant turn + 3 tool records in the original order.
+    records = [json.loads(line) for line in agent.chat_log.read_text().splitlines()]
+    tool_records = [r for r in records if r["role"] == "tool"]
+    assert [r["name"] for r in tool_records] == ["analyze", "develop", "develop"]
+
+    # Snippet counter advanced exactly once for the single `analyze` call.
+    assert (agent.snippets_dir / "001.py").exists()
+    assert not (agent.snippets_dir / "002.py").exists()
+
+
+def test_parallel_analyze_calls_get_distinct_snippet_numbers(
+    patched_main_agent, monkeypatch
+):
+    """Two analyze calls in the same turn must not collide on the snippet filename."""
+    agent = MainAgent(slug="test", run_id="r1", goal_text="do the thing")
+
+    response = _fake_multi(
+        ("analyze", {"code": "print('a')"}),
+        ("analyze", {"code": "print('b')"}),
+        ("analyze", {"code": "print('c')"}),
+    )
+    monkeypatch.setattr(main_agent, "call_llm", lambda **kwargs: (response, 0))
+
+    agent._step([])
+
+    for n in (1, 2, 3):
+        assert (agent.snippets_dir / f"{n:03d}.py").exists()
+    contents = {
+        (agent.snippets_dir / f"{n:03d}.py").read_text() for n in (1, 2, 3)
+    }
+    # All three snippets kept their distinct bodies (no overwrite).
+    assert any("print('a')" in c for c in contents)
+    assert any("print('b')" in c for c in contents)
+    assert any("print('c')" in c for c in contents)
 
 
 def test_text_only_response_is_logged_and_ignored(patched_main_agent, monkeypatch, caplog):
