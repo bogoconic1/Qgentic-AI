@@ -236,6 +236,72 @@ def test_parallel_analyze_calls_get_distinct_snippet_numbers(
     assert any("print('c')" in c for c in contents)
 
 
+def test_stuck_nudge_fires_after_repeated_identical_calls(
+    patched_main_agent, monkeypatch
+):
+    """If the same single-call turn repeats N times, MainAgent appends a static
+    "push on / never stop" nudge to input_list and clears its history.
+
+    Regression for #257 — the live failure showed `analyze(time.sleep(2))` repeated
+    623 times in a row.
+    """
+    agent = MainAgent(slug="test", run_id="r1", goal_text="do the thing")
+
+    response = _fake_fc("analyze", code="import time\ntime.sleep(2)\nprint('Waiting...')")
+    monkeypatch.setattr(main_agent, "call_llm", lambda **kwargs: (response, 0))
+
+    threshold = main_agent._STUCK_REPEAT_THRESHOLD
+    nudge_text = main_agent._STUCK_NUDGE
+
+    def _has_nudge(messages: list[dict]) -> bool:
+        for msg in messages:
+            if msg.get("role") != "user":
+                continue
+            for part in msg.get("parts", []):
+                if nudge_text in part.get("text", ""):
+                    return True
+        return False
+
+    # First (threshold-1) repeats: no nudge yet — pattern not confirmed.
+    for _ in range(threshold - 1):
+        agent._step([])
+    assert not _has_nudge(agent.input_list)
+
+    # The threshold'th identical turn triggers the nudge.
+    agent._step([])
+    last = agent.input_list[-1]
+    assert last["role"] == "user"
+    assert nudge_text in last["parts"][0]["text"]
+
+    # History reset, so the next identical turn does NOT immediately re-nudge.
+    agent._step([])
+    assert agent.input_list[-1]["role"] == "function"
+
+
+def test_stuck_nudge_does_not_fire_for_varied_calls(patched_main_agent, monkeypatch):
+    """A turn whose tool args differ from the previous resets the stuck window."""
+    agent = MainAgent(slug="test", run_id="r1", goal_text="do the thing")
+
+    threshold = main_agent._STUCK_REPEAT_THRESHOLD
+    nudge_text = main_agent._STUCK_NUDGE
+
+    responses = iter(
+        [_fake_fc("analyze", code=f"print({i})") for i in range(threshold + 2)]
+    )
+    monkeypatch.setattr(
+        main_agent, "call_llm", lambda **kwargs: (next(responses), 0)
+    )
+
+    for _ in range(threshold + 2):
+        agent._step([])
+
+    for msg in agent.input_list:
+        if msg.get("role") != "user":
+            continue
+        for part in msg.get("parts", []):
+            assert nudge_text not in part.get("text", "")
+
+
 def test_text_only_response_is_logged_and_ignored(patched_main_agent, monkeypatch, caplog):
     agent = MainAgent(slug="test", run_id="r1", goal_text="do the thing")
     monkeypatch.setattr(

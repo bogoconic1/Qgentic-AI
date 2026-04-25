@@ -13,6 +13,7 @@ after every idea-pool mutation).
 
 from __future__ import annotations
 
+import collections
 import json
 import logging
 import threading
@@ -39,6 +40,23 @@ _INITIAL_USER_TURN = (
     "Take your first step. The session goal, the current idea pool (INDEX.md), "
     "and your tool palette are all in the system prompt. Pick a tool and call "
     "it — every step should be a tool call, never a plain text response."
+)
+
+# Number of consecutive turns with byte-identical tool-call signatures before
+# the stuck-detection nudge fires. Set to 3 so a "double-check then act" pattern
+# doesn't false-positive, but a degenerate spin (e.g. repeated `analyze(time.sleep)`)
+# is caught before it burns much budget.
+_STUCK_REPEAT_THRESHOLD = 3
+
+_STUCK_NUDGE = (
+    "You've made the same tool call(s) for the last "
+    f"{_STUCK_REPEAT_THRESHOLD} turns. That's a sign you're out of ideas, not "
+    "that the work is done. **Push on.** Concrete options: add a fresh idea "
+    "via `add_idea`; call `research(instruction=\"...\")` to web-search for "
+    "unblocking ideas; inspect a `developer_N/` directory you haven't reviewed "
+    "yet; reread INDEX.md and pick the next-most-promising idea. **Never "
+    "stop** — the session has no termination condition. The user will SIGKILL "
+    "when satisfied."
 )
 
 
@@ -79,6 +97,12 @@ class MainAgent:
         # this list.
         self.input_list: list[dict] = [append_message("user", _INITIAL_USER_TURN)]
         self.last_input_tokens: int | None = None
+        # Rolling window of per-turn tool-call signatures. When the deque is
+        # full and every entry is identical, the agent is spinning on a no-op
+        # — `_step` injects `_STUCK_NUDGE` to push it back to productive work.
+        self._recent_call_sigs: collections.deque[tuple[tuple[str, str], ...]] = (
+            collections.deque(maxlen=_STUCK_REPEAT_THRESHOLD)
+        )
         # Ensure INDEX.md exists so `load_index` has something to read.
         if not (self.ideas_dir / "INDEX.md").exists():
             (self.ideas_dir / "INDEX.md").write_text("# Idea pool\n\n")
@@ -174,6 +198,29 @@ class MainAgent:
                 mode="json", exclude_none=True
             )
         )
+
+        # Stuck detection: if the last N turns made byte-identical tool calls,
+        # the agent is spinning on a no-op (e.g. repeated `analyze(time.sleep(2))`
+        # after it thinks the goal is met). Inject a static "push on / never stop"
+        # nudge so it tries something new instead.
+        turn_sig = tuple(
+            (name, json.dumps(args, sort_keys=True, ensure_ascii=False))
+            for name, args, _ in results
+        )
+        self._recent_call_sigs.append(turn_sig)
+        if (
+            len(self._recent_call_sigs) == _STUCK_REPEAT_THRESHOLD
+            and len(set(self._recent_call_sigs)) == 1
+        ):
+            logger.warning(
+                "MainAgent appears stuck: same %d-call turn repeated %d times "
+                "(%s) — injecting unstucking nudge",
+                len(turn_sig),
+                _STUCK_REPEAT_THRESHOLD,
+                [n for n, _ in turn_sig],
+            )
+            self.input_list.append(append_message("user", _STUCK_NUDGE))
+            self._recent_call_sigs.clear()
 
     def _dispatch(self, name: str, args: dict) -> str:
         if name == "develop":
