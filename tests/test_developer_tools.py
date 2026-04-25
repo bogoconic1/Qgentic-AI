@@ -80,6 +80,34 @@ def test_execute_code_timeout(test_script_timeout):
     assert "killed" in result.lower() or "timeout" in result.lower()
 
 
+def test_execute_code_result_honors_timeout():
+    """Regression for #256: a hung snippet must not block .result() forever.
+
+    Before the fix, ExecutionJob.result() called self._proc.wait() with no
+    timeout, so an infinite-loop snippet would pin the parent indefinitely.
+    """
+    import time
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+        f.write("import time\nwhile True:\n    time.sleep(0.05)\n")
+        script_path = f.name
+
+    try:
+        t0 = time.monotonic()
+        job = execute_code(script_path, timeout_seconds=2)
+        result = job.result()
+        elapsed = time.monotonic() - t0
+
+        assert "timeout" in result.lower(), (
+            f"expected timeout diagnostic in output, got: {result[:200]!r}"
+        )
+        assert elapsed < 5, (
+            f"result() should return within ~3s of the timeout; took {elapsed:.1f}s"
+        )
+    finally:
+        Path(script_path).unlink(missing_ok=True)
+
+
 def test_execute_code_error_returns_raw_stderr(test_script_error):
     """Test that a failing script returns raw stderr (no enrichment).
 
