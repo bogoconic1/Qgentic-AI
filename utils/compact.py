@@ -159,7 +159,11 @@ def _format_summary(raw: str) -> str:
     formatted = _ANALYSIS_RE.sub("", raw)
     match = _SUMMARY_RE.search(formatted)
     if match:
-        formatted = _SUMMARY_RE.sub(
-            f"Summary:\n{match.group(1).strip()}", formatted, count=1
+        # `.replace` with a plain string avoids re.sub's replacement-template
+        # parsing — the summary body can legitimately contain literal \d, \w,
+        # etc. (regex explanations, Windows paths, LaTeX macros) which would
+        # otherwise crash `re.sub` with `re.error: bad escape`.
+        formatted = formatted.replace(
+            match.group(0), f"Summary:\n{match.group(1).strip()}", 1
         )
     return re.sub(r"\n\n+", "\n\n", formatted).strip() or raw
