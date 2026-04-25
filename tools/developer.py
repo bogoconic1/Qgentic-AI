@@ -150,8 +150,18 @@ class ExecutionJob:
         Returns raw stdout on success, raw stderr on failure. Callers who want
         stack-trace enrichment can feed the stderr through
         ``web_search_stack_trace`` themselves.
+
+        Honors ``self._timeout_seconds``: if the subprocess hasn't exited by
+        then, it is killed via ``self.kill`` and the diagnostic string is
+        returned. Without this, a hung snippet would block the parent
+        indefinitely (see issue #256).
         """
-        self._proc.wait()
+        remaining = max(0.0, self._timeout_seconds - self.elapsed())
+        try:
+            self._proc.wait(timeout=remaining)
+        except subprocess.TimeoutExpired:
+            return self.kill(f"Hard timeout {self._timeout_seconds}s exceeded")
+
         self._stdout_thread.join(timeout=5)
         self._stderr_thread.join(timeout=5)
 
