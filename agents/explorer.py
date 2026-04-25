@@ -20,12 +20,21 @@ import sysconfig
 from pathlib import Path
 
 import weave
-from google.genai import types
 
 from project_config import get_config
 from prompts.explore import build_system, build_user
 from tools.helpers import call_llm
-from utils.llm_utils import append_message, get_explore_tools
+from utils.llm_utils import (
+    append_message,
+    assistant_message_from_response,
+    extract_text_from_response,
+    get_explore_tools,
+    get_response_tool_calls,
+    make_tool_message,
+    tool_call_args,
+    tool_call_id,
+    tool_call_name,
+)
 from utils.output import truncate_for_llm
 
 
@@ -337,29 +346,35 @@ def _tool_bash_readonly(command: str) -> str:
 
 
 def _execute_tool_call(item) -> str:
-    args = dict(item.args)
+    args = tool_call_args(item)
+    name = tool_call_name(item)
 
-    if item.name == "read_file":
+    if name == "read_file":
+        start_line = args["start_line"] if "start_line" in args else None
+        end_line = args["end_line"] if "end_line" in args else None
         return _tool_read_file(
             args["path"],
-            args.get("start_line"),
-            args.get("end_line"),
+            start_line,
+            end_line,
         )
-    if item.name == "glob_files":
+    if name == "glob_files":
         return _tool_glob_files(args["root"], args["pattern"])
-    if item.name == "grep_code":
+    if name == "grep_code":
+        file_glob = args["file_glob"] if "file_glob" in args else "*.py"
+        max_results = args["max_results"] if "max_results" in args else 20
         return _tool_grep_code(
             args["root"],
             args["pattern"],
-            args.get("file_glob", "*.py"),
-            args.get("max_results", 20),
+            file_glob,
+            max_results,
         )
-    if item.name == "list_dir":
-        return _tool_list_dir(args["path"], args.get("max_entries", 100))
-    if item.name == "bash_readonly":
+    if name == "list_dir":
+        max_entries = args["max_entries"] if "max_entries" in args else 100
+        return _tool_list_dir(args["path"], max_entries)
+    if name == "bash_readonly":
         return _tool_bash_readonly(args["command"])
 
-    return json.dumps({"error": f"Unknown tool: {item.name}"})
+    return json.dumps({"error": f"Unknown tool: {name}"})
 
 
 # ---------------------------------------------------------------------------
@@ -395,31 +410,18 @@ def explore_codebase(query: str) -> str:
             system_instruction=system_prompt,
             function_declarations=tools,
             messages=input_list,
-            enable_google_search=True,
+            enable_web_search=True,
         )
 
-        parts = response.candidates[0].content.parts
-        has_function_calls = any(
-            part.function_call for part in parts if hasattr(part, "function_call")
-        )
+        tool_calls = get_response_tool_calls(response)
 
-        if not has_function_calls:
+        if not tool_calls:
             logger.info("Explore completed at step %d", step)
-            return truncate_for_llm(response.text or "")
+            return truncate_for_llm(extract_text_from_response(response))
 
-        function_responses = []
-        for part in parts:
-            if hasattr(part, "function_call") and part.function_call:
-                tool_result_str = _execute_tool_call(part.function_call)
-                function_responses.append(
-                    types.Part.from_function_response(
-                        name=part.function_call.name,
-                        response={"result": tool_result_str},
-                    )
-                )
-
-        input_list.append(response.candidates[0].content)
-        if function_responses:
+        input_list.append(assistant_message_from_response(response))
+        for call in tool_calls:
+            tool_result_str = _execute_tool_call(call)
             input_list.append(
-                types.Content(role="function", parts=function_responses)
+                make_tool_message(tool_call_id(call), tool_result_str)
             )

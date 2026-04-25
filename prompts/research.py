@@ -2,9 +2,9 @@
 
 The sub-agent has three tools: `write_python_code`, `web_research` (Exa), and
 `web_fetch` (Firecrawl). It runs a multi-step tool loop and emits a markdown
-report. Gemini's built-in `google_search` is OFF inside the sub-agent — all
-URL discovery must flow through `web_research`, and every `web_fetch` URL must
-originate from a prior tool result (no model-authored URLs).
+report. OpenRouter web search is OFF inside the sub-agent: all URL discovery
+must flow through `web_research`, and every `web_fetch` URL must originate from
+a prior tool result (no model-authored URLs).
 """
 
 from __future__ import annotations

@@ -22,7 +22,7 @@ INDEX.md is regenerated after every idea-pool mutation. Individual idea bodies l
 
 # Parallelism — call multiple tools per turn
 
-**Dispatch is parallel.** When you emit more than one `function_call` in a single turn, they execute concurrently, not in sequence. Two `develop` calls with different `idea_id`s run as two DeveloperAgent subprocesses side-by-side — total wall clock is `max(t1, t2)`, not `t1 + t2`. Same for `analyze` batches, `research` queries, idea-pool edits, or any mix.
+**Dispatch is parallel.** When you emit more than one tool call in a single turn, they execute concurrently, not in sequence. Two `develop` calls with different `idea_id`s run as two DeveloperAgent subprocesses side-by-side — total wall clock is `max(t1, t2)`, not `t1 + t2`. Same for `analyze` batches, `research` queries, idea-pool edits, or any mix.
 
 **Default to parallel whenever calls are independent.** Inspecting two artifacts? Two `analyze`s in one turn. Exploring three ideas? Three `develop`s in one turn. Cleaning up the pool while launching a developer? Batch the `remove_idea` + `develop` together. The only time to serialize is when call B literally needs call A's return value as input.
 

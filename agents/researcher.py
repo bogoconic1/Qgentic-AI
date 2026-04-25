@@ -4,8 +4,8 @@ A sub-agent the Main Agent (or orchestrator) instantiates with a run's
 ``(slug, run_id, research_iter)`` and then calls ``run(instruction)`` on.
 It runs a multi-step tool loop over three inner tools — ``web_research``
 (Exa discovery), ``web_fetch`` (Firecrawl scrape), and ``write_python_code``
-(subprocess exec) — and emits a markdown report. Gemini's built-in
-``google_search`` is disabled inside the sub-agent so every URL the LLM
+(subprocess exec) — and emits a markdown report. OpenRouter web search is
+disabled inside the sub-agent so every URL the LLM
 dereferences is traceable back to a prior tool result (no invented URLs).
 
 Tool outputs (``web_research``, ``web_fetch``, ``write_python_code``) are
@@ -35,14 +35,23 @@ import weave
 from dotenv import load_dotenv
 from exa_py import Exa
 from firecrawl import Firecrawl
-from google.genai import types
 
 from project_config import get_config
 from prompts.research import build_system, build_user
 from tools.developer import _build_resource_header, execute_code
 from tools.helpers import call_llm
 from utils.compact import compact_messages, should_compact
-from utils.llm_utils import append_message, get_deep_research_tools
+from utils.llm_utils import (
+    append_message,
+    assistant_message_from_response,
+    extract_text_from_response,
+    get_deep_research_tools,
+    get_response_tool_calls,
+    make_tool_message,
+    tool_call_args,
+    tool_call_id,
+    tool_call_name,
+)
 from utils.output import truncate_for_llm
 
 
@@ -146,13 +155,13 @@ def _render_tool_record_markdown(
 
     if tool_name == "web_research":
         lines = [header, f"**Query:** {args['query']}\n"]
-        if args.get("num_results") is not None:
+        if "num_results" in args and args["num_results"] is not None:
             lines.append(f"**Requested num_results:** {args['num_results']}\n")
         lines.append(f"**Num results returned:** {len(result['results'])}\n\n---\n\n")
         for idx, item in enumerate(result["results"], start=1):
             lines.append(f"## Result {idx}: {item['title'] or '(no title)'}\n\n")
             lines.append(f"- **URL:** {item['url']}\n")
-            if item.get("published_date"):
+            if item["published_date"]:
                 lines.append(f"- **Published:** {item['published_date']}\n")
             lines.append(f"\n{item['text']}\n\n---\n\n")
         return "".join(lines)
@@ -175,14 +184,15 @@ def _render_tool_record_markdown(
 
 
 def _execute_tool_call(item, state: dict) -> str:
-    args = dict(item.args)
-    tool_name = item.name
+    args = tool_call_args(item)
+    tool_name = tool_call_name(item)
 
-    tool_seq = state["tool_seq"].get(tool_name, 0) + 1
+    tool_seq = state["tool_seq"][tool_name] + 1 if tool_name in state["tool_seq"] else 1
     state["tool_seq"][tool_name] = tool_seq
 
     if tool_name == "web_research":
-        result_json = _tool_web_research(args["query"], args.get("num_results"))
+        num_results = args["num_results"] if "num_results" in args else None
+        result_json = _tool_web_research(args["query"], num_results)
     elif tool_name == "web_fetch":
         result_json = _tool_web_fetch(args["url"])
     elif tool_name == "write_python_code":
@@ -282,43 +292,25 @@ class ResearcherAgent:
                 system_instruction=system_prompt,
                 function_declarations=tools,
                 messages=input_list,
-                enable_google_search=False,
+                enable_web_search=False,
                 include_usage=True,
             )
 
-            parts = response.candidates[0].content.parts
-            has_function_calls = any(
-                part.function_call
-                for part in parts
-                if hasattr(part, "function_call")
-            )
+            tool_calls = get_response_tool_calls(response)
 
-            if not has_function_calls:
+            if not tool_calls:
                 logger.info("ResearcherAgent completed at step %d", step)
-                markdown = response.text or ""
+                markdown = extract_text_from_response(response)
                 break
 
-            function_responses = []
-            for part in parts:
-                if hasattr(part, "function_call") and part.function_call:
-                    tool_result_str = _execute_tool_call(part.function_call, state)
-                    function_responses.append(
-                        types.Part.from_function_response(
-                            name=part.function_call.name,
-                            response={"result": tool_result_str},
-                        )
-                    )
-
-            input_list.append(
-                response.candidates[0].content.model_dump(
-                    mode="json", exclude_none=True
-                )
-            )
-            if function_responses:
+            input_list.append(assistant_message_from_response(response))
+            for call in tool_calls:
+                tool_result_str = _execute_tool_call(call, state)
                 input_list.append(
-                    types.Content(
-                        role="function", parts=function_responses
-                    ).model_dump(mode="json", exclude_none=True)
+                    make_tool_message(
+                        tool_call_id(call),
+                        tool_result_str,
+                    )
                 )
 
         plan_path = self.research_dir / f"PLAN_{self.research_iter}.md"

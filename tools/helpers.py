@@ -1,16 +1,23 @@
 import json
 import logging
+import os
+import sys
 import time
+from pathlib import Path
 
-from google import genai
-from google.genai import errors as genai_errors
-from google.genai import types as genai_types
 import httpx
 import pydantic
 import weave
 
 from project_config import get_config
-from utils.llm_utils import append_message
+from utils.llm_utils import append_message, extract_text_from_response
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_LOCAL_OPENROUTER_SRC = _REPO_ROOT / "libraries" / "python-sdk" / "src"
+if _LOCAL_OPENROUTER_SRC.exists():
+    sys.path.insert(0, str(_LOCAL_OPENROUTER_SRC))
+
+from openrouter import OpenRouter, errors as openrouter_errors  # noqa: E402
 
 _MAX_STRUCTURED_OUTPUT_RETRIES = 3
 
@@ -34,14 +41,15 @@ RETRYABLE_EXCEPTIONS = (
     httpx.ConnectTimeout,
     httpx.PoolTimeout,
     httpx.HTTPStatusError,
-    genai_errors.ServerError,
-    genai_errors.ClientError,
+    openrouter_errors.OpenRouterError,
 )
 
 
 def _is_non_retryable_http_status(exc):
     if isinstance(exc, httpx.HTTPStatusError):
         return exc.response.status_code not in RETRYABLE_HTTP_STATUS_CODES
+    if isinstance(exc, openrouter_errors.OpenRouterError):
+        return exc.status_code not in RETRYABLE_HTTP_STATUS_CODES
     return False
 
 
@@ -49,11 +57,47 @@ _503_POLL_INTERVAL = 300  # 5 minutes
 
 
 def _is_503_unavailable(exc):
-    if isinstance(exc, genai_errors.ServerError) and exc.code == 503:
-        return True
     if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 503:
         return True
+    if isinstance(exc, openrouter_errors.OpenRouterError) and exc.status_code == 503:
+        return True
     return False
+
+
+def _normalize_messages(messages: str | list | None) -> list[dict]:
+    if messages is None:
+        return []
+    if isinstance(messages, str):
+        return [append_message("user", messages)]
+    return list(messages)
+
+
+def _prompt_tokens(response) -> int | None:
+    if response.usage is None:
+        return None
+    return response.usage.prompt_tokens
+
+
+def _json_schema_response_format(text_format) -> dict:
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": text_format.__name__,
+            "schema": text_format.model_json_schema(),
+            "strict": True,
+        },
+    }
+
+
+def _web_search_tool() -> dict:
+    return {
+        "type": "openrouter:web_search",
+        "parameters": {
+            "engine": "auto",
+            "max_results": 5,
+            "max_total_results": 10,
+        },
+    }
 
 
 def _retry_with_backoff(func, *, max_retries, backoff_sequence):
@@ -112,11 +156,9 @@ def call_llm(
     text_format=None,
     temperature: float = 1.0,
     max_retries: int | None = None,
-    enable_google_search: bool = False,
+    enable_web_search: bool = False,
     top_p: float = 1.0,
-    thinking_budget: int | None = None,
-    thinking_level: str | None = None,
-    include_thoughts: bool = False,
+    reasoning_effort: str | None = None,
     function_declarations: list = None,
     include_usage: bool = False,
 ):
@@ -125,66 +167,59 @@ def call_llm(
     backoff_seq = tuple(runtime_cfg["llm_backoff_sequence"])
 
     tool_list = []
-    tool_params = {}
-    if enable_google_search:
-        tool_params["google_search"] = genai_types.GoogleSearch()
     if function_declarations:
-        tool_params["function_declarations"] = function_declarations
-    if tool_params:
-        tool_list = [genai_types.Tool(**tool_params)]
+        tool_list.extend(function_declarations)
+    if enable_web_search:
+        tool_list.append(_web_search_tool())
 
-    config_params = {
-        "temperature": temperature,
-        "top_p": top_p,
-        "system_instruction": system_instruction,
-        "tools": tool_list if tool_list else None,
-    }
-
-    thinking_config_params = {}
-    if thinking_level is not None:
-        thinking_config_params["thinking_level"] = thinking_level
-    if thinking_budget is not None:
-        thinking_config_params["thinking_budget"] = thinking_budget
-    if include_thoughts:
-        thinking_config_params["include_thoughts"] = include_thoughts
-    config_params["thinking_config"] = genai_types.ThinkingConfig(
-        **thinking_config_params
+    response_format = (
+        _json_schema_response_format(text_format) if text_format is not None else None
     )
-
-    if text_format is not None:
-        config_params["response_mime_type"] = "application/json"
-        config_params["response_json_schema"] = text_format.model_json_schema()
-
-    config = genai_types.GenerateContentConfig(**config_params)
+    reasoning = {"effort": reasoning_effort} if reasoning_effort is not None else None
 
     def _make_request(contents):
         def _attempt():
-            client = genai.Client()
-            return client.models.generate_content(
-                model=model,
-                contents=contents,
-                config=config,
-            )
+            with OpenRouter(
+                api_key=os.environ["OPENROUTER_API_KEY"],
+                x_open_router_title="Qgentic-AI",
+                x_open_router_categories="cli-agent,kaggle-agent",
+            ) as client:
+                request_messages = []
+                if system_instruction:
+                    request_messages.append(
+                        {"role": "system", "content": system_instruction}
+                    )
+                request_messages.extend(_normalize_messages(contents))
+
+                return client.chat.send(
+                    model=model,
+                    messages=request_messages,
+                    tools=tool_list or None,
+                    tool_choice="auto" if tool_list else None,
+                    parallel_tool_calls=True if function_declarations else None,
+                    temperature=temperature,
+                    top_p=top_p,
+                    response_format=response_format,
+                    reasoning=reasoning,
+                    stream=False,
+                    timeout_ms=600_000,
+                )
 
         return _retry_with_backoff(
             _attempt, max_retries=retries, backoff_sequence=backoff_seq
         )
 
     response = _make_request(messages)
-    input_tokens = (
-        response.usage_metadata.prompt_token_count if include_usage else None
-    )
+    input_tokens = _prompt_tokens(response) if include_usage else None
 
     if text_format is None:
         return (response, input_tokens) if include_usage else response
 
     # Structured output: parse JSON, retry with corrective feedback on failure
-    current_messages = (
-        [append_message("user", messages)] if isinstance(messages, str) else list(messages)
-    )
+    current_messages = _normalize_messages(messages)
 
     for attempt in range(_MAX_STRUCTURED_OUTPUT_RETRIES):
-        raw_text = response.text
+        raw_text = extract_text_from_response(response)
         if raw_text is not None:
             try:
                 parsed_result = text_format.model_validate_json(raw_text)
@@ -221,6 +256,4 @@ def call_llm(
         ]
 
         response = _make_request(current_messages)
-        input_tokens = (
-            response.usage_metadata.prompt_token_count if include_usage else None
-        )
+        input_tokens = _prompt_tokens(response) if include_usage else None

@@ -22,7 +22,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import weave
-from google.genai import types
 
 from agents.developer import DeveloperAgent
 from agents.researcher import ResearcherAgent
@@ -32,7 +31,16 @@ from tools.developer import _build_resource_header, execute_code
 from tools.helpers import call_llm
 from utils.compact import compact_messages, should_compact
 from utils.idea_pool import add_idea, load_index, remove_idea, update_idea
-from utils.llm_utils import append_message, get_main_agent_tools
+from utils.llm_utils import (
+    append_message,
+    assistant_message_from_response,
+    get_main_agent_tools,
+    get_response_tool_calls,
+    make_tool_message,
+    tool_call_args,
+    tool_call_id,
+    tool_call_name,
+)
 from utils.output import truncate_for_llm
 
 
@@ -83,18 +91,17 @@ class MainAgent:
             d.mkdir(parents=True, exist_ok=True)
         self.dev_iter = 0
         self.research_iter = 0
-        # Locks protect shared state when multiple function_calls in a single
-        # Gemini turn dispatch concurrently (see `_step` parallel path).
+        # Locks protect shared state when multiple tool calls in a single
+        # model turn dispatch concurrently (see `_step` parallel path).
         self._iter_lock = threading.Lock()   # dev_iter, research_iter, snippet counter
         self._idea_lock = threading.Lock()   # add_idea / remove_idea / update_idea
         self._log_lock = threading.Lock()    # chat-log append
         # Persistent snippet counter avoids a glob-based race where two parallel
         # `analyze` calls both see N files on disk and both write `N+1.py`.
         self._snippet_counter = len(list(self.snippets_dir.glob("*.py")))
-        # google-genai requires at least one content entry per call; seed with
-        # a canonical starter user turn so the first `_step()` has something to
-        # send. Subsequent steps accumulate model responses + tool results in
-        # this list.
+        # Seed with a canonical starter user turn so the first `_step()` has
+        # something to send. Subsequent steps accumulate model responses + tool
+        # results in this list.
         self.input_list: list[dict] = [append_message("user", _INITIAL_USER_TURN)]
         self.last_input_tokens: int | None = None
         # Rolling window of per-turn tool-call signatures. When the deque is
@@ -128,76 +135,60 @@ class MainAgent:
             system_instruction=system_prompt,
             messages=self.input_list,
             function_declarations=tools,
-            enable_google_search=False,
+            enable_web_search=False,
             include_usage=True,
         )
 
-        parts = response.candidates[0].content.parts
-        has_function_calls = any(
-            p.function_call for p in parts if hasattr(p, "function_call")
-        )
+        tool_calls = get_response_tool_calls(response)
+        has_tool_calls = bool(tool_calls)
+        assistant_msg = assistant_message_from_response(response)
 
-        self.input_list.append(
-            response.candidates[0].content.model_dump(mode="json", exclude_none=True)
-        )
-        self._log({"role": "assistant", "content": response.candidates[0].content.model_dump(mode="json", exclude_none=True)})
+        self.input_list.append(assistant_msg)
+        self._log({"role": "assistant", "content": assistant_msg})
 
-        if not has_function_calls:
+        if not has_tool_calls:
             logger.warning(
                 "MainAgent emitted text-only response; nudging back to tool use"
             )
             self.input_list.append(
                 append_message(
                     "user",
-                    "Your previous turn had no function_call — every step must "
-                    "be a tool call. Pick a tool from the declared palette and "
+                    "Your previous turn had no tool call — every step must be "
+                    "a tool call. Pick a tool from the declared palette and "
                     "call it now.",
                 )
             )
             return
 
-        call_parts = [
-            p for p in parts if hasattr(p, "function_call") and p.function_call
-        ]
-        results: list[tuple[str, dict, str] | None] = [None] * len(call_parts)
+        results: list[tuple[str, dict, str, str] | None] = [None] * len(tool_calls)
 
-        def _run(idx: int, fc) -> tuple[int, str, dict, str]:
-            args = dict(fc.args)
-            return idx, fc.name, args, self._dispatch(fc.name, args)
+        def _run(idx: int, call) -> tuple[int, str, dict, str, str]:
+            name = tool_call_name(call)
+            args = tool_call_args(call)
+            call_id = tool_call_id(call)
+            return idx, name, args, self._dispatch(name, args), call_id
 
-        if len(call_parts) == 1:
-            idx, name, args, result = _run(0, call_parts[0].function_call)
-            results[idx] = (name, args, result)
+        if len(tool_calls) == 1:
+            idx, name, args, result, call_id = _run(0, tool_calls[0])
+            results[idx] = (name, args, result, call_id)
         else:
             logger.info(
-                "MainAgent dispatching %d function_calls in parallel: %s",
-                len(call_parts),
-                [cp.function_call.name for cp in call_parts],
+                "MainAgent dispatching %d tool calls in parallel: %s",
+                len(tool_calls),
+                [tool_call_name(call) for call in tool_calls],
             )
-            with ThreadPoolExecutor(max_workers=len(call_parts)) as ex:
+            with ThreadPoolExecutor(max_workers=len(tool_calls)) as ex:
                 futs = [
-                    ex.submit(_run, i, cp.function_call)
-                    for i, cp in enumerate(call_parts)
+                    ex.submit(_run, i, call)
+                    for i, call in enumerate(tool_calls)
                 ]
                 for fut in futs:
-                    idx, name, args, result = fut.result()
-                    results[idx] = (name, args, result)
+                    idx, name, args, result, call_id = fut.result()
+                    results[idx] = (name, args, result, call_id)
 
-        function_responses = []
-        for name, args, result in results:
-            function_responses.append(
-                types.Part.from_function_response(
-                    name=name,
-                    response={"result": result},
-                )
-            )
+        for name, args, result, call_id in results:
+            self.input_list.append(make_tool_message(call_id, result))
             self._log({"role": "tool", "name": name, "args": args, "result": result})
-
-        self.input_list.append(
-            types.Content(role="function", parts=function_responses).model_dump(
-                mode="json", exclude_none=True
-            )
-        )
 
         # Stuck detection: if the last N turns made byte-identical tool calls,
         # the agent is spinning on a no-op (e.g. repeated `analyze(time.sleep(2))`
@@ -205,7 +196,7 @@ class MainAgent:
         # nudge so it tries something new instead.
         turn_sig = tuple(
             (name, json.dumps(args, sort_keys=True, ensure_ascii=False))
-            for name, args, _ in results
+            for name, args, _, _ in results
         )
         self._recent_call_sigs.append(turn_sig)
         if (

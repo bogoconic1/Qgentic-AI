@@ -3,7 +3,10 @@
 import pytest
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock
+from openrouter.components.chatassistantmessage import ChatAssistantMessage
+from openrouter.components.chatchoice import ChatChoice
+from openrouter.components.chatresult import ChatResult
+from openrouter.components.chattoolcall import ChatToolCall, ChatToolCallFunction
 
 from tools.developer import (
     execute_code,
@@ -333,27 +336,38 @@ def test_monitor_logs_with_bash_tool(monkeypatch):
     """monitor_logs() handles execute_bash tool calls from the LLM."""
     call_count = [0]
 
+    def _tool_response() -> ChatResult:
+        tool_call = ChatToolCall(
+            function=ChatToolCallFunction(
+                name="execute_bash",
+                arguments='{"command": "echo ok"}',
+            ),
+            id="call_123",
+            type="function",
+        )
+        return ChatResult(
+            choices=[
+                ChatChoice(
+                    finish_reason="tool_calls",
+                    index=0,
+                    message=ChatAssistantMessage(
+                        role="assistant",
+                        tool_calls=[tool_call],
+                    ),
+                )
+            ],
+            created=0,
+            id="chatcmpl_test",
+            model="deepseek/deepseek-v4-pro",
+            object="chat.completion",
+            system_fingerprint=None,
+        )
+
     def fake_call_llm(*args, **kwargs):
         call_count[0] += 1
 
         if call_count[0] == 1:
-            mock_fc = MagicMock()
-            mock_fc.name = "execute_bash"
-            mock_fc.args = {"command": "echo ok"}
-            mock_fc.id = "call_123"
-
-            mock_part = MagicMock(spec=["function_call"])
-            mock_part.function_call = mock_fc
-
-            mock_content = MagicMock()
-            mock_content.parts = [mock_part]
-
-            mock_candidate = MagicMock()
-            mock_candidate.content = mock_content
-
-            mock_response = MagicMock(spec=["candidates"])
-            mock_response.candidates = [mock_candidate]
-            return mock_response
+            return _tool_response()
 
         return LogMonitorVerdict(
             reasoning="GPU at 0% utilization — process is deadlocked",

@@ -11,12 +11,16 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from project_config import get_config
-from google.genai import types
 from tools.helpers import call_llm
 from utils.llm_utils import (
-    extract_text_from_response,
     append_message,
+    assistant_message_from_response,
     get_monitor_tools,
+    get_response_tool_calls,
+    make_tool_message,
+    tool_call_args,
+    tool_call_id,
+    tool_call_name,
 )
 from prompts.tools_developer import (
     build_stack_trace_prompt as prompt_stack_trace,
@@ -72,7 +76,7 @@ def web_search_stack_trace(query: str) -> str:
         model=_DEVELOPER_TOOL_MODEL,
         system_instruction=system_prompt,
         messages=messages,
-        enable_google_search=True,
+        enable_web_search=True,
         text_format=StackTraceSolution,
     )
 
@@ -279,9 +283,10 @@ def execute_code(
 
 def _execute_monitor_tool_call(item) -> str:
     """Execute a monitor tool call (execute_bash) and return the result as JSON."""
-    args = dict(item.args)
+    args = tool_call_args(item)
+    name = tool_call_name(item)
 
-    if item.name == "execute_bash":
+    if name == "execute_bash":
         command = args["command"]
         logger.info("Monitor tool: execute_bash(%s)", command)
         result = subprocess.run(
@@ -293,7 +298,7 @@ def _execute_monitor_tool_call(item) -> str:
         )
         return json.dumps({"output": result.stdout + result.stderr})
     else:
-        raise ValueError(f"Unknown monitor tool: {item.name}")
+        raise ValueError(f"Unknown monitor tool: {name}")
 
 
 def monitor_logs(
@@ -330,42 +335,35 @@ def monitor_logs(
             system_instruction=system_prompt,
             function_declarations=tools if not is_last_step else [],
             messages=input_list,
-            enable_google_search=False,
+            enable_web_search=False,
             text_format=text_format,
         )
 
-        # text_format is LogMonitorVerdict on last step (returns Pydantic), None otherwise
-        if hasattr(response, "action"):
+        # text_format is LogMonitorVerdict on last step (returns Pydantic), None otherwise.
+        if isinstance(response, LogMonitorVerdict):
             return response
 
-        parts = response.candidates[0].content.parts
-        has_function_calls = any(
-            part.function_call for part in parts if hasattr(part, "function_call")
-        )
+        tool_calls = get_response_tool_calls(response)
 
-        if not has_function_calls:
+        if not tool_calls:
             response = call_llm(
                 model=_DEVELOPER_TOOL_MODEL,
                 system_instruction=system_prompt,
                 messages=input_list,
-                enable_google_search=False,
+                enable_web_search=False,
                 text_format=LogMonitorVerdict,
             )
             return response
 
-        function_responses = []
-        for part in parts:
-            if hasattr(part, "function_call") and part.function_call:
-                tool_result_str = _execute_monitor_tool_call(part.function_call)
-                function_responses.append(
-                    types.Part.from_function_response(
-                        name=part.function_call.name,
-                        response={"result": tool_result_str},
-                    )
+        input_list.append(assistant_message_from_response(response))
+        for call in tool_calls:
+            tool_result_str = _execute_monitor_tool_call(call)
+            input_list.append(
+                make_tool_message(
+                    tool_call_id(call),
+                    tool_result_str,
                 )
-        input_list.append(response.candidates[0].content)
-        if function_responses:
-            input_list.append(types.Content(role="function", parts=function_responses))
+            )
 
     # Exhausted steps without a verdict — force one
     logger.warning("Monitor exhausted %d steps, forcing final verdict", max_tool_steps)
@@ -373,7 +371,7 @@ def monitor_logs(
         model=_DEVELOPER_TOOL_MODEL,
         system_instruction=system_prompt + "\n\nReturn your verdict now.",
         messages=input_list,
-        enable_google_search=False,
+        enable_web_search=False,
         text_format=LogMonitorVerdict,
     )
     return response

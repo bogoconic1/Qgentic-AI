@@ -1,6 +1,6 @@
 """
 LLM-based code safety checker for generated code.
-Uses Gemini 2.5 Flash for fast, intelligent security analysis.
+Uses the configured OpenRouter model for fast security analysis.
 
 Focuses on critical security issues only:
 - Code execution (eval, exec, compile)
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 _CONFIG = get_config()
 _LLM_CFG = _CONFIG["llm"]
-_SAFETY_MODEL = "gemini-2.5-flash"  # Latest Flash model (2025)
+_SAFETY_MODEL = _LLM_CFG["leakage_review_model"]
 
 
 def check_code_safety(code: str) -> dict:
@@ -46,9 +46,8 @@ def check_code_safety(code: str) -> dict:
         text_format=CodeSafetyCheck,
         temperature=0.0,
         max_retries=3,
-        enable_google_search=False,
+        enable_web_search=False,
         top_p=0.95,
-        thinking_budget=None,
     )
 
     decision = "proceed" if response.decision == "allow" else "block"

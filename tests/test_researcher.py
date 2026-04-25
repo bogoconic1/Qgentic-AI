@@ -6,6 +6,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
+from openrouter.components.chattoolcall import ChatToolCall, ChatToolCallFunction
 
 from agents import researcher as research_module
 
@@ -38,6 +39,14 @@ class _StubJob:
 
     def result(self):
         return self._output
+
+
+def _tool_call(name: str, args: dict) -> ChatToolCall:
+    return ChatToolCall(
+        function=ChatToolCallFunction(name=name, arguments=json.dumps(args)),
+        id=f"call_{name}",
+        type="function",
+    )
 
 
 @pytest.fixture
@@ -129,7 +138,7 @@ def test_execute_tool_call_dispatches_and_writes_markdown_records(stubbed):
     }
 
     # web_research
-    item = SimpleNamespace(name="web_research", args={"query": "foo", "num_results": 2})
+    item = _tool_call("web_research", {"query": "foo", "num_results": 2})
     research_module._execute_tool_call(item, state)
     wr_record = (stubbed.research_dir / "web_research" / "1.md").read_text()
     assert "# web_research #1" in wr_record
@@ -137,14 +146,14 @@ def test_execute_tool_call_dispatches_and_writes_markdown_records(stubbed):
     assert "body-a" in wr_record
 
     # web_fetch
-    item = SimpleNamespace(name="web_fetch", args={"url": "https://e.example"})
+    item = _tool_call("web_fetch", {"url": "https://e.example"})
     research_module._execute_tool_call(item, state)
     wf_record = (stubbed.research_dir / "web_fetch" / "1.md").read_text()
     assert "# web_fetch #1" in wf_record
     assert "# hello\nworld" in wf_record
 
     # write_python_code — no markdown record, but script IS written
-    item = SimpleNamespace(name="write_python_code", args={"code": "x=1"})
+    item = _tool_call("write_python_code", {"code": "x=1"})
     research_module._execute_tool_call(item, state)
     assert (stubbed.scripts_dir / "1.py").exists()
     assert not (stubbed.research_dir / "write_python_code").exists()
@@ -152,7 +161,7 @@ def test_execute_tool_call_dispatches_and_writes_markdown_records(stubbed):
     # unknown tool raises
     with pytest.raises(ValueError, match="Unknown tool"):
         research_module._execute_tool_call(
-            SimpleNamespace(name="nope", args={}), state
+            _tool_call("nope", {}), state
         )
 
 

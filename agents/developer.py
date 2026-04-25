@@ -22,7 +22,6 @@ from pathlib import Path
 from typing import Any
 
 import weave
-from google.genai import types
 
 from agents.explorer import explore_codebase
 from project_config import get_config
@@ -41,7 +40,17 @@ from tools.helpers import call_llm
 from utils.code_utils import extract_python_code
 from utils.compact import compact_messages, should_compact
 from utils.guardrails import build_block_summary, evaluate_guardrails
-from utils.llm_utils import append_message, get_developer_tools
+from utils.llm_utils import (
+    append_message,
+    assistant_message_from_response,
+    extract_text_from_response,
+    get_developer_tools,
+    get_response_tool_calls,
+    make_tool_message,
+    tool_call_args,
+    tool_call_id,
+    tool_call_name,
+)
 from utils.output import truncate_for_llm
 
 
@@ -223,7 +232,7 @@ class DeveloperAgent:
             if stats_path.exists():
                 try:
                     stats = json.loads(stats_path.read_text())
-                    score = float(stats.get("score"))
+                    score = float(stats["score"])
                     if math.isfinite(score):
                         return {
                             "status": "success",
@@ -292,19 +301,14 @@ class DeveloperAgent:
                 messages=input_list,
                 text_format=None,
                 function_declarations=tools,
-                enable_google_search=True,
+                enable_web_search=True,
                 include_usage=True,
             )
 
-            parts = response.candidates[0].content.parts
-            has_function_calls = any(
-                part.function_call
-                for part in parts
-                if hasattr(part, "function_call")
-            )
+            tool_calls = get_response_tool_calls(response)
 
-            if not has_function_calls:
-                raw_text = response.text or ""
+            if not tool_calls:
+                raw_text = extract_text_from_response(response)
                 code = extract_python_code(raw_text)
                 if not code:
                     raise ValueError(
@@ -312,53 +316,41 @@ class DeveloperAgent:
                     )
                 return code, last_input_tokens
 
-            function_responses = []
-            for call_idx, part in enumerate(parts, start=1):
-                if hasattr(part, "function_call") and part.function_call:
-                    tool_result_str = self._execute_developer_tool_call(
-                        part.function_call,
-                        attempt_dir=attempt_dir,
-                        step=step,
-                        call_idx=call_idx,
-                    )
-                    function_responses.append(
-                        types.Part.from_function_response(
-                            name=part.function_call.name,
-                            response={"result": tool_result_str},
-                        )
-                    )
-
-            input_list.append(
-                response.candidates[0].content.model_dump(
-                    mode="json", exclude_none=True
+            input_list.append(assistant_message_from_response(response))
+            for call_idx, call in enumerate(tool_calls, start=1):
+                tool_result_str = self._execute_developer_tool_call(
+                    call,
+                    attempt_dir=attempt_dir,
+                    step=step,
+                    call_idx=call_idx,
                 )
-            )
-            if function_responses:
                 input_list.append(
-                    types.Content(
-                        role="function", parts=function_responses
-                    ).model_dump(mode="json", exclude_none=True)
+                    make_tool_message(
+                        tool_call_id(call),
+                        tool_result_str,
+                    )
                 )
 
     def _execute_developer_tool_call(
         self,
-        function_call,
+        tool_call,
         *,
         attempt_dir: Path,
         step: int,
         call_idx: int,
     ) -> str:
         """Dispatch a tool call made during code generation."""
-        args = dict(function_call.args)
+        args = tool_call_args(tool_call)
+        name = tool_call_name(tool_call)
 
-        if function_call.name == "explore_codebase":
+        if name == "explore_codebase":
             query = args["query"]
             logger.info("explore_codebase called: %s", query[:100])
             return truncate_for_llm(explore_codebase(query))
 
-        if function_call.name == "analyze":
+        if name == "analyze":
             code = args["code"]
-            timeout = args.get("timeout_seconds", 300)
+            timeout = args["timeout_seconds"] if "timeout_seconds" in args else 300
             logger.info(
                 "analyze called (step %s call %s, %d bytes, timeout=%ds)",
                 step,
@@ -373,4 +365,4 @@ class DeveloperAgent:
             job = execute_code(str(script_file), timeout_seconds=timeout)
             return json.dumps({"output": truncate_for_llm(job.result(), script_file.with_suffix(".txt"))})
 
-        return json.dumps({"error": f"Unknown tool: {function_call.name}"})
+        return json.dumps({"error": f"Unknown tool: {name}"})

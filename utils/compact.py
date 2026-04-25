@@ -3,7 +3,7 @@
 Triggered after every ``call_llm`` whose returned ``prompt_token_count``
 exceeds ``runtime.compaction_threshold_tokens``. Replaces the front of the
 ``input_list`` with a single user-role summary message produced by a
-one-shot Gemini call against the same model the agent is using.
+one-shot OpenRouter call against the same model the agent is using.
 
 Public API:
     should_compact(last_input_tokens) -> bool
@@ -18,7 +18,7 @@ import re
 
 from project_config import get_config_value
 from tools.helpers import call_llm
-from utils.llm_utils import append_message
+from utils.llm_utils import append_message, extract_text_from_response
 
 
 logger = logging.getLogger(__name__)
@@ -73,7 +73,7 @@ Format your output as:
 9. Optional Next Step: ...
 </summary>
 
-The conversation to summarise is provided below inside <conversation> tags as a JSON array of message objects (each with a role and parts). Produce only the <analysis> and <summary> blocks — no other text.
+The conversation to summarise is provided below inside <conversation> tags as a JSON array of OpenRouter chat message objects. Produce only the <analysis> and <summary> blocks — no other text.
 
 <conversation>
 {conversation_json}
@@ -112,10 +112,10 @@ def should_compact(last_input_tokens: int | None) -> bool:
 def compact_messages(input_list: list[dict], *, model: str) -> list[dict]:
     """Summarise the front of ``input_list`` and return ``[summary_user, *kept]``.
 
-    ``kept`` is the last ``runtime.compaction_keep_last`` entries. Gemini's
-    "conversation must start with user" rule is satisfied by the prepended
-    ``summary_user`` turn, so ``kept`` may start on any role — including an
-    orphaned function-response whose function_call was summarised away.
+    ``kept`` is the last ``runtime.compaction_keep_last`` entries. The
+    prepended ``summary_user`` turn gives the model a fresh user message, so
+    ``kept`` may start on any role — including an orphaned tool response whose
+    initiating tool call was summarised away.
     """
     keep_last = get_config_value("runtime", "compaction_keep_last")
     if keep_last is None:
@@ -143,9 +143,9 @@ def compact_messages(input_list: list[dict], *, model: str) -> list[dict]:
             conversation_json=json.dumps(old, ensure_ascii=False)
         ),
         function_declarations=None,
-        enable_google_search=False,
+        enable_web_search=False,
     )
-    summary_text = _format_summary((response.text or "").strip())
+    summary_text = _format_summary(extract_text_from_response(response).strip())
     summary_msg = append_message("user", _SUMMARY_PREAMBLE + summary_text)
     return [summary_msg, *recent]
 

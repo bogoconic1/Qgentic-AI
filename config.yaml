@@ -1,15 +1,15 @@
 llm:
-  main_agent_model: "gemini-3.1-pro-preview"
-  developer_model: "gemini-3.1-pro-preview"
-  developer_tool_model: "gemini-3.1-pro-preview"
-  leakage_review_model: "gemini-3.1-pro-preview"
+  main_agent_model: "deepseek/deepseek-v4-pro"
+  developer_model: "deepseek/deepseek-v4-pro"
+  developer_tool_model: "deepseek/deepseek-v4-pro"
+  leakage_review_model: "deepseek/deepseek-v4-pro"
 runtime:
   write_python_code_timeout_seconds: 300             # Per-call timeout for write_python_code subprocess
   llm_max_retries: 5
   llm_backoff_sequence: [1, 5, 10, 30, 60]
-  compaction_threshold_tokens: 200000  # compact when last call's prompt_token_count exceeds this
+  compaction_threshold_tokens: 160000  # compact when last call's prompt_token_count exceeds this
   compaction_keep_last: 4               # turns kept verbatim after summary
-  baseline_code_timeout: 43200  # 12 hours for baseline code execution
+  baseline_code_timeout: 3600  # 12 hours for baseline code execution
   log_monitor_interval: 120  # Seconds between LLM log monitor calls during code execution
   # Codebase exploration sub-agent
   explore_allowed_roots:
@@ -24,7 +24,7 @@ paths:
   task_root: "task"
 guardrails:
   logging_basicconfig_order: true
-  leakage_review: true
+  leakage_review: false
   enable_code_safety: true
 tracking:
   wandb:

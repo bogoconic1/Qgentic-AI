@@ -7,45 +7,61 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from openrouter.components.chatassistantmessage import ChatAssistantMessage
+from openrouter.components.chatchoice import ChatChoice
+from openrouter.components.chatresult import ChatResult
+from openrouter.components.chattoolcall import ChatToolCall, ChatToolCallFunction
 
 from agents import main_agent
 from agents.main_agent import MainAgent
 
 
-def _fake_fc(name: str, **args):
-    """Build a response whose single part is a function_call matching the given name/args."""
-    fc = SimpleNamespace(name=name, args=args)
-    part = SimpleNamespace(function_call=fc)
-    content = SimpleNamespace(parts=[part])
-    content.model_dump = lambda **_: {
-        "role": "model",
-        "parts": [{"function_call": {"name": name, "args": dict(args)}}],
-    }
-    candidate = SimpleNamespace(content=content)
-    return SimpleNamespace(candidates=[candidate])
+def _chat_response(message: ChatAssistantMessage, finish_reason: str) -> ChatResult:
+    return ChatResult(
+        choices=[ChatChoice(finish_reason=finish_reason, index=0, message=message)],
+        created=0,
+        id="chatcmpl_test",
+        model="deepseek/deepseek-v4-pro",
+        object="chat.completion",
+        system_fingerprint=None,
+    )
 
 
-def _fake_text(text: str):
-    """Build a text-only response (no function_call attribute on the part)."""
-    part = SimpleNamespace(text=text)  # intentionally has no function_call
-    content = SimpleNamespace(parts=[part])
-    content.model_dump = lambda **_: {"role": "model", "parts": [{"text": text}]}
-    candidate = SimpleNamespace(content=content)
-    return SimpleNamespace(candidates=[candidate])
+def _tool_call(name: str, args: dict, call_id: str) -> ChatToolCall:
+    return ChatToolCall(
+        function=ChatToolCallFunction(name=name, arguments=json.dumps(args)),
+        id=call_id,
+        type="function",
+    )
 
 
-def _fake_multi(*calls: tuple[str, dict]):
-    """Build a response whose parts are several function_calls in the given order."""
-    parts = []
-    dumped_parts = []
-    for name, args in calls:
-        fc = SimpleNamespace(name=name, args=dict(args))
-        parts.append(SimpleNamespace(function_call=fc))
-        dumped_parts.append({"function_call": {"name": name, "args": dict(args)}})
-    content = SimpleNamespace(parts=parts)
-    content.model_dump = lambda **_: {"role": "model", "parts": dumped_parts}
-    candidate = SimpleNamespace(content=content)
-    return SimpleNamespace(candidates=[candidate])
+def _fake_fc(name: str, **args) -> ChatResult:
+    """Build a response whose single tool call matches the given name/args."""
+    message = ChatAssistantMessage(
+        role="assistant",
+        tool_calls=[_tool_call(name, dict(args), "call_0")],
+    )
+    return _chat_response(message, "tool_calls")
+
+
+def _fake_text(text: str) -> ChatResult:
+    """Build a text-only response."""
+    return _chat_response(
+        ChatAssistantMessage(role="assistant", content=text),
+        "stop",
+    )
+
+
+def _fake_multi(*calls: tuple[str, dict]) -> ChatResult:
+    """Build a response whose tool calls are emitted in the given order."""
+    tool_calls = [
+        _tool_call(name, dict(args), f"call_{idx}")
+        for idx, (name, args) in enumerate(calls)
+    ]
+    return _chat_response(
+        ChatAssistantMessage(role="assistant", tool_calls=tool_calls),
+        "tool_calls",
+    )
 
 
 @pytest.fixture
@@ -173,7 +189,7 @@ def test_baseline_develop_passes_goal_as_idea(patched_main_agent, monkeypatch):
 
 
 def test_parallel_dispatch_preserves_order(patched_main_agent, monkeypatch):
-    """Multiple function_calls in one turn execute and keep original ordering."""
+    """Multiple tool calls in one turn execute and keep original ordering."""
     agent = MainAgent(slug="test", run_id="r1", goal_text="do the thing")
 
     # Seed the idea pool with two ideas the LLM can develop.
@@ -194,11 +210,10 @@ def test_parallel_dispatch_preserves_order(patched_main_agent, monkeypatch):
     assert len(patched_main_agent["dev_calls"]) == 2
     assert sorted(c["dev_iter"] for c in patched_main_agent["dev_calls"]) == [1, 2]
 
-    # function_response Content appended to input_list matches function_call order.
-    func_content = agent.input_list[-1]
-    assert func_content["role"] == "function"
-    emitted_names = [p["function_response"]["name"] for p in func_content["parts"]]
-    assert emitted_names == ["analyze", "develop", "develop"]
+    # Tool result messages are appended in the same order as the model tool calls.
+    emitted_tool_ids = [m["tool_call_id"] for m in agent.input_list[-3:]]
+    assert emitted_tool_ids == ["call_0", "call_1", "call_2"]
+    assert [m["role"] for m in agent.input_list[-3:]] == ["tool", "tool", "tool"]
 
     # Chat log: assistant turn + 3 tool records in the original order.
     records = [json.loads(line) for line in agent.chat_log.read_text().splitlines()]
@@ -257,9 +272,8 @@ def test_stuck_nudge_fires_after_repeated_identical_calls(
         for msg in messages:
             if msg.get("role") != "user":
                 continue
-            for part in msg.get("parts", []):
-                if nudge_text in part.get("text", ""):
-                    return True
+            if nudge_text in msg["content"]:
+                return True
         return False
 
     # First (threshold-1) repeats: no nudge yet — pattern not confirmed.
@@ -271,11 +285,11 @@ def test_stuck_nudge_fires_after_repeated_identical_calls(
     agent._step([])
     last = agent.input_list[-1]
     assert last["role"] == "user"
-    assert nudge_text in last["parts"][0]["text"]
+    assert nudge_text in last["content"]
 
     # History reset, so the next identical turn does NOT immediately re-nudge.
     agent._step([])
-    assert agent.input_list[-1]["role"] == "function"
+    assert agent.input_list[-1]["role"] == "tool"
 
 
 def test_stuck_nudge_does_not_fire_for_varied_calls(patched_main_agent, monkeypatch):
@@ -298,8 +312,7 @@ def test_stuck_nudge_does_not_fire_for_varied_calls(patched_main_agent, monkeypa
     for msg in agent.input_list:
         if msg.get("role") != "user":
             continue
-        for part in msg.get("parts", []):
-            assert nudge_text not in part.get("text", "")
+        assert nudge_text not in msg["content"]
 
 
 def test_text_only_response_is_logged_and_ignored(patched_main_agent, monkeypatch, caplog):

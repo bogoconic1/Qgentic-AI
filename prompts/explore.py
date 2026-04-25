@@ -34,7 +34,7 @@ You may read files anywhere under the following root directories. Reads outside 
 - `list_dir(path, max_entries?)` — list immediate children of a directory. Directories are suffixed with `/`.
 - `bash_readonly(command)` — run a single read-only shell command. Only these commands are allowed: `ls`, `cat`, `head`, `tail`, `wc`, `file`, `find`, `grep`, `tree`, `du`, `stat`, `git status`, `git log`, `git diff`, `git show`, `git blame`, `git ls-files`, `git ls-tree`. Pipes (`|`), redirection (`>`, `<`, `>>`), command chaining (`;`, `&&`, `||`), backticks, and `$()` are forbidden — use the dedicated tools above for those needs.
 
-You also have Google search available — use it when you need API documentation or examples that aren't in the local codebase.
+You also have OpenRouter web search available — use it when you need API documentation or examples that aren't in the local codebase.
 
 ## Guidelines
 - Make efficient use of the tools: be smart about how you search.

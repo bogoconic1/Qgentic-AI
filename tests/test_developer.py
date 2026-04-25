@@ -4,20 +4,32 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
+from openrouter.components.chatassistantmessage import ChatAssistantMessage
+from openrouter.components.chatchoice import ChatChoice
+from openrouter.components.chatresult import ChatResult
 
 from agents import developer
 from agents.developer import DeveloperAgent
 
 
-def _fake_llm_response(text: str) -> SimpleNamespace:
-    """Mimic the shape of a genai text response with a single text-only part."""
-    text_part = SimpleNamespace(text=text)
-    content = SimpleNamespace(parts=[text_part])
-    candidate = SimpleNamespace(content=content)
-    return SimpleNamespace(text=text, candidates=[candidate])
+def _fake_llm_response(text: str) -> ChatResult:
+    """Mimic an OpenRouter text response."""
+    return ChatResult(
+        choices=[
+            ChatChoice(
+                finish_reason="stop",
+                index=0,
+                message=ChatAssistantMessage(role="assistant", content=text),
+            )
+        ],
+        created=0,
+        id="chatcmpl_test",
+        model="deepseek/deepseek-v4-pro",
+        object="chat.completion",
+        system_fingerprint=None,
+    )
 
 
 def _valid_script() -> str:
