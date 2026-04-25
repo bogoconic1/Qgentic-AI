@@ -80,6 +80,42 @@ def test_compact_messages_summarises_and_keeps_last_n(monkeypatch):
     assert out[1:] == msgs[4:]
 
 
+def test_compact_messages_handles_backslash_escapes_in_summary(monkeypatch):
+    """Regression: summary body containing \\d / \\w / \\n must not crash.
+
+    `re.sub` used to receive the summary body as a replacement template and
+    choke on any `\\<letter>` sequence with `re.error: bad escape`. The LLM's
+    summary can legitimately contain such sequences (regex explanations,
+    Windows paths, LaTeX). Use `.replace` instead.
+    """
+    troubling_body = r"regex: \d+\w+ and Windows path C:\Users\x; LaTeX \dfrac{a}{b}"
+    monkeypatch.setattr(
+        compact,
+        "call_llm",
+        lambda **kw: SimpleNamespace(
+            text=f"<summary>{troubling_body}</summary>"
+        ),
+    )
+    msgs = [
+        _msg("user", "u1"),
+        _msg("model", "m1"),
+        _msg("function", "f1"),
+        _msg("user", "u2"),
+        _msg("model", "m2"),
+        _msg("function", "f2"),
+        _msg("user", "u3"),
+        _msg("model", "m3"),
+    ]
+
+    out = compact_messages(msgs, model="gemini-3.1-pro-preview")
+
+    assert out[0]["role"] == "user"
+    # The raw backslash sequences survive into the summary body verbatim.
+    assert r"\d+" in out[0]["parts"][0]["text"]
+    assert r"C:\Users\x" in out[0]["parts"][0]["text"]
+    assert r"\dfrac" in out[0]["parts"][0]["text"]
+
+
 def test_compact_messages_summarises_even_when_kept_starts_on_non_user(monkeypatch):
     """MainAgent shape: only one user (index 0); kept may start on any role."""
     called = []
