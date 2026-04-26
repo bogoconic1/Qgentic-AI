@@ -302,6 +302,35 @@ def test_stuck_nudge_does_not_fire_for_varied_calls(patched_main_agent, monkeypa
             assert nudge_text not in part.get("text", "")
 
 
+def test_filesystem_tool_calls_route_to_filesystem_helpers(
+    patched_main_agent, monkeypatch
+):
+    """A `list_dir` tool call from MainAgent is dispatched to tools.filesystem."""
+    captured = {}
+
+    def fake_execute_filesystem_tool(name, args):
+        captured["name"] = name
+        captured["args"] = args
+        return json.dumps({"entries": ["fake/"], "total": 1})
+
+    monkeypatch.setattr(
+        main_agent, "execute_filesystem_tool", fake_execute_filesystem_tool
+    )
+
+    agent = MainAgent(slug="test", run_id="r1", goal_text="do the thing")
+    response = _fake_fc("list_dir", path="/workspace")
+    monkeypatch.setattr(main_agent, "call_llm", lambda **kwargs: (response, 0))
+
+    agent._step([])
+
+    assert captured == {"name": "list_dir", "args": {"path": "/workspace"}}
+    records = [json.loads(line) for line in agent.chat_log.read_text().splitlines()]
+    tool_records = [r for r in records if r["role"] == "tool"]
+    assert len(tool_records) == 1
+    assert tool_records[0]["name"] == "list_dir"
+    assert json.loads(tool_records[0]["result"])["entries"] == ["fake/"]
+
+
 def test_text_only_response_is_logged_and_ignored(patched_main_agent, monkeypatch, caplog):
     agent = MainAgent(slug="test", run_id="r1", goal_text="do the thing")
     monkeypatch.setattr(

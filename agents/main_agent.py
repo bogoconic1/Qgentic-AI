@@ -29,6 +29,7 @@ from agents.researcher import ResearcherAgent
 from project_config import get_config
 from prompts.main_agent import build_system
 from tools.developer import _build_resource_header, execute_code
+from tools.filesystem import execute_filesystem_tool
 from tools.helpers import call_llm
 from utils.compact import compact_messages, should_compact
 from utils.idea_pool import add_idea, load_index, remove_idea, update_idea
@@ -277,6 +278,10 @@ class MainAgent:
             with self._idea_lock:
                 update_idea(self.ideas_dir, args["idea_id"], args["description"])
             return json.dumps({"ok": True})
+
+        fs_result = execute_filesystem_tool(name, args)
+        if fs_result is not None:
+            return truncate_for_llm(fs_result)
 
         return json.dumps({"error": f"Unknown tool: {name}"})
 
