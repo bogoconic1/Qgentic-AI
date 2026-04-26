@@ -182,6 +182,25 @@ def test_filesystem_tool_calls_route_to_filesystem_helpers(stubbed, monkeypatch)
     assert json.loads(out)["returncode"] == 0
 
 
+def test_build_system_inlines_custom_instructions():
+    """The researcher system prompt inlines RESEARCHER_INSTRUCTIONS.md when present."""
+    from prompts.research import build_system
+
+    body = "Cite at least three peer-reviewed sources per claim."
+    out = build_system(custom_instructions=body)
+    assert "<custom_instructions>" in out
+    assert body in out
+
+
+def test_build_system_omits_section_when_no_instructions():
+    """Absent / empty custom_instructions → no <custom_instructions> wrapper."""
+    from prompts.research import build_system
+
+    assert "<custom_instructions>" not in build_system()
+    assert "<custom_instructions>" not in build_system(custom_instructions="")
+    assert "<custom_instructions>" not in build_system(custom_instructions="   \n")
+
+
 def test_render_tool_record_markdown_error_path():
     rendered = research_module._render_tool_record_markdown(
         "web_research", 2, {"query": "q"}, json.dumps({"error": "exa down"})

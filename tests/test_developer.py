@@ -216,6 +216,29 @@ def test_filesystem_tool_calls_route_to_filesystem_helpers(
     assert json.loads(result)["entries"] == ["fake/"]
 
 
+def test_developer_instructions_appended_to_system_prompt(fake_pipeline, tmp_path):
+    """If task/<slug>/DEVELOPER_INSTRUCTIONS.md exists, its body is inlined."""
+    task_dir = tmp_path / "task" / "test-slug"
+    task_dir.mkdir(parents=True, exist_ok=True)
+    (task_dir / "DEVELOPER_INSTRUCTIONS.md").write_text(
+        "Always emit the score as a percent multiplied by 100."
+    )
+
+    dev = DeveloperAgent(slug="test-slug", run_id="r1", dev_iter=1)
+    dev.run(idea="Produce a finite score.")
+
+    system_prompt = fake_pipeline["system_prompts"][0]
+    assert "<custom_instructions>" in system_prompt
+    assert "Always emit the score as a percent multiplied by 100." in system_prompt
+
+
+def test_developer_instructions_omitted_when_file_missing(fake_pipeline, tmp_path):
+    """Absent DEVELOPER_INSTRUCTIONS.md → no <custom_instructions> section."""
+    dev = DeveloperAgent(slug="test-slug", run_id="r1", dev_iter=1)
+    dev.run(idea="Produce a finite score.")
+    assert "<custom_instructions>" not in fake_pipeline["system_prompts"][0]
+
+
 def test_previous_code_threaded_into_system_prompt(fake_pipeline, tmp_path):
     """dev_iter=2 with a prior successful developer_1/<k>/ should inline previous_code."""
     # Seed a prior successful run

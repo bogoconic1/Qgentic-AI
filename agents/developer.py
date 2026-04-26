@@ -143,6 +143,13 @@ class DeveloperAgent:
                     return train_py.read_text()
         return None
 
+    def _load_custom_instructions(self) -> str | None:
+        """Read `task/<slug>/DEVELOPER_INSTRUCTIONS.md` if it exists."""
+        path = _TASK_ROOT / self.slug / "DEVELOPER_INSTRUCTIONS.md"
+        if not path.exists():
+            return None
+        return path.read_text(encoding="utf-8")
+
     @weave.op()
     def run(self, idea: str) -> dict[str, Any]:
         """Run one developer iteration; retry on failure until success."""
@@ -150,6 +157,7 @@ class DeveloperAgent:
         system_prompt = codegen_system(
             idea=idea,
             previous_code=previous_code,
+            custom_instructions=self._load_custom_instructions(),
         )
 
         input_list: list[dict] = [
