@@ -32,7 +32,7 @@ You may read files anywhere under the following root directories. Reads outside 
 - `glob_files(root, pattern)` — find files matching a glob pattern under `root`. Up to 50 matches.
 - `grep_code(root, pattern, file_glob?, max_results?)` — recursive regex search under `root`. `file_glob` defaults to `*.py`; pass `*` to search all file types.
 - `list_dir(path, max_entries?)` — list immediate children of a directory. Directories are suffixed with `/`.
-- `bash_readonly(command)` — run a single read-only shell command. Only these commands are allowed: `ls`, `cat`, `head`, `tail`, `wc`, `file`, `find`, `grep`, `tree`, `du`, `stat`, `git status`, `git log`, `git diff`, `git show`, `git blame`, `git ls-files`, `git ls-tree`. Pipes (`|`), redirection (`>`, `<`, `>>`), command chaining (`;`, `&&`, `||`), backticks, and `$()` are forbidden — use the dedicated tools above for those needs.
+- `bash(command)` — run a shell command via `bash -c` (pipes, redirection, chaining, backticks, and `$()` all work). An LLM safety judge inspects every command and blocks anything that could damage the host (e.g. `rm -rf /`, `dd` against block devices, fork bombs, pipe-to-shell, writes to system paths). For this exploration task you should still prefer the dedicated `read_file`/`glob_files`/`grep_code`/`list_dir` tools — they're cheaper and structured.
 
 You also have Google search available — use it when you need API documentation or examples that aren't in the local codebase.
 

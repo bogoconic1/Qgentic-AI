@@ -37,6 +37,7 @@ from tools.developer import (
     execute_with_monitor,
     web_search_stack_trace,
 )
+from tools.filesystem import execute_filesystem_tool
 from tools.helpers import call_llm
 from utils.code_utils import extract_python_code
 from utils.compact import compact_messages, should_compact
@@ -372,5 +373,9 @@ class DeveloperAgent:
             script_file.write_text(_build_resource_header() + code)
             job = execute_code(str(script_file), timeout_seconds=timeout)
             return json.dumps({"output": truncate_for_llm(job.result(), script_file.with_suffix(".txt"))})
+
+        fs_result = execute_filesystem_tool(function_call.name, args)
+        if fs_result is not None:
+            return truncate_for_llm(fs_result)
 
         return json.dumps({"error": f"Unknown tool: {function_call.name}"})

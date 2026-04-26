@@ -40,6 +40,7 @@ from google.genai import types
 from project_config import get_config
 from prompts.research import build_system, build_user
 from tools.developer import _build_resource_header, execute_code
+from tools.filesystem import execute_filesystem_tool
 from tools.helpers import call_llm
 from utils.compact import compact_messages, should_compact
 from utils.llm_utils import append_message, get_deep_research_tools
@@ -190,7 +191,10 @@ def _execute_tool_call(item, state: dict) -> str:
             args["code"], tool_seq, state["scripts_dir"]
         )
     else:
-        raise ValueError(f"Unknown tool: {tool_name}")
+        fs_result = execute_filesystem_tool(tool_name, args)
+        if fs_result is None:
+            raise ValueError(f"Unknown tool: {tool_name}")
+        return truncate_for_llm(fs_result)
 
     # Write audit record with FULL result before truncating for the LLM.
     if tool_name in ("web_research", "web_fetch"):

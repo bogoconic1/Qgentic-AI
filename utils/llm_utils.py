@@ -145,7 +145,12 @@ def get_monitor_tools():
 
 
 def get_deep_research_tools():
-    """Inner tools available to the Deep Research sub-agent."""
+    """Inner tools available to the Deep Research sub-agent.
+
+    The three research-specific tools (web_research / web_fetch /
+    write_python_code) plus the shared filesystem tools (read_file /
+    glob_files / grep_code / list_dir / bash).
+    """
     return [
         types.FunctionDeclaration(
             name="web_research",
@@ -211,16 +216,26 @@ def get_deep_research_tools():
                 "required": ["code"],
             },
         ),
+        *get_filesystem_tools(),
     ]
 
 
 # ---------------------------------------------------------------------------
-# Explore tools (read-only, scoped to runtime.explore_allowed_roots)
+# Filesystem + explore tools (scoped to runtime.explore_allowed_roots)
 # ---------------------------------------------------------------------------
 
 
-def get_explore_tools():
-    """Get the read-only tools available to the codebase exploration sub-agent."""
+def get_filesystem_tools():
+    """Five Linux-style tools (read/glob/grep/list/bash) shared across subagents.
+
+    The four read-only tools (`read_file`, `glob_files`, `grep_code`,
+    `list_dir`) reject paths outside the configured allowed roots. The
+    fifth tool, `bash`, is widened: it goes through `bash -c` so pipes,
+    redirection, and chaining all work — but every command is run past
+    an LLM safety judge first. The judge blocks destructive operations
+    (`rm -rf /`, `dd` to a disk, fork bombs, pipe-to-shell, writes to
+    system paths, etc.).
+    """
     return [
         types.FunctionDeclaration(
             name="read_file",
@@ -307,26 +322,38 @@ def get_explore_tools():
             },
         ),
         types.FunctionDeclaration(
-            name="bash_readonly",
+            name="bash",
             description=(
-                "Run a single read-only shell command. ONLY these commands are allowed: "
-                "ls, cat, head, tail, wc, file, find, grep, tree, du, stat, "
-                "git status, git log, git diff, git show, git blame, git ls-files, git ls-tree. "
-                "Pipes (|), redirection (>, <, >>), command chaining (;, &&, ||), backticks, and $() are forbidden — "
-                "use the dedicated read_file/glob_files/grep_code/list_dir tools instead."
+                "Run a shell command via `bash -c`. Pipes, redirection, chaining, "
+                "backticks, and $() all work. An LLM safety judge inspects every "
+                "command first and blocks destructive operations (rm -rf /, dd "
+                "against block devices, mkfs, fork bombs, pipe-to-shell, writes "
+                "to /etc/usr/lib/boot/sys/proc/dev/var/root, force-pushes, "
+                "shutdown/reboot, etc.). Use this for the long tail of operations "
+                "the dedicated tools don't cover: `cp`, `mv`, `mkdir`, `rm` of "
+                "project files, `tar`, `pip install`, `python script.py | tee log`."
             ),
             parameters_json_schema={
                 "type": "object",
                 "properties": {
                     "command": {
                         "type": "string",
-                        "description": "The shell command to run (e.g. 'ls -la /workspace/Qgentic-AI/agents').",
+                        "description": "The shell command to run (passed verbatim to `bash -c`).",
                     },
                 },
                 "required": ["command"],
             },
         ),
     ]
+
+
+def get_explore_tools():
+    """Get the tools available to the codebase exploration sub-agent.
+
+    Same shape as :func:`get_filesystem_tools`; kept as a separate name so
+    the explorer can diverge later if it ever needs to.
+    """
+    return get_filesystem_tools()
 
 
 # ---------------------------------------------------------------------------
@@ -455,7 +482,12 @@ def get_main_agent_tools():
 
 
 def get_developer_tools():
-    """Get tools available to the developer agents during code generation."""
+    """Get tools available to the developer agents during code generation.
+
+    `explore_codebase` (codebase Q&A) plus `analyze` (Python in subprocess)
+    plus the shared filesystem tools (read_file / glob_files / grep_code /
+    list_dir / bash).
+    """
     return [
         types.FunctionDeclaration(
             name="explore_codebase",
@@ -506,4 +538,5 @@ def get_developer_tools():
                 "required": ["code"],
             },
         ),
+        *get_filesystem_tools(),
     ]

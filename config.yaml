@@ -3,6 +3,7 @@ llm:
   developer_model: "gemini-3.1-pro-preview"
   developer_tool_model: "gemini-3.1-pro-preview"
   leakage_review_model: "gemini-3.1-pro-preview"
+  bash_judge_model: "gemini-3.1-pro-preview"  # judges every shell command before execution
 runtime:
   write_python_code_timeout_seconds: 300             # Per-call timeout for write_python_code subprocess
   llm_max_retries: 5
@@ -11,6 +12,7 @@ runtime:
   compaction_keep_last: 4               # turns kept verbatim after summary
   baseline_code_timeout: 43200  # 12 hours for baseline code execution
   log_monitor_interval: 120  # Seconds between LLM log monitor calls during code execution
+  bash_timeout_seconds: 600  # Per-call timeout for the bash filesystem tool
   # Codebase exploration sub-agent
   explore_allowed_roots:
     # Paths the explore subagent is allowed to read.
