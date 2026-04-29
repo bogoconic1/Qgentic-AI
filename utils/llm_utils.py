@@ -478,6 +478,7 @@ def get_main_agent_tools():
                 "required": ["idea_id", "description"],
             },
         ),
+        *get_filesystem_tools(),
     ]
 
 
