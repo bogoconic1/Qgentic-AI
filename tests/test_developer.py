@@ -186,6 +186,36 @@ def test_guardrails_block_counts_as_failed_attempt(monkeypatch, fake_pipeline, t
     assert (base / "2" / "train_stats.json").exists()
 
 
+def test_filesystem_tool_calls_route_to_filesystem_helpers(
+    fake_pipeline, monkeypatch, tmp_path
+):
+    """A `list_dir` tool call from the codegen LLM is dispatched to tools.filesystem."""
+    captured = {}
+
+    def fake_execute_filesystem_tool(name, args):
+        captured["name"] = name
+        captured["args"] = args
+        return json.dumps({"entries": ["fake/"], "total": 1})
+
+    monkeypatch.setattr(
+        developer, "execute_filesystem_tool", fake_execute_filesystem_tool
+    )
+
+    dev = DeveloperAgent(slug="test-slug", run_id="r1", dev_iter=1)
+    function_call = SimpleNamespace(
+        name="list_dir", args={"path": str(tmp_path)}
+    )
+    result = dev._execute_developer_tool_call(
+        function_call,
+        attempt_dir=tmp_path / "task" / "test-slug" / "r1" / "developer_1" / "1",
+        step=1,
+        call_idx=1,
+    )
+
+    assert captured == {"name": "list_dir", "args": {"path": str(tmp_path)}}
+    assert json.loads(result)["entries"] == ["fake/"]
+
+
 def test_previous_code_threaded_into_system_prompt(fake_pipeline, tmp_path):
     """dev_iter=2 with a prior successful developer_1/<k>/ should inline previous_code."""
     # Seed a prior successful run

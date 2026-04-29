@@ -156,6 +156,32 @@ def test_execute_tool_call_dispatches_and_writes_markdown_records(stubbed):
         )
 
 
+def test_filesystem_tool_calls_route_to_filesystem_helpers(stubbed, monkeypatch):
+    """A `bash` tool call routes through tools.filesystem.execute_filesystem_tool."""
+    captured = {}
+
+    def fake_execute_filesystem_tool(name, args):
+        captured["name"] = name
+        captured["args"] = args
+        return json.dumps({"output": "ok", "returncode": 0, "truncated": False})
+
+    monkeypatch.setattr(
+        research_module, "execute_filesystem_tool", fake_execute_filesystem_tool
+    )
+
+    state = {
+        "research_dir": stubbed.research_dir,
+        "scripts_dir": stubbed.scripts_dir,
+        "tool_seq": {},
+    }
+
+    item = SimpleNamespace(name="bash", args={"command": "ls -la"})
+    out = research_module._execute_tool_call(item, state)
+
+    assert captured == {"name": "bash", "args": {"command": "ls -la"}}
+    assert json.loads(out)["returncode"] == 0
+
+
 def test_render_tool_record_markdown_error_path():
     rendered = research_module._render_tool_record_markdown(
         "web_research", 2, {"query": "q"}, json.dumps({"error": "exa down"})
