@@ -15,6 +15,7 @@ from pathlib import Path
 def codegen_system(
     idea: str,
     previous_code: str | None = None,
+    custom_instructions: str | None = None,
 ) -> str:
     idea_section = f"\n<idea>\n{idea}\n</idea>\n"
 
@@ -30,8 +31,16 @@ def codegen_system(
             "</previous_code>\n"
         )
 
+    custom_section = ""
+    if custom_instructions and custom_instructions.strip():
+        custom_section = (
+            "\n<custom_instructions>\n"
+            f"{custom_instructions.strip()}\n"
+            "</custom_instructions>\n"
+        )
+
     return f"""You are a developer producing a single Python script (`train.py`) that implements the task specified by the `<idea>` block below. Output one complete script per attempt; the previous attempt's code and any failure feedback are visible above in the conversation thread.
-{idea_section}{previous_section}
+{idea_section}{previous_section}{custom_section}
 ## Hard constraints
 
 - Place `import logging` and `logging.basicConfig(level=logging.INFO, ...)` at the very top of the script, BEFORE any third-party imports (torch, transformers, numpy, etc.). Third-party libraries configure logging on import, so basicConfig must come first. A pre-execution guardrail enforces this and will block the script otherwise.

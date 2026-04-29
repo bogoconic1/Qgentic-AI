@@ -233,6 +233,13 @@ class ResearcherAgent:
         self.web_research_dir = self.research_dir / "web_research"
         self.web_fetch_dir = self.research_dir / "web_fetch"
 
+    def _load_custom_instructions(self) -> str | None:
+        """Read `task/<slug>/RESEARCHER_INSTRUCTIONS.md` if it exists."""
+        path = _TASK_ROOT / self.slug / "RESEARCHER_INSTRUCTIONS.md"
+        if not path.exists():
+            return None
+        return path.read_text(encoding="utf-8")
+
     @weave.op()
     def run(self, instruction: str) -> str:
         """Run the Deep Research loop and return a markdown report.
@@ -259,7 +266,9 @@ class ResearcherAgent:
             instruction,
         )
 
-        system_prompt = build_system()
+        system_prompt = build_system(
+            custom_instructions=self._load_custom_instructions(),
+        )
         user_prompt = build_user(instruction)
         tools = get_deep_research_tools()
         state: dict = {
