@@ -28,7 +28,6 @@ from agents.developer import DeveloperAgent
 from agents.researcher import ResearcherAgent
 from project_config import get_config
 from prompts.main_agent import build_system
-from tools.developer import _build_resource_header, execute_code
 from tools.filesystem import execute_filesystem_tool
 from tools.helpers import call_llm
 from utils.compact import compact_messages, should_compact
@@ -66,7 +65,6 @@ logger = logging.getLogger(__name__)
 _CONFIG = get_config()
 _TASK_ROOT = Path(_CONFIG["paths"]["task_root"])
 _MAIN_AGENT_MODEL = _CONFIG["llm"]["main_agent_model"]
-_EXECUTE_PYTHON_TIMEOUT = 600
 
 
 class MainAgent:
@@ -78,20 +76,15 @@ class MainAgent:
         self.goal_text = goal_text
         self.base_dir = _TASK_ROOT / slug / run_id
         self.ideas_dir = self.base_dir / "ideas"
-        self.snippets_dir = self.base_dir / "main_agent_snippets"
         self.chat_log = self.base_dir / "main_agent_chat.jsonl"
-        for d in (self.ideas_dir, self.snippets_dir):
-            d.mkdir(parents=True, exist_ok=True)
+        self.ideas_dir.mkdir(parents=True, exist_ok=True)
         self.dev_iter = 0
         self.research_iter = 0
         # Locks protect shared state when multiple function_calls in a single
         # Gemini turn dispatch concurrently (see `_step` parallel path).
-        self._iter_lock = threading.Lock()   # dev_iter, research_iter, snippet counter
+        self._iter_lock = threading.Lock()   # dev_iter, research_iter
         self._idea_lock = threading.Lock()   # add_idea / remove_idea / update_idea
         self._log_lock = threading.Lock()    # chat-log append
-        # Persistent snippet counter avoids a glob-based race where two parallel
-        # `analyze` calls both see N files on disk and both write `N+1.py`.
-        self._snippet_counter = len(list(self.snippets_dir.glob("*.py")))
         # google-genai requires at least one content entry per call; seed with
         # a canonical starter user turn so the first `_step()` has something to
         # send. Subsequent steps accumulate model responses + tool results in
@@ -254,15 +247,6 @@ class MainAgent:
                 research_iter=research_iter_snapshot,
             )
             return truncate_for_llm(res.run(instruction=args["instruction"]))
-
-        if name == "analyze":
-            with self._iter_lock:
-                self._snippet_counter += 1
-                snippet_num = self._snippet_counter
-            script_file = self.snippets_dir / f"{snippet_num:03d}.py"
-            script_file.write_text(_build_resource_header() + args["code"])
-            job = execute_code(str(script_file), timeout_seconds=_EXECUTE_PYTHON_TIMEOUT)
-            return json.dumps({"output": truncate_for_llm(job.result(), script_file.with_suffix(".txt"))})
 
         if name == "add_idea":
             with self._idea_lock:

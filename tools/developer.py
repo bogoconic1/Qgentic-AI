@@ -47,11 +47,6 @@ _BASELINE_CODE_TIMEOUT = _RUNTIME_CFG["baseline_code_timeout"]
 _LOG_MONITOR_INTERVAL = _RUNTIME_CFG["log_monitor_interval"]
 
 
-def _build_resource_header() -> str:
-    """Build a Python header that caps BLAS thread count for subprocess scripts."""
-    return 'import os\nos.environ["OPENBLAS_NUM_THREADS"] = "32"\n\n'
-
-
 @weave.op()
 def web_search_stack_trace(query: str) -> str:
     """Research how to fix a bug based on the stack trace and error message.
