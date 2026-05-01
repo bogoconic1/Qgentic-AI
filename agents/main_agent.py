@@ -6,9 +6,11 @@ memory ops (`add_idea` / `remove_idea` / `update_idea`). No termination in
 software — user SIGKILLs the process when satisfied.
 
 Session-level context: `GOAL.md` (only in MainAgent's own system prompt —
-subagents receive task-scoped strings via `idea` / `instruction` / `query`)
-and `task/<slug>/<run_id>/ideas/INDEX.md` (always-resident, regenerated
-after every idea-pool mutation).
+subagents receive task-scoped strings via `idea` / `instruction` / `query`),
+`task/<slug>/<run_id>/ideas/INDEX.md` (always-resident, regenerated after
+every idea-pool mutation), and `task/<slug>/<run_id>/MAIN.md` (the agent's
+living plan — scaffolded with `# {goal_text}`, maintained by the agent
+via `write_file` / `edit_file`).
 """
 
 from __future__ import annotations
@@ -77,6 +79,7 @@ class MainAgent:
         self.base_dir = _TASK_ROOT / slug / run_id
         self.ideas_dir = self.base_dir / "ideas"
         self.chat_log = self.base_dir / "main_agent_chat.jsonl"
+        self.main_md_path = self.base_dir / "MAIN.md"
         self.ideas_dir.mkdir(parents=True, exist_ok=True)
         self.dev_iter = 0
         self.research_iter = 0
@@ -100,6 +103,11 @@ class MainAgent:
         # Ensure INDEX.md exists so `load_index` has something to read.
         if not (self.ideas_dir / "INDEX.md").exists():
             (self.ideas_dir / "INDEX.md").write_text("# Idea pool\n\n")
+        # Scaffold MAIN.md — the agent's living plan, maintained via write_file
+        # / edit_file. Idempotent guard so re-instantiation in the same run dir
+        # doesn't clobber accumulated state.
+        if not self.main_md_path.exists():
+            self.main_md_path.write_text(f"# {goal_text}\n", encoding="utf-8")
 
     @weave.op()
     def run(self) -> None:

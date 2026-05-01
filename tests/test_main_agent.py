@@ -317,3 +317,30 @@ def test_text_only_response_is_logged_and_ignored(patched_main_agent, monkeypatc
     records = [json.loads(line) for line in agent.chat_log.read_text().splitlines()]
     assert len(records) == 1
     assert records[0]["role"] == "assistant"
+
+
+# ---------------------------------------------------------------------------
+# MAIN.md scaffold (mirrors the RESEARCH.md pattern from #275)
+# ---------------------------------------------------------------------------
+
+
+def test_init_creates_main_md_scaffold(patched_main_agent):
+    """Constructing MainAgent scaffolds MAIN.md with `# {goal_text}\\n`."""
+    goal = "win the competition by Friday"
+    agent = MainAgent(slug="test", run_id="r1", goal_text=goal)
+
+    assert agent.main_md_path == agent.base_dir / "MAIN.md"
+    assert agent.main_md_path.exists()
+    assert agent.main_md_path.read_text(encoding="utf-8") == f"# {goal}\n"
+
+
+def test_init_does_not_clobber_existing_main_md(patched_main_agent):
+    """Re-instantiating with the same (slug, run_id) leaves a populated MAIN.md untouched."""
+    base_dir = main_agent._TASK_ROOT / "test" / "r1"
+    base_dir.mkdir(parents=True, exist_ok=True)
+    populated = "# done\n\n## What I tried\n\n- Idea 1: failed.\n"
+    (base_dir / "MAIN.md").write_text(populated, encoding="utf-8")
+
+    agent = MainAgent(slug="test", run_id="r1", goal_text="ignored on second construct")
+
+    assert agent.main_md_path.read_text(encoding="utf-8") == populated
