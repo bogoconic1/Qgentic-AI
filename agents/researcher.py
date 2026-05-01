@@ -20,7 +20,10 @@ Per-invocation layout (owned by this module):
     │   └── <seq>.md
     ├── web_fetch/     # per-call audit records for web_fetch
     │   └── <seq>.md
-    └── PLAN_<research_iter>.md   # final markdown report
+    └── RESEARCH.md    # the final report — scaffolded at run start with a
+                       # single H1 ("# {instruction}"), populated by the
+                       # agent via write_file/edit_file, and read back at
+                       # termination as the run's return value.
 """
 
 from __future__ import annotations
@@ -205,6 +208,7 @@ class ResearcherAgent:
         self.research_dir = _TASK_ROOT / slug / run_id / f"research_{research_iter}"
         self.web_research_dir = self.research_dir / "web_research"
         self.web_fetch_dir = self.research_dir / "web_fetch"
+        self.research_md_path = self.research_dir / "RESEARCH.md"
 
     def _load_custom_instructions(self) -> str | None:
         """Read `task/<slug>/RESEARCHER_INSTRUCTIONS.md` if it exists."""
@@ -217,18 +221,27 @@ class ResearcherAgent:
     def run(self, instruction: str) -> str:
         """Run the Deep Research loop and return a markdown report.
 
-        Creates ``task/<slug>/<run_id>/research_<research_iter>/``, runs the
-        tool loop, and persists the final markdown as ``PLAN_<research_iter>.md``
-        inside that directory. The markdown is also returned.
+        Creates ``task/<slug>/<run_id>/research_<research_iter>/``, scaffolds
+        ``RESEARCH.md`` with a single H1 (``# {instruction}``) so the agent
+        has a known target to ``write_file``/``edit_file`` into, runs the
+        tool loop, and reads ``RESEARCH.md`` back at termination — that file
+        IS the report.
 
         Args:
             instruction: Free-form research instruction — as long as needed.
 
         Returns:
-            Free-form markdown report with URL citations.
+            Contents of ``RESEARCH.md`` after the run.
         """
         for d in (self.web_research_dir, self.web_fetch_dir):
             d.mkdir(parents=True, exist_ok=True)
+
+        self.research_md_path.parent.mkdir(parents=True, exist_ok=True)
+        if not self.research_md_path.exists():
+            self.research_md_path.write_text(
+                f"# {instruction}\n",
+                encoding="utf-8",
+            )
 
         logger.info(
             "ResearcherAgent.run slug=%s run_id=%s iter=%d dir=%s instruction=%r",
@@ -251,7 +264,6 @@ class ResearcherAgent:
         input_list: list[dict] = [append_message("user", user_prompt)]
         last_input_tokens: int | None = None
 
-        markdown = ""
         step = 0
         while True:
             step += 1
@@ -280,7 +292,6 @@ class ResearcherAgent:
 
             if not has_function_calls:
                 logger.info("ResearcherAgent completed at step %d", step)
-                markdown = response.text or ""
                 break
 
             function_responses = []
@@ -306,8 +317,10 @@ class ResearcherAgent:
                     ).model_dump(mode="json", exclude_none=True)
                 )
 
-        plan_path = self.research_dir / f"PLAN_{self.research_iter}.md"
-        plan_path.write_text(markdown)
-        logger.info("ResearcherAgent wrote %s (%d chars)", plan_path, len(markdown))
-
-        return markdown
+        report = self.research_md_path.read_text(encoding="utf-8")
+        logger.info(
+            "ResearcherAgent read %s (%d chars)",
+            self.research_md_path,
+            len(report),
+        )
+        return report
