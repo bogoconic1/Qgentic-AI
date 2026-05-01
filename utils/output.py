@@ -23,7 +23,7 @@ def truncate_for_llm(
 
     If *full_output_path* is given and the file does not already exist, the
     full text is written there. If it already exists (e.g. the caller wrote
-    ``train.txt`` before calling this), the write is skipped — the path is
+    ``SOLUTION.txt`` before calling this), the write is skipped — the path is
     only used in the truncation reference message.
     """
     if len(text) <= max_chars:

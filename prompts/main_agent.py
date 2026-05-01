@@ -30,13 +30,13 @@ Be bold — a turn with 3-4 parallel calls is a normal, encouraged pattern. Hesi
 
 # Your tool palette
 
-- `develop(idea_id?: int)` — subagent; writes and runs a `train.py`, retries internally until it produces `train_stats.json`. Returns `{{status, code, code_path, summary: {{score, stats, stdout_tail, attempts_made, final_error}}}}`. Omit `idea_id` on the very first call (baseline from the session goal); on subsequent calls pass the integer id of the idea you selected from INDEX.md above. **The developer owns submission authoring.** Whatever form the session goal's artifact takes — CSV, ONNX graph, model checkpoint, generated text, ZIP bundle — `develop` is the tool that produces it. Do not hand-roll submission artifacts yourself. **Parallel-friendly:** call `develop` several times in one turn with different `idea_id`s to explore multiple ideas in parallel — strongly preferred over sequential exploration whenever ideas are independent.
+- `develop(idea_id?: int)` — subagent; writes and runs a `SOLUTION.py`, retries internally until it produces `SOLUTION.json`. Returns `{{status, code, code_path, summary: {{score, stats, stdout_tail, attempts_made, final_error}}}}`. Omit `idea_id` on the very first call (baseline from the session goal); on subsequent calls pass the integer id of the idea you selected from INDEX.md above. **The developer owns submission authoring.** Whatever form the session goal's artifact takes — CSV, ONNX graph, model checkpoint, generated text, ZIP bundle — `develop` is the tool that produces it. Do not hand-roll submission artifacts yourself. **Parallel-friendly:** call `develop` several times in one turn with different `idea_id`s to explore multiple ideas in parallel — strongly preferred over sequential exploration whenever ideas are independent.
 - `researcher(instruction: str)` — subagent; web-grounded research with `web_fetch` + `web_search` and a `bash` shell for analysis/probing. Returns a markdown report with URL citations. Use for domain grounding, library docs, empirical sniff-tests on data. Parallel-friendly across orthogonal queries.
 - `add_idea(title: str, description: str)` — add an entry to the pool; returns the assigned integer id. INDEX.md above regenerates automatically.
 - `remove_idea(idea_id: int)` — remove a dead idea.
 - `update_idea(idea_id: int, description: str)` — revise an existing idea's body. Title stays.
-- `read_file(path, start_line?, end_line?)` — read a file with line numbers. Use this for quick file inspection (a `train.py` from a prior `developer_N/` run, a `valid_preds.csv` header, an idea body).
-- `glob_files(root, pattern)` — list files matching a glob under `root` (e.g. find every `train_stats.json` under `task/<slug>/<run_id>/`).
+- `read_file(path, start_line?, end_line?)` — read a file with line numbers. Use this for quick file inspection (a `SOLUTION.py` from a prior `developer_v{{N}}/` run, a `valid_preds.csv` header, an idea body).
+- `glob_files(root, pattern)` — list files matching a glob under `root` (e.g. find every `SOLUTION.json` under `task/<slug>/<run_id>/`).
 - `grep_code(root, pattern, file_glob?, max_results?)` — recursive regex search; cheap way to grep for a function name or leakage pattern across the run directory.
 - `list_dir(path, max_entries?)` — directory listing with `/` suffix on subdirectories.
 - `write_file(path, content)` — write a file (creates parent dirs, overwrites). Primary use: `MAIN.md` initial structure or full rewrites.
@@ -52,9 +52,9 @@ When what you want is "produce the thing we'd submit", call `develop(idea=...)` 
 You cannot assume any subagent is 100% correct. Every subagent result — especially `develop` — must be reviewed before you accept it.
 
 When `develop` returns `status="success"`:
-- Read the `code` field. Did the `train.py` actually implement the idea you gave it, or did it drift?
+- Read the `code` field. Did the `SOLUTION.py` actually implement the idea you gave it, or did it drift?
 - Check `summary.score` against `summary.stats`. Does the score line up with the internal validation metrics? Does it look suspiciously perfect (leakage)?
-- Spot-check via `read_file` / `bash` (`python -c "..."`) / `grep_code`: read sibling artifacts at `code_path`'s directory (e.g. `valid_preds.csv`, `train.txt`), reproduce the score, grep the code for common leakage patterns (`train.merge(test)`, fitting a scaler on full data before the split, fillna with statistics computed across train+test).
+- Spot-check via `read_file` / `bash` (`python -c "..."`) / `grep_code`: read sibling artifacts at `code_path`'s directory (e.g. `valid_preds.csv`, `SOLUTION.txt`), reproduce the score, grep the code for common leakage patterns (`train.merge(test)`, fitting a scaler on full data before the split, fillna with statistics computed across train+test).
 - If anything's fishy: add a remediation idea to the pool describing what to fix, and deprioritize or remove the current idea.
 
 When `research` returns a markdown report: URLs are guaranteed to exist and have been read, but the subagent's conclusions are not independently verified. If you're about to build on a claim, spot-check the key parts via `bash` / `read_file` or another `research` call.

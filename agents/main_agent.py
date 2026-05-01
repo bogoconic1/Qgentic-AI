@@ -55,7 +55,7 @@ _STUCK_NUDGE = (
     f"{_STUCK_REPEAT_THRESHOLD} turns. That's a sign you're out of ideas, not "
     "that the work is done. **Push on.** Concrete options: add a fresh idea "
     "via `add_idea`; call `research(instruction=\"...\")` to web-search for "
-    "unblocking ideas; inspect a `developer_N/` directory you haven't reviewed "
+    "unblocking ideas; inspect a `developer_v{N}/` directory you haven't reviewed "
     "yet; reread INDEX.md and pick the next-most-promising idea. **Never "
     "stop** — the session has no termination condition. The user will SIGKILL "
     "when satisfied."
