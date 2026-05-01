@@ -200,6 +200,127 @@ Third-party libraries may configure logging on import, making basicConfig a no-o
     }
 
 
+# ----------------------------------------------------
+# Guardrails: SOLUTION.txt FileHandler in basicConfig
+# ----------------------------------------------------
+
+
+def _is_logging_filehandler_call(call: ast.Call) -> bool:
+    """Detect ``logging.FileHandler(...)`` calls."""
+    return (
+        isinstance(call.func, ast.Attribute)
+        and isinstance(call.func.value, ast.Name)
+        and call.func.value.id == "logging"
+        and call.func.attr == "FileHandler"
+    )
+
+
+def _ast_contains_string(node: ast.AST, target: str) -> bool:
+    """Return True if any Constant node within ``node``'s subtree equals ``target``."""
+    for sub in ast.walk(node):
+        if isinstance(sub, ast.Constant) and sub.value == target:
+            return True
+    return False
+
+
+def check_solution_txt_filehandler(code: str) -> dict:
+    """Ensure ``logging.basicConfig`` registers a ``FileHandler`` for SOLUTION.txt.
+
+    Walks the AST to find a top-level ``logging.basicConfig(handlers=[...])``
+    call whose handlers list contains ``logging.FileHandler(...)`` whose
+    arguments reference the literal string ``"SOLUTION.txt"``. The agent's
+    SOLUTION.py is required to self-log via this FileHandler so the curated
+    training log lands at ``Path(__file__).parent / "SOLUTION.txt"``.
+
+    Returns a ``{status, violations}`` dict shaped like
+    ``check_logging_basicconfig_order``.
+    """
+    try:
+        module = ast.parse(code)
+    except SyntaxError as exc:
+        return {
+            "status": "fail",
+            "violations": [
+                {
+                    "line": getattr(exc, "lineno", 0) or 0,
+                    "reason": f"syntax error while parsing generated code: {exc}",
+                }
+            ],
+        }
+
+    basic_calls = [
+        node
+        for node in module.body
+        if isinstance(node, ast.Expr)
+        and isinstance(node.value, ast.Call)
+        and _is_logging_basicconfig_call(node.value)
+    ]
+
+    if not basic_calls:
+        return {
+            "status": "fail",
+            "violations": [
+                {
+                    "line": 0,
+                    "reason": "No top-level logging.basicConfig() call found.",
+                }
+            ],
+        }
+
+    for call_expr in basic_calls:
+        call = call_expr.value
+        handlers_kw = next(
+            (kw for kw in call.keywords if kw.arg == "handlers"), None
+        )
+        if handlers_kw is None:
+            return {
+                "status": "fail",
+                "violations": [
+                    {
+                        "line": call.lineno,
+                        "reason": (
+                            "logging.basicConfig() must include a `handlers=[...]` "
+                            "kwarg registering a FileHandler for SOLUTION.txt."
+                        ),
+                    }
+                ],
+            }
+        if not isinstance(handlers_kw.value, ast.List):
+            return {
+                "status": "fail",
+                "violations": [
+                    {
+                        "line": handlers_kw.value.lineno,
+                        "reason": (
+                            "logging.basicConfig() `handlers=` must be a list "
+                            "literal of handler instances."
+                        ),
+                    }
+                ],
+            }
+        for handler_node in handlers_kw.value.elts:
+            if not isinstance(handler_node, ast.Call):
+                continue
+            if not _is_logging_filehandler_call(handler_node):
+                continue
+            if _ast_contains_string(handler_node, "SOLUTION.txt"):
+                return {"status": "pass", "violations": []}
+        return {
+            "status": "fail",
+            "violations": [
+                {
+                    "line": call.lineno,
+                    "reason": (
+                        "logging.basicConfig() `handlers=` must include a "
+                        '`logging.FileHandler(... "SOLUTION.txt" ...)` entry.'
+                    ),
+                }
+            ],
+        }
+
+    return {"status": "pass", "violations": []}
+
+
 # ----------------------------------------------
 # Guardrails: LLM-based data leakage risk review
 # ----------------------------------------------

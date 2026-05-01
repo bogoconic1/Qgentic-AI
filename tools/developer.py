@@ -22,6 +22,10 @@ from prompts.tools_developer import (
     log_monitor_system as prompt_log_monitor_system,
     log_monitor_user as prompt_log_monitor_user,
 )
+from guardrails.developer import (
+    check_logging_basicconfig_order,
+    check_solution_txt_filehandler,
+)
 from schemas.developer import LogMonitorVerdict, StackTraceSolution
 from utils.output import truncate_for_llm
 import weave
@@ -430,3 +434,123 @@ def execute_with_monitor(
     output = job.result()
     logger.info("Execution output captured for %s", code_path)
     return output
+
+
+# ---------------------------------------------------------------------------
+# run_solution: agent-facing tool that wraps guardrails + execute_with_monitor
+# ---------------------------------------------------------------------------
+
+
+@weave.op()
+def run_solution(version_dir: str | Path) -> str:
+    """Execute the agent's SOLUTION.py at ``version_dir`` under guardrails + monitor.
+
+    Pipeline: read SOLUTION.py → static guardrails (basicConfig order +
+    SOLUTION.txt FileHandler) → execute_with_monitor (subprocess + LLM
+    distress monitor) → parse SOLUTION.json. Returns a JSON string with
+    ``{success, score?, stats?, elapsed_seconds, output_tail}`` on success
+    or ``{success: False, error_kind, ...}`` on failure.
+
+    The agent reads ``SOLUTION.txt`` separately via ``read_file`` for the
+    curated log. ``output_tail`` here is a short slice of the captured
+    stdout/stderr stream — useful for crashes that never reached the
+    script's logger (e.g. import errors before basicConfig) and for the
+    monitor's kill diagnostic when it fires.
+    """
+    version_dir = Path(version_dir)
+    code_path = version_dir / "SOLUTION.py"
+
+    if not code_path.exists():
+        return json.dumps(
+            {
+                "success": False,
+                "error_kind": "missing_solution_py",
+                "error": (
+                    f"SOLUTION.py not found at {code_path}. Author it via "
+                    "write_file before calling run_solution."
+                ),
+            }
+        )
+
+    code = code_path.read_text(encoding="utf-8")
+
+    g_basic = check_logging_basicconfig_order(code)
+    if g_basic["status"] == "fail":
+        return json.dumps(
+            {
+                "success": False,
+                "error_kind": "guardrail_basicconfig",
+                "violations": g_basic["violations"],
+            }
+        )
+
+    g_handler = check_solution_txt_filehandler(code)
+    if g_handler["status"] == "fail":
+        return json.dumps(
+            {
+                "success": False,
+                "error_kind": "guardrail_filehandler",
+                "violations": g_handler["violations"],
+            }
+        )
+
+    start = time.monotonic()
+    output = execute_with_monitor(
+        code_path=str(code_path),
+        timeout_seconds=_BASELINE_CODE_TIMEOUT,
+        log_monitor_interval=_LOG_MONITOR_INTERVAL,
+        logger=logger,
+    )
+    elapsed = time.monotonic() - start
+    output_tail = truncate_for_llm(output, max_chars=4_000)
+
+    stats_path = version_dir / "SOLUTION.json"
+    if not stats_path.exists():
+        return json.dumps(
+            {
+                "success": False,
+                "error_kind": "no_stats",
+                "elapsed_seconds": elapsed,
+                "output_tail": output_tail,
+            }
+        )
+
+    try:
+        stats = json.loads(stats_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return json.dumps(
+            {
+                "success": False,
+                "error_kind": "invalid_stats_json",
+                "error": str(exc),
+                "elapsed_seconds": elapsed,
+                "output_tail": output_tail,
+            }
+        )
+
+    score = stats.get("score") if isinstance(stats, dict) else None
+    if (
+        not isinstance(score, (int, float))
+        or isinstance(score, bool)
+        or score != score  # NaN check
+        or score in (float("inf"), float("-inf"))
+    ):
+        return json.dumps(
+            {
+                "success": False,
+                "error_kind": "missing_or_nonfinite_score",
+                "stats": stats if isinstance(stats, dict) else None,
+                "elapsed_seconds": elapsed,
+                "output_tail": output_tail,
+            }
+        )
+
+    return json.dumps(
+        {
+            "success": True,
+            "score": float(score),
+            "stats": stats,
+            "elapsed_seconds": elapsed,
+            "output_tail": output_tail,
+        }
+    )

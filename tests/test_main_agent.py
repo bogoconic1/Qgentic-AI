@@ -69,15 +69,15 @@ def patched_main_agent(monkeypatch, tmp_path):
             dev_calls[-1]["idea"] = idea
             return {
                 "status": "success",
-                "code": "# fake",
-                "code_path": f"dev_{self.dev_iter}",
+                "version_dir": f"task/test/r1/developer_v{self.dev_iter}",
                 "summary": {
                     "score": 0.5,
                     "stats": {},
-                    "stdout_tail": "",
-                    "attempts_made": 1,
+                    "elapsed_seconds": 0.0,
+                    "runs_made": 1,
                     "final_error": None,
                 },
+                "report": f"# fake idea\n\nDev iter {self.dev_iter} fake report.\n",
             }
 
     monkeypatch.setattr(main_agent, "DeveloperAgent", FakeDeveloperAgent)
