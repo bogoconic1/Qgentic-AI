@@ -256,24 +256,174 @@ def _tool_bash(command: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Write + Edit (modeled on claude-code FileWriteTool / FileEditTool)
+# ---------------------------------------------------------------------------
+
+# When a model emits straight quotes but the file uses typographic curly
+# quotes (or vice versa), the matcher should still locate the substring.
+# Mirrors FileEditTool/utils.ts.
+_LEFT_SINGLE_CURLY = "‘"
+_RIGHT_SINGLE_CURLY = "’"
+_LEFT_DOUBLE_CURLY = "“"
+_RIGHT_DOUBLE_CURLY = "”"
+
+_WRITE_FILE_MAX_BYTES = 5 * 1024 * 1024
+
+
+def _normalize_quotes(s: str) -> str:
+    return (
+        s.replace(_LEFT_SINGLE_CURLY, "'")
+        .replace(_RIGHT_SINGLE_CURLY, "'")
+        .replace(_LEFT_DOUBLE_CURLY, '"')
+        .replace(_RIGHT_DOUBLE_CURLY, '"')
+    )
+
+
+def _find_actual_string(file_content: str, search: str) -> str | None:
+    if search in file_content:
+        return search
+    normalized_search = _normalize_quotes(search)
+    normalized_file = _normalize_quotes(file_content)
+    idx = normalized_file.find(normalized_search)
+    if idx == -1:
+        return None
+    return file_content[idx : idx + len(search)]
+
+
+def _apply_edit_to_file(content: str, old: str, new: str, replace_all: bool) -> str:
+    if new != "":
+        return content.replace(old, new) if replace_all else content.replace(old, new, 1)
+    if not old.endswith("\n") and (old + "\n") in content:
+        old_eff = old + "\n"
+    else:
+        old_eff = old
+    return content.replace(old_eff, "") if replace_all else content.replace(old_eff, "", 1)
+
+
+def _tool_write_file(path: str, content: str) -> str:
+    full_path = Path(path)
+    error = _validate_path(full_path)
+    if error:
+        return json.dumps({"error": error})
+    resolved = full_path.resolve()
+    if resolved.exists() and resolved.is_dir():
+        return json.dumps({"error": f"Path is a directory: {path}"})
+    if len(content.encode("utf-8")) > _WRITE_FILE_MAX_BYTES:
+        return json.dumps({"error": f"Content exceeds {_WRITE_FILE_MAX_BYTES} byte cap"})
+    try:
+        resolved.parent.mkdir(parents=True, exist_ok=True)
+        existed = resolved.exists()
+        resolved.write_text(content, encoding="utf-8")
+    except Exception as exc:
+        return json.dumps({"error": f"Write failed: {exc}"})
+    return json.dumps(
+        {
+            "type": "update" if existed else "create",
+            "path": str(resolved),
+            "bytes_written": len(content.encode("utf-8")),
+        }
+    )
+
+
+def _tool_edit_file(
+    path: str, old_string: str, new_string: str, replace_all: bool = False
+) -> str:
+    full_path = Path(path)
+    error = _validate_path(full_path)
+    if error:
+        return json.dumps({"error": error})
+    resolved = full_path.resolve()
+    if old_string == new_string:
+        return json.dumps(
+            {"error": "No changes: old_string and new_string are identical"}
+        )
+
+    if not resolved.exists():
+        if old_string == "":
+            try:
+                resolved.parent.mkdir(parents=True, exist_ok=True)
+                resolved.write_text(new_string, encoding="utf-8")
+            except Exception as exc:
+                return json.dumps({"error": f"Write failed: {exc}"})
+            return json.dumps(
+                {
+                    "type": "create",
+                    "path": str(resolved),
+                    "bytes_written": len(new_string.encode("utf-8")),
+                }
+            )
+        return json.dumps({"error": f"File not found: {path}"})
+
+    if not resolved.is_file():
+        return json.dumps({"error": f"Not a regular file: {path}"})
+
+    try:
+        content = resolved.read_text(encoding="utf-8")
+    except Exception as exc:
+        return json.dumps({"error": f"Failed to read file: {exc}"})
+
+    actual_old = _find_actual_string(content, old_string)
+    if actual_old is None:
+        return json.dumps({"error": "String to replace not found in file."})
+
+    matches = content.count(actual_old)
+    if matches > 1 and not replace_all:
+        return json.dumps(
+            {
+                "error": (
+                    f"Found {matches} matches of the old_string, but replace_all is false. "
+                    "Either set replace_all=true or provide more context to make old_string unique."
+                )
+            }
+        )
+
+    updated = _apply_edit_to_file(content, actual_old, new_string, replace_all)
+    if updated == content:
+        return json.dumps({"error": "Edit produced no changes."})
+
+    try:
+        resolved.write_text(updated, encoding="utf-8")
+    except Exception as exc:
+        return json.dumps({"error": f"Write failed: {exc}"})
+
+    return json.dumps(
+        {
+            "type": "update",
+            "path": str(resolved),
+            "matches_replaced": matches if replace_all else 1,
+        }
+    )
+
+
+# ---------------------------------------------------------------------------
 # Shared dispatcher
 # ---------------------------------------------------------------------------
 
 
 FILESYSTEM_TOOL_NAMES = frozenset(
-    {"read_file", "glob_files", "grep_code", "list_dir", "bash"}
+    {
+        "read_file",
+        "glob_files",
+        "grep_code",
+        "list_dir",
+        "bash",
+        "write_file",
+        "edit_file",
+    }
 )
 
 
 def execute_filesystem_tool(name: str, args: dict) -> str | None:
     """Dispatch one filesystem tool call by name. Returns ``None`` if name is unknown.
 
-    The five tools are:
+    The seven tools are:
       - ``read_file(path, start_line?, end_line?)`` — read file lines.
       - ``glob_files(root, pattern)`` — glob under ``root``.
       - ``grep_code(root, pattern, file_glob?, max_results?)`` — recursive regex search.
       - ``list_dir(path, max_entries?)`` — list a directory.
       - ``bash(command)`` — judge-gated shell command.
+      - ``write_file(path, content)`` — write/overwrite a file.
+      - ``edit_file(path, old_string, new_string, replace_all?)`` — exact-string replacement.
     """
     if name == "read_file":
         return _tool_read_file(
@@ -294,4 +444,13 @@ def execute_filesystem_tool(name: str, args: dict) -> str | None:
         return _tool_list_dir(args["path"], args.get("max_entries", 100))
     if name == "bash":
         return _tool_bash(args["command"])
+    if name == "write_file":
+        return _tool_write_file(args["path"], args["content"])
+    if name == "edit_file":
+        return _tool_edit_file(
+            args["path"],
+            args["old_string"],
+            args["new_string"],
+            args.get("replace_all", False),
+        )
     return None
