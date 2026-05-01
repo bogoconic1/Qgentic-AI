@@ -376,10 +376,10 @@ def get_main_agent_tools():
             name="develop",
             description=(
                 "Runs one developer iteration and OWNS SUBMISSION AUTHORING: the "
-                "developer subagent writes a `train.py` that produces whatever "
+                "developer subagent writes a `SOLUTION.py` that produces whatever "
                 "artifact the session goal requires (CSV, ONNX graph, model "
                 "weights, generated text, ZIP bundle, …) and dumps "
-                "`train_stats.json` with a score. Retries internally until "
+                "`SOLUTION.json` with a score. Retries internally until "
                 "valid stats land. Returns a structured payload with the final "
                 "code, its path on disk, and a summary (score, stats, "
                 "stdout_tail, attempts_made). Omit `idea_id` on the very first "
