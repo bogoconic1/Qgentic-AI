@@ -2,21 +2,20 @@
 
 A sub-agent the Main Agent (or orchestrator) instantiates with a run's
 ``(slug, run_id, research_iter)`` and then calls ``run(instruction)`` on.
-It runs a multi-step tool loop over three inner tools — ``web_research``
-(Exa discovery), ``web_fetch`` (Firecrawl scrape), and ``write_python_code``
-(subprocess exec) — and emits a markdown report. Gemini's built-in
-``google_search`` is disabled inside the sub-agent so every URL the LLM
-dereferences is traceable back to a prior tool result (no invented URLs).
+It runs a multi-step tool loop over two inner research tools —
+``web_research`` (Exa discovery) and ``web_fetch`` (Firecrawl scrape) —
+plus the shared filesystem palette (read/glob/grep/list/bash). Use ``bash``
+for any scripted execution (`python -c "..."` or `python script.py`).
+Gemini's built-in ``google_search`` is disabled inside the sub-agent so
+every URL the LLM dereferences is traceable back to a prior tool result
+(no invented URLs).
 
-Tool outputs (``web_research``, ``web_fetch``, ``write_python_code``) are
-truncated to 30k chars before flowing back to the LLM. Full content is
-preserved in per-call audit records on disk.
+Tool outputs are truncated to 30k chars before flowing back to the LLM.
+Full content is preserved in per-call audit records on disk.
 
 Per-invocation layout (owned by this module):
 
     task/<slug>/<run_id>/research_<research_iter>/
-    ├── scripts/       # executed Python scripts (re-runnable standalone)
-    │   └── <seq>.py
     ├── web_research/  # per-call audit records for web_research
     │   └── <seq>.md
     ├── web_fetch/     # per-call audit records for web_fetch
@@ -39,7 +38,6 @@ from google.genai import types
 
 from project_config import get_config
 from prompts.research import build_system, build_user
-from tools.developer import _build_resource_header, execute_code
 from tools.filesystem import execute_filesystem_tool
 from tools.helpers import call_llm
 from utils.compact import compact_messages, should_compact
@@ -54,12 +52,10 @@ logger = logging.getLogger(__name__)
 
 _CONFIG = get_config()
 _LLM_CFG = _CONFIG["llm"]
-_RUNTIME_CFG = _CONFIG["runtime"]
 _PATH_CFG = _CONFIG["paths"]
 
 _TASK_ROOT = Path(_PATH_CFG["task_root"])
 _DEEP_RESEARCH_LLM_MODEL = _LLM_CFG["developer_tool_model"]
-_WRITE_PYTHON_CODE_TIMEOUT_SECONDS = _RUNTIME_CFG["write_python_code_timeout_seconds"]
 
 
 # ---------------------------------------------------------------------------
@@ -117,24 +113,6 @@ def _tool_web_fetch(url: str) -> str:
     return json.dumps({"url": url, "title": title or url, "markdown": markdown})
 
 
-def _tool_write_python_code(code: str, seq: int, scripts_dir: Path) -> str:
-    """Save + exec a Python script in the scripts dir. Return full stdout/stderr."""
-    script_path = scripts_dir / f"{seq}.py"
-    script_path.write_text(_build_resource_header() + code)
-    logger.info("write_python_code seq=%d path=%s", seq, script_path)
-
-    try:
-        job = execute_code(
-            str(script_path), timeout_seconds=_WRITE_PYTHON_CODE_TIMEOUT_SECONDS
-        )
-        output = job.result()
-    except Exception as exc:
-        logger.exception("write_python_code execution failed")
-        return json.dumps({"error": f"execution failed: {exc}"})
-
-    return json.dumps({"output": truncate_for_llm(output, script_path.with_suffix(".txt"))})
-
-
 def _render_tool_record_markdown(
     tool_name: str, seq: int, args: dict, result_json: str
 ) -> str:
@@ -186,10 +164,6 @@ def _execute_tool_call(item, state: dict) -> str:
         result_json = _tool_web_research(args["query"], args.get("num_results"))
     elif tool_name == "web_fetch":
         result_json = _tool_web_fetch(args["url"])
-    elif tool_name == "write_python_code":
-        result_json = _tool_write_python_code(
-            args["code"], tool_seq, state["scripts_dir"]
-        )
     else:
         fs_result = execute_filesystem_tool(tool_name, args)
         if fs_result is None:
@@ -229,7 +203,6 @@ class ResearcherAgent:
         self.run_id = run_id
         self.research_iter = research_iter
         self.research_dir = _TASK_ROOT / slug / run_id / f"research_{research_iter}"
-        self.scripts_dir = self.research_dir / "scripts"
         self.web_research_dir = self.research_dir / "web_research"
         self.web_fetch_dir = self.research_dir / "web_fetch"
 
@@ -254,7 +227,7 @@ class ResearcherAgent:
         Returns:
             Free-form markdown report with URL citations.
         """
-        for d in (self.scripts_dir, self.web_research_dir, self.web_fetch_dir):
+        for d in (self.web_research_dir, self.web_fetch_dir):
             d.mkdir(parents=True, exist_ok=True)
 
         logger.info(
@@ -273,7 +246,6 @@ class ResearcherAgent:
         tools = get_deep_research_tools()
         state: dict = {
             "research_dir": self.research_dir,
-            "scripts_dir": self.scripts_dir,
             "tool_seq": {},
         }
         input_list: list[dict] = [append_message("user", user_prompt)]

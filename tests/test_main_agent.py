@@ -52,14 +52,6 @@ def _fake_multi(*calls: tuple[str, dict]):
 def patched_main_agent(monkeypatch, tmp_path):
     monkeypatch.setattr(main_agent, "_TASK_ROOT", tmp_path / "task")
 
-    monkeypatch.setattr(
-        main_agent,
-        "execute_code",
-        lambda filepath, timeout_seconds=None: SimpleNamespace(
-            result=lambda: f"ran {Path(filepath).name}"
-        ),
-    )
-
     dev_calls: list = []
 
     class FakeDeveloperAgent:
@@ -119,7 +111,6 @@ def test_dispatches_each_tool(patched_main_agent, monkeypatch):
             _fake_fc("update_idea", idea_id=1, description="body v2"),
             _fake_fc("develop", idea_id=1),
             _fake_fc("research", instruction="look up X"),
-            _fake_fc("analyze", code="print('hi')"),
             _fake_fc("remove_idea", idea_id=1),
         ]
     )
@@ -127,7 +118,7 @@ def test_dispatches_each_tool(patched_main_agent, monkeypatch):
         main_agent, "call_llm", lambda **kwargs: (next(responses), 0)
     )
 
-    for _ in range(6):
+    for _ in range(5):
         agent._step([])
 
     # developer + researcher subagents invoked once each
@@ -141,19 +132,14 @@ def test_dispatches_each_tool(patched_main_agent, monkeypatch):
     # idea pool mutated: add → update → remove leaves pool empty
     assert "try it" not in (agent.ideas_dir / "INDEX.md").read_text()
 
-    # execute_python wrote and ran a snippet
-    assert (agent.snippets_dir / "001.py").exists()
-    assert "print('hi')" in (agent.snippets_dir / "001.py").read_text()
-
-    # chat log captured every step (6 assistant turns + 6 tool results = 12 records)
+    # chat log captured every step (5 assistant turns + 5 tool results = 10 records)
     records = [json.loads(line) for line in agent.chat_log.read_text().splitlines()]
-    assert len(records) == 12
+    assert len(records) == 10
     assert [r["name"] for r in records[1::2]] == [
         "add_idea",
         "update_idea",
         "develop",
         "research",
-        "analyze",
         "remove_idea",
     ]
 
@@ -180,9 +166,16 @@ def test_parallel_dispatch_preserves_order(patched_main_agent, monkeypatch):
     agent._dispatch("add_idea", {"title": "alpha", "description": "idea-alpha"})
     agent._dispatch("add_idea", {"title": "beta", "description": "idea-beta"})
 
+    # Filesystem tool calls are routed through execute_filesystem_tool — stub it.
+    monkeypatch.setattr(
+        main_agent,
+        "execute_filesystem_tool",
+        lambda name, args: json.dumps({"output": f"ran {name}", "returncode": 0}),
+    )
+
     # Single LLM turn returning three parallel calls in a specific order.
     response = _fake_multi(
-        ("analyze", {"code": "print('first')"}),
+        ("read_file", {"path": "/tmp/seed.txt"}),
         ("develop", {"idea_id": 1}),
         ("develop", {"idea_id": 2}),
     )
@@ -198,42 +191,12 @@ def test_parallel_dispatch_preserves_order(patched_main_agent, monkeypatch):
     func_content = agent.input_list[-1]
     assert func_content["role"] == "function"
     emitted_names = [p["function_response"]["name"] for p in func_content["parts"]]
-    assert emitted_names == ["analyze", "develop", "develop"]
+    assert emitted_names == ["read_file", "develop", "develop"]
 
     # Chat log: assistant turn + 3 tool records in the original order.
     records = [json.loads(line) for line in agent.chat_log.read_text().splitlines()]
     tool_records = [r for r in records if r["role"] == "tool"]
-    assert [r["name"] for r in tool_records] == ["analyze", "develop", "develop"]
-
-    # Snippet counter advanced exactly once for the single `analyze` call.
-    assert (agent.snippets_dir / "001.py").exists()
-    assert not (agent.snippets_dir / "002.py").exists()
-
-
-def test_parallel_analyze_calls_get_distinct_snippet_numbers(
-    patched_main_agent, monkeypatch
-):
-    """Two analyze calls in the same turn must not collide on the snippet filename."""
-    agent = MainAgent(slug="test", run_id="r1", goal_text="do the thing")
-
-    response = _fake_multi(
-        ("analyze", {"code": "print('a')"}),
-        ("analyze", {"code": "print('b')"}),
-        ("analyze", {"code": "print('c')"}),
-    )
-    monkeypatch.setattr(main_agent, "call_llm", lambda **kwargs: (response, 0))
-
-    agent._step([])
-
-    for n in (1, 2, 3):
-        assert (agent.snippets_dir / f"{n:03d}.py").exists()
-    contents = {
-        (agent.snippets_dir / f"{n:03d}.py").read_text() for n in (1, 2, 3)
-    }
-    # All three snippets kept their distinct bodies (no overwrite).
-    assert any("print('a')" in c for c in contents)
-    assert any("print('b')" in c for c in contents)
-    assert any("print('c')" in c for c in contents)
+    assert [r["name"] for r in tool_records] == ["read_file", "develop", "develop"]
 
 
 def test_stuck_nudge_fires_after_repeated_identical_calls(
@@ -242,12 +205,17 @@ def test_stuck_nudge_fires_after_repeated_identical_calls(
     """If the same single-call turn repeats N times, MainAgent appends a static
     "push on / never stop" nudge to input_list and clears its history.
 
-    Regression for #257 — the live failure showed `analyze(time.sleep(2))` repeated
-    623 times in a row.
+    Regression for #257 — a live failure showed the same no-op tool call
+    repeated 623 times in a row.
     """
     agent = MainAgent(slug="test", run_id="r1", goal_text="do the thing")
 
-    response = _fake_fc("analyze", code="import time\ntime.sleep(2)\nprint('Waiting...')")
+    monkeypatch.setattr(
+        main_agent,
+        "execute_filesystem_tool",
+        lambda name, args: json.dumps({"output": "ok", "returncode": 0}),
+    )
+    response = _fake_fc("read_file", path="/tmp/loop.txt")
     monkeypatch.setattr(main_agent, "call_llm", lambda **kwargs: (response, 0))
 
     threshold = main_agent._STUCK_REPEAT_THRESHOLD
@@ -285,8 +253,13 @@ def test_stuck_nudge_does_not_fire_for_varied_calls(patched_main_agent, monkeypa
     threshold = main_agent._STUCK_REPEAT_THRESHOLD
     nudge_text = main_agent._STUCK_NUDGE
 
+    monkeypatch.setattr(
+        main_agent,
+        "execute_filesystem_tool",
+        lambda name, args: json.dumps({"output": "ok", "returncode": 0}),
+    )
     responses = iter(
-        [_fake_fc("analyze", code=f"print({i})") for i in range(threshold + 2)]
+        [_fake_fc("read_file", path=f"/tmp/{i}.txt") for i in range(threshold + 2)]
     )
     monkeypatch.setattr(
         main_agent, "call_llm", lambda **kwargs: (next(responses), 0)

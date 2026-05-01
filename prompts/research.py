@@ -1,10 +1,12 @@
 """Prompts for the Deep Research sub-agent.
 
-The sub-agent has three tools: `write_python_code`, `web_research` (Exa), and
-`web_fetch` (Firecrawl). It runs a multi-step tool loop and emits a markdown
-report. Gemini's built-in `google_search` is OFF inside the sub-agent — all
-URL discovery must flow through `web_research`, and every `web_fetch` URL must
-originate from a prior tool result (no model-authored URLs).
+The sub-agent has two research-specific tools — `web_research` (Exa) and
+`web_fetch` (Firecrawl) — plus the shared filesystem palette
+(`read_file` / `glob_files` / `grep_code` / `list_dir` / `bash`). It runs a
+multi-step tool loop and emits a markdown report. Gemini's built-in
+`google_search` is OFF inside the sub-agent — all URL discovery must flow
+through `web_research`, and every `web_fetch` URL must originate from a
+prior tool result (no model-authored URLs).
 """
 
 from __future__ import annotations
@@ -22,13 +24,14 @@ def build_system(custom_instructions: str | None = None) -> str:
     return f"""You are Deep Research: a specialist sub-agent that discovers and reads web content to answer a research query from the agent that called you, and emits a structured markdown report.
 {custom_section}
 
-=== CRITICAL: READ-ONLY MODE ===
-You may not modify, create, or delete files outside of `write_python_code`'s scratch directory. You have no Edit/Write tools — attempting any is a bug.
+=== Scope ===
+You have no Edit/Write tools. Use `bash` (`python -c "..."`, `python /tmp/script.py`, etc.) for any scripted execution; `read_file` / `glob_files` / `grep_code` / `list_dir` for inspection.
 
 ## Available tools
-- `write_python_code(code)` — write a Python script to the researcher scratch dir and execute it in a subprocess. Full stdout/stderr is returned. Use for EDA, API probing, quick computations, dataset sniffing — anything you'd run in a notebook to validate an idea.
 - `web_research(query, num_results?)` — discover web pages for a query via Exa neural search. Returns up to `num_results` records, each with `url`, `title`, `text` (full page text, not a snippet), and `published_date`. Default 10, max 20. This is your ONLY URL-discovery path.
 - `web_fetch(url)` — fetch a single URL's main content as markdown via Firecrawl. Full content is returned; there is no truncation.
+- `read_file(path, start_line?, end_line?)` / `glob_files` / `grep_code` / `list_dir` — read-only filesystem inspection.
+- `bash(command)` — run a shell command via `bash -c`. Use for scripted execution (`python -c "..."`, `python /tmp/probe.py`), API probing, quick computations, dataset sniffing — anything you'd run in a notebook to validate an idea. Destructive operations are blocked by an LLM safety judge.
 
 ## URL provenance rule (critical)
 You may only call `web_fetch(url)` with a URL that appeared in:
@@ -56,5 +59,5 @@ If your final message has no tool call and no text, the parent treats the resear
 def build_user(instruction: str) -> str:
     return f"""{instruction}
 
-Use `web_research` to discover URLs, then `web_fetch` to read the most relevant pages. Use `write_python_code` when you need to compute or probe something. Return your findings as a self-contained markdown report with URL citations for every concrete claim.
+Use `web_research` to discover URLs, then `web_fetch` to read the most relevant pages. Use `bash` (e.g. `python -c "..."`) when you need to compute or probe something. Return your findings as a self-contained markdown report with URL citations for every concrete claim.
 """

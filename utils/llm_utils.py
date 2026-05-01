@@ -89,31 +89,6 @@ def append_message(role: str, message: str) -> dict:
     return {"role": gemini_role, "parts": [{"text": message}]}
 
 
-def get_tools():
-    """
-    Get tools as Gemini FunctionDeclaration objects.
-
-    Returns:
-        List of FunctionDeclaration objects
-    """
-    return [
-        types.FunctionDeclaration(
-            name="analyze",
-            description="Write and execute a Python script. The script runs in the task data directory with access to all data files, model outputs, and predictions. Print results to stdout.",
-            parameters_json_schema={
-                "type": "object",
-                "properties": {
-                    "code": {
-                        "type": "string",
-                        "description": "Complete Python script to execute.",
-                    }
-                },
-                "required": ["code"],
-            },
-        ),
-    ]
-
-
 # ---------------------------------------------------------------------------
 # Monitor tools (execute_bash for system diagnostics during training)
 # ---------------------------------------------------------------------------
@@ -140,16 +115,17 @@ def get_monitor_tools():
 
 
 # ---------------------------------------------------------------------------
-# Deep Research tools (web_research + web_fetch + write_python_code)
+# Deep Research tools (web_research + web_fetch)
 # ---------------------------------------------------------------------------
 
 
 def get_deep_research_tools():
     """Inner tools available to the Deep Research sub-agent.
 
-    The three research-specific tools (web_research / web_fetch /
-    write_python_code) plus the shared filesystem tools (read_file /
-    glob_files / grep_code / list_dir / bash).
+    The two research-specific tools (web_research / web_fetch) plus the
+    shared filesystem tools (read_file / glob_files / grep_code / list_dir /
+    bash). Use ``bash`` for any scripted execution (`python -c "..."` or
+    `python script.py`).
     """
     return [
         types.FunctionDeclaration(
@@ -195,25 +171,6 @@ def get_deep_research_tools():
                     },
                 },
                 "required": ["url"],
-            },
-        ),
-        types.FunctionDeclaration(
-            name="write_python_code",
-            description=(
-                "Write a Python script to the research scripts dir and execute "
-                "it in a subprocess. Full stdout/stderr is returned. Use for "
-                "EDA, API probing, quick computations — anything you'd run in "
-                "a notebook to validate an idea."
-            ),
-            parameters_json_schema={
-                "type": "object",
-                "properties": {
-                    "code": {
-                        "type": "string",
-                        "description": "Complete Python source to execute.",
-                    },
-                },
-                "required": ["code"],
             },
         ),
         *get_filesystem_tools(),
@@ -379,7 +336,7 @@ def get_main_agent_tools():
                 "integer id of the entry you selected from INDEX.md (the "
                 "`[NNN]` prefix) — the framework resolves it to the full "
                 "idea body. DO NOT hand-author submission artifacts yourself "
-                "via `analyze` — that is always wrong; it belongs here."
+                "— that is always wrong; it belongs here."
             ),
             parameters_json_schema={
                 "type": "object",
@@ -409,32 +366,6 @@ def get_main_agent_tools():
                     },
                 },
                 "required": ["instruction"],
-            },
-        ),
-        types.FunctionDeclaration(
-            name="analyze",
-            description=(
-                "Run a Python snippet in a fresh subprocess for INSPECTION and "
-                "ANALYSIS. Returns stdout/stderr. Legitimate uses: read files, "
-                "inspect artifacts produced by prior `develop` / `research` "
-                "calls, reproduce a reported score, grep code for leakage "
-                "patterns, compute analyses (per-class F1, calibration, "
-                "confusion matrices) over `valid_preds.csv`, list directory "
-                "contents. NOT for authoring submission artifacts (call "
-                "`develop`), NOT for modifying the Python environment "
-                "(`pip install`, `apt`, `conda`), NOT for long training runs. "
-                "If you find yourself iterating variants of a solution via "
-                "this tool, stop and call `develop(idea=...)` instead."
-            ),
-            parameters_json_schema={
-                "type": "object",
-                "properties": {
-                    "code": {
-                        "type": "string",
-                        "description": "Complete Python source to execute.",
-                    },
-                },
-                "required": ["code"],
             },
         ),
         types.FunctionDeclaration(
@@ -485,9 +416,10 @@ def get_main_agent_tools():
 def get_developer_tools():
     """Get tools available to the developer agents during code generation.
 
-    `explore_codebase` (codebase Q&A) plus `analyze` (Python in subprocess)
-    plus the shared filesystem tools (read_file / glob_files / grep_code /
-    list_dir / bash).
+    `explore_codebase` (codebase Q&A) plus the shared filesystem tools
+    (read_file / glob_files / grep_code / list_dir / bash). Use ``bash``
+    (`python -c "..."` or `python script.py`) for any code execution
+    during codegen.
     """
     return [
         types.FunctionDeclaration(
@@ -497,7 +429,7 @@ def get_developer_tools():
                 "packages and get back a markdown report with file:line citations. The "
                 "sub-agent reads source files using read_file/glob_files/grep_code/list_dir "
                 "across configured roots — it does NOT execute Python or shell commands. "
-                "To verify whether a snippet runs, use `analyze` instead.\n\n"
+                "To verify whether a snippet runs, use `bash` (e.g. `python -c \"...\"`).\n\n"
                 "Use this for static investigation: 'How does X work?', 'What's the "
                 "signature of Y?', 'Where is Z defined?', 'Show me callers of W'. Brief "
                 "the sub-agent like a smart colleague who just walked into the room — it "
@@ -513,30 +445,6 @@ def get_developer_tools():
                     }
                 },
                 "required": ["query"],
-            },
-        ),
-        types.FunctionDeclaration(
-            name="analyze",
-            description=(
-                "Run a Python snippet in a fresh subprocess and get back stdout, "
-                "stderr, and the exit code. Use this to VERIFY behavior — test an "
-                "import, probe an API, check a library version, prototype a function, "
-                "run a quick computation. The snippet runs with a timeout. Use this "
-                "tool when you would otherwise be guessing whether something works."
-            ),
-            parameters_json_schema={
-                "type": "object",
-                "properties": {
-                    "code": {
-                        "type": "string",
-                        "description": "Python source code to execute.",
-                    },
-                    "timeout_seconds": {
-                        "type": "integer",
-                        "description": "Hard timeout in seconds (default: 300).",
-                    },
-                },
-                "required": ["code"],
             },
         ),
         *get_filesystem_tools(),

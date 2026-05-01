@@ -32,14 +32,6 @@ class _StubFirecrawl:
         return self._next_doc
 
 
-class _StubJob:
-    def __init__(self, output: str):
-        self._output = output
-
-    def result(self):
-        return self._output
-
-
 @pytest.fixture
 def stubbed(monkeypatch, tmp_path):
     exa = _StubExa()
@@ -50,26 +42,14 @@ def stubbed(monkeypatch, tmp_path):
     monkeypatch.setattr(research_module, "Exa", lambda api_key: exa)
     monkeypatch.setattr(research_module, "Firecrawl", lambda api_key: fc)
 
-    executed = []
-
-    def _fake_execute(filepath, timeout_seconds):
-        executed.append((filepath, timeout_seconds))
-        return _StubJob(f"ran {filepath}\n")
-
-    monkeypatch.setattr(research_module, "execute_code", _fake_execute)
-
     research_dir = tmp_path / "research_1"
-    scripts_dir = research_dir / "scripts"
     (research_dir / "web_research").mkdir(parents=True)
     (research_dir / "web_fetch").mkdir(parents=True)
-    scripts_dir.mkdir(parents=True)
 
     return SimpleNamespace(
         exa=exa,
         fc=fc,
-        executed=executed,
         research_dir=research_dir,
-        scripts_dir=scripts_dir,
     )
 
 
@@ -103,17 +83,6 @@ def test_web_fetch_success_and_no_truncation(stubbed):
     assert stubbed.fc.calls[0]["only_main_content"] is True
 
 
-def test_write_python_code_writes_and_executes(stubbed):
-    result = json.loads(
-        research_module._tool_write_python_code("print('hi')", 5, stubbed.scripts_dir)
-    )
-    script_path = stubbed.scripts_dir / "5.py"
-    assert script_path.exists()
-    assert "print('hi')" in script_path.read_text()
-    assert "ran" in result["output"]
-    assert stubbed.executed[0][1] == research_module._WRITE_PYTHON_CODE_TIMEOUT_SECONDS
-
-
 def test_execute_tool_call_dispatches_and_writes_markdown_records(stubbed):
     stubbed.exa._next_results = [
         SimpleNamespace(url="https://a.example", title="A", text="body-a", published_date=None),
@@ -124,7 +93,6 @@ def test_execute_tool_call_dispatches_and_writes_markdown_records(stubbed):
 
     state = {
         "research_dir": stubbed.research_dir,
-        "scripts_dir": stubbed.scripts_dir,
         "tool_seq": {},
     }
 
@@ -142,12 +110,6 @@ def test_execute_tool_call_dispatches_and_writes_markdown_records(stubbed):
     wf_record = (stubbed.research_dir / "web_fetch" / "1.md").read_text()
     assert "# web_fetch #1" in wf_record
     assert "# hello\nworld" in wf_record
-
-    # write_python_code — no markdown record, but script IS written
-    item = SimpleNamespace(name="write_python_code", args={"code": "x=1"})
-    research_module._execute_tool_call(item, state)
-    assert (stubbed.scripts_dir / "1.py").exists()
-    assert not (stubbed.research_dir / "write_python_code").exists()
 
     # unknown tool raises
     with pytest.raises(ValueError, match="Unknown tool"):
@@ -171,7 +133,6 @@ def test_filesystem_tool_calls_route_to_filesystem_helpers(stubbed, monkeypatch)
 
     state = {
         "research_dir": stubbed.research_dir,
-        "scripts_dir": stubbed.scripts_dir,
         "tool_seq": {},
     }
 

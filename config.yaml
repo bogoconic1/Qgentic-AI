@@ -5,7 +5,6 @@ llm:
   leakage_review_model: "gemini-3.1-pro-preview"
   bash_judge_model: "gemini-3.1-pro-preview"  # judges every shell command before execution
 runtime:
-  write_python_code_timeout_seconds: 300             # Per-call timeout for write_python_code subprocess
   llm_max_retries: 5
   llm_backoff_sequence: [1, 5, 10, 30, 60]
   compaction_threshold_tokens: 200000  # compact when last call's prompt_token_count exceeds this
