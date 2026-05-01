@@ -178,6 +178,66 @@ def get_deep_research_tools():
 
 
 # ---------------------------------------------------------------------------
+# Developer tools (run_solution + web_search_stack_trace + filesystem)
+# ---------------------------------------------------------------------------
+
+
+def get_developer_tools():
+    """Inner tool palette for the Developer sub-agent.
+
+    Two developer-specific tools — ``run_solution`` (executes the agent's
+    SOLUTION.py under guardrails + LLM monitor) and ``web_search_stack_trace``
+    (web-grounded debug helper) — plus the shared filesystem palette
+    (``read_file`` / ``glob_files`` / ``grep_code`` / ``list_dir`` / ``bash`` /
+    ``write_file`` / ``edit_file``).
+    """
+    return [
+        types.FunctionDeclaration(
+            name="run_solution",
+            description=(
+                "Execute SOLUTION.py at the agent's working directory under "
+                "static guardrails (basicConfig order + FileHandler check) "
+                "and an LLM training monitor that watches stdout/stderr live "
+                "for NaN loss, deadlock, OOM, etc. Returns a JSON object: on "
+                "success {success, score, stats, elapsed_seconds, output_tail}; "
+                "on failure {success: false, error_kind, violations|error, "
+                "elapsed_seconds?, output_tail?}. SOLUTION.txt is written by "
+                "the script's own logger — read it via read_file for the "
+                "curated training log; output_tail here is a short slice of "
+                "raw stdout/stderr useful for pre-logger crashes and monitor "
+                "kill diagnostics."
+            ),
+            parameters_json_schema={
+                "type": "object",
+                "properties": {},
+            },
+        ),
+        types.FunctionDeclaration(
+            name="web_search_stack_trace",
+            description=(
+                "Research how to fix a Python error from a stack trace. Pass "
+                "the raw stderr (the function isolates the traceback) and "
+                "receive the same trace annotated with a web-grounded "
+                "suggested fix from a search-grounded LLM call. Use for "
+                "unfamiliar tracebacks; for tracebacks you can fix from "
+                "inspection alone, edit directly without calling this."
+            ),
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The stack trace text (raw stderr is fine).",
+                    },
+                },
+                "required": ["query"],
+            },
+        ),
+        *get_filesystem_tools(),
+    ]
+
+
+# ---------------------------------------------------------------------------
 # Filesystem + explore tools (scoped to runtime.explore_allowed_roots)
 # ---------------------------------------------------------------------------
 
@@ -379,10 +439,11 @@ def get_main_agent_tools():
                 "developer subagent writes a `SOLUTION.py` that produces whatever "
                 "artifact the session goal requires (CSV, ONNX graph, model "
                 "weights, generated text, ZIP bundle, …) and dumps "
-                "`SOLUTION.json` with a score. Retries internally until "
-                "valid stats land. Returns a structured payload with the final "
-                "code, its path on disk, and a summary (score, stats, "
-                "stdout_tail, attempts_made). Omit `idea_id` on the very first "
+                "`SOLUTION.json` with a score. Returns a structured payload "
+                "with `version_dir` (where SOLUTION.{py,md,json,txt} live), "
+                "a `summary` (score, stats, elapsed_seconds, runs_made, "
+                "final_error), and a `report` (the developer's SOLUTION.md). "
+                "Omit `idea_id` on the very first "
                 "call (baseline from the session goal); otherwise pass the "
                 "integer id of the entry you selected from INDEX.md (the "
                 "`[NNN]` prefix) — the framework resolves it to the full "
