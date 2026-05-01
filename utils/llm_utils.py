@@ -304,17 +304,8 @@ def get_filesystem_tools():
     ]
 
 
-def get_explore_tools():
-    """Get the tools available to the codebase exploration sub-agent.
-
-    Same shape as :func:`get_filesystem_tools`; kept as a separate name so
-    the explorer can diverge later if it ever needs to.
-    """
-    return get_filesystem_tools()
-
-
 # ---------------------------------------------------------------------------
-# Developer tools (explore_codebase for code generation)
+# Main Agent tools
 # ---------------------------------------------------------------------------
 
 
@@ -413,39 +404,3 @@ def get_main_agent_tools():
     ]
 
 
-def get_developer_tools():
-    """Get tools available to the developer agents during code generation.
-
-    `explore_codebase` (codebase Q&A) plus the shared filesystem tools
-    (read_file / glob_files / grep_code / list_dir / bash). Use ``bash``
-    (`python -c "..."` or `python script.py`) for any code execution
-    during codegen.
-    """
-    return [
-        types.FunctionDeclaration(
-            name="explore_codebase",
-            description=(
-                "Ask a natural-language question about the codebase or installed Python "
-                "packages and get back a markdown report with file:line citations. The "
-                "sub-agent reads source files using read_file/glob_files/grep_code/list_dir "
-                "across configured roots — it does NOT execute Python or shell commands. "
-                "To verify whether a snippet runs, use `bash` (e.g. `python -c \"...\"`).\n\n"
-                "Use this for static investigation: 'How does X work?', 'What's the "
-                "signature of Y?', 'Where is Z defined?', 'Show me callers of W'. Brief "
-                "the sub-agent like a smart colleague who just walked into the room — it "
-                "hasn't seen this conversation. Terse command-style prompts produce "
-                "shallow, generic work."
-            ),
-            parameters_json_schema={
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Natural-language question about the codebase or installed libraries.",
-                    }
-                },
-                "required": ["query"],
-            },
-        ),
-        *get_filesystem_tools(),
-    ]
