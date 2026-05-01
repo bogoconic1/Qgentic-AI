@@ -168,3 +168,97 @@ def test_render_tool_record_markdown_error_path():
     )
     assert "# web_research #2" in rendered
     assert "**ERROR:** exa down" in rendered
+
+
+# ---------------------------------------------------------------------------
+# RESEARCH.md scaffold + return-value contract
+# ---------------------------------------------------------------------------
+
+
+def _terminating_response():
+    """Build a fake call_llm response whose only part has no function_call."""
+    return SimpleNamespace(
+        candidates=[
+            SimpleNamespace(
+                content=SimpleNamespace(
+                    parts=[SimpleNamespace(function_call=None)],
+                    model_dump=lambda **_: {
+                        "role": "model",
+                        "parts": [{"text": "done"}],
+                    },
+                )
+            )
+        ],
+        text="done",
+    )
+
+
+def test_run_creates_research_md_scaffold(monkeypatch, tmp_path):
+    """run() scaffolds RESEARCH.md as `# {instruction}\\n` and returns its
+    contents — even if the agent never modifies it (terminates immediately)."""
+    monkeypatch.setattr(research_module, "_TASK_ROOT", tmp_path)
+    monkeypatch.setattr(research_module, "should_compact", lambda _: False)
+    monkeypatch.setattr(
+        research_module, "call_llm", lambda **_: (_terminating_response(), 100)
+    )
+
+    agent = research_module.ResearcherAgent("slug", "run-1", 1)
+    instruction = "Research how to fine-tune Llama on Modal"
+    result = agent.run(instruction)
+
+    research_md = tmp_path / "slug" / "run-1" / "research_1" / "RESEARCH.md"
+    assert research_md.exists()
+    assert research_md.read_text(encoding="utf-8") == f"# {instruction}\n"
+    # The framework ALWAYS returns RESEARCH.md from disk — never the LLM text.
+    assert result == f"# {instruction}\n"
+
+
+def test_run_returns_research_md_contents_when_populated(monkeypatch, tmp_path):
+    """If the agent populates RESEARCH.md via write_file, run() returns the
+    populated content (not the scaffold, not the terminating LLM text)."""
+    from tools import filesystem as fs_module
+
+    monkeypatch.setattr(research_module, "_TASK_ROOT", tmp_path)
+    monkeypatch.setattr(research_module, "should_compact", lambda _: False)
+    monkeypatch.setattr(fs_module, "_ALLOWED_ROOTS", [tmp_path.resolve()])
+
+    research_md_path = tmp_path / "slug" / "run-1" / "research_1" / "RESEARCH.md"
+    populated = "# done\n\nFinding: foo is bar (https://example.com).\n"
+
+    call_count = [0]
+
+    def fake_call_llm(**_):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            fc = SimpleNamespace(
+                name="write_file",
+                args={"path": str(research_md_path), "content": populated},
+                id="call_1",
+            )
+            return (
+                SimpleNamespace(
+                    candidates=[
+                        SimpleNamespace(
+                            content=SimpleNamespace(
+                                parts=[SimpleNamespace(function_call=fc)],
+                                model_dump=lambda **_: {
+                                    "role": "model",
+                                    "parts": [{"function_call": {"name": "write_file"}}],
+                                },
+                            )
+                        )
+                    ],
+                    text=None,
+                ),
+                100,
+            )
+        return _terminating_response(), 100
+
+    monkeypatch.setattr(research_module, "call_llm", fake_call_llm)
+
+    agent = research_module.ResearcherAgent("slug", "run-1", 1)
+    result = agent.run("any instruction")
+
+    assert research_md_path.read_text(encoding="utf-8") == populated
+    assert result == populated
+    assert call_count[0] == 2
