@@ -1,15 +1,15 @@
-"""Shared filesystem tools (read + grep + glob + list + bash).
+"""Shared filesystem tools (read + grep + glob + list + bash + write + edit).
 
-Lifted out of ``agents/explorer.py`` so the same five tools can be exposed
-to the developer and researcher subagents. The four read-only helpers
-(``_tool_read_file``, ``_tool_glob_files``, ``_tool_grep_code``,
-``_tool_list_dir``) carry the same semantics as before — paths must
-resolve under one of the configured allowed roots.
+A single palette of file/system tools usable by every sub-agent. The four
+read-only helpers (``_tool_read_file``, ``_tool_glob_files``,
+``_tool_grep_code``, ``_tool_list_dir``) and the two write helpers
+(``_tool_write_file``, ``_tool_edit_file``) all gate on
+``runtime.explore_allowed_roots``: paths outside the allow-list are
+rejected before any I/O happens.
 
-The fifth tool, ``_tool_bash``, is the widened replacement for the old
-``bash_readonly``: it runs through ``bash -c`` so pipes, redirection,
-chaining, and any command name are allowed, but every command is run
-past ``judge_bash_command`` first to block destructive operations.
+``_tool_bash`` runs through ``bash -c`` so pipes, redirection, chaining,
+and any command name are allowed, but every command is sent through
+``judge_bash_command`` first to block destructive operations.
 """
 
 from __future__ import annotations

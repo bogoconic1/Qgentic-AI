@@ -3,7 +3,7 @@
 Caps tool/execution output at a character limit before it enters the
 conversation thread. When truncated, the full text is optionally persisted
 to a file and the truncated version includes a reference so the LLM can
-read more via ``explore_codebase`` / ``analyze`` if needed.
+read more via ``read_file`` / ``grep_code`` if needed.
 """
 
 from __future__ import annotations
