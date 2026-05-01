@@ -257,3 +257,37 @@ def test_execute_filesystem_tool_routes_by_name(sandbox, monkeypatch):
     assert json.loads(out)["returncode"] == 0
 
     assert fs.execute_filesystem_tool("nope", {}) is None
+
+
+# ---------------------------------------------------------------------------
+# LLM-side palette: get_filesystem_tools() must stay in sync with the dispatcher
+# ---------------------------------------------------------------------------
+
+
+def test_get_filesystem_tools_palette_matches_dispatcher():
+    """The FunctionDeclaration palette and the dispatcher's tool-name set must
+    list the same tools. If they drift, agents will either advertise tools the
+    dispatcher cannot run, or the dispatcher will silently support tools the
+    LLM is never told about."""
+    from utils.llm_utils import get_filesystem_tools
+
+    palette_names = {t.name for t in get_filesystem_tools()}
+    assert palette_names == fs.FILESYSTEM_TOOL_NAMES
+
+
+def test_get_filesystem_tools_write_and_edit_schemas():
+    """write_file and edit_file declarations carry the parameter schema we need
+    for the dispatcher to call into the helpers correctly."""
+    from utils.llm_utils import get_filesystem_tools
+
+    by_name = {t.name: t for t in get_filesystem_tools()}
+
+    write = by_name["write_file"].parameters_json_schema
+    assert set(write["required"]) == {"path", "content"}
+    assert write["properties"]["path"]["type"] == "string"
+    assert write["properties"]["content"]["type"] == "string"
+
+    edit = by_name["edit_file"].parameters_json_schema
+    assert set(edit["required"]) == {"path", "old_string", "new_string"}
+    assert edit["properties"]["replace_all"]["type"] == "boolean"
+    assert "replace_all" not in edit["required"]

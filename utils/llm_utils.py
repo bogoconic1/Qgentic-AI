@@ -301,6 +301,66 @@ def get_filesystem_tools():
                 "required": ["command"],
             },
         ),
+        types.FunctionDeclaration(
+            name="write_file",
+            description=(
+                "Write a file to the local filesystem. Creates parent "
+                "directories as needed and overwrites any existing file at "
+                "`path`. Prefer `edit_file` for in-place modifications since "
+                "it only sends the diff; use `write_file` for new files or "
+                "full rewrites. Path must resolve under one of the configured "
+                "allowed roots."
+            ),
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Absolute path or path relative to cwd.",
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "Full file content to write.",
+                    },
+                },
+                "required": ["path", "content"],
+            },
+        ),
+        types.FunctionDeclaration(
+            name="edit_file",
+            description=(
+                "Perform an exact-string replacement inside a file. "
+                "`old_string` must match a unique substring; if the file "
+                "contains more than one occurrence, set `replace_all` to "
+                "true. Curly quotes are normalized so a straight-quote "
+                "`old_string` matches typographic content. To create a new "
+                "file pass an empty `old_string` and the desired content as "
+                "`new_string`. Path must resolve under one of the configured "
+                "allowed roots."
+            ),
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Absolute path or path relative to cwd.",
+                    },
+                    "old_string": {
+                        "type": "string",
+                        "description": "Substring to replace; must be unique unless replace_all is true. Empty string + missing file = create.",
+                    },
+                    "new_string": {
+                        "type": "string",
+                        "description": "Replacement text. Empty string deletes old_string.",
+                    },
+                    "replace_all": {
+                        "type": "boolean",
+                        "description": "Replace every occurrence of old_string instead of failing on multiple matches (default: false).",
+                    },
+                },
+                "required": ["path", "old_string", "new_string"],
+            },
+        ),
     ]
 
 
