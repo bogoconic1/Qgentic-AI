@@ -1,15 +1,13 @@
-"""Developer subagent — codegen disabled in this PR.
+"""DeveloperAgent stub.
 
-PR 1 of the issue-#221 stack strips the legacy fenced-``python`` codegen
-contract (the model emitting ``train.py`` as a markdown code block that
-``extract_python_code`` writes to disk wholesale). PR 2 will reintroduce a
-structured contract with ``write_file`` / ``edit_file`` tools modeled on
-``claude-code/tools/FileWriteTool`` and ``claude-code/tools/FileEditTool``.
+PR 1 (#270) stripped the legacy fenced-``python`` codegen contract. This PR
+drops the lingering helpers (``_find_previous_code``,
+``_load_custom_instructions``) that assumed a same-shape rewrite. A
+follow-up PR will replace this stub with a fresh codegen loop modeled on
+``ResearcherAgent.run()`` plus the new ``write_file`` / ``edit_file`` tools.
 
-Until PR 2 lands, ``DeveloperAgent.run()`` raises ``NotImplementedError`` so
-a ``develop`` call from MainAgent surfaces a clean error instead of silently
-producing nothing. ``_find_previous_code`` and ``_load_custom_instructions``
-are kept because PR 2's reborn codegen loop will need them.
+Until then, ``run()`` raises ``NotImplementedError`` so a ``develop`` call
+from MainAgent surfaces a clean error.
 """
 
 from __future__ import annotations
@@ -27,12 +25,11 @@ logger = logging.getLogger(__name__)
 
 
 _CONFIG = get_config()
-_PATH_CFG = _CONFIG["paths"]
-_TASK_ROOT = Path(_PATH_CFG["task_root"])
+_TASK_ROOT = Path(_CONFIG["paths"]["task_root"])
 
 
 class DeveloperAgent:
-    """One-training-iteration subagent (codegen disabled until PR 2)."""
+    """Stub. Reborn in a follow-up PR."""
 
     def __init__(
         self,
@@ -48,41 +45,9 @@ class DeveloperAgent:
         self.base_dir = _TASK_ROOT / slug / run_id / f"developer_{dev_iter}"
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
-    def _find_previous_code(self) -> str | None:
-        """Return the text of the last successful ``train.py`` from prior dev_iter, if any."""
-        if self.dev_iter <= 1:
-            return None
-        for prev_iter in range(self.dev_iter - 1, 0, -1):
-            prev_base = _TASK_ROOT / self.slug / self.run_id / f"developer_{prev_iter}"
-            if not prev_base.exists():
-                continue
-            successful = sorted(
-                (
-                    d
-                    for d in prev_base.iterdir()
-                    if d.is_dir()
-                    and d.name.isdigit()
-                    and (d / "train_stats.json").exists()
-                ),
-                key=lambda p: int(p.name),
-            )
-            if successful:
-                train_py = successful[-1] / "train.py"
-                if train_py.exists():
-                    return train_py.read_text()
-        return None
-
-    def _load_custom_instructions(self) -> str | None:
-        """Read `task/<slug>/DEVELOPER_INSTRUCTIONS.md` if it exists."""
-        path = _TASK_ROOT / self.slug / "DEVELOPER_INSTRUCTIONS.md"
-        if not path.exists():
-            return None
-        return path.read_text(encoding="utf-8")
-
     @weave.op()
     def run(self, idea: str) -> dict[str, Any]:
         raise NotImplementedError(
-            "DeveloperAgent codegen is disabled in this PR. PR 2 will introduce "
-            "write_file / edit_file tools (modeled on claude-code's FileWriteTool "
-            "and FileEditTool) and re-enable a structured codegen loop."
+            "DeveloperAgent codegen is disabled. A follow-up PR will introduce "
+            "the new flat-loop codegen design."
         )

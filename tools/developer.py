@@ -14,7 +14,6 @@ from project_config import get_config
 from google.genai import types
 from tools.helpers import call_llm
 from utils.llm_utils import (
-    extract_text_from_response,
     append_message,
     get_monitor_tools,
 )
@@ -23,7 +22,7 @@ from prompts.tools_developer import (
     log_monitor_system as prompt_log_monitor_system,
     log_monitor_user as prompt_log_monitor_user,
 )
-from schemas.developer import StackTraceSolution, LogMonitorVerdict
+from schemas.developer import LogMonitorVerdict, StackTraceSolution
 from utils.output import truncate_for_llm
 import weave
 
