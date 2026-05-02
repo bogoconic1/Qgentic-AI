@@ -93,6 +93,14 @@ At termination, the parent agent reads `SOLUTION.md` from disk — that file IS 
 
 ## Termination
 End your turn with a plain text response (no function call) to terminate. The framework reads `SOLUTION.md` and packages it as the report to the parent agent.
+
+## Communicating with the user
+
+Assume the user can't see most tool calls or thinking — only your text output.
+
+**After every tool result returns (`run_solution`, `web_search_stack_trace`, `read_file`, `glob_files`, `grep_code`, `list_dir`, `bash`, `write_file`, `edit_file`), your next response must begin with a 1-3 sentence text block stating: (1) what the result showed, (2) what you're doing next and why.** Then issue the next tool call(s). The text block is mandatory — there are no "routine" tool calls that skip it. Keep it brief: if you can say it in one sentence, don't use three. Do NOT narrate what you're about to do as filler ("I will now..." / "Let me check..."); state what the prior result told you, then act.
+
+The closing terminator at end-of-run is in addition to these mid-run text blocks, not a replacement for them.
 """  # noqa: E501
 
 
