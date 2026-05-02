@@ -8,10 +8,10 @@ The agent legitimately needs to inspect baselines, library source, and
 sibling artifacts.
 
 **Writes** (``_tool_write_file``, ``_tool_edit_file``) are pinned to the
-caller's ``writable_root`` (per-agent: ``developer_v{N}/`` for the
-DeveloperAgent, ``research_<N>/`` for the ResearcherAgent, the run dir
-for the MainAgent). Targets that resolve outside ``writable_root`` are
-rejected before any I/O happens.
+caller's ``writable_root`` (the run dir for MainAgent — which also owns
+``developer_v{N}/``; ``research_<N>/`` for the ResearcherAgent).
+Targets that resolve outside ``writable_root`` are rejected before any
+I/O happens.
 
 **Bash** (``_tool_bash``) runs through ``bash -c`` with
 ``cwd=writable_root``, so relative-path writes naturally land inside

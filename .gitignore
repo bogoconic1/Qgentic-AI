@@ -9,7 +9,6 @@ catboost_info/
 wandb/
 goal_runs/
 GOAL.md
-DEVELOPER_INSTRUCTIONS.md
 RESEARCHER_INSTRUCTIONS.md
 # C extensions
 *.so

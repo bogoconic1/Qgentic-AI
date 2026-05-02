@@ -26,10 +26,14 @@ from pathlib import Path
 import weave
 from google.genai import types
 
-from agents.developer import DeveloperAgent
 from agents.researcher import ResearcherAgent
 from project_config import get_config
 from prompts.main_agent import build_system
+from tools.developer import (
+    SOLUTION_PY_SCAFFOLD,
+    run_solution as tool_run_solution,
+    web_search_stack_trace as tool_web_search_stack_trace,
+)
 from tools.filesystem import execute_filesystem_tool
 from tools.helpers import call_llm
 from utils.compact import compact_messages, should_compact
@@ -226,30 +230,40 @@ class MainAgent:
             self._recent_call_sigs.clear()
 
     def _dispatch(self, name: str, args: dict) -> str:
-        if name == "develop":
-            if "idea_id" not in args:
-                return json.dumps({
-                    "error": (
-                        "idea_id is required. If the idea pool is empty, call "
-                        "add_idea(...) first to seed a narrow starter idea, "
-                        "then call develop(idea_id=<the new id>)."
-                    )
-                })
-            idea_id = int(args["idea_id"])
-            matches = list(self.ideas_dir.glob(f"{idea_id:03d}_*.md"))
-            if not matches:
-                return json.dumps({"error": f"unknown idea_id: {idea_id}"})
-            idea_text = matches[0].read_text()
+        if name == "start_dev_session":
             with self._iter_lock:
                 self.dev_iter += 1
                 dev_iter_snapshot = self.dev_iter
-            dev = DeveloperAgent(
-                slug=self.slug,
-                run_id=self.run_id,
-                dev_iter=dev_iter_snapshot,
-            )
-            payload = dev.run(idea=idea_text)
-            return json.dumps(payload)
+            version_dir = self.base_dir / f"developer_v{dev_iter_snapshot}"
+            version_dir.mkdir(parents=True, exist_ok=True)
+
+            solution_py_path = version_dir / "SOLUTION.py"
+            if not solution_py_path.exists():
+                solution_py_path.write_text(SOLUTION_PY_SCAFFOLD, encoding="utf-8")
+
+            header = "# SOLUTION\n"
+            idea_id = args.get("idea_id")
+            if idea_id is not None:
+                matches = list(self.ideas_dir.glob(f"{int(idea_id):03d}_*.md"))
+                if matches:
+                    title = matches[0].read_text().splitlines()[0].lstrip("# ").strip()
+                    header = f"# {title}\n"
+            solution_md_path = version_dir / "SOLUTION.md"
+            if not solution_md_path.exists():
+                solution_md_path.write_text(header, encoding="utf-8")
+
+            return json.dumps({"version_dir": str(version_dir)})
+
+        if name == "run_solution":
+            version_dir = args.get("version_dir")
+            if not version_dir:
+                return json.dumps({
+                    "error": "version_dir is required. Call start_dev_session first."
+                })
+            return truncate_for_llm(tool_run_solution(version_dir))
+
+        if name == "web_search_stack_trace":
+            return truncate_for_llm(tool_web_search_stack_trace(args["query"]))
 
         if name == "research":
             with self._iter_lock:

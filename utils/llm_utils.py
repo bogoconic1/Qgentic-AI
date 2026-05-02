@@ -178,66 +178,6 @@ def get_deep_research_tools():
 
 
 # ---------------------------------------------------------------------------
-# Developer tools (run_solution + web_search_stack_trace + filesystem)
-# ---------------------------------------------------------------------------
-
-
-def get_developer_tools():
-    """Inner tool palette for the Developer sub-agent.
-
-    Two developer-specific tools — ``run_solution`` (executes the agent's
-    SOLUTION.py under guardrails + LLM monitor) and ``web_search_stack_trace``
-    (web-grounded debug helper) — plus the shared filesystem palette
-    (``read_file`` / ``glob_files`` / ``grep_code`` / ``list_dir`` / ``bash`` /
-    ``write_file`` / ``edit_file``).
-    """
-    return [
-        types.FunctionDeclaration(
-            name="run_solution",
-            description=(
-                "Execute SOLUTION.py at the agent's working directory under "
-                "static guardrails (basicConfig order + FileHandler check) "
-                "and an LLM training monitor that watches stdout/stderr live "
-                "for NaN loss, deadlock, OOM, etc. Returns a JSON object: on "
-                "success {success, score, stats, elapsed_seconds, output_tail}; "
-                "on failure {success: false, error_kind, violations|error, "
-                "elapsed_seconds?, output_tail?}. SOLUTION.txt is written by "
-                "the script's own logger — read it via read_file for the "
-                "curated training log; output_tail here is a short slice of "
-                "raw stdout/stderr useful for pre-logger crashes and monitor "
-                "kill diagnostics."
-            ),
-            parameters_json_schema={
-                "type": "object",
-                "properties": {},
-            },
-        ),
-        types.FunctionDeclaration(
-            name="web_search_stack_trace",
-            description=(
-                "Research how to fix a Python error from a stack trace. Pass "
-                "the raw stderr (the function isolates the traceback) and "
-                "receive the same trace annotated with a web-grounded "
-                "suggested fix from a search-grounded LLM call. Use for "
-                "unfamiliar tracebacks; for tracebacks you can fix from "
-                "inspection alone, edit directly without calling this."
-            ),
-            parameters_json_schema={
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "The stack trace text (raw stderr is fine).",
-                    },
-                },
-                "required": ["query"],
-            },
-        ),
-        *get_filesystem_tools(),
-    ]
-
-
-# ---------------------------------------------------------------------------
 # Filesystem tools (reads run wide; writes pinned to per-agent writable_root)
 # ---------------------------------------------------------------------------
 
@@ -433,33 +373,76 @@ def get_main_agent_tools():
     """Get the tool palette available to the Main Agent."""
     return [
         types.FunctionDeclaration(
-            name="develop",
+            name="start_dev_session",
             description=(
-                "Runs one developer iteration and OWNS SUBMISSION AUTHORING: the "
-                "developer subagent writes a `SOLUTION.py` that produces whatever "
-                "artifact the session goal requires (CSV, ONNX graph, model "
-                "weights, generated text, ZIP bundle, …) and dumps "
-                "`SOLUTION.json` with a score. Returns a structured payload "
-                "with `version_dir` (where SOLUTION.{py,md,json,txt} live), "
-                "a `summary` (score, stats, elapsed_seconds, runs_made, "
-                "final_error), and a `report` (the developer's SOLUTION.md). "
-                "`idea_id` is REQUIRED — pass the integer id of the entry "
-                "you selected from INDEX.md (the `[NNN]` prefix); the "
-                "framework resolves it to the full idea body. If the idea "
-                "pool is empty (first move), `add_idea(...)` a narrow "
-                "starter idea first, then call `develop` against its id. "
-                "DO NOT hand-author submission artifacts yourself — that is "
-                "always wrong; it belongs here."
+                "Allocate a fresh `developer_v{N}/` directory under the run "
+                "root. Creates the dir, scaffolds `SOLUTION.py` with the "
+                "required logging stanza (basicConfig + FileHandler for "
+                "SOLUTION.txt), and scaffolds `SOLUTION.md` with a header. "
+                "Returns a JSON object with `version_dir` (absolute path). "
+                "Use this BEFORE writing or editing SOLUTION.py for a new "
+                "implementation attempt; subsequent edits go through "
+                "`write_file` / `edit_file` against `version_dir/SOLUTION.py`. "
+                "Optional `idea_id` looks up the idea from INDEX.md and uses "
+                "its title for the SOLUTION.md header."
             ),
             parameters_json_schema={
                 "type": "object",
                 "properties": {
                     "idea_id": {
                         "type": "integer",
-                        "description": "Id of the idea entry to develop (the `[NNN]` prefix in INDEX.md). Required.",
+                        "description": "Optional id of the idea entry whose title seeds SOLUTION.md.",
                     },
                 },
-                "required": ["idea_id"],
+            },
+        ),
+        types.FunctionDeclaration(
+            name="run_solution",
+            description=(
+                "Execute `SOLUTION.py` inside `version_dir` under static "
+                "guardrails (basicConfig order + FileHandler for SOLUTION.txt) "
+                "and an LLM training monitor that watches stdout/stderr live "
+                "for NaN loss, deadlock, OOM, etc. Returns a JSON object: on "
+                "success {success, score, stats, elapsed_seconds, output_tail}; "
+                "on failure {success: false, error_kind, violations|error, "
+                "elapsed_seconds?, output_tail?}. SOLUTION.txt is written by "
+                "the script's own logger — read it via `read_file` for the "
+                "curated training log; `output_tail` here is a short slice of "
+                "raw stdout/stderr useful for pre-logger crashes and monitor "
+                "kill diagnostics. After a SUCCESSFUL run, the next response "
+                "must include the `metric=… delta=… decision=…` line and the "
+                "next call must `edit_file MAIN.md` appending the same line."
+            ),
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "version_dir": {
+                        "type": "string",
+                        "description": "Absolute path returned by `start_dev_session` (`task/<slug>/<run_id>/developer_v{N}/`).",
+                    },
+                },
+                "required": ["version_dir"],
+            },
+        ),
+        types.FunctionDeclaration(
+            name="web_search_stack_trace",
+            description=(
+                "Research how to fix a Python error from a stack trace. Pass "
+                "the raw stderr (the function isolates the traceback) and "
+                "receive the same trace annotated with a web-grounded "
+                "suggested fix from a search-grounded LLM call. Use for "
+                "unfamiliar tracebacks; for tracebacks you can fix from "
+                "inspection alone, edit directly without calling this."
+            ),
+            parameters_json_schema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The stack trace text (raw stderr is fine).",
+                    },
+                },
+                "required": ["query"],
             },
         ),
         types.FunctionDeclaration(
