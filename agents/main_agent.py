@@ -226,14 +226,19 @@ class MainAgent:
 
     def _dispatch(self, name: str, args: dict) -> str:
         if name == "develop":
-            if "idea_id" in args:
-                idea_id = int(args["idea_id"])
-                matches = list(self.ideas_dir.glob(f"{idea_id:03d}_*.md"))
-                if not matches:
-                    return json.dumps({"error": f"unknown idea_id: {idea_id}"})
-                idea_text = matches[0].read_text()
-            else:
-                idea_text = self.goal_text
+            if "idea_id" not in args:
+                return json.dumps({
+                    "error": (
+                        "idea_id is required. If the idea pool is empty, call "
+                        "add_idea(...) first to seed a narrow starter idea, "
+                        "then call develop(idea_id=<the new id>)."
+                    )
+                })
+            idea_id = int(args["idea_id"])
+            matches = list(self.ideas_dir.glob(f"{idea_id:03d}_*.md"))
+            if not matches:
+                return json.dumps({"error": f"unknown idea_id: {idea_id}"})
+            idea_text = matches[0].read_text()
             with self._iter_lock:
                 self.dev_iter += 1
                 dev_iter_snapshot = self.dev_iter

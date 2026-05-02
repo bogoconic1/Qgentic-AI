@@ -144,18 +144,15 @@ def test_dispatches_each_tool(patched_main_agent, monkeypatch):
     ]
 
 
-def test_baseline_develop_passes_goal_as_idea(patched_main_agent, monkeypatch):
-    """`develop()` with no idea_id falls through to idea=<goal_text>."""
+def test_develop_without_idea_id_returns_error(patched_main_agent, monkeypatch):
+    """`develop()` with no idea_id returns an error and does NOT invoke the subagent."""
     agent = MainAgent(slug="test", run_id="r1", goal_text="the session goal body")
-    responses = iter([_fake_fc("develop")])
-    monkeypatch.setattr(
-        main_agent, "call_llm", lambda **kwargs: (next(responses), 0)
-    )
 
-    agent._step([])
+    result = agent._dispatch("develop", {})
 
-    assert len(patched_main_agent["dev_calls"]) == 1
-    assert patched_main_agent["dev_calls"][0]["idea"] == "the session goal body"
+    assert "error" in json.loads(result)
+    assert "idea_id is required" in json.loads(result)["error"]
+    assert patched_main_agent["dev_calls"] == []
 
 
 def test_parallel_dispatch_preserves_order(patched_main_agent, monkeypatch):
