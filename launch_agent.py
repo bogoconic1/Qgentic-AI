@@ -4,11 +4,10 @@ Loads `GOAL.md`, downloads the Kaggle competition data if needed, and hands
 control to `MainAgent.run()` for the rest of the session. No termination in
 software — SIGKILL when satisfied.
 
-Source of truth for `GOAL.md` / `DEVELOPER_INSTRUCTIONS.md` /
-`RESEARCHER_INSTRUCTIONS.md` is the **repo root**. Each launch copies them
-into `task/<slug>/`, overwriting any prior copies — so the agents always
-read the latest version straight from the repo. Edit at the root, not the
-copy.
+Source of truth for `GOAL.md` / `RESEARCHER_INSTRUCTIONS.md` is the **repo
+root**. Each launch copies them into `task/<slug>/`, overwriting any prior
+copies — so the agents always read the latest version straight from the
+repo. Edit at the root, not the copy.
 """
 
 import argparse
@@ -31,23 +30,22 @@ _REPO_ROOT = Path(__file__).resolve().parent
 
 # Files copied from the repo root into `task/<slug>/` on every launch. The
 # root copies are source of truth; the task-dir copies are what every agent
-# reads at startup. All three are required at the repo root — a missing
-# file raises FileNotFoundError so a misconfigured run fails loudly at
-# launch instead of silently dropping custom instructions.
+# reads at startup. Both are required at the repo root — a missing file
+# raises FileNotFoundError so a misconfigured run fails loudly at launch
+# instead of silently dropping custom instructions.
 _TASK_METADATA_FILES = (
     "GOAL.md",
-    "DEVELOPER_INSTRUCTIONS.md",
     "RESEARCHER_INSTRUCTIONS.md",
 )
 
 
 def _sync_task_metadata(base_dir: Path) -> None:
-    """Copy GOAL.md and the two INSTRUCTIONS files from repo root → base_dir.
+    """Copy GOAL.md and RESEARCHER_INSTRUCTIONS.md from repo root → base_dir.
 
-    Always overwrites — root is the source of truth. All three files MUST
-    exist at the repo root; raises ``FileNotFoundError`` listing whichever
-    are missing so the launcher surfaces a misconfigured run before it
-    starts producing artifacts.
+    Always overwrites — root is the source of truth. Both files MUST exist
+    at the repo root; raises ``FileNotFoundError`` listing whichever are
+    missing so the launcher surfaces a misconfigured run before it starts
+    producing artifacts.
     """
     missing = [
         name for name in _TASK_METADATA_FILES if not (_REPO_ROOT / name).exists()

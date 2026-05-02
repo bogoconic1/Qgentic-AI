@@ -50,6 +50,32 @@ _BASELINE_CODE_TIMEOUT = _RUNTIME_CFG["baseline_code_timeout"]
 _LOG_MONITOR_INTERVAL = _RUNTIME_CFG["log_monitor_interval"]
 
 
+SOLUTION_PY_SCAFFOLD = '''\
+"""SOLUTION.py — agent-authored training script.
+
+Edit below the logging stanza. Do not move or remove the basicConfig
+call — guardrails enforce that it precedes all third-party imports
+and registers a FileHandler for SOLUTION.txt.
+"""
+
+import logging
+from pathlib import Path
+
+logging.basicConfig(
+    level=logging.INFO,
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler(Path(__file__).parent / "SOLUTION.txt", mode="w"),
+    ],
+    format="%(asctime)s %(levelname)s %(message)s",
+)
+
+logger = logging.getLogger(__name__)
+
+# === third-party imports below this line ===
+'''
+
+
 @weave.op()
 def web_search_stack_trace(query: str) -> str:
     """Research how to fix a bug based on the stack trace and error message.

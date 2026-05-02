@@ -52,35 +52,31 @@ def _fake_multi(*calls: tuple[str, dict]):
 def patched_main_agent(monkeypatch, tmp_path):
     monkeypatch.setattr(main_agent, "_TASK_ROOT", tmp_path / "task")
 
-    dev_calls: list = []
+    run_solution_calls: list = []
 
-    class FakeDeveloperAgent:
-        def __init__(self, slug, run_id, dev_iter):
-            dev_calls.append(
-                {
-                    "slug": slug,
-                    "run_id": run_id,
-                    "dev_iter": dev_iter,
-                }
-            )
-            self.dev_iter = dev_iter
-
-        def run(self, idea):
-            dev_calls[-1]["idea"] = idea
-            return {
-                "status": "success",
-                "version_dir": f"task/test/r1/developer_v{self.dev_iter}",
-                "summary": {
-                    "score": 0.5,
-                    "stats": {},
-                    "elapsed_seconds": 0.0,
-                    "runs_made": 1,
-                    "final_error": None,
-                },
-                "report": f"# fake idea\n\nDev iter {self.dev_iter} fake report.\n",
+    def fake_run_solution(version_dir):
+        run_solution_calls.append({"version_dir": str(version_dir)})
+        return json.dumps(
+            {
+                "success": True,
+                "score": 0.5,
+                "stats": {},
+                "elapsed_seconds": 0.0,
+                "output_tail": "",
             }
+        )
 
-    monkeypatch.setattr(main_agent, "DeveloperAgent", FakeDeveloperAgent)
+    monkeypatch.setattr(main_agent, "tool_run_solution", fake_run_solution)
+
+    web_search_calls: list = []
+
+    def fake_web_search_stack_trace(query):
+        web_search_calls.append({"query": query})
+        return f"trace + fix for: {query[:40]}"
+
+    monkeypatch.setattr(
+        main_agent, "tool_web_search_stack_trace", fake_web_search_stack_trace
+    )
 
     research_calls: list = []
 
@@ -99,7 +95,11 @@ def patched_main_agent(monkeypatch, tmp_path):
 
     monkeypatch.setattr(main_agent, "ResearcherAgent", FakeResearcherAgent)
 
-    return {"dev_calls": dev_calls, "research_calls": research_calls}
+    return {
+        "run_solution_calls": run_solution_calls,
+        "web_search_calls": web_search_calls,
+        "research_calls": research_calls,
+    }
 
 
 def test_dispatches_each_tool(patched_main_agent, monkeypatch):
@@ -109,7 +109,12 @@ def test_dispatches_each_tool(patched_main_agent, monkeypatch):
         [
             _fake_fc("add_idea", title="try it", description="body"),
             _fake_fc("update_idea", idea_id=1, description="body v2"),
-            _fake_fc("develop", idea_id=1),
+            _fake_fc("start_dev_session", idea_id=1),
+            _fake_fc(
+                "run_solution",
+                version_dir=str(agent.base_dir / "developer_v1"),
+            ),
+            _fake_fc("web_search_stack_trace", query="Traceback ..."),
             _fake_fc("research", instruction="look up X"),
             _fake_fc("remove_idea", idea_id=1),
         ]
@@ -118,50 +123,93 @@ def test_dispatches_each_tool(patched_main_agent, monkeypatch):
         main_agent, "call_llm", lambda **kwargs: (next(responses), 0)
     )
 
-    for _ in range(5):
+    for _ in range(7):
         agent._step([])
 
-    # developer + researcher subagents invoked once each
-    assert len(patched_main_agent["dev_calls"]) == 1
-    assert patched_main_agent["dev_calls"][0]["dev_iter"] == 1
-    # develop resolved idea_id=1 → full file body (includes the updated description "body v2")
-    assert "body v2" in patched_main_agent["dev_calls"][0]["idea"]
+    # start_dev_session allocated developer_v1/ with both scaffolds.
+    version_dir = agent.base_dir / "developer_v1"
+    assert version_dir.is_dir()
+    assert (version_dir / "SOLUTION.py").exists()
+    assert (version_dir / "SOLUTION.md").read_text(encoding="utf-8").startswith("# ")
+    assert agent.dev_iter == 1
+
+    # run_solution forwarded to tools.developer.run_solution.
+    assert len(patched_main_agent["run_solution_calls"]) == 1
+    assert patched_main_agent["run_solution_calls"][0]["version_dir"] == str(
+        version_dir
+    )
+
+    # web_search_stack_trace forwarded to the underlying tool.
+    assert len(patched_main_agent["web_search_calls"]) == 1
+    assert patched_main_agent["web_search_calls"][0]["query"].startswith("Traceback")
+
+    # researcher subagent invoked once.
     assert len(patched_main_agent["research_calls"]) == 1
     assert patched_main_agent["research_calls"][0]["research_iter"] == 1
 
     # idea pool mutated: add → update → remove leaves pool empty
     assert "try it" not in (agent.ideas_dir / "INDEX.md").read_text()
 
-    # chat log captured every step (5 assistant turns + 5 tool results = 10 records)
+    # chat log captured every step (7 assistant turns + 7 tool results = 14 records)
     records = [json.loads(line) for line in agent.chat_log.read_text().splitlines()]
-    assert len(records) == 10
+    assert len(records) == 14
     assert [r["name"] for r in records[1::2]] == [
         "add_idea",
         "update_idea",
-        "develop",
+        "start_dev_session",
+        "run_solution",
+        "web_search_stack_trace",
         "research",
         "remove_idea",
     ]
 
 
-def test_develop_without_idea_id_returns_error(patched_main_agent, monkeypatch):
-    """`develop()` with no idea_id returns an error and does NOT invoke the subagent."""
+def test_run_solution_without_version_dir_returns_error(
+    patched_main_agent, monkeypatch
+):
+    """`run_solution()` with no version_dir returns an error and does NOT execute."""
     agent = MainAgent(slug="test", run_id="r1", goal_text="the session goal body")
 
-    result = agent._dispatch("develop", {})
+    result = agent._dispatch("run_solution", {})
 
     assert "error" in json.loads(result)
-    assert "idea_id is required" in json.loads(result)["error"]
-    assert patched_main_agent["dev_calls"] == []
+    assert "version_dir is required" in json.loads(result)["error"]
+    assert patched_main_agent["run_solution_calls"] == []
+
+
+def test_start_dev_session_uses_idea_title_for_solution_md(
+    patched_main_agent, monkeypatch
+):
+    """When idea_id is supplied, SOLUTION.md is seeded with the idea's title."""
+    agent = MainAgent(slug="test", run_id="r1", goal_text="goal")
+    agent._dispatch(
+        "add_idea", {"title": "fancy refactor", "description": "do something"}
+    )
+
+    result = json.loads(agent._dispatch("start_dev_session", {"idea_id": 1}))
+    version_dir = Path(result["version_dir"])
+
+    assert version_dir.name == "developer_v1"
+    solution_md = (version_dir / "SOLUTION.md").read_text(encoding="utf-8")
+    assert solution_md.startswith("# fancy refactor")
+
+
+def test_start_dev_session_without_idea_id_uses_default_header(
+    patched_main_agent, monkeypatch
+):
+    """Without idea_id, SOLUTION.md gets a generic header (no crash)."""
+    agent = MainAgent(slug="test", run_id="r1", goal_text="goal")
+
+    result = json.loads(agent._dispatch("start_dev_session", {}))
+    version_dir = Path(result["version_dir"])
+
+    assert (version_dir / "SOLUTION.md").read_text(encoding="utf-8") == "# SOLUTION\n"
+    assert (version_dir / "SOLUTION.py").exists()
 
 
 def test_parallel_dispatch_preserves_order(patched_main_agent, monkeypatch):
     """Multiple function_calls in one turn execute and keep original ordering."""
     agent = MainAgent(slug="test", run_id="r1", goal_text="do the thing")
-
-    # Seed the idea pool with two ideas the LLM can develop.
-    agent._dispatch("add_idea", {"title": "alpha", "description": "idea-alpha"})
-    agent._dispatch("add_idea", {"title": "beta", "description": "idea-beta"})
 
     # Filesystem tool calls are routed through execute_filesystem_tool — stub it.
     monkeypatch.setattr(
@@ -175,27 +223,32 @@ def test_parallel_dispatch_preserves_order(patched_main_agent, monkeypatch):
     # Single LLM turn returning three parallel calls in a specific order.
     response = _fake_multi(
         ("read_file", {"path": "/tmp/seed.txt"}),
-        ("develop", {"idea_id": 1}),
-        ("develop", {"idea_id": 2}),
+        ("start_dev_session", {}),
+        ("research", {"instruction": "explore Y"}),
     )
     monkeypatch.setattr(main_agent, "call_llm", lambda **kwargs: (response, 0))
 
     agent._step([])
 
-    # Both develop calls ran; each got its own dev_iter.
-    assert len(patched_main_agent["dev_calls"]) == 2
-    assert sorted(c["dev_iter"] for c in patched_main_agent["dev_calls"]) == [1, 2]
+    # start_dev_session ran (developer_v1/ exists).
+    assert (agent.base_dir / "developer_v1").is_dir()
+    # research subagent invoked.
+    assert len(patched_main_agent["research_calls"]) == 1
 
     # function_response Content appended to input_list matches function_call order.
     func_content = agent.input_list[-1]
     assert func_content["role"] == "function"
     emitted_names = [p["function_response"]["name"] for p in func_content["parts"]]
-    assert emitted_names == ["read_file", "develop", "develop"]
+    assert emitted_names == ["read_file", "start_dev_session", "research"]
 
     # Chat log: assistant turn + 3 tool records in the original order.
     records = [json.loads(line) for line in agent.chat_log.read_text().splitlines()]
     tool_records = [r for r in records if r["role"] == "tool"]
-    assert [r["name"] for r in tool_records] == ["read_file", "develop", "develop"]
+    assert [r["name"] for r in tool_records] == [
+        "read_file",
+        "start_dev_session",
+        "research",
+    ]
 
 
 def test_stuck_nudge_fires_after_repeated_identical_calls(
