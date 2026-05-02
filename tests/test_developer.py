@@ -150,7 +150,8 @@ def test_run_loads_developer_instructions_when_present(patched_developer, monkey
 
     captured = {}
 
-    def fake_build_system(custom_instructions=None):
+    def fake_build_system(writable_root, custom_instructions=None):
+        captured["writable_root"] = writable_root
         captured["custom_instructions"] = custom_instructions
         return "system prompt"
 

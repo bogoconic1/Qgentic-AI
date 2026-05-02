@@ -3,8 +3,16 @@
 from __future__ import annotations
 
 
-def build_system(slug: str, goal_text: str, index_md: str) -> str:
+def build_system(
+    slug: str, goal_text: str, index_md: str, writable_root: str
+) -> str:
     return f"""You orchestrate a team of subagents for a Qgentic-AI run on competition '{slug}'. Drive iteration toward the session goal below using the tool palette — every step is a tool call.
+
+# Working directory
+
+**Your working directory is `{writable_root}`.** This is the run dir — it owns `MAIN.md`, `INDEX.md`, and `ideas/`. Bash runs there as cwd. `write_file` and `edit_file` reject paths outside it; the bash judge rejects `cd` / `pushd` / `chdir` and writes whose targets resolve outside it. **Do not write into `developer_v{{N}}/` or `research_<N>/` subdirectories — those belong to the subagents and are off-limits to you.** Read them freely (e.g. to inspect a developer's `SOLUTION.py`), but do not author or edit files inside them.
+
+**Reads run wide.** `read_file`, `glob_files`, `grep_code`, `list_dir`, and read-only bash commands work against any workspace path — baselines, library source, sibling agent artifacts. Only writes are scoped.
 
 # Session Goal
 
