@@ -124,6 +124,22 @@ def test_run_failed_run_solution_records_error_kind(patched_developer, monkeypat
     assert result["summary"]["score"] is None
 
 
+def test_run_no_run_status_when_no_run_solution_called(patched_developer, monkeypatch):
+    """Agent terminating without calling run_solution returns status='no_run'."""
+    dev = DeveloperAgent(slug="test", run_id="r1", dev_iter=0)
+
+    monkeypatch.setattr(
+        developer, "call_llm", lambda **kwargs: (_fake_text("nothing to do"), 0)
+    )
+
+    result = dev.run(idea="explore-only")
+
+    assert result["status"] == "no_run"
+    assert result["summary"]["runs_made"] == 0
+    assert result["summary"]["score"] is None
+    assert result["summary"]["final_error"] is None
+
+
 def test_run_loads_developer_instructions_when_present(patched_developer, monkeypatch):
     """DEVELOPER_INSTRUCTIONS.md at task/<slug>/ is threaded into build_system."""
     task_root = developer._TASK_ROOT
