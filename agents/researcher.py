@@ -31,6 +31,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 
 import weave
@@ -211,6 +212,7 @@ class ResearcherAgent:
         self.web_research_dir = self.research_dir / "web_research"
         self.web_fetch_dir = self.research_dir / "web_fetch"
         self.research_md_path = self.research_dir / "RESEARCH.md"
+        self.chat_log = self.research_dir / "researcher_chat.jsonl"
 
     def _load_custom_instructions(self) -> str | None:
         """Read `task/<slug>/RESEARCHER_INSTRUCTIONS.md` if it exists."""
@@ -293,6 +295,12 @@ class ResearcherAgent:
                 if hasattr(part, "function_call")
             )
 
+            assistant_content = response.candidates[0].content.model_dump(
+                mode="json", exclude_none=True
+            )
+            input_list.append(assistant_content)
+            self._log({"role": "assistant", "content": assistant_content})
+
             if not has_function_calls:
                 logger.info("ResearcherAgent completed at step %d", step)
                 break
@@ -300,19 +308,23 @@ class ResearcherAgent:
             function_responses = []
             for part in parts:
                 if hasattr(part, "function_call") and part.function_call:
-                    tool_result_str = _execute_tool_call(part.function_call, state)
+                    fc = part.function_call
+                    name = fc.name
+                    args = dict(fc.args)
+                    tool_result_str = _execute_tool_call(fc, state)
                     function_responses.append(
                         types.Part.from_function_response(
-                            name=part.function_call.name,
+                            name=name,
                             response={"result": tool_result_str},
                         )
                     )
+                    self._log({
+                        "role": "tool",
+                        "name": name,
+                        "args": args,
+                        "result": tool_result_str,
+                    })
 
-            input_list.append(
-                response.candidates[0].content.model_dump(
-                    mode="json", exclude_none=True
-                )
-            )
             if function_responses:
                 input_list.append(
                     types.Content(
@@ -327,3 +339,8 @@ class ResearcherAgent:
             len(report),
         )
         return report
+
+    def _log(self, record: dict) -> None:
+        record["ts"] = datetime.now(timezone.utc).isoformat()
+        with self.chat_log.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(record) + "\n")

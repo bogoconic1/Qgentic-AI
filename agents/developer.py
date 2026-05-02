@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -146,6 +147,7 @@ class DeveloperAgent:
         self.base_dir = _TASK_ROOT / slug / run_id / f"developer_v{dev_iter}"
         self.solution_py_path = self.base_dir / "SOLUTION.py"
         self.solution_md_path = self.base_dir / "SOLUTION.md"
+        self.chat_log = self.base_dir / "developer_chat.jsonl"
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
         if not self.solution_py_path.exists():
@@ -223,6 +225,12 @@ class DeveloperAgent:
                 if hasattr(part, "function_call")
             )
 
+            assistant_content = response.candidates[0].content.model_dump(
+                mode="json", exclude_none=True
+            )
+            input_list.append(assistant_content)
+            self._log({"role": "assistant", "content": assistant_content})
+
             if not has_function_calls:
                 logger.info("DeveloperAgent completed at step %d", step)
                 break
@@ -230,19 +238,23 @@ class DeveloperAgent:
             function_responses = []
             for part in parts:
                 if hasattr(part, "function_call") and part.function_call:
-                    tool_result_str = _execute_tool_call(part.function_call, state)
+                    fc = part.function_call
+                    name = fc.name
+                    args = dict(fc.args)
+                    tool_result_str = _execute_tool_call(fc, state)
                     function_responses.append(
                         types.Part.from_function_response(
-                            name=part.function_call.name,
+                            name=name,
                             response={"result": tool_result_str},
                         )
                     )
+                    self._log({
+                        "role": "tool",
+                        "name": name,
+                        "args": args,
+                        "result": tool_result_str,
+                    })
 
-            input_list.append(
-                response.candidates[0].content.model_dump(
-                    mode="json", exclude_none=True
-                )
-            )
             if function_responses:
                 input_list.append(
                     types.Content(
@@ -277,3 +289,8 @@ class DeveloperAgent:
             },
             "report": report,
         }
+
+    def _log(self, record: dict) -> None:
+        record["ts"] = datetime.now(timezone.utc).isoformat()
+        with self.chat_log.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(record) + "\n")
