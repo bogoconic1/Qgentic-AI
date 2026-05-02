@@ -248,7 +248,12 @@ class DeveloperAgent:
                 )
 
         report = self.solution_md_path.read_text(encoding="utf-8")
-        status = "success" if state["last_score"] is not None else "failed"
+        if state["runs_made"] == 0:
+            status = "no_run"
+        elif state["last_score"] is not None:
+            status = "success"
+        else:
+            status = "failed"
         logger.info(
             "DeveloperAgent.run finished slug=%s run_id=%s dev_iter=%d status=%s",
             self.slug,
