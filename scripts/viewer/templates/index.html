@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Tasks · Qgentic Viewer{% endblock %}
+{% block content %}
+<h1>Tasks</h1>
+{% if not slugs %}
+<p class="empty">No tasks found under <code>{{ task_root }}</code>.</p>
+{% else %}
+<table class="listing">
+  <thead><tr><th>slug</th><th>latest run</th><th>runs</th></tr></thead>
+  <tbody>
+  {% for s in slugs %}
+    <tr>
+      <td><a href="{{ url_for('slug_page', slug=s.name) }}">{{ s.name }}</a></td>
+      <td>
+        {% if s.latest_run %}
+          <a href="{{ url_for('run_page', slug=s.name, run_id=s.latest_run) }}">{{ s.latest_run }}</a>
+        {% else %}
+          <span class="muted">—</span>
+        {% endif %}
+      </td>
+      <td>{{ s.run_count }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

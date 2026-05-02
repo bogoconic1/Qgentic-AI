@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}{{ run.run_id }} · {{ run.slug }}{% endblock %}
+{% block breadcrumbs %}
+  / <a href="{{ url_for('slug_page', slug=run.slug) }}">{{ run.slug }}</a>
+  / <a href="{{ url_for('run_page', slug=run.slug, run_id=run.run_id) }}">{{ run.run_id }}</a>
+{% endblock %}
+{% block toolbar %}
+  <a class="toolbar-btn" href="{{ url_for('run_page', slug=run.slug, run_id=run.run_id, live=1) }}">live ↺</a>
+{% endblock %}
+{% block content %}
+<aside class="sidebar">
+  <h3>Run files</h3>
+  <ul class="links">
+    {% for label, rel in run_files %}
+      <li><a href="{{ url_for('file_page', path=rel) }}">{{ label }}</a></li>
+    {% endfor %}
+  </ul>
+  <h3>Subagents</h3>
+  <ul class="links">
+    {% for n in run.research_indices %}
+      <li><a href="{{ url_for('research_page', slug=run.slug, run_id=run.run_id, n=n) }}">research_{{ n }}</a></li>
+    {% endfor %}
+    {% if not run.research_indices %}
+      <li class="muted">none yet</li>
+    {% endif %}
+  </ul>
+</aside>
+<section class="transcript">
+  <h1>MainAgent · {{ run.run_id }}</h1>
+  {% if not run.has_main_log %}
+    <p class="empty">no main_agent_chat.jsonl yet — refresh after the run starts.</p>
+  {% else %}
+    {% from "_transcript.html" import render_records %}
+    {{ render_records(records) }}
+  {% endif %}
+</section>
+{% endblock %}

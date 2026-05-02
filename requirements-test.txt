@@ -14,3 +14,5 @@ PyYAML
 requests
 firecrawl-py
 exa-py
+flask
+markdown

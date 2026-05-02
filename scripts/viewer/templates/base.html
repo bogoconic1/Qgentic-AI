@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{% block title %}Qgentic Viewer{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  {% if live %}
+  <script>
+    (function () {
+      var key = "viewer:scroll:" + location.pathname + location.search;
+      var saved = sessionStorage.getItem(key);
+      if (saved !== null) window.scrollTo(0, parseInt(saved, 10));
+      window.addEventListener("scroll", function () {
+        sessionStorage.setItem(key, window.scrollY);
+      }, { passive: true });
+      setTimeout(function () { location.reload(); }, 3000);
+    })();
+  </script>
+  {% endif %}
+</head>
+<body>
+  <header>
+    <nav class="breadcrumbs">
+      <a href="{{ url_for('index') }}">tasks</a>
+      {% block breadcrumbs %}{% endblock %}
+    </nav>
+    {% block toolbar %}{% endblock %}
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
