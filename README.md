@@ -84,10 +84,23 @@ The original Kaggle pipeline: Researcher + Developer agents iterate on a competi
 
 ### Create Required Files
 
-Before running, create these files in `task/<slug>/`:
+The repo ships three empty templates — `GOAL.example.md`, `DEVELOPER_INSTRUCTIONS.example.md`, `RESEARCHER_INSTRUCTIONS.example.md`. Copy each one to the matching `*.md` filename and fill it in for your task; the `*.md` working copies are gitignored so per-task content never lands in the repo:
+
+```bash
+cp GOAL.example.md GOAL.md
+cp DEVELOPER_INSTRUCTIONS.example.md DEVELOPER_INSTRUCTIONS.md
+cp RESEARCHER_INSTRUCTIONS.example.md RESEARCHER_INSTRUCTIONS.md
+```
+
+Then edit each `*.md` at the repo root:
 
 - **`GOAL.md`**: Session-wide objective, threaded into every agent's system prompt.
-- **`description.md`**: Competition description and evaluation criteria (read by the developer's generated `SOLUTION.py`).
+- **`DEVELOPER_INSTRUCTIONS.md`**: Task-specific guidance inlined into the Developer subagent's system prompt.
+- **`RESEARCHER_INSTRUCTIONS.md`**: Task-specific guidance inlined into the Researcher subagent's system prompt.
+
+Each launch copies all three into `task/<slug>/`, overwriting any stale copies. Root is source of truth; all three are required (the launcher errors at startup if any are missing).
+
+A fourth file, **`task/<slug>/description.md`**, holds the competition description / evaluation criteria. It is **not** copied from root — `launch_agent.py` populates it from `kagglehub` automatically on the first launch with that slug.
 
 The Main Agent bootstraps everything else — it writes ideas, research reports, and per-iteration developer outputs under `task/<slug>/<run_id>/` itself.
 
