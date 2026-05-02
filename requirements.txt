@@ -40,3 +40,5 @@ torchgeo
 scikit-image
 google-genai
 anthropic
+flask>=3.0
+markdown>=3.5

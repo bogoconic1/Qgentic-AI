@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{{ kind }}_{{ n }} · {{ run.run_id }}{% endblock %}
+{% block breadcrumbs %}
+  / <a href="{{ url_for('slug_page', slug=run.slug) }}">{{ run.slug }}</a>
+  / <a href="{{ url_for('run_page', slug=run.slug, run_id=run.run_id) }}">{{ run.run_id }}</a>
+  / {{ subagent_label }}
+{% endblock %}
+{% block toolbar %}
+  <a class="toolbar-btn" href="{{ request.path }}?live=1">live ↺</a>
+{% endblock %}
+{% block content %}
+<aside class="sidebar">
+  <h3>Artifacts</h3>
+  <ul class="links">
+    {% for label, rel in artifacts %}
+      <li><a href="{{ url_for('file_page', path=rel) }}">{{ label }}</a></li>
+    {% endfor %}
+    {% if not artifacts %}
+      <li class="muted">none yet</li>
+    {% endif %}
+  </ul>
+  <h3>Other subagents</h3>
+  <ul class="links">
+    {% for v in run.research_indices %}
+      {% if not (kind == 'researcher' and v == n) %}
+        <li><a href="{{ url_for('research_page', slug=run.slug, run_id=run.run_id, n=v) }}">research_{{ v }}</a></li>
+      {% endif %}
+    {% endfor %}
+    <li><a href="{{ url_for('run_page', slug=run.slug, run_id=run.run_id) }}">main agent</a></li>
+  </ul>
+</aside>
+<section class="transcript">
+  <h1>{{ subagent_label }}</h1>
+  {% if log_missing %}
+    <p class="empty">no chat log yet — refresh after the subagent starts.</p>
+  {% else %}
+    {% from "_transcript.html" import render_records %}
+    {{ render_records(records) }}
+  {% endif %}
+</section>
+{% endblock %}

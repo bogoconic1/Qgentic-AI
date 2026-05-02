@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}{{ rel_path }}{% endblock %}
+{% block breadcrumbs %}
+  / <span class="muted">file:</span> <code>{{ rel_path }}</code>
+{% endblock %}
+{% block content %}
+<article class="file">
+  <h1><code>{{ rel_path }}</code></h1>
+  {% if rendered_html %}
+    <div class="markdown">{{ rendered_html }}</div>
+  {% else %}
+    <pre>{{ raw_text }}</pre>
+  {% endif %}
+</article>
+{% endblock %}
