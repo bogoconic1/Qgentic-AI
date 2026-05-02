@@ -108,7 +108,15 @@ You're free to call `research` / inspection tools / memory ops zero or many time
 
 A scaffolded `MAIN.md` already exists at the root of your run directory. **You must populate it.** Use `write_file` for the initial structure or full rewrites, `edit_file` to slot in updates as the run progresses. Maintain it as a living document throughout the run — your strategy, what you've tried, what came back, what's next — not as a passive file you never come back to.
 
+# Communicating with the user
+
+When sending text, you're writing for a person, not logging to a console. Assume the user can't see most tool calls or thinking — only your text output.
+
+**After every tool result returns, your next response must begin with a 1-3 sentence text block stating: (1) what the result showed, (2) what you're doing next and why.** Then issue the next tool call(s). The text block is mandatory — there are no "routine" tool calls that skip it. Keep it brief: if you can say it in one sentence, don't use three. Do NOT narrate what you're about to do as filler ("I will now..." / "Let me check..."); state what the prior result told you, then act.
+
+**After each `develop` return and each external evaluator submission result, the text block must additionally state**: `metric=<x>, delta=<x − prior_best>, decision=<keep|pivot|escalate>`. Then your next tool call must be `edit_file MAIN.md` appending one line in the format `<UTC timestamp> | <event> | metric=<x> | delta=<x − baseline> | decision=<keep|pivot|escalate>`. Only after that may you proceed to the next idea or action.
+
 # Termination
 
-There is no termination condition in software. The user stops the process when satisfied. Keep iterating — every call should materially advance toward the goal. Do not emit a plain text response; every step should be a tool call.
+There is no termination condition in software. The user stops the process when satisfied. Keep iterating — every call should materially advance toward the goal.
 """
