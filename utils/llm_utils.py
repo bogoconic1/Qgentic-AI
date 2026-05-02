@@ -443,22 +443,23 @@ def get_main_agent_tools():
                 "with `version_dir` (where SOLUTION.{py,md,json,txt} live), "
                 "a `summary` (score, stats, elapsed_seconds, runs_made, "
                 "final_error), and a `report` (the developer's SOLUTION.md). "
-                "Omit `idea_id` on the very first "
-                "call (baseline from the session goal); otherwise pass the "
-                "integer id of the entry you selected from INDEX.md (the "
-                "`[NNN]` prefix) — the framework resolves it to the full "
-                "idea body. DO NOT hand-author submission artifacts yourself "
-                "— that is always wrong; it belongs here."
+                "`idea_id` is REQUIRED — pass the integer id of the entry "
+                "you selected from INDEX.md (the `[NNN]` prefix); the "
+                "framework resolves it to the full idea body. If the idea "
+                "pool is empty (first move), `add_idea(...)` a narrow "
+                "starter idea first, then call `develop` against its id. "
+                "DO NOT hand-author submission artifacts yourself — that is "
+                "always wrong; it belongs here."
             ),
             parameters_json_schema={
                 "type": "object",
                 "properties": {
                     "idea_id": {
                         "type": "integer",
-                        "description": "Id of the idea entry to develop (the `[NNN]` prefix in INDEX.md). Omit for baseline.",
+                        "description": "Id of the idea entry to develop (the `[NNN]` prefix in INDEX.md). Required.",
                     },
                 },
-                "required": [],
+                "required": ["idea_id"],
             },
         ),
         types.FunctionDeclaration(
