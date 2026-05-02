@@ -1,15 +1,24 @@
 """Shared filesystem tools (read + grep + glob + list + bash + write + edit).
 
-A single palette of file/system tools usable by every sub-agent. The four
-read-only helpers (``_tool_read_file``, ``_tool_glob_files``,
-``_tool_grep_code``, ``_tool_list_dir``) and the two write helpers
-(``_tool_write_file``, ``_tool_edit_file``) all gate on
-``runtime.explore_allowed_roots``: paths outside the allow-list are
+A single palette of file/system tools usable by every sub-agent.
+
+**Reads** (``_tool_read_file``, ``_tool_glob_files``, ``_tool_grep_code``,
+``_tool_list_dir``) run wide — any path on the workspace is fair game.
+The agent legitimately needs to inspect baselines, library source, and
+sibling artifacts.
+
+**Writes** (``_tool_write_file``, ``_tool_edit_file``) are pinned to the
+caller's ``writable_root`` (per-agent: ``developer_v{N}/`` for the
+DeveloperAgent, ``research_<N>/`` for the ResearcherAgent, the run dir
+for the MainAgent). Targets that resolve outside ``writable_root`` are
 rejected before any I/O happens.
 
-``_tool_bash`` runs through ``bash -c`` so pipes, redirection, chaining,
-and any command name are allowed, but every command is sent through
-``judge_bash_command`` first to block destructive operations.
+**Bash** (``_tool_bash``) runs through ``bash -c`` with
+``cwd=writable_root``, so relative-path writes naturally land inside
+the agent's directory. Each command is judged by ``judge_bash_command``
+(LLM-as-judge), which rejects ``cd``/``pushd``/``chdir`` (no escape from
+cwd) and writes whose targets resolve outside ``writable_root``, on
+top of the existing destructive-op block list.
 """
 
 from __future__ import annotations
@@ -17,7 +26,6 @@ from __future__ import annotations
 import json
 import logging
 import subprocess
-import sysconfig
 from pathlib import Path
 
 from project_config import get_config
@@ -29,35 +37,34 @@ logger = logging.getLogger(__name__)
 
 _RUNTIME_CFG = get_config()["runtime"]
 
-_USER_ROOTS = [Path(r).resolve() for r in _RUNTIME_CFG["explore_allowed_roots"]]
-_SITE_PACKAGES = Path(sysconfig.get_path("purelib")).resolve()
-_ALLOWED_ROOTS: list[Path] = _USER_ROOTS + [_SITE_PACKAGES]
-
 
 _BASH_OUTPUT_CAP_BYTES = 8 * 1024
 _BASH_TIMEOUT_SECONDS = int(_RUNTIME_CFG.get("bash_timeout_seconds", 600))
 
 
 # ---------------------------------------------------------------------------
-# Path validation
+# writable_root containment check (used by write_file / edit_file only)
 # ---------------------------------------------------------------------------
 
 
-def _validate_path(path: Path) -> str | None:
-    """Return an error string if the resolved path is outside every allowed root."""
+def _inside(target: Path, writable_root: Path) -> bool:
+    """Return True iff ``target`` resolves to a path under ``writable_root``."""
     try:
-        resolved = path.resolve()
-    except Exception as exc:
-        return f"Failed to resolve path: {exc}"
-    for root in _ALLOWED_ROOTS:
-        try:
-            resolved.relative_to(root)
-            return None
-        except ValueError:
-            continue
-    return (
-        f"Path {resolved} is outside the allowed roots "
-        f"({', '.join(str(r) for r in _ALLOWED_ROOTS)})"
+        target.resolve().relative_to(writable_root.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def _outside_writable_root_error(target: Path, writable_root: Path) -> str:
+    return json.dumps(
+        {
+            "error": (
+                f"Path {target.resolve()} is outside writable_root "
+                f"{writable_root.resolve()}. Writes must land inside the "
+                "agent's working directory."
+            )
+        }
     )
 
 
@@ -70,10 +77,6 @@ def _tool_read_file(
     path: str, start_line: int | None = None, end_line: int | None = None
 ) -> str:
     full_path = Path(path)
-    error = _validate_path(full_path)
-    if error:
-        return json.dumps({"error": error})
-
     resolved = full_path.resolve()
     if not resolved.exists():
         return json.dumps({"error": f"File not found: {path}"})
@@ -114,10 +117,6 @@ def _tool_read_file(
 
 def _tool_glob_files(root: str, pattern: str) -> str:
     root_path = Path(root)
-    error = _validate_path(root_path)
-    if error:
-        return json.dumps({"error": error})
-
     resolved = root_path.resolve()
     if not resolved.exists():
         return json.dumps({"error": f"Root not found: {root}"})
@@ -143,10 +142,6 @@ def _tool_grep_code(
     max_results: int = 20,
 ) -> str:
     root_path = Path(root)
-    error = _validate_path(root_path)
-    if error:
-        return json.dumps({"error": error})
-
     resolved = root_path.resolve()
     if not resolved.exists():
         return json.dumps({"error": f"Root not found: {root}"})
@@ -178,10 +173,6 @@ def _tool_grep_code(
 
 def _tool_list_dir(path: str, max_entries: int = 100) -> str:
     full_path = Path(path)
-    error = _validate_path(full_path)
-    if error:
-        return json.dumps({"error": error})
-
     resolved = full_path.resolve()
     if not resolved.exists():
         return json.dumps({"error": f"Path not found: {path}"})
@@ -214,27 +205,30 @@ def _tool_list_dir(path: str, max_entries: int = 100) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _tool_bash(command: str) -> str:
+def _tool_bash(command: str, *, writable_root: Path) -> str:
     """Run a shell command after the LLM safety judge has signed off.
 
-    Goes through ``bash -c`` so the agent can use pipes, redirection,
-    command chaining, environment variables, and any installed binary.
-    Each unique command is judged by ``judge_bash_command`` first; the
-    judge's verdict is cached.
+    Goes through ``bash -c`` with ``cwd=writable_root`` so the agent can
+    use pipes, redirection, command chaining, environment variables, and
+    any installed binary, and so relative-path writes naturally land
+    inside the agent's directory. Each unique command is judged by
+    ``judge_bash_command(command, writable_root)`` first; the judge's
+    verdict is cached.
     """
-    verdict = judge_bash_command(command)
+    verdict = judge_bash_command(command, str(writable_root))
     if verdict.verdict != "allow":
         return json.dumps(
             {"error": f"Blocked by safety judge: {verdict.reason}"}
         )
 
-    logger.info("bash exec: %s", command[:200])
+    logger.info("bash exec (cwd=%s): %s", writable_root, command[:200])
     try:
         result = subprocess.run(
             ["bash", "-c", command],
             capture_output=True,
             text=True,
             timeout=_BASH_TIMEOUT_SECONDS,
+            cwd=str(writable_root),
         )
     except subprocess.TimeoutExpired:
         return json.dumps({"error": f"Command timed out after {_BASH_TIMEOUT_SECONDS}s"})
@@ -300,11 +294,10 @@ def _apply_edit_to_file(content: str, old: str, new: str, replace_all: bool) -> 
     return content.replace(old_eff, "") if replace_all else content.replace(old_eff, "", 1)
 
 
-def _tool_write_file(path: str, content: str) -> str:
+def _tool_write_file(path: str, content: str, *, writable_root: Path) -> str:
     full_path = Path(path)
-    error = _validate_path(full_path)
-    if error:
-        return json.dumps({"error": error})
+    if not _inside(full_path, writable_root):
+        return _outside_writable_root_error(full_path, writable_root)
     resolved = full_path.resolve()
     if resolved.exists() and resolved.is_dir():
         return json.dumps({"error": f"Path is a directory: {path}"})
@@ -326,12 +319,16 @@ def _tool_write_file(path: str, content: str) -> str:
 
 
 def _tool_edit_file(
-    path: str, old_string: str, new_string: str, replace_all: bool = False
+    path: str,
+    old_string: str,
+    new_string: str,
+    replace_all: bool = False,
+    *,
+    writable_root: Path,
 ) -> str:
     full_path = Path(path)
-    error = _validate_path(full_path)
-    if error:
-        return json.dumps({"error": error})
+    if not _inside(full_path, writable_root):
+        return _outside_writable_root_error(full_path, writable_root)
     resolved = full_path.resolve()
     if old_string == new_string:
         return json.dumps(
@@ -413,8 +410,16 @@ FILESYSTEM_TOOL_NAMES = frozenset(
 )
 
 
-def execute_filesystem_tool(name: str, args: dict) -> str | None:
+def execute_filesystem_tool(
+    name: str, args: dict, *, writable_root: Path
+) -> str | None:
     """Dispatch one filesystem tool call by name. Returns ``None`` if name is unknown.
+
+    Reads (``read_file`` / ``glob_files`` / ``grep_code`` / ``list_dir``)
+    run wide and ignore ``writable_root``. Writes (``write_file`` /
+    ``edit_file``) and ``bash`` are pinned to ``writable_root``: the
+    write helpers reject paths that resolve outside it; bash runs with
+    ``cwd=writable_root`` and is gated by ``judge_bash_command``.
 
     The seven tools are:
       - ``read_file(path, start_line?, end_line?)`` — read file lines.
@@ -443,14 +448,17 @@ def execute_filesystem_tool(name: str, args: dict) -> str | None:
     if name == "list_dir":
         return _tool_list_dir(args["path"], args.get("max_entries", 100))
     if name == "bash":
-        return _tool_bash(args["command"])
+        return _tool_bash(args["command"], writable_root=writable_root)
     if name == "write_file":
-        return _tool_write_file(args["path"], args["content"])
+        return _tool_write_file(
+            args["path"], args["content"], writable_root=writable_root
+        )
     if name == "edit_file":
         return _tool_edit_file(
             args["path"],
             args["old_string"],
             args["new_string"],
             args.get("replace_all", False),
+            writable_root=writable_root,
         )
     return None

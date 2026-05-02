@@ -120,6 +120,7 @@ class MainAgent:
             slug=self.slug,
             goal_text=self.goal_text,
             index_md=load_index(self.ideas_dir),
+            writable_root=str(self.base_dir),
         )
         if should_compact(self.last_input_tokens):
             self.input_list = compact_messages(
@@ -276,7 +277,9 @@ class MainAgent:
                 update_idea(self.ideas_dir, args["idea_id"], args["description"])
             return json.dumps({"ok": True})
 
-        fs_result = execute_filesystem_tool(name, args)
+        fs_result = execute_filesystem_tool(
+            name, args, writable_root=self.base_dir
+        )
         if fs_result is not None:
             return truncate_for_llm(fs_result)
 

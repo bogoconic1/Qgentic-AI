@@ -111,7 +111,9 @@ def _execute_tool_call(item, state: dict) -> str:
     if tool_name == "web_search_stack_trace":
         return truncate_for_llm(tool_web_search_stack_trace(args["query"]))
 
-    fs_result = execute_filesystem_tool(tool_name, args)
+    fs_result = execute_filesystem_tool(
+        tool_name, args, writable_root=state["base_dir"]
+    )
     if fs_result is None:
         raise ValueError(f"Unknown tool: {tool_name}")
     return truncate_for_llm(fs_result)
@@ -179,6 +181,7 @@ class DeveloperAgent:
         )
 
         system_prompt = build_system(
+            writable_root=str(self.base_dir),
             custom_instructions=self._load_custom_instructions(),
         )
         user_prompt = build_user(idea)

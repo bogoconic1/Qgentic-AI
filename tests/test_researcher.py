@@ -122,9 +122,10 @@ def test_filesystem_tool_calls_route_to_filesystem_helpers(stubbed, monkeypatch)
     """A `bash` tool call routes through tools.filesystem.execute_filesystem_tool."""
     captured = {}
 
-    def fake_execute_filesystem_tool(name, args):
+    def fake_execute_filesystem_tool(name, args, *, writable_root):
         captured["name"] = name
         captured["args"] = args
+        captured["writable_root"] = writable_root
         return json.dumps({"output": "ok", "returncode": 0, "truncated": False})
 
     monkeypatch.setattr(
@@ -139,7 +140,9 @@ def test_filesystem_tool_calls_route_to_filesystem_helpers(stubbed, monkeypatch)
     item = SimpleNamespace(name="bash", args={"command": "ls -la"})
     out = research_module._execute_tool_call(item, state)
 
-    assert captured == {"name": "bash", "args": {"command": "ls -la"}}
+    assert captured["name"] == "bash"
+    assert captured["args"] == {"command": "ls -la"}
+    assert captured["writable_root"] == stubbed.research_dir
     assert json.loads(out)["returncode"] == 0
 
 
@@ -148,18 +151,23 @@ def test_build_system_inlines_custom_instructions():
     from prompts.research import build_system
 
     body = "Cite at least three peer-reviewed sources per claim."
-    out = build_system(custom_instructions=body)
+    out = build_system(writable_root="/tmp/research_1", custom_instructions=body)
     assert "<custom_instructions>" in out
     assert body in out
+    assert "/tmp/research_1" in out
 
 
 def test_build_system_omits_section_when_no_instructions():
     """Absent / empty custom_instructions → no <custom_instructions> wrapper."""
     from prompts.research import build_system
 
-    assert "<custom_instructions>" not in build_system()
-    assert "<custom_instructions>" not in build_system(custom_instructions="")
-    assert "<custom_instructions>" not in build_system(custom_instructions="   \n")
+    assert "<custom_instructions>" not in build_system(writable_root="/tmp/research_1")
+    assert "<custom_instructions>" not in build_system(
+        writable_root="/tmp/research_1", custom_instructions=""
+    )
+    assert "<custom_instructions>" not in build_system(
+        writable_root="/tmp/research_1", custom_instructions="   \n"
+    )
 
 
 def test_render_tool_record_markdown_error_path():
@@ -216,11 +224,8 @@ def test_run_creates_research_md_scaffold(monkeypatch, tmp_path):
 def test_run_returns_research_md_contents_when_populated(monkeypatch, tmp_path):
     """If the agent populates RESEARCH.md via write_file, run() returns the
     populated content (not the scaffold, not the terminating LLM text)."""
-    from tools import filesystem as fs_module
-
     monkeypatch.setattr(research_module, "_TASK_ROOT", tmp_path)
     monkeypatch.setattr(research_module, "should_compact", lambda _: False)
-    monkeypatch.setattr(fs_module, "_ALLOWED_ROOTS", [tmp_path.resolve()])
 
     research_md_path = tmp_path / "slug" / "run-1" / "research_1" / "RESEARCH.md"
     populated = "# done\n\nFinding: foo is bar (https://example.com).\n"

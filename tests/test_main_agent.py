@@ -167,7 +167,9 @@ def test_parallel_dispatch_preserves_order(patched_main_agent, monkeypatch):
     monkeypatch.setattr(
         main_agent,
         "execute_filesystem_tool",
-        lambda name, args: json.dumps({"output": f"ran {name}", "returncode": 0}),
+        lambda name, args, *, writable_root: json.dumps(
+            {"output": f"ran {name}", "returncode": 0}
+        ),
     )
 
     # Single LLM turn returning three parallel calls in a specific order.
@@ -210,7 +212,9 @@ def test_stuck_nudge_fires_after_repeated_identical_calls(
     monkeypatch.setattr(
         main_agent,
         "execute_filesystem_tool",
-        lambda name, args: json.dumps({"output": "ok", "returncode": 0}),
+        lambda name, args, *, writable_root: json.dumps(
+            {"output": "ok", "returncode": 0}
+        ),
     )
     response = _fake_fc("read_file", path="/tmp/loop.txt")
     monkeypatch.setattr(main_agent, "call_llm", lambda **kwargs: (response, 0))
@@ -253,7 +257,9 @@ def test_stuck_nudge_does_not_fire_for_varied_calls(patched_main_agent, monkeypa
     monkeypatch.setattr(
         main_agent,
         "execute_filesystem_tool",
-        lambda name, args: json.dumps({"output": "ok", "returncode": 0}),
+        lambda name, args, *, writable_root: json.dumps(
+            {"output": "ok", "returncode": 0}
+        ),
     )
     responses = iter(
         [_fake_fc("read_file", path=f"/tmp/{i}.txt") for i in range(threshold + 2)]
@@ -278,9 +284,10 @@ def test_filesystem_tool_calls_route_to_filesystem_helpers(
     """A `list_dir` tool call from MainAgent is dispatched to tools.filesystem."""
     captured = {}
 
-    def fake_execute_filesystem_tool(name, args):
+    def fake_execute_filesystem_tool(name, args, *, writable_root):
         captured["name"] = name
         captured["args"] = args
+        captured["writable_root"] = writable_root
         return json.dumps({"entries": ["fake/"], "total": 1})
 
     monkeypatch.setattr(
@@ -293,7 +300,9 @@ def test_filesystem_tool_calls_route_to_filesystem_helpers(
 
     agent._step([])
 
-    assert captured == {"name": "list_dir", "args": {"path": "/workspace"}}
+    assert captured["name"] == "list_dir"
+    assert captured["args"] == {"path": "/workspace"}
+    assert captured["writable_root"] == agent.base_dir
     records = [json.loads(line) for line in agent.chat_log.read_text().splitlines()]
     tool_records = [r for r in records if r["role"] == "tool"]
     assert len(tool_records) == 1

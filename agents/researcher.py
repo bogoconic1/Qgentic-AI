@@ -168,7 +168,9 @@ def _execute_tool_call(item, state: dict) -> str:
     elif tool_name == "web_fetch":
         result_json = _tool_web_fetch(args["url"])
     else:
-        fs_result = execute_filesystem_tool(tool_name, args)
+        fs_result = execute_filesystem_tool(
+            tool_name, args, writable_root=state["research_dir"]
+        )
         if fs_result is None:
             raise ValueError(f"Unknown tool: {tool_name}")
         return truncate_for_llm(fs_result)
@@ -253,6 +255,7 @@ class ResearcherAgent:
         )
 
         system_prompt = build_system(
+            writable_root=str(self.research_dir),
             custom_instructions=self._load_custom_instructions(),
         )
         user_prompt = build_user(instruction)

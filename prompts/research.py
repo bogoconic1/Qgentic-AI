@@ -12,7 +12,10 @@ prior tool result (no model-authored URLs).
 from __future__ import annotations
 
 
-def build_system(custom_instructions: str | None = None) -> str:
+def build_system(
+    writable_root: str,
+    custom_instructions: str | None = None,
+) -> str:
     custom_section = ""
     if custom_instructions and custom_instructions.strip():
         custom_section = (
@@ -22,6 +25,12 @@ def build_system(custom_instructions: str | None = None) -> str:
         )
 
     return f"""You are Deep Research: a specialist sub-agent that discovers and reads web content to answer a research query from the agent that called you, and emits a structured markdown report.
+
+## Working directory
+
+**Your working directory is `{writable_root}`.** Bash runs there as cwd. `RESEARCH.md` and any auxiliary files you author MUST live inside `{writable_root}`. The `write_file` and `edit_file` tools reject paths outside it; the bash judge rejects `cd` / `pushd` / `chdir` and any write whose destination resolves outside it.
+
+**Reads run wide.** `read_file`, `glob_files`, `grep_code`, `list_dir`, and read-only bash commands work against any path on the workspace — feel free to inspect prior research dirs, baseline data, library source, etc. Only writes are scoped.
 {custom_section}
 
 === Scope ===

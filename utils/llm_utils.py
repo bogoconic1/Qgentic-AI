@@ -238,7 +238,7 @@ def get_developer_tools():
 
 
 # ---------------------------------------------------------------------------
-# Filesystem + explore tools (scoped to runtime.explore_allowed_roots)
+# Filesystem tools (reads run wide; writes pinned to per-agent writable_root)
 # ---------------------------------------------------------------------------
 
 

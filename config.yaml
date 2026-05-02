@@ -12,15 +12,6 @@ runtime:
   baseline_code_timeout: 43200  # 12 hours for baseline code execution
   log_monitor_interval: 120  # Seconds between LLM log monitor calls during code execution
   bash_timeout_seconds: 600  # Per-call timeout for the bash filesystem tool
-  # Codebase exploration sub-agent
-  explore_allowed_roots:
-    # Paths the explore subagent is allowed to read.
-    # The site-packages directory of the active Python interpreter (i.e. whichever
-    # conda/venv launched the orchestrator) is auto-added at runtime — you do NOT
-    # need to list it here. To expose a *different* env's site-packages (e.g. if
-    # the orchestrator runs in a thin env but you want explore to read libraries
-    # from a heavyweight env), add the absolute path explicitly below.
-    - /workspace
 paths:
   task_root: "task"
 guardrails:

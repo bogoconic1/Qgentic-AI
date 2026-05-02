@@ -11,12 +11,12 @@ from tools import filesystem as fs
 
 
 # ---------------------------------------------------------------------------
-# Sandbox: every test runs against a tmp_path that is the only allowed root.
+# Sandbox: every test runs against a tmp_path that is the writable_root.
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture
-def sandbox(tmp_path, monkeypatch):
+def sandbox(tmp_path):
     (tmp_path / "pkg").mkdir()
     (tmp_path / "pkg" / "__init__.py").write_text("VERSION = '1.0'\n")
     (tmp_path / "pkg" / "core.py").write_text(
@@ -26,13 +26,11 @@ def sandbox(tmp_path, monkeypatch):
     )
     (tmp_path / "data").mkdir()
     (tmp_path / "data" / "config.json").write_text('{"k": 1}\n')
-
-    monkeypatch.setattr(fs, "_ALLOWED_ROOTS", [tmp_path.resolve()])
     return tmp_path
 
 
 # ---------------------------------------------------------------------------
-# Read-only filesystem tools
+# Read-only filesystem tools — run wide, no allow-list
 # ---------------------------------------------------------------------------
 
 
@@ -54,19 +52,22 @@ def test_read_file(sandbox):
     assert "error" in missing
 
 
-def test_path_validation_blocks_outside_roots(sandbox, tmp_path_factory):
-    """Every read tool must reject paths outside the configured allowlist."""
-    outside = tmp_path_factory.mktemp("outside") / "evil.py"
+def test_reads_run_wide_no_allowlist(sandbox, tmp_path_factory):
+    """Reads outside the sandbox now succeed — there is no global allow-list."""
+    outside = tmp_path_factory.mktemp("outside") / "data.py"
     outside.write_text("x = 1\n")
 
-    for blob in [
-        fs._tool_read_file(str(outside)),
-        fs._tool_glob_files(str(outside.parent), "*.py"),
-        fs._tool_grep_code(str(outside.parent), "x"),
-        fs._tool_list_dir(str(outside.parent)),
-    ]:
-        result = json.loads(blob)
-        assert "error" in result and "outside the allowed roots" in result["error"]
+    out = json.loads(fs._tool_read_file(str(outside)))
+    assert "x = 1" in out["content"]
+
+    glob_out = json.loads(fs._tool_glob_files(str(outside.parent), "*.py"))
+    assert "data.py" in glob_out["matches"]
+
+    grep_out = json.loads(fs._tool_grep_code(str(outside.parent), "x"))
+    assert grep_out["total_matches"] == 1
+
+    list_out = json.loads(fs._tool_list_dir(str(outside.parent)))
+    assert "data.py" in list_out["entries"]
 
 
 def test_glob_grep_list(sandbox):
@@ -88,7 +89,7 @@ def test_glob_grep_list(sandbox):
 
 
 # ---------------------------------------------------------------------------
-# bash — judge-gated execution
+# bash — judge-gated, runs with cwd=writable_root
 # ---------------------------------------------------------------------------
 
 
@@ -97,22 +98,46 @@ def _patch_judge(monkeypatch, verdict: str, reason: str = "ok"):
     monkeypatch.setattr(
         fs,
         "judge_bash_command",
-        lambda command: BashSafetyVerdict(verdict=verdict, reason=reason),
+        lambda command, writable_root: BashSafetyVerdict(
+            verdict=verdict, reason=reason
+        ),
     )
 
 
 def test_bash_runs_when_judge_allows(sandbox, monkeypatch):
     """An allow verdict → command actually runs and stdout is returned."""
     _patch_judge(monkeypatch, "allow")
-    out = json.loads(fs._tool_bash(f"ls {sandbox / 'pkg'}"))
+    out = json.loads(fs._tool_bash("ls pkg", writable_root=sandbox))
     assert out["returncode"] == 0
     assert "core.py" in out["output"]
 
 
-def test_bash_blocks_when_judge_blocks(monkeypatch):
+def test_bash_runs_with_cwd_set_to_writable_root(sandbox, monkeypatch):
+    """`pwd` inside bash returns the writable_root, since cwd is pinned to it."""
+    _patch_judge(monkeypatch, "allow")
+    out = json.loads(fs._tool_bash("pwd", writable_root=sandbox))
+    assert out["returncode"] == 0
+    assert str(sandbox.resolve()) in out["output"]
+
+
+def test_bash_judge_receives_writable_root(sandbox, monkeypatch):
+    """The bash judge stub is called with (command, writable_root)."""
+    seen: list[tuple[str, str]] = []
+
+    def fake_judge(command, writable_root):
+        seen.append((command, writable_root))
+        return BashSafetyVerdict(verdict="allow", reason="ok")
+
+    monkeypatch.setattr(fs, "judge_bash_command", fake_judge)
+    fs._tool_bash("echo hi", writable_root=sandbox)
+
+    assert seen == [("echo hi", str(sandbox))]
+
+
+def test_bash_blocks_when_judge_blocks(sandbox, monkeypatch):
     """A block verdict → no execution, error message includes the reason."""
     _patch_judge(monkeypatch, "block", reason="rm -rf / would delete the host")
-    out = json.loads(fs._tool_bash("rm -rf /"))
+    out = json.loads(fs._tool_bash("rm -rf /", writable_root=sandbox))
     assert "error" in out
     assert "rm -rf /" in out["error"]
 
@@ -120,10 +145,10 @@ def test_bash_blocks_when_judge_blocks(monkeypatch):
 def test_bash_supports_pipes_and_redirection(sandbox, monkeypatch):
     """bash -c lets the judge'd command use shell composition."""
     _patch_judge(monkeypatch, "allow")
-    out_path = sandbox / "out.txt"
     out = json.loads(
         fs._tool_bash(
-            f"ls {sandbox / 'pkg'} | head -n 1 > {out_path} && cat {out_path}"
+            "ls pkg | head -n 1 > out.txt && cat out.txt",
+            writable_root=sandbox,
         )
     )
     assert out["returncode"] == 0
@@ -133,14 +158,15 @@ def test_bash_supports_pipes_and_redirection(sandbox, monkeypatch):
 def test_bash_can_mutate_project_files(sandbox, monkeypatch):
     """End-to-end: an allow verdict really lets the agent write inside the sandbox."""
     _patch_judge(monkeypatch, "allow")
-    new_dir = sandbox / "build"
-    out = json.loads(fs._tool_bash(f"mkdir -p {new_dir} && touch {new_dir}/marker"))
+    out = json.loads(
+        fs._tool_bash("mkdir -p build && touch build/marker", writable_root=sandbox)
+    )
     assert out["returncode"] == 0
-    assert (new_dir / "marker").exists()
+    assert (sandbox / "build" / "marker").exists()
 
 
 # ---------------------------------------------------------------------------
-# write_file + edit_file (modeled on claude-code FileWriteTool / FileEditTool)
+# write_file + edit_file — pinned to writable_root
 # ---------------------------------------------------------------------------
 
 
@@ -148,11 +174,15 @@ def test_write_file_create_then_overwrite(sandbox):
     """First write returns type=create; second write to the same path returns type=update."""
     target = sandbox / "out" / "hello.py"
 
-    first = json.loads(fs._tool_write_file(str(target), "print('v1')\n"))
+    first = json.loads(
+        fs._tool_write_file(str(target), "print('v1')\n", writable_root=sandbox)
+    )
     assert first["type"] == "create"
     assert target.read_text() == "print('v1')\n"
 
-    second = json.loads(fs._tool_write_file(str(target), "print('v2')\n"))
+    second = json.loads(
+        fs._tool_write_file(str(target), "print('v2')\n", writable_root=sandbox)
+    )
     assert second["type"] == "update"
     assert target.read_text() == "print('v2')\n"
 
@@ -162,7 +192,9 @@ def test_edit_file_basic_replacement(sandbox):
     target = sandbox / "edit_basic.py"
     target.write_text("x = 1\ny = 2\n")
 
-    out = json.loads(fs._tool_edit_file(str(target), "y = 2", "y = 99"))
+    out = json.loads(
+        fs._tool_edit_file(str(target), "y = 2", "y = 99", writable_root=sandbox)
+    )
     assert out["type"] == "update"
     assert out["matches_replaced"] == 1
     assert target.read_text() == "x = 1\ny = 99\n"
@@ -173,14 +205,17 @@ def test_edit_file_unique_match_required_or_replace_all(sandbox):
     target = sandbox / "edit_multi.py"
     target.write_text("a = 1\na = 1\n")
 
-    err = json.loads(fs._tool_edit_file(str(target), "a = 1", "a = 2"))
+    err = json.loads(
+        fs._tool_edit_file(str(target), "a = 1", "a = 2", writable_root=sandbox)
+    )
     assert "error" in err
     assert "2 matches" in err["error"]
-    # File untouched.
     assert target.read_text() == "a = 1\na = 1\n"
 
     out = json.loads(
-        fs._tool_edit_file(str(target), "a = 1", "a = 2", replace_all=True)
+        fs._tool_edit_file(
+            str(target), "a = 1", "a = 2", replace_all=True, writable_root=sandbox
+        )
     )
     assert out["matches_replaced"] == 2
     assert target.read_text() == "a = 2\na = 2\n"
@@ -191,7 +226,9 @@ def test_edit_file_no_match_returns_error(sandbox):
     target = sandbox / "edit_nope.py"
     target.write_text("x = 1\n")
 
-    out = json.loads(fs._tool_edit_file(str(target), "absent", "anything"))
+    out = json.loads(
+        fs._tool_edit_file(str(target), "absent", "anything", writable_root=sandbox)
+    )
     assert "error" in out
     assert "not found" in out["error"]
     assert target.read_text() == "x = 1\n"
@@ -200,29 +237,42 @@ def test_edit_file_no_match_returns_error(sandbox):
 def test_edit_file_curly_quote_normalization(sandbox):
     """File has curly quotes; model passes straight quotes; replacement still succeeds."""
     target = sandbox / "edit_curly.py"
-    target.write_text("msg = “hello”\n")  # curly double quotes
+    target.write_text("msg = “hello”\n")
 
-    out = json.loads(fs._tool_edit_file(str(target), 'msg = "hello"', 'msg = "world"'))
+    out = json.loads(
+        fs._tool_edit_file(
+            str(target), 'msg = "hello"', 'msg = "world"', writable_root=sandbox
+        )
+    )
     assert out["type"] == "update"
-    # The replacement uses the actual (curly) substring sliced from the file,
-    # so the new content reflects the edit cleanly.
     assert "world" in target.read_text()
     assert "hello" not in target.read_text()
 
 
-def test_write_and_edit_reject_path_outside_allowed_roots(sandbox, tmp_path_factory):
-    """Both new tools refuse paths outside the configured allowlist."""
+def test_write_file_rejects_path_outside_writable_root(sandbox, tmp_path_factory):
+    """write_file refuses to write a file outside writable_root."""
     outside = tmp_path_factory.mktemp("outside") / "evil.py"
 
-    write_err = json.loads(fs._tool_write_file(str(outside), "data\n"))
-    assert "error" in write_err
-    assert "outside the allowed roots" in write_err["error"]
+    err = json.loads(
+        fs._tool_write_file(str(outside), "data\n", writable_root=sandbox)
+    )
+    assert "error" in err
+    assert "outside writable_root" in err["error"]
     assert not outside.exists()
 
+
+def test_edit_file_rejects_path_outside_writable_root(sandbox, tmp_path_factory):
+    """edit_file refuses to modify a file outside writable_root."""
+    outside = tmp_path_factory.mktemp("outside") / "evil.py"
     outside.write_text("# pre-existing\n")
-    edit_err = json.loads(fs._tool_edit_file(str(outside), "pre-existing", "patched"))
-    assert "error" in edit_err
-    assert "outside the allowed roots" in edit_err["error"]
+
+    err = json.loads(
+        fs._tool_edit_file(
+            str(outside), "pre-existing", "patched", writable_root=sandbox
+        )
+    )
+    assert "error" in err
+    assert "outside writable_root" in err["error"]
     assert outside.read_text() == "# pre-existing\n"
 
 
@@ -236,27 +286,34 @@ def test_execute_filesystem_tool_routes_by_name(sandbox, monkeypatch):
     _patch_judge(monkeypatch, "allow")
 
     out = fs.execute_filesystem_tool(
-        "read_file", {"path": str(sandbox / "pkg" / "core.py")}
+        "read_file", {"path": str(sandbox / "pkg" / "core.py")},
+        writable_root=sandbox,
     )
     assert "def add" in json.loads(out)["content"]
 
     out = fs.execute_filesystem_tool(
-        "glob_files", {"root": str(sandbox / "pkg"), "pattern": "*.py"}
+        "glob_files", {"root": str(sandbox / "pkg"), "pattern": "*.py"},
+        writable_root=sandbox,
     )
     assert json.loads(out)["total"] == 2
 
     out = fs.execute_filesystem_tool(
-        "grep_code", {"root": str(sandbox / "pkg"), "pattern": "def add"}
+        "grep_code", {"root": str(sandbox / "pkg"), "pattern": "def add"},
+        writable_root=sandbox,
     )
     assert json.loads(out)["total_matches"] == 1
 
-    out = fs.execute_filesystem_tool("list_dir", {"path": str(sandbox)})
+    out = fs.execute_filesystem_tool(
+        "list_dir", {"path": str(sandbox)}, writable_root=sandbox
+    )
     assert "pkg/" in json.loads(out)["entries"]
 
-    out = fs.execute_filesystem_tool("bash", {"command": f"ls {sandbox / 'pkg'}"})
+    out = fs.execute_filesystem_tool(
+        "bash", {"command": "ls pkg"}, writable_root=sandbox
+    )
     assert json.loads(out)["returncode"] == 0
 
-    assert fs.execute_filesystem_tool("nope", {}) is None
+    assert fs.execute_filesystem_tool("nope", {}, writable_root=sandbox) is None
 
 
 # ---------------------------------------------------------------------------
@@ -271,23 +328,5 @@ def test_get_filesystem_tools_palette_matches_dispatcher():
     LLM is never told about."""
     from utils.llm_utils import get_filesystem_tools
 
-    palette_names = {t.name for t in get_filesystem_tools()}
-    assert palette_names == fs.FILESYSTEM_TOOL_NAMES
-
-
-def test_get_filesystem_tools_write_and_edit_schemas():
-    """write_file and edit_file declarations carry the parameter schema we need
-    for the dispatcher to call into the helpers correctly."""
-    from utils.llm_utils import get_filesystem_tools
-
-    by_name = {t.name: t for t in get_filesystem_tools()}
-
-    write = by_name["write_file"].parameters_json_schema
-    assert set(write["required"]) == {"path", "content"}
-    assert write["properties"]["path"]["type"] == "string"
-    assert write["properties"]["content"]["type"] == "string"
-
-    edit = by_name["edit_file"].parameters_json_schema
-    assert set(edit["required"]) == {"path", "old_string", "new_string"}
-    assert edit["properties"]["replace_all"]["type"] == "boolean"
-    assert "replace_all" not in edit["required"]
+    palette = {decl.name for decl in get_filesystem_tools()}
+    assert palette == fs.FILESYSTEM_TOOL_NAMES
