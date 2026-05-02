@@ -363,19 +363,84 @@ def test_filesystem_tool_calls_route_to_filesystem_helpers(
     assert json.loads(tool_records[0]["result"])["entries"] == ["fake/"]
 
 
-def test_text_only_response_is_logged_and_ignored(patched_main_agent, monkeypatch, caplog):
+def test_single_text_only_passes_through_silently(patched_main_agent, monkeypatch):
+    """A single text-only turn is legitimate; counter increments, no termination."""
     agent = MainAgent(slug="test", run_id="r1", goal_text="do the thing")
     monkeypatch.setattr(
         main_agent, "call_llm", lambda **kwargs: (_fake_text("hello"), 0)
     )
 
-    with caplog.at_level("WARNING"):
-        agent._step([])
+    agent._step([])
 
-    assert any("text-only" in rec.message for rec in caplog.records)
+    assert agent._consecutive_text_only == 1
+    assert agent._done is False
+    # Only the assistant turn was appended; no user-nudge follow-up.
+    assert agent.input_list[-1]["role"] == "model"
     records = [json.loads(line) for line in agent.chat_log.read_text().splitlines()]
     assert len(records) == 1
     assert records[0]["role"] == "assistant"
+
+
+def test_two_consecutive_text_only_does_not_terminate(patched_main_agent, monkeypatch):
+    """Two text-only turns increment the counter but stay below the watchdog."""
+    agent = MainAgent(slug="test", run_id="r1", goal_text="do the thing")
+    monkeypatch.setattr(
+        main_agent, "call_llm", lambda **kwargs: (_fake_text("hello"), 0)
+    )
+
+    agent._step([])
+    agent._step([])
+
+    assert agent._consecutive_text_only == 2
+    assert agent._done is False
+
+
+def test_three_consecutive_text_only_sets_done_flag(patched_main_agent, monkeypatch):
+    """At the watchdog threshold MainAgent terminates the run cleanly."""
+    agent = MainAgent(slug="test", run_id="r1", goal_text="do the thing")
+    monkeypatch.setattr(
+        main_agent, "call_llm", lambda **kwargs: (_fake_text("hello"), 0)
+    )
+
+    threshold = main_agent._TEXT_ONLY_TERMINATE_THRESHOLD
+    for _ in range(threshold):
+        agent._step([])
+
+    assert agent._consecutive_text_only == threshold
+    assert agent._done is True
+
+
+def test_function_call_resets_text_only_counter(patched_main_agent, monkeypatch):
+    """A turn containing a function_call resets the consecutive-text-only counter."""
+    agent = MainAgent(slug="test", run_id="r1", goal_text="do the thing")
+
+    monkeypatch.setattr(
+        main_agent,
+        "execute_filesystem_tool",
+        lambda name, args, *, writable_root: json.dumps(
+            {"output": "ok", "returncode": 0}
+        ),
+    )
+
+    responses = iter(
+        [
+            _fake_text("hello"),
+            _fake_text("still here"),
+            _fake_fc("read_file", path="/tmp/x.txt"),
+            _fake_text("hmm"),
+        ]
+    )
+    monkeypatch.setattr(
+        main_agent, "call_llm", lambda **kwargs: (next(responses), 0)
+    )
+
+    for _ in range(4):
+        agent._step([])
+
+    # text-only, text-only → counter=2; function_call → reset to 0;
+    # text-only → counter=1.
+    assert agent._consecutive_text_only == 1
+    assert agent._done is False
 
 
 # ---------------------------------------------------------------------------
