@@ -44,8 +44,9 @@ from utils.output import truncate_for_llm
 
 _INITIAL_USER_TURN = (
     "Take your first step. The session goal, the current idea pool (INDEX.md), "
-    "and your tool palette are all in the system prompt. Pick a tool and call "
-    "it — every step should be a tool call, never a plain text response."
+    "and your tool palette are all in the system prompt. Begin with a 1-3 "
+    "sentence prose block stating your read of the goal and your opening move, "
+    "then issue the tool call(s) — every turn must lead with prose, then act."
 )
 
 # Number of consecutive turns with byte-identical tool-call signatures before
