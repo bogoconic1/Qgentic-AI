@@ -240,7 +240,9 @@ class MainAgent:
                 _STUCK_REPEAT_THRESHOLD,
                 [n for n, _ in turn_sig],
             )
-            self.input_list.append(append_message("user", _STUCK_NUDGE))
+            nudge_msg = append_message("user", _STUCK_NUDGE)
+            self.input_list.append(nudge_msg)
+            self._log({"role": "user", "content": nudge_msg})
             self._recent_call_sigs.clear()
 
     def _dispatch(self, name: str, args: dict) -> str:

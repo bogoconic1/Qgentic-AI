@@ -295,6 +295,16 @@ def test_stuck_nudge_fires_after_repeated_identical_calls(
     assert last["role"] == "user"
     assert nudge_text in last["parts"][0]["text"]
 
+    # JSONL transcript fidelity: the nudge the LLM sees must also land in
+    # the persisted chat log. Regression for the silent-divergence bug where
+    # the nudge was appended to input_list but never logged.
+    records = [json.loads(line) for line in agent.chat_log.read_text().splitlines()]
+    user_records = [r for r in records if r.get("role") == "user"]
+    assert any(
+        nudge_text in (r.get("content", {}).get("parts", [{}])[0].get("text", ""))
+        for r in user_records
+    ), "stuck nudge must be written to JSONL chat log, not just input_list"
+
     # History reset, so the next identical turn does NOT immediately re-nudge.
     agent._step([])
     assert agent.input_list[-1]["role"] == "function"
