@@ -116,10 +116,21 @@ python launch_agent.py --slug "enter slug" --run-id my_run --goal-file path/to/G
 ### Monitoring
 
 - `task/<slug>/<run_id>/main_agent_chat.jsonl` — append-only audit log of every MainAgent step (assistant turn + tool result).
-- `task/<slug>/<run_id>/developer_v{N}/` — per-iteration developer artifacts (`SOLUTION.py`, `SOLUTION.txt`, `SOLUTION.json`, `submission.csv`, …).
-- `task/<slug>/<run_id>/research_<N>/` — per-call researcher artifacts (`PLAN_<N>.md` + `web_research/`/`web_fetch/` audit records).
+- `task/<slug>/<run_id>/developer_v{N}/` — per-iteration developer artifacts (`SOLUTION.py`, `SOLUTION.txt`, `SOLUTION.json`, `submission.csv`, …) plus `developer_chat.jsonl`.
+- `task/<slug>/<run_id>/research_<N>/` — per-call researcher artifacts (`RESEARCH.md` + `web_research/`/`web_fetch/` audit records) plus `researcher_chat.jsonl`.
 - `task/<slug>/<run_id>/ideas/` — idea pool (memdir-style `INDEX.md` + one file per idea).
 - Weights & Biases / Weave tracking is configured via `config.yaml` under `tracking.wandb`.
+
+#### Web viewer
+
+A local Flask app reads the three `*_chat.jsonl` files and renders the full transcript with collapsible tool calls/results, links to companion artifacts (`MAIN.md`, `SOLUTION.{py,md,json,txt}`, `RESEARCH.md`, `web_research/`, `web_fetch/`), and a `?live=1` mode that meta-refreshes every 3 s.
+
+```bash
+python -m scripts.viewer --port 8765
+# → http://127.0.0.1:8765/
+```
+
+Defaults to `127.0.0.1` only — never binds publicly. To reach a remote VM, SSH local-forward the port (`ssh -L 8765:127.0.0.1:8765 …`) rather than passing `--host 0.0.0.0`. Bash tool calls render as `$ <command>` in a shell-style block instead of escaped JSON.
 
 ---
 

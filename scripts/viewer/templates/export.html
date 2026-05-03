@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ run.slug }} · {{ run.run_id }}</title>
+<style>{{ inline_css | safe }}</style>
+</head>
+<body>
+<header><nav class="breadcrumbs"><strong>{{ run.slug }}</strong> / {{ run.run_id }}</nav></header>
+<div style="max-width: 1400px; margin: 0 auto; padding: 1.2rem;">
+{% from "_transcript.html" import render_records %}
+<h1>MainAgent · {{ run.run_id }}</h1>
+{{ render_records(main_records) }}
+{% for label, records in subagents %}
+<h2>{{ label }}</h2>
+{{ render_records(records) }}
+{% endfor %}
+</div>
+</body>
+</html>
