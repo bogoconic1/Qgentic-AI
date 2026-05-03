@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}{{ slug }} · Qgentic Viewer{% endblock %}
+{% block breadcrumbs %} / <a href="{{ url_for('slug_page', slug=slug) }}">{{ slug }}</a>{% endblock %}
+{% block content %}
+<h1>{{ slug }}</h1>
+{% if slug_files %}
+<section class="card">
+  <h2>Slug-level docs</h2>
+  <ul class="links">
+    {% for label, rel in slug_files %}
+      <li><a href="{{ url_for('file_page', path=rel) }}">{{ label }}</a></li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if not runs %}
+<p class="empty">No runs yet under <code>{{ slug }}</code>.</p>
+{% else %}
+<table class="listing">
+  <thead>
+    <tr><th>run_id</th><th>last modified</th><th>main log</th><th>research</th></tr>
+  </thead>
+  <tbody>
+  {% for r in runs %}
+    <tr>
+      <td><a href="{{ url_for('run_page', slug=slug, run_id=r.run_id) }}">{{ r.run_id }}</a></td>
+      <td>{{ r.mtime | fmt_mtime }}</td>
+      <td>{{ "yes" if r.has_main_log else "no" }}</td>
+      <td>{{ r.research_indices | join(", ") if r.research_indices else "—" }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

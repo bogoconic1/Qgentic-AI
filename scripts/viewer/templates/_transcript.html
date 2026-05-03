@@ -1,0 +1,114 @@
+{% macro render_args(name, args) %}
+  {% set cmd = bash_command(name, args) %}
+  {% if cmd is not none %}
+    {% set cmd_body = cmd | truncate_body %}
+    <div class="bash-cmd-wrap">
+      <span class="cmd-prompt">$</span>
+      <pre class="bash-cmd">{{ cmd_body.head }}</pre>
+    </div>
+    {% if cmd_body.truncated %}
+      <details><summary>show full command ({{ cmd_body.full_size | fmt_bytes }})</summary><pre>{{ cmd_body.full }}</pre></details>
+    {% endif %}
+    {% set extras = args_without_command(args) %}
+    {% if extras %}
+      <details class="args">
+        <summary>extra args</summary>
+        <pre>{{ extras | format_args_json }}</pre>
+      </details>
+    {% endif %}
+  {% else %}
+    {% set body = (args | format_args_json) | truncate_body %}
+    <details class="args" {% if not body.truncated %}open{% endif %}>
+      <summary>args ({{ body.full_size | fmt_bytes }})</summary>
+      {% if body.truncated %}
+        <pre>{{ body.head }}</pre>
+        <details><summary>show full args</summary><pre>{{ body.full }}</pre></details>
+      {% else %}
+        <pre>{{ body.full }}</pre>
+      {% endif %}
+    </details>
+  {% endif %}
+{% endmacro %}
+
+{% macro render_records(records) %}
+  {% if not records %}
+    <p class="empty">no records yet.</p>
+  {% endif %}
+  {% for rec in records %}
+    {% set role = rec.__class__.__name__ %}
+    {% if role == "AssistantRecord" %}
+      <details class="record assistant" open>
+        <summary>
+          <span class="badge role">assistant</span>
+          <span class="ts">{{ rec.ts or "—" }}</span>
+          {% if rec.parts %}
+            <span class="muted">· {{ rec.parts | length }} part{{ "s" if rec.parts | length != 1 else "" }}</span>
+          {% endif %}
+        </summary>
+        <div class="body">
+          {% for part in rec.parts %}
+            <div class="part">
+              {% if part.text %}
+                <div class="text">{{ part.text | render_markdown }}</div>
+              {% endif %}
+              {% if part.function_call %}
+                {% set fc = part.function_call %}
+                <div class="fc">
+                  <span class="badge fc-name">{{ fc.name }}</span>
+                  {% if fc.id %}<span class="muted small">#{{ fc.id }}</span>{% endif %}
+                  {{ render_args(fc.name, fc.args) }}
+                </div>
+              {% endif %}
+              {% if part.has_thought %}
+                <span class="badge thought">thought · {{ part.thought_size | fmt_bytes }}</span>
+              {% endif %}
+            </div>
+          {% endfor %}
+          {% if not rec.parts %}
+            <p class="muted">empty assistant content.</p>
+          {% endif %}
+        </div>
+      </details>
+    {% elif role == "ToolRecord" %}
+      {% set classified = rec.result | classify_result %}
+      <details class="record tool">
+        <summary>
+          <span class="badge role tool-role">tool</span>
+          <span class="badge tool-name">{{ rec.name }}</span>
+          <span class="ts">{{ rec.ts or "—" }}</span>
+          <span class="muted small">result {{ classified.size | fmt_bytes }}</span>
+        </summary>
+        <div class="body">
+          <div class="result">
+            {% if classified.binary %}
+              <pre class="binary">[binary, {{ classified.size | fmt_bytes }}]</pre>
+            {% else %}
+              {% if classified.meta %}
+                <div class="meta-row">
+                  {% for label, value in classified.meta %}
+                    <span class="meta-pair"><span class="meta-key">{{ label }}</span>=<span class="meta-val">{{ value | fmt_meta_value }}</span></span>
+                  {% endfor %}
+                </div>
+              {% endif %}
+              {% if classified.body.full_size > 0 %}
+                <pre {% if classified.is_error %}class="result-error"{% endif %}>{{ classified.body.head }}</pre>
+                {% if classified.body.truncated %}
+                  <details><summary>show full result ({{ classified.body.full_size | fmt_bytes }})</summary><pre>{{ classified.body.full }}</pre></details>
+                {% endif %}
+              {% endif %}
+            {% endif %}
+          </div>
+        </div>
+      </details>
+    {% else %}
+      <details class="record raw" open>
+        <summary>
+          <span class="badge role raw-role">raw</span>
+          <span class="ts">{{ rec.ts or "—" }}</span>
+          <span class="muted small">{{ rec.error }}</span>
+        </summary>
+        <pre>{{ rec.line }}</pre>
+      </details>
+    {% endif %}
+  {% endfor %}
+{% endmacro %}
