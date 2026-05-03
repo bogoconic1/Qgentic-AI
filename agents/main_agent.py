@@ -65,6 +65,12 @@ _STUCK_NUDGE = (
     "when satisfied."
 )
 
+# Silent watchdog: after this many consecutive text-only turns (no
+# function_call), MainAgent treats the agent as disengaged from the task and
+# terminates the run cleanly. Any turn containing at least one function_call
+# resets the counter to 0.
+_TEXT_ONLY_TERMINATE_THRESHOLD = 3
+
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +110,9 @@ class MainAgent:
         self._recent_call_sigs: collections.deque[tuple[tuple[str, str], ...]] = (
             collections.deque(maxlen=_STUCK_REPEAT_THRESHOLD)
         )
+        # Silent text-only watchdog (see `_TEXT_ONLY_TERMINATE_THRESHOLD`).
+        self._consecutive_text_only = 0
+        self._done = False
         # Ensure INDEX.md exists so `load_index` has something to read.
         if not (self.ideas_dir / "INDEX.md").exists():
             (self.ideas_dir / "INDEX.md").write_text("# Idea pool\n\n")
@@ -116,7 +125,7 @@ class MainAgent:
     @weave.op()
     def run(self) -> None:
         tools = get_main_agent_tools()
-        while True:
+        while not self._done:
             self._step(tools)
 
     def _step(self, tools) -> None:
@@ -150,18 +159,22 @@ class MainAgent:
         self._log({"role": "assistant", "content": response.candidates[0].content.model_dump(mode="json", exclude_none=True)})
 
         if not has_function_calls:
-            logger.warning(
-                "MainAgent emitted text-only response; nudging back to tool use"
-            )
-            self.input_list.append(
-                append_message(
-                    "user",
-                    "Your previous turn had no function_call — every step must "
-                    "be a tool call. Pick a tool from the declared palette and "
-                    "call it now.",
+            # Text-only turns are legitimate in isolation (transient drift, a
+            # single "done / waiting" message). But sustained text-only signals
+            # the agent has disengaged — terminate the run cleanly once the
+            # watchdog threshold trips.
+            self._consecutive_text_only += 1
+            if self._consecutive_text_only >= _TEXT_ONLY_TERMINATE_THRESHOLD:
+                logger.info(
+                    "MainAgent: %d consecutive text-only turns — agent appears "
+                    "done; terminating run",
+                    self._consecutive_text_only,
                 )
-            )
+                self._done = True
+            # Nothing to dispatch on a text-only turn either way; `run()`'s
+            # `while not self._done` checks the flag on the next iteration.
             return
+        self._consecutive_text_only = 0
 
         call_parts = [
             p for p in parts if hasattr(p, "function_call") and p.function_call
