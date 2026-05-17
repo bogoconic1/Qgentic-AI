@@ -35,8 +35,12 @@ def download_competition_data(slug: str, target_dir: Path) -> None:
         else:
             shutil.copy2(entry, dest)
 
-    logger.info("Synced competition data for slug=%s from %s to %s",
-                slug, cache_path, target_dir)
+    logger.info(
+        "Synced competition data for slug=%s from %s to %s",
+        slug,
+        cache_path,
+        target_dir,
+    )
 
 
 def generate_description_md(slug: str, target_dir: Path) -> None:
@@ -71,6 +75,4 @@ def generate_description_md(slug: str, target_dir: Path) -> None:
         f"{data.markdown or ''}\n"
     )
     description_path.write_text(content)
-    logger.info(
-        "Wrote %s for slug=%s (%d chars)", description_path, slug, len(content)
-    )
+    logger.info("Wrote %s for slug=%s (%d chars)", description_path, slug, len(content))

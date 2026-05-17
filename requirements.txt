@@ -38,7 +38,7 @@ matplotlib
 seaborn
 torchgeo
 scikit-image
-google-genai
+openai
 anthropic
 flask
 markdown

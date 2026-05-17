@@ -11,8 +11,6 @@ from agents import researcher as research_module
 
 
 class _StubExa:
-    """Minimal Exa client stub: records kwargs and returns canned results."""
-
     def __init__(self, *, api_key=None):
         self.calls = []
         self._next_results: list[SimpleNamespace] = []
@@ -56,12 +54,17 @@ def stubbed(monkeypatch, tmp_path):
 def test_web_research_success_and_no_truncation(stubbed):
     long_text = "x" * 50_000
     stubbed.exa._next_results = [
-        SimpleNamespace(url="https://a.example/1", title="A", text=long_text, published_date="2026-01-01"),
+        SimpleNamespace(
+            url="https://a.example/1",
+            title="A",
+            text=long_text,
+            published_date="2026-01-01",
+        ),
     ]
     result = json.loads(research_module._tool_web_research("q", num_results=3))
     assert len(result["results"]) == 1
-    assert result["results"][0]["text"] == long_text          # no truncation
-    assert stubbed.exa.calls[0]["num_results"] == 3           # passed through, no clamp
+    assert result["results"][0]["text"] == long_text
+    assert stubbed.exa.calls[0]["num_results"] == 3
     assert stubbed.exa.calls[0]["type"] == "auto"
     assert stubbed.exa.calls[0]["text"] is True
 
@@ -70,7 +73,7 @@ def test_web_research_empty_returns_error(stubbed):
     stubbed.exa._next_results = []
     result = json.loads(research_module._tool_web_research("nothing", num_results=None))
     assert "error" in result
-    assert "num_results" not in stubbed.exa.calls[0]          # omitted when None
+    assert "num_results" not in stubbed.exa.calls[0]
 
 
 def test_web_fetch_success_and_no_truncation(stubbed):
@@ -79,13 +82,26 @@ def test_web_fetch_success_and_no_truncation(stubbed):
         markdown=long_md, metadata=SimpleNamespace(title="Title")
     )
     result = json.loads(research_module._tool_web_fetch("https://e.example"))
-    assert result["markdown"] == long_md                      # no truncation
+    assert result["markdown"] == long_md
     assert stubbed.fc.calls[0]["only_main_content"] is True
+
+
+def _make_fc(name, args_dict):
+    return SimpleNamespace(
+        name=name,
+        arguments=json.dumps(args_dict),
+        call_id=f"call_{name}",
+    )
 
 
 def test_execute_tool_call_dispatches_and_writes_markdown_records(stubbed):
     stubbed.exa._next_results = [
-        SimpleNamespace(url="https://a.example", title="A", text="body-a", published_date=None),
+        SimpleNamespace(
+            url="https://a.example",
+            title="A",
+            text="body-a",
+            published_date=None,
+        ),
     ]
     stubbed.fc._next_doc = SimpleNamespace(
         markdown="# hello\nworld", metadata=SimpleNamespace(title="H")
@@ -96,30 +112,26 @@ def test_execute_tool_call_dispatches_and_writes_markdown_records(stubbed):
         "tool_seq": {},
     }
 
-    # web_research
-    item = SimpleNamespace(name="web_research", args={"query": "foo", "num_results": 2})
-    research_module._execute_tool_call(item, state)
+    research_module._execute_tool_call(
+        _make_fc("web_research", {"query": "foo", "num_results": 2}), state
+    )
     wr_record = (stubbed.research_dir / "web_research" / "1.md").read_text()
     assert "# web_research #1" in wr_record
     assert "https://a.example" in wr_record
     assert "body-a" in wr_record
 
-    # web_fetch
-    item = SimpleNamespace(name="web_fetch", args={"url": "https://e.example"})
-    research_module._execute_tool_call(item, state)
+    research_module._execute_tool_call(
+        _make_fc("web_fetch", {"url": "https://e.example"}), state
+    )
     wf_record = (stubbed.research_dir / "web_fetch" / "1.md").read_text()
     assert "# web_fetch #1" in wf_record
     assert "# hello\nworld" in wf_record
 
-    # unknown tool raises
     with pytest.raises(ValueError, match="Unknown tool"):
-        research_module._execute_tool_call(
-            SimpleNamespace(name="nope", args={}), state
-        )
+        research_module._execute_tool_call(_make_fc("nope", {}), state)
 
 
 def test_filesystem_tool_calls_route_to_filesystem_helpers(stubbed, monkeypatch):
-    """A `bash` tool call routes through tools.filesystem.execute_filesystem_tool."""
     captured = {}
 
     def fake_execute_filesystem_tool(name, args, *, writable_root):
@@ -137,8 +149,9 @@ def test_filesystem_tool_calls_route_to_filesystem_helpers(stubbed, monkeypatch)
         "tool_seq": {},
     }
 
-    item = SimpleNamespace(name="bash", args={"command": "ls -la"})
-    out = research_module._execute_tool_call(item, state)
+    out = research_module._execute_tool_call(
+        _make_fc("bash", {"command": "ls -la"}), state
+    )
 
     assert captured["name"] == "bash"
     assert captured["args"] == {"command": "ls -la"}
@@ -147,7 +160,6 @@ def test_filesystem_tool_calls_route_to_filesystem_helpers(stubbed, monkeypatch)
 
 
 def test_build_system_inlines_custom_instructions():
-    """The researcher system prompt inlines RESEARCHER_INSTRUCTIONS.md when present."""
     from prompts.research import build_system
 
     body = "Cite at least three peer-reviewed sources per claim."
@@ -158,7 +170,6 @@ def test_build_system_inlines_custom_instructions():
 
 
 def test_build_system_omits_section_when_no_instructions():
-    """Absent / empty custom_instructions → no <custom_instructions> wrapper."""
     from prompts.research import build_system
 
     assert "<custom_instructions>" not in build_system(writable_root="/tmp/research_1")
@@ -178,36 +189,23 @@ def test_render_tool_record_markdown_error_path():
     assert "**ERROR:** exa down" in rendered
 
 
-# ---------------------------------------------------------------------------
-# RESEARCH.md scaffold + return-value contract
-# ---------------------------------------------------------------------------
-
-
 def _terminating_response():
-    """Build a fake call_llm response whose only part has no function_call."""
-    return SimpleNamespace(
-        candidates=[
-            SimpleNamespace(
-                content=SimpleNamespace(
-                    parts=[SimpleNamespace(function_call=None)],
-                    model_dump=lambda **_: {
-                        "role": "model",
-                        "parts": [{"text": "done"}],
-                    },
-                )
-            )
-        ],
-        text="done",
+    msg = SimpleNamespace(
+        type="message",
+        content=[SimpleNamespace(type="output_text", text="done")],
     )
+    resp = SimpleNamespace(id="resp_term", output=[msg], output_text="done")
+    resp.usage = SimpleNamespace(input_tokens=100)
+    return resp
 
 
 def test_run_creates_research_md_scaffold(monkeypatch, tmp_path):
-    """run() scaffolds RESEARCH.md as `# {instruction}\\n` and returns its
-    contents — even if the agent never modifies it (terminates immediately)."""
     monkeypatch.setattr(research_module, "_TASK_ROOT", tmp_path)
     monkeypatch.setattr(research_module, "should_compact", lambda _: False)
     monkeypatch.setattr(
-        research_module, "call_llm", lambda **_: (_terminating_response(), 100)
+        research_module,
+        "call_llm",
+        lambda **_: (_terminating_response(), 100),
     )
 
     agent = research_module.ResearcherAgent("slug", "run-1", 1)
@@ -217,13 +215,10 @@ def test_run_creates_research_md_scaffold(monkeypatch, tmp_path):
     research_md = tmp_path / "slug" / "run-1" / "research_1" / "RESEARCH.md"
     assert research_md.exists()
     assert research_md.read_text(encoding="utf-8") == f"# {instruction}\n"
-    # The framework ALWAYS returns RESEARCH.md from disk — never the LLM text.
     assert result == f"# {instruction}\n"
 
 
 def test_run_returns_research_md_contents_when_populated(monkeypatch, tmp_path):
-    """If the agent populates RESEARCH.md via write_file, run() returns the
-    populated content (not the scaffold, not the terminating LLM text)."""
     monkeypatch.setattr(research_module, "_TASK_ROOT", tmp_path)
     monkeypatch.setattr(research_module, "should_compact", lambda _: False)
 
@@ -236,30 +231,41 @@ def test_run_returns_research_md_contents_when_populated(monkeypatch, tmp_path):
         call_count[0] += 1
         if call_count[0] == 1:
             fc = SimpleNamespace(
+                type="function_call",
                 name="write_file",
-                args={"path": str(research_md_path), "content": populated},
-                id="call_1",
-            )
-            return (
-                SimpleNamespace(
-                    candidates=[
-                        SimpleNamespace(
-                            content=SimpleNamespace(
-                                parts=[SimpleNamespace(function_call=fc)],
-                                model_dump=lambda **_: {
-                                    "role": "model",
-                                    "parts": [{"function_call": {"name": "write_file"}}],
-                                },
-                            )
-                        )
-                    ],
-                    text=None,
+                arguments=json.dumps(
+                    {"path": str(research_md_path), "content": populated}
                 ),
-                100,
+                call_id="call_write",
             )
+            resp = SimpleNamespace(id="resp_fc", output=[fc], output_text=None)
+            resp.usage = SimpleNamespace(input_tokens=100)
+            return resp, 100
         return _terminating_response(), 100
 
     monkeypatch.setattr(research_module, "call_llm", fake_call_llm)
+
+    monkeypatch.setattr(
+        research_module,
+        "execute_filesystem_tool",
+        lambda name, args, *, writable_root: json.dumps(
+            {
+                "type": "create",
+                "path": str(research_md_path),
+                "bytes_written": len(populated),
+            }
+        ),
+    )
+
+    def fake_execute_tool_call(fc, state):
+        args = json.loads(fc.arguments)
+        if fc.name == "write_file":
+            research_md_path.parent.mkdir(parents=True, exist_ok=True)
+            research_md_path.write_text(args["content"], encoding="utf-8")
+            return json.dumps({"type": "create", "path": args["path"]})
+        raise ValueError(f"Unknown: {fc.name}")
+
+    monkeypatch.setattr(research_module, "_execute_tool_call", fake_execute_tool_call)
 
     agent = research_module.ResearcherAgent("slug", "run-1", 1)
     result = agent.run("any instruction")

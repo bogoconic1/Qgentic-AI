@@ -17,20 +17,27 @@ def _seed_run(root: Path) -> tuple[str, str]:
     (run / "MAIN.md").write_text("# Plan\n\nhello world.")
     (root / slug / "GOAL.md").write_text("# goal")
     (run / "main_agent_chat.jsonl").write_text(
-        "\n".join([
-            json.dumps({
-                "role": "assistant",
-                "content": {"parts": [{"text": "hi from MainAgent"}]},
-                "ts": "2026-01-01T00:00:00+00:00",
-            }),
-            json.dumps({
-                "role": "tool",
-                "name": "read_file",
-                "args": {"path": "/x"},
-                "result": "{\"content\": \"ok\"}",
-                "ts": "2026-01-01T00:00:01+00:00",
-            }),
-        ]) + "\n"
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "role": "assistant",
+                        "content": {"parts": [{"text": "hi from MainAgent"}]},
+                        "ts": "2026-01-01T00:00:00+00:00",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "role": "tool",
+                        "name": "read_file",
+                        "args": {"path": "/x"},
+                        "result": '{"content": "ok"}',
+                        "ts": "2026-01-01T00:00:01+00:00",
+                    }
+                ),
+            ]
+        )
+        + "\n"
     )
 
     research = run / "research_1"
@@ -81,22 +88,37 @@ def test_bash_command_rendered_directly(tmp_path: Path):
     run.mkdir(parents=True)
     cmd = 'grep -n -A 20 "class Node" /venv/main/lib/python3.12/site-packages/onnx_tool/node.py'
     (run / "main_agent_chat.jsonl").write_text(
-        "\n".join([
-            json.dumps({
-                "role": "assistant",
-                "content": {"parts": [
-                    {"function_call": {"id": "c1", "name": "bash", "args": {"command": cmd}}}
-                ]},
-                "ts": "2026-01-02T00:00:00+00:00",
-            }),
-            json.dumps({
-                "role": "tool",
-                "name": "bash",
-                "args": {"command": cmd},
-                "result": "ok",
-                "ts": "2026-01-02T00:00:01+00:00",
-            }),
-        ]) + "\n"
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "role": "assistant",
+                        "content": {
+                            "parts": [
+                                {
+                                    "function_call": {
+                                        "id": "c1",
+                                        "name": "bash",
+                                        "args": {"command": cmd},
+                                    }
+                                }
+                            ]
+                        },
+                        "ts": "2026-01-02T00:00:00+00:00",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "role": "tool",
+                        "name": "bash",
+                        "args": {"command": cmd},
+                        "result": "ok",
+                        "ts": "2026-01-02T00:00:01+00:00",
+                    }
+                ),
+            ]
+        )
+        + "\n"
     )
     app = server.create_app(task_root_override=tmp_path)
     app.config["TESTING"] = True
@@ -118,15 +140,20 @@ def test_tool_result_unwraps_bash_output(tmp_path: Path):
     slug, run_id = "wrap", "20260103_000000"
     run = tmp_path / slug / run_id
     run.mkdir(parents=True)
-    payload = json.dumps({"output": "hello\nworld", "returncode": 0, "truncated": False})
+    payload = json.dumps(
+        {"output": "hello\nworld", "returncode": 0, "truncated": False}
+    )
     (run / "main_agent_chat.jsonl").write_text(
-        json.dumps({
-            "role": "tool",
-            "name": "bash",
-            "args": {"command": "echo hi"},
-            "result": payload,
-            "ts": "2026-01-03T00:00:00+00:00",
-        }) + "\n"
+        json.dumps(
+            {
+                "role": "tool",
+                "name": "bash",
+                "args": {"command": "echo hi"},
+                "result": payload,
+                "ts": "2026-01-03T00:00:00+00:00",
+            }
+        )
+        + "\n"
     )
     app = server.create_app(task_root_override=tmp_path)
     app.config["TESTING"] = True
@@ -147,13 +174,16 @@ def test_tool_result_error_styled(tmp_path: Path):
     run = tmp_path / slug / run_id
     run.mkdir(parents=True)
     (run / "main_agent_chat.jsonl").write_text(
-        json.dumps({
-            "role": "tool",
-            "name": "write_file",
-            "args": {"path": "/tmp/x"},
-            "result": json.dumps({"error": "Blocked by safety judge"}),
-            "ts": "2026-01-04T00:00:00+00:00",
-        }) + "\n"
+        json.dumps(
+            {
+                "role": "tool",
+                "name": "write_file",
+                "args": {"path": "/tmp/x"},
+                "result": json.dumps({"error": "Blocked by safety judge"}),
+                "ts": "2026-01-04T00:00:00+00:00",
+            }
+        )
+        + "\n"
     )
     app = server.create_app(task_root_override=tmp_path)
     app.config["TESTING"] = True
@@ -169,13 +199,16 @@ def test_tool_result_no_primary_renders_meta_only(tmp_path: Path):
     run = tmp_path / slug / run_id
     run.mkdir(parents=True)
     (run / "main_agent_chat.jsonl").write_text(
-        json.dumps({
-            "role": "tool",
-            "name": "add_idea",
-            "args": {"body": "x"},
-            "result": json.dumps({"idea_id": 1}),
-            "ts": "2026-01-05T00:00:00+00:00",
-        }) + "\n"
+        json.dumps(
+            {
+                "role": "tool",
+                "name": "add_idea",
+                "args": {"body": "x"},
+                "result": json.dumps({"idea_id": 1}),
+                "ts": "2026-01-05T00:00:00+00:00",
+            }
+        )
+        + "\n"
     )
     app = server.create_app(task_root_override=tmp_path)
     app.config["TESTING"] = True
@@ -196,20 +229,25 @@ def test_tool_result_list_dir_entries_unwrapped(tmp_path: Path):
     slug, run_id = "lst", "20260106_000000"
     run = tmp_path / slug / run_id
     run.mkdir(parents=True)
-    payload = json.dumps({
-        "entries": ["a.py", "b.py", "README.md"],
-        "showing": 3,
-        "total": 3,
-        "truncated": False,
-    })
+    payload = json.dumps(
+        {
+            "entries": ["a.py", "b.py", "README.md"],
+            "showing": 3,
+            "total": 3,
+            "truncated": False,
+        }
+    )
     (run / "main_agent_chat.jsonl").write_text(
-        json.dumps({
-            "role": "tool",
-            "name": "list_dir",
-            "args": {"path": "."},
-            "result": payload,
-            "ts": "2026-01-06T00:00:00+00:00",
-        }) + "\n"
+        json.dumps(
+            {
+                "role": "tool",
+                "name": "list_dir",
+                "args": {"path": "."},
+                "result": payload,
+                "ts": "2026-01-06T00:00:00+00:00",
+            }
+        )
+        + "\n"
     )
     app = server.create_app(task_root_override=tmp_path)
     app.config["TESTING"] = True
@@ -227,19 +265,24 @@ def test_tool_result_grep_matches_with_dict_items(tmp_path: Path):
     slug, run_id = "grp", "20260107_000000"
     run = tmp_path / slug / run_id
     run.mkdir(parents=True)
-    payload = json.dumps({
-        "matches": [{"file": "x.py", "line": 1, "text": "hi"}],
-        "showing": 1,
-        "total_matches": 1,
-    })
+    payload = json.dumps(
+        {
+            "matches": [{"file": "x.py", "line": 1, "text": "hi"}],
+            "showing": 1,
+            "total_matches": 1,
+        }
+    )
     (run / "main_agent_chat.jsonl").write_text(
-        json.dumps({
-            "role": "tool",
-            "name": "grep_code",
-            "args": {"pattern": "hi"},
-            "result": payload,
-            "ts": "2026-01-07T00:00:00+00:00",
-        }) + "\n"
+        json.dumps(
+            {
+                "role": "tool",
+                "name": "grep_code",
+                "args": {"pattern": "hi"},
+                "result": payload,
+                "ts": "2026-01-07T00:00:00+00:00",
+            }
+        )
+        + "\n"
     )
     app = server.create_app(task_root_override=tmp_path)
     app.config["TESTING"] = True
@@ -247,7 +290,10 @@ def test_tool_result_grep_matches_with_dict_items(tmp_path: Path):
     assert rv.status_code == 200
     body = rv.data.decode()
     # Each match item rendered as JSON on its own line in the body block.
-    assert '{&#34;file&#34;: &#34;x.py&#34;, &#34;line&#34;: 1, &#34;text&#34;: &#34;hi&#34;}' in body
+    assert (
+        "{&#34;file&#34;: &#34;x.py&#34;, &#34;line&#34;: 1, &#34;text&#34;: &#34;hi&#34;}"
+        in body
+    )
     assert "total_matches" in body and "showing" in body
 
 
@@ -255,21 +301,26 @@ def test_tool_result_run_solution_output_tail_unwrapped(tmp_path: Path):
     slug, run_id = "rs", "20260108_000000"
     run = tmp_path / slug / run_id
     run.mkdir(parents=True)
-    payload = json.dumps({
-        "elapsed_seconds": 132.5,
-        "output_tail": "Final score: 0.87",
-        "score": 0.87,
-        "stats": {"train_loss": 0.1, "val_score": 0.87},
-        "success": True,
-    })
+    payload = json.dumps(
+        {
+            "elapsed_seconds": 132.5,
+            "output_tail": "Final score: 0.87",
+            "score": 0.87,
+            "stats": {"train_loss": 0.1, "val_score": 0.87},
+            "success": True,
+        }
+    )
     (run / "main_agent_chat.jsonl").write_text(
-        json.dumps({
-            "role": "tool",
-            "name": "run_solution",
-            "args": {},
-            "result": payload,
-            "ts": "2026-01-08T00:00:00+00:00",
-        }) + "\n"
+        json.dumps(
+            {
+                "role": "tool",
+                "name": "run_solution",
+                "args": {},
+                "result": payload,
+                "ts": "2026-01-08T00:00:00+00:00",
+            }
+        )
+        + "\n"
     )
     app = server.create_app(task_root_override=tmp_path)
     app.config["TESTING"] = True
@@ -334,12 +385,19 @@ def test_file_empty_path_400(client):
 
 
 def test_export_self_contained(client, tmp_path: Path):
-    research_log = tmp_path / "demo" / "20260101_000000" / "research_1" / "researcher_chat.jsonl"
-    research_log.write_text(json.dumps({
-        "role": "assistant",
-        "content": {"parts": [{"text": "hi from researcher"}]},
-        "ts": "2026-01-01T00:00:02+00:00",
-    }) + "\n")
+    research_log = (
+        tmp_path / "demo" / "20260101_000000" / "research_1" / "researcher_chat.jsonl"
+    )
+    research_log.write_text(
+        json.dumps(
+            {
+                "role": "assistant",
+                "content": {"parts": [{"text": "hi from researcher"}]},
+                "ts": "2026-01-01T00:00:02+00:00",
+            }
+        )
+        + "\n"
+    )
     rv = client.get("/export/demo/20260101_000000")
     assert rv.status_code == 200
     body = rv.data.decode("utf-8")

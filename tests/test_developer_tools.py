@@ -1,9 +1,11 @@
 """Unit tests for shared developer tools (tools/developer.py)."""
 
+import json
+from types import SimpleNamespace
+
 import pytest
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock
 
 from tools.developer import (
     execute_code,
@@ -138,7 +140,9 @@ def test_web_search_stack_trace(monkeypatch):
 
     monkeypatch.setattr("tools.developer.call_llm", fake_call_llm)
 
-    query = "Traceback (most recent call last):\n  File 'test.py', line 1\nValueError: test"
+    query = (
+        "Traceback (most recent call last):\n  File 'test.py', line 1\nValueError: test"
+    )
     result = web_search_stack_trace(query)
 
     assert call_count[0] == 1, "Should call the LLM exactly once (web-search path only)"
@@ -337,23 +341,18 @@ def test_monitor_logs_with_bash_tool(monkeypatch):
         call_count[0] += 1
 
         if call_count[0] == 1:
-            mock_fc = MagicMock()
-            mock_fc.name = "execute_bash"
-            mock_fc.args = {"command": "echo ok"}
-            mock_fc.id = "call_123"
-
-            mock_part = MagicMock(spec=["function_call"])
-            mock_part.function_call = mock_fc
-
-            mock_content = MagicMock()
-            mock_content.parts = [mock_part]
-
-            mock_candidate = MagicMock()
-            mock_candidate.content = mock_content
-
-            mock_response = MagicMock(spec=["candidates"])
-            mock_response.candidates = [mock_candidate]
-            return mock_response
+            fc = SimpleNamespace(
+                type="function_call",
+                name="execute_bash",
+                arguments=json.dumps({"command": "echo ok"}),
+                call_id="call_123",
+            )
+            resp = SimpleNamespace(
+                id="resp_monitor_1",
+                output=[fc],
+                output_text=None,
+            )
+            return resp
 
         return LogMonitorVerdict(
             reasoning="GPU at 0% utilization — process is deadlocked",

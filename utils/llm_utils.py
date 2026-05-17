@@ -1,5 +1,5 @@
 """
-LLM utility functions for Gemini response handling and tool definitions.
+LLM utility functions for OpenAI Responses API handling and tool definitions.
 """
 
 import base64
@@ -7,23 +7,12 @@ import logging
 import mimetypes
 from pathlib import Path
 
-from google.genai import types
-
 logger = logging.getLogger(__name__)
 
 
 def encode_image_to_data_url(
     image_path: str | Path, max_size_bytes: int = 4_500_000
 ) -> str:
-    """Encode an image file to a data URL.
-
-    Args:
-        image_path: Path to the image file
-        max_size_bytes: Maximum file size in bytes (default 4.5MB)
-
-    Returns:
-        Data URL string in format: data:{mime};base64,{data}
-    """
     path = Path(image_path) if isinstance(image_path, str) else image_path
 
     mime, _ = mimetypes.guess_type(path.name)
@@ -52,55 +41,20 @@ def encode_image_to_data_url(
 
 
 def extract_text_from_response(response) -> str:
-    """
-    Extract text from a Gemini response.
-
-    Args:
-        response: Google Gemini response object
-
-    Returns:
-        Extracted text string
-
-    Examples:
-        >>> text = extract_text_from_response(gemini_response)
-    """
-    return response.text
+    return response.output_text
 
 
 def append_message(role: str, message: str) -> dict:
-    """
-    Create a message in Gemini format.
-
-    Args:
-        role: Message role ("user", "assistant", "model", etc.)
-        message: Message content (text string)
-
-    Returns:
-        Formatted message dict for Gemini
-
-    Examples:
-        >>> append_message("user", "Hello")
-        {'role': 'user', 'parts': [{'text': 'Hello'}]}
-
-        >>> append_message("assistant", "Hi")
-        {'role': 'model', 'parts': [{'text': 'Hi'}]}
-    """
-    gemini_role = "model" if role == "assistant" else role
-    return {"role": gemini_role, "parts": [{"text": message}]}
-
-
-# ---------------------------------------------------------------------------
-# Monitor tools (execute_bash for system diagnostics during training)
-# ---------------------------------------------------------------------------
+    return {"role": role, "content": message}
 
 
 def get_monitor_tools():
-    """Get monitor tools (execute_bash) as Gemini FunctionDeclaration objects."""
     return [
-        types.FunctionDeclaration(
-            name="execute_bash",
-            description="Execute a bash command for system diagnostics. Use for checking GPU utilization (nvidia-smi), process status (ps, top), memory (free), disk (df), etc.",
-            parameters_json_schema={
+        {
+            "type": "function",
+            "name": "execute_bash",
+            "description": "Execute a bash command for system diagnostics. Use for checking GPU utilization (nvidia-smi), process status (ps, top), memory (free), disk (df), etc.",
+            "parameters": {
                 "type": "object",
                 "properties": {
                     "command": {
@@ -110,33 +64,22 @@ def get_monitor_tools():
                 },
                 "required": ["command"],
             },
-        )
+        }
     ]
 
 
-# ---------------------------------------------------------------------------
-# Deep Research tools (web_research + web_fetch)
-# ---------------------------------------------------------------------------
-
-
 def get_deep_research_tools():
-    """Inner tools available to the Deep Research sub-agent.
-
-    The two research-specific tools (web_research / web_fetch) plus the
-    shared filesystem tools (read_file / glob_files / grep_code / list_dir /
-    bash). Use ``bash`` for any scripted execution (`python -c "..."` or
-    `python script.py`).
-    """
     return [
-        types.FunctionDeclaration(
-            name="web_research",
-            description=(
+        {
+            "type": "function",
+            "name": "web_research",
+            "description": (
                 "Discover web pages for a query via Exa neural search. "
                 "Returns a list of results, each with url, title, full page text, "
                 "and published_date — not a snippet, the whole text. This is the "
                 "ONLY way to discover URLs; never guess or reconstruct URLs."
             ),
-            parameters_json_schema={
+            "parameters": {
                 "type": "object",
                 "properties": {
                     "query": {
@@ -153,16 +96,17 @@ def get_deep_research_tools():
                 },
                 "required": ["query"],
             },
-        ),
-        types.FunctionDeclaration(
-            name="web_fetch",
-            description=(
+        },
+        {
+            "type": "function",
+            "name": "web_fetch",
+            "description": (
                 "Fetch a single URL's main content as markdown via Firecrawl. "
                 "Full page content is returned — no truncation. Only call with "
                 "URLs you got from a prior `web_research` result or from a "
                 "markdown link inside a prior `web_fetch` result."
             ),
-            parameters_json_schema={
+            "parameters": {
                 "type": "object",
                 "properties": {
                     "url": {
@@ -172,32 +116,18 @@ def get_deep_research_tools():
                 },
                 "required": ["url"],
             },
-        ),
+        },
         *get_filesystem_tools(),
     ]
 
 
-# ---------------------------------------------------------------------------
-# Filesystem tools (reads run wide; writes pinned to per-agent writable_root)
-# ---------------------------------------------------------------------------
-
-
 def get_filesystem_tools():
-    """Five Linux-style tools (read/glob/grep/list/bash) shared across subagents.
-
-    The four read-only tools (`read_file`, `glob_files`, `grep_code`,
-    `list_dir`) reject paths outside the configured allowed roots. The
-    fifth tool, `bash`, is widened: it goes through `bash -c` so pipes,
-    redirection, and chaining all work — but every command is run past
-    an LLM safety judge first. The judge blocks destructive operations
-    (`rm -rf /`, `dd` to a disk, fork bombs, pipe-to-shell, writes to
-    system paths, etc.).
-    """
     return [
-        types.FunctionDeclaration(
-            name="read_file",
-            description="Read a source file. Path is absolute or relative to the current working directory. Returns numbered lines. Files over 300 lines are truncated unless start_line/end_line are specified.",
-            parameters_json_schema={
+        {
+            "type": "function",
+            "name": "read_file",
+            "description": "Read a source file. Path is absolute or relative to the current working directory. Returns numbered lines. Files over 300 lines are truncated unless start_line/end_line are specified.",
+            "parameters": {
                 "type": "object",
                 "properties": {
                     "path": {
@@ -215,11 +145,12 @@ def get_filesystem_tools():
                 },
                 "required": ["path"],
             },
-        ),
-        types.FunctionDeclaration(
-            name="glob_files",
-            description="Find files matching a glob pattern under a root directory. Returns up to 50 matches as paths relative to the root.",
-            parameters_json_schema={
+        },
+        {
+            "type": "function",
+            "name": "glob_files",
+            "description": "Find files matching a glob pattern under a root directory. Returns up to 50 matches as paths relative to the root.",
+            "parameters": {
                 "type": "object",
                 "properties": {
                     "root": {
@@ -233,11 +164,12 @@ def get_filesystem_tools():
                 },
                 "required": ["root", "pattern"],
             },
-        ),
-        types.FunctionDeclaration(
-            name="grep_code",
-            description="Recursively search a regex pattern in files under a root directory. Returns matching lines with file paths and line numbers.",
-            parameters_json_schema={
+        },
+        {
+            "type": "function",
+            "name": "grep_code",
+            "description": "Recursively search a regex pattern in files under a root directory. Returns matching lines with file paths and line numbers.",
+            "parameters": {
                 "type": "object",
                 "properties": {
                     "root": {
@@ -259,11 +191,12 @@ def get_filesystem_tools():
                 },
                 "required": ["root", "pattern"],
             },
-        ),
-        types.FunctionDeclaration(
-            name="list_dir",
-            description="List the immediate children of a directory. Directories are suffixed with '/'.",
-            parameters_json_schema={
+        },
+        {
+            "type": "function",
+            "name": "list_dir",
+            "description": "List the immediate children of a directory. Directories are suffixed with '/'.",
+            "parameters": {
                 "type": "object",
                 "properties": {
                     "path": {
@@ -277,10 +210,11 @@ def get_filesystem_tools():
                 },
                 "required": ["path"],
             },
-        ),
-        types.FunctionDeclaration(
-            name="bash",
-            description=(
+        },
+        {
+            "type": "function",
+            "name": "bash",
+            "description": (
                 "Run a shell command via `bash -c`. Pipes, redirection, chaining, "
                 "backticks, and $() all work. An LLM safety judge inspects every "
                 "command first and blocks destructive operations (rm -rf /, dd "
@@ -290,7 +224,7 @@ def get_filesystem_tools():
                 "the dedicated tools don't cover: `cp`, `mv`, `mkdir`, `rm` of "
                 "project files, `tar`, `pip install`, `python script.py | tee log`."
             ),
-            parameters_json_schema={
+            "parameters": {
                 "type": "object",
                 "properties": {
                     "command": {
@@ -300,10 +234,11 @@ def get_filesystem_tools():
                 },
                 "required": ["command"],
             },
-        ),
-        types.FunctionDeclaration(
-            name="write_file",
-            description=(
+        },
+        {
+            "type": "function",
+            "name": "write_file",
+            "description": (
                 "Write a file to the local filesystem. Creates parent "
                 "directories as needed and overwrites any existing file at "
                 "`path`. Prefer `edit_file` for in-place modifications since "
@@ -311,7 +246,7 @@ def get_filesystem_tools():
                 "full rewrites. Path must resolve under one of the configured "
                 "allowed roots."
             ),
-            parameters_json_schema={
+            "parameters": {
                 "type": "object",
                 "properties": {
                     "path": {
@@ -325,10 +260,11 @@ def get_filesystem_tools():
                 },
                 "required": ["path", "content"],
             },
-        ),
-        types.FunctionDeclaration(
-            name="edit_file",
-            description=(
+        },
+        {
+            "type": "function",
+            "name": "edit_file",
+            "description": (
                 "Perform an exact-string replacement inside a file. "
                 "`old_string` must match a unique substring; if the file "
                 "contains more than one occurrence, set `replace_all` to "
@@ -338,7 +274,7 @@ def get_filesystem_tools():
                 "`new_string`. Path must resolve under one of the configured "
                 "allowed roots."
             ),
-            parameters_json_schema={
+            "parameters": {
                 "type": "object",
                 "properties": {
                     "path": {
@@ -360,21 +296,16 @@ def get_filesystem_tools():
                 },
                 "required": ["path", "old_string", "new_string"],
             },
-        ),
+        },
     ]
 
 
-# ---------------------------------------------------------------------------
-# Main Agent tools
-# ---------------------------------------------------------------------------
-
-
 def get_main_agent_tools():
-    """Get the tool palette available to the Main Agent."""
     return [
-        types.FunctionDeclaration(
-            name="start_dev_session",
-            description=(
+        {
+            "type": "function",
+            "name": "start_dev_session",
+            "description": (
                 "Allocate a fresh `developer_v{N}/` directory under the run "
                 "root. Creates the dir, scaffolds `SOLUTION.py` with the "
                 "required logging stanza (basicConfig + FileHandler for "
@@ -386,7 +317,7 @@ def get_main_agent_tools():
                 "Optional `idea_id` looks up the idea from INDEX.md and uses "
                 "its title for the SOLUTION.md header."
             ),
-            parameters_json_schema={
+            "parameters": {
                 "type": "object",
                 "properties": {
                     "idea_id": {
@@ -395,10 +326,11 @@ def get_main_agent_tools():
                     },
                 },
             },
-        ),
-        types.FunctionDeclaration(
-            name="run_solution",
-            description=(
+        },
+        {
+            "type": "function",
+            "name": "run_solution",
+            "description": (
                 "Execute `SOLUTION.py` inside `version_dir` under static "
                 "guardrails (basicConfig order + FileHandler for SOLUTION.txt) "
                 "and an LLM training monitor that watches stdout/stderr live "
@@ -413,7 +345,7 @@ def get_main_agent_tools():
                 "must include the `metric=… delta=… decision=…` line and the "
                 "next call must `edit_file MAIN.md` appending the same line."
             ),
-            parameters_json_schema={
+            "parameters": {
                 "type": "object",
                 "properties": {
                     "version_dir": {
@@ -423,10 +355,11 @@ def get_main_agent_tools():
                 },
                 "required": ["version_dir"],
             },
-        ),
-        types.FunctionDeclaration(
-            name="web_search_stack_trace",
-            description=(
+        },
+        {
+            "type": "function",
+            "name": "web_search_stack_trace",
+            "description": (
                 "Research how to fix a Python error from a stack trace. Pass "
                 "the raw stderr (the function isolates the traceback) and "
                 "receive the same trace annotated with a web-grounded "
@@ -434,7 +367,7 @@ def get_main_agent_tools():
                 "unfamiliar tracebacks; for tracebacks you can fix from "
                 "inspection alone, edit directly without calling this."
             ),
-            parameters_json_schema={
+            "parameters": {
                 "type": "object",
                 "properties": {
                     "query": {
@@ -444,16 +377,17 @@ def get_main_agent_tools():
                 },
                 "required": ["query"],
             },
-        ),
-        types.FunctionDeclaration(
-            name="research",
-            description=(
+        },
+        {
+            "type": "function",
+            "name": "research",
+            "description": (
                 "Runs one Deep Research iteration: web_fetch + web_search + internal "
                 "Python to produce a markdown report answering the instruction. Use "
                 "for domain grounding, library docs, prior-art sweeps, empirical "
                 "sniff-tests on the dataset."
             ),
-            parameters_json_schema={
+            "parameters": {
                 "type": "object",
                 "properties": {
                     "instruction": {
@@ -463,11 +397,12 @@ def get_main_agent_tools():
                 },
                 "required": ["instruction"],
             },
-        ),
-        types.FunctionDeclaration(
-            name="add_idea",
-            description="Add a new entry to the idea pool. Returns the assigned integer id.",
-            parameters_json_schema={
+        },
+        {
+            "type": "function",
+            "name": "add_idea",
+            "description": "Add a new entry to the idea pool. Returns the assigned integer id.",
+            "parameters": {
                 "type": "object",
                 "properties": {
                     "title": {
@@ -481,22 +416,24 @@ def get_main_agent_tools():
                 },
                 "required": ["title", "description"],
             },
-        ),
-        types.FunctionDeclaration(
-            name="remove_idea",
-            description="Remove an idea from the pool by id.",
-            parameters_json_schema={
+        },
+        {
+            "type": "function",
+            "name": "remove_idea",
+            "description": "Remove an idea from the pool by id.",
+            "parameters": {
                 "type": "object",
                 "properties": {
                     "idea_id": {"type": "integer"},
                 },
                 "required": ["idea_id"],
             },
-        ),
-        types.FunctionDeclaration(
-            name="update_idea",
-            description="Replace the body of an existing idea. Title stays the same.",
-            parameters_json_schema={
+        },
+        {
+            "type": "function",
+            "name": "update_idea",
+            "description": "Replace the body of an existing idea. Title stays the same.",
+            "parameters": {
                 "type": "object",
                 "properties": {
                     "idea_id": {"type": "integer"},
@@ -504,8 +441,6 @@ def get_main_agent_tools():
                 },
                 "required": ["idea_id", "description"],
             },
-        ),
+        },
         *get_filesystem_tools(),
     ]
-
-

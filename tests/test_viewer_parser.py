@@ -27,17 +27,26 @@ def test_iter_records_missing_file(tmp_path: Path):
 
 def test_assistant_record_with_text_function_call_and_thought(tmp_path: Path):
     p = tmp_path / "x.jsonl"
-    _write(p, {
-        "role": "assistant",
-        "content": {"parts": [
-            {"text": "hello"},
-            {
-                "function_call": {"id": "c1", "name": "read_file", "args": {"path": "/x"}},
-                "thought_signature": "A" * 64,
+    _write(
+        p,
+        {
+            "role": "assistant",
+            "content": {
+                "parts": [
+                    {"text": "hello"},
+                    {
+                        "function_call": {
+                            "id": "c1",
+                            "name": "read_file",
+                            "args": {"path": "/x"},
+                        },
+                        "thought_signature": "A" * 64,
+                    },
+                ]
             },
-        ]},
-        "ts": "2026-05-02T07:25:00+00:00",
-    })
+            "ts": "2026-05-02T07:25:00+00:00",
+        },
+    )
 
     records = list(parser.iter_records(p))
     assert len(records) == 1
@@ -52,26 +61,33 @@ def test_assistant_record_with_text_function_call_and_thought(tmp_path: Path):
     assert text_part.has_thought is False
 
     assert fc_part.text is None
-    assert fc_part.function_call == {"id": "c1", "name": "read_file", "args": {"path": "/x"}}
+    assert fc_part.function_call == {
+        "id": "c1",
+        "name": "read_file",
+        "args": {"path": "/x"},
+    }
     assert fc_part.has_thought is True
     assert fc_part.thought_size == 64
 
 
 def test_tool_record(tmp_path: Path):
     p = tmp_path / "x.jsonl"
-    _write(p, {
-        "role": "tool",
-        "name": "read_file",
-        "args": {"path": "/x"},
-        "result": "{\"content\": \"hi\"}",
-        "ts": "2026-05-02T07:25:01+00:00",
-    })
+    _write(
+        p,
+        {
+            "role": "tool",
+            "name": "read_file",
+            "args": {"path": "/x"},
+            "result": '{"content": "hi"}',
+            "ts": "2026-05-02T07:25:01+00:00",
+        },
+    )
 
     [rec] = list(parser.iter_records(p))
     assert isinstance(rec, parser.ToolRecord)
     assert rec.name == "read_file"
     assert rec.args == {"path": "/x"}
-    assert rec.result == "{\"content\": \"hi\"}"
+    assert rec.result == '{"content": "hi"}'
     assert rec.ts == "2026-05-02T07:25:01+00:00"
 
 
@@ -96,7 +112,10 @@ def test_mid_file_malformed_yields_raw_then_continues(tmp_path: Path):
 def test_last_line_malformed_dropped_silently(tmp_path: Path):
     # Simulate live-write race: prior records are valid, last line truncated mid-write.
     p = tmp_path / "x.jsonl"
-    text = json.dumps({"role": "tool", "name": "a", "args": {}, "result": "1", "ts": "t1"}) + "\n"
+    text = (
+        json.dumps({"role": "tool", "name": "a", "args": {}, "result": "1", "ts": "t1"})
+        + "\n"
+    )
     text += '{"role": "tool", "name": "b", "args"'  # truncated
     p.write_text(text)
 
@@ -108,12 +127,15 @@ def test_last_line_malformed_dropped_silently(tmp_path: Path):
 
 def test_missing_ts_renders_as_none(tmp_path: Path):
     p = tmp_path / "x.jsonl"
-    _write(p, {
-        "role": "tool",
-        "name": "a",
-        "args": {},
-        "result": "ok",
-    })
+    _write(
+        p,
+        {
+            "role": "tool",
+            "name": "a",
+            "args": {},
+            "result": "ok",
+        },
+    )
     [rec] = list(parser.iter_records(p))
     assert rec.ts is None
 

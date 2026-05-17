@@ -20,9 +20,7 @@ def sandbox(tmp_path):
     (tmp_path / "pkg").mkdir()
     (tmp_path / "pkg" / "__init__.py").write_text("VERSION = '1.0'\n")
     (tmp_path / "pkg" / "core.py").write_text(
-        "def add(a, b):\n"
-        "    \"\"\"Add two numbers.\"\"\"\n"
-        "    return a + b\n"
+        'def add(a, b):\n    """Add two numbers."""\n    return a + b\n'
     )
     (tmp_path / "data").mkdir()
     (tmp_path / "data" / "config.json").write_text('{"k": 1}\n')
@@ -41,9 +39,7 @@ def test_read_file(sandbox):
     assert full["total_lines"] == 3
 
     sliced = json.loads(
-        fs._tool_read_file(
-            str(sandbox / "pkg" / "core.py"), start_line=1, end_line=1
-        )
+        fs._tool_read_file(str(sandbox / "pkg" / "core.py"), start_line=1, end_line=1)
     )
     assert "1: def add(a, b):" in sliced["content"]
     assert "return" not in sliced["content"]
@@ -253,9 +249,7 @@ def test_write_file_rejects_path_outside_writable_root(sandbox, tmp_path_factory
     """write_file refuses to write a file outside writable_root."""
     outside = tmp_path_factory.mktemp("outside") / "evil.py"
 
-    err = json.loads(
-        fs._tool_write_file(str(outside), "data\n", writable_root=sandbox)
-    )
+    err = json.loads(fs._tool_write_file(str(outside), "data\n", writable_root=sandbox))
     assert "error" in err
     assert "outside writable_root" in err["error"]
     assert not outside.exists()
@@ -286,19 +280,22 @@ def test_execute_filesystem_tool_routes_by_name(sandbox, monkeypatch):
     _patch_judge(monkeypatch, "allow")
 
     out = fs.execute_filesystem_tool(
-        "read_file", {"path": str(sandbox / "pkg" / "core.py")},
+        "read_file",
+        {"path": str(sandbox / "pkg" / "core.py")},
         writable_root=sandbox,
     )
     assert "def add" in json.loads(out)["content"]
 
     out = fs.execute_filesystem_tool(
-        "glob_files", {"root": str(sandbox / "pkg"), "pattern": "*.py"},
+        "glob_files",
+        {"root": str(sandbox / "pkg"), "pattern": "*.py"},
         writable_root=sandbox,
     )
     assert json.loads(out)["total"] == 2
 
     out = fs.execute_filesystem_tool(
-        "grep_code", {"root": str(sandbox / "pkg"), "pattern": "def add"},
+        "grep_code",
+        {"root": str(sandbox / "pkg"), "pattern": "def add"},
         writable_root=sandbox,
     )
     assert json.loads(out)["total_matches"] == 1
@@ -328,5 +325,5 @@ def test_get_filesystem_tools_palette_matches_dispatcher():
     LLM is never told about."""
     from utils.llm_utils import get_filesystem_tools
 
-    palette = {decl.name for decl in get_filesystem_tools()}
+    palette = {decl["name"] for decl in get_filesystem_tools()}
     assert palette == fs.FILESYSTEM_TOOL_NAMES

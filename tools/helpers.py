@@ -2,10 +2,8 @@ import json
 import logging
 import time
 
-from google import genai
-from google.genai import errors as genai_errors
-from google.genai import types as genai_types
 import httpx
+import openai
 import pydantic
 import weave
 
@@ -16,8 +14,6 @@ _MAX_STRUCTURED_OUTPUT_RETRIES = 3
 
 
 class StructuredOutputError(Exception):
-    """Raised when the LLM fails to produce valid JSON after retries."""
-
     pass
 
 
@@ -34,14 +30,18 @@ RETRYABLE_EXCEPTIONS = (
     httpx.ConnectTimeout,
     httpx.PoolTimeout,
     httpx.HTTPStatusError,
-    genai_errors.ServerError,
-    genai_errors.ClientError,
+    openai.APIError,
+    openai.APIConnectionError,
+    openai.APITimeoutError,
+    openai.RateLimitError,
 )
 
 
 def _is_non_retryable_http_status(exc):
     if isinstance(exc, httpx.HTTPStatusError):
         return exc.response.status_code not in RETRYABLE_HTTP_STATUS_CODES
+    if isinstance(exc, openai.APIStatusError):
+        return exc.status_code not in RETRYABLE_HTTP_STATUS_CODES
     return False
 
 
@@ -49,7 +49,7 @@ _503_POLL_INTERVAL = 300  # 5 minutes
 
 
 def _is_503_unavailable(exc):
-    if isinstance(exc, genai_errors.ServerError) and exc.code == 503:
+    if isinstance(exc, openai.APIStatusError) and exc.status_code == 503:
         return True
     if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 503:
         return True
@@ -110,87 +110,79 @@ def call_llm(
     system_instruction: str,
     messages: str | list = None,
     text_format=None,
-    temperature: float = 1.0,
     max_retries: int | None = None,
     enable_google_search: bool = False,
-    top_p: float = 1.0,
-    thinking_budget: int | None = None,
-    thinking_level: str | None = None,
-    include_thoughts: bool = False,
+    thinking_level: str | None = "xhigh",
     function_declarations: list = None,
     include_usage: bool = False,
+    previous_response_id: str | None = None,
 ):
     runtime_cfg = get_config()["runtime"]
     retries = max_retries or runtime_cfg["llm_max_retries"]
     backoff_seq = tuple(runtime_cfg["llm_backoff_sequence"])
 
     tool_list = []
-    tool_params = {}
     if enable_google_search:
-        tool_params["google_search"] = genai_types.GoogleSearch()
+        tool_list.append({"type": "web_search_preview"})
     if function_declarations:
-        tool_params["function_declarations"] = function_declarations
-    if tool_params:
-        tool_list = [genai_types.Tool(**tool_params)]
+        tool_list.extend(function_declarations)
 
-    config_params = {
-        "temperature": temperature,
-        "top_p": top_p,
-        "system_instruction": system_instruction,
-        "tools": tool_list if tool_list else None,
+    create_params = {
+        "model": model,
+        "instructions": system_instruction,
     }
+    if tool_list:
+        create_params["tools"] = tool_list
 
-    thinking_config_params = {}
+    reasoning_params = {}
     if thinking_level is not None:
-        thinking_config_params["thinking_level"] = thinking_level
-    if thinking_budget is not None:
-        thinking_config_params["thinking_budget"] = thinking_budget
-    if include_thoughts:
-        thinking_config_params["include_thoughts"] = include_thoughts
-    config_params["thinking_config"] = genai_types.ThinkingConfig(
-        **thinking_config_params
-    )
+        reasoning_params["effort"] = thinking_level
+    if reasoning_params:
+        create_params["reasoning"] = reasoning_params
 
-    if text_format is not None:
-        config_params["response_mime_type"] = "application/json"
-        config_params["response_json_schema"] = text_format.model_json_schema()
+    use_parse = text_format is not None
 
-    config = genai_types.GenerateContentConfig(**config_params)
+    if use_parse and not function_declarations:
+        create_params["text"] = {
+            "format": {
+                "type": "json_schema",
+                "name": text_format.__name__,
+                "schema": text_format.model_json_schema(),
+                "strict": True,
+            }
+        }
+
+    if previous_response_id is not None:
+        create_params["previous_response_id"] = previous_response_id
 
     def _make_request(contents):
         def _attempt():
-            client = genai.Client()
-            return client.models.generate_content(
-                model=model,
-                contents=contents,
-                config=config,
-            )
+            client = openai.OpenAI()
+            create_params["input"] = contents
+            return client.responses.create(**create_params)
 
         return _retry_with_backoff(
             _attempt, max_retries=retries, backoff_sequence=backoff_seq
         )
 
     response = _make_request(messages)
-    input_tokens = (
-        response.usage_metadata.prompt_token_count if include_usage else None
-    )
+    input_tokens = response.usage.input_tokens if include_usage else None
 
     if text_format is None:
         return (response, input_tokens) if include_usage else response
 
-    # Structured output: parse JSON, retry with corrective feedback on failure
     current_messages = (
-        [append_message("user", messages)] if isinstance(messages, str) else list(messages)
+        [append_message("user", messages)]
+        if isinstance(messages, str)
+        else list(messages)
     )
 
     for attempt in range(_MAX_STRUCTURED_OUTPUT_RETRIES):
-        raw_text = response.text
+        raw_text = response.output_text
         if raw_text is not None:
             try:
                 parsed_result = text_format.model_validate_json(raw_text)
-                return (
-                    (parsed_result, input_tokens) if include_usage else parsed_result
-                )
+                return (parsed_result, input_tokens) if include_usage else parsed_result
             except (pydantic.ValidationError, json.JSONDecodeError) as e:
                 error_msg = str(e)
         else:
@@ -221,6 +213,4 @@ def call_llm(
         ]
 
         response = _make_request(current_messages)
-        input_tokens = (
-            response.usage_metadata.prompt_token_count if include_usage else None
-        )
+        input_tokens = response.usage.input_tokens if include_usage else None

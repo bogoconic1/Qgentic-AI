@@ -11,7 +11,6 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from project_config import get_config
-from google.genai import types
 from tools.helpers import call_llm
 from utils.llm_utils import (
     append_message,
@@ -301,11 +300,10 @@ def execute_code(
     return ExecutionJob(proc, timeout_seconds, filepath)
 
 
-def _execute_monitor_tool_call(item) -> str:
-    """Execute a monitor tool call (execute_bash) and return the result as JSON."""
-    args = dict(item.args)
+def _execute_monitor_tool_call(fc) -> str:
+    args = json.loads(fc.arguments)
 
-    if item.name == "execute_bash":
+    if fc.name == "execute_bash":
         command = args["command"]
         logger.info("Monitor tool: execute_bash(%s)", command)
         result = subprocess.run(
@@ -317,7 +315,7 @@ def _execute_monitor_tool_call(item) -> str:
         )
         return json.dumps({"output": result.stdout + result.stderr})
     else:
-        raise ValueError(f"Unknown monitor tool: {item.name}")
+        raise ValueError(f"Unknown monitor tool: {fc.name}")
 
 
 def monitor_logs(
@@ -342,6 +340,7 @@ def monitor_logs(
 
     tools = get_monitor_tools()
     input_list = [append_message("user", user_prompt)]
+    previous_response_id = None
 
     for step in range(max_tool_steps):
         is_last_step = step == max_tool_steps - 1
@@ -356,49 +355,58 @@ def monitor_logs(
             messages=input_list,
             enable_google_search=False,
             text_format=text_format,
+            previous_response_id=previous_response_id,
         )
 
-        # text_format is LogMonitorVerdict on last step (returns Pydantic), None otherwise
         if hasattr(response, "action"):
             return response
 
-        parts = response.candidates[0].content.parts
-        has_function_calls = any(
-            part.function_call for part in parts if hasattr(part, "function_call")
-        )
+        previous_response_id = response.id
+        output_items = response.output
+        function_calls = [item for item in output_items if item.type == "function_call"]
 
-        if not has_function_calls:
+        if not function_calls:
             response = call_llm(
                 model=_DEVELOPER_TOOL_MODEL,
                 system_instruction=system_prompt,
-                messages=input_list,
+                messages=[],
                 enable_google_search=False,
                 text_format=LogMonitorVerdict,
+                previous_response_id=previous_response_id,
             )
             return response
 
-        function_responses = []
-        for part in parts:
-            if hasattr(part, "function_call") and part.function_call:
-                tool_result_str = _execute_monitor_tool_call(part.function_call)
-                function_responses.append(
-                    types.Part.from_function_response(
-                        name=part.function_call.name,
-                        response={"result": tool_result_str},
-                    )
-                )
-        input_list.append(response.candidates[0].content)
-        if function_responses:
-            input_list.append(types.Content(role="function", parts=function_responses))
+        next_input = []
+        output_text = response.output_text or ""
+        if output_text:
+            input_list.append(append_message("assistant", output_text))
+        for fc in function_calls:
+            input_list.append(
+                {
+                    "type": "function_call",
+                    "call_id": fc.call_id,
+                    "name": fc.name,
+                    "arguments": fc.arguments,
+                }
+            )
+            tool_result_str = _execute_monitor_tool_call(fc)
+            item = {
+                "type": "function_call_output",
+                "call_id": fc.call_id,
+                "output": tool_result_str,
+            }
+            input_list.append(item)
+            next_input.append(item)
+        input_list = next_input
 
-    # Exhausted steps without a verdict — force one
     logger.warning("Monitor exhausted %d steps, forcing final verdict", max_tool_steps)
     response = call_llm(
         model=_DEVELOPER_TOOL_MODEL,
         system_instruction=system_prompt + "\n\nReturn your verdict now.",
-        messages=input_list,
+        messages=[],
         enable_google_search=False,
         text_format=LogMonitorVerdict,
+        previous_response_id=previous_response_id,
     )
     return response
 

@@ -37,14 +37,10 @@ uv pip install -r requirements.txt
 Create a `.env` file in the project root:
 
 ```
-GOOGLE_API_KEY=...
 OPENAI_API_KEY=...
 ANTHROPIC_API_KEY=...
 FIRECRAWL_API_KEY=...
 HF_TOKEN=...
-GOOGLE_CLOUD_PROJECT=...
-GOOGLE_CLOUD_LOCATION=global
-GOOGLE_GENAI_USE_VERTEXAI=True
 KAGGLE_USERNAME=
 KAGGLE_KEY=
 ```
@@ -96,21 +92,21 @@ flowchart TB
     USER(["User"])
     GOAL["GOAL.md<br/>RESEARCHER_INSTRUCTIONS.md"]
     KH[("kagglehub")]
-    GEM[("Gemini API")]
+    LLM[("OpenAI GPT-5.5")]
     WEB[("Exa + Firecrawl")]
 
     USER -->|"launch_agent.py --slug X"| LA["launch_agent.py<br/>copies inputs · downloads competition · creates run dir"]
     GOAL --> LA
     KH -. competition .-> LA
 
-    LA --> MA["MainAgent · Gemini loop<br/><br/>Tools<br/>start_dev_session · run_solution<br/>research · web_search_stack_trace<br/>add_idea / update_idea / remove_idea<br/>bash · read_file · write_file · edit_file<br/>list_dir · grep_code · glob_files"]
+    LA --> MA["MainAgent · GPT-5.5 loop<br/><br/>Tools<br/>start_dev_session · run_solution<br/>research · web_search_stack_trace<br/>add_idea / update_idea / remove_idea<br/>bash · read_file · write_file · edit_file<br/>list_dir · grep_code · glob_files"]
 
     MA -. each bash call .-> JUDGE[/"LLM bash safety judge"/]
     MA -. run_solution .-> MON[/"LLM training monitor<br/>watches stdout / stderr live"/]
-    MA -. LLM .-> GEM
+    MA -. LLM .-> LLM
 
-    MA -->|"research(instruction)"| RA["Researcher subagent · Gemini loop<br/><br/>Tools<br/>web_research · web_fetch<br/>bash · read_file · write_file · edit_file<br/>list_dir · grep_code · glob_files"]
-    RA -. LLM .-> GEM
+    MA -->|"research(instruction)"| RA["Researcher subagent · GPT-5.5 loop<br/><br/>Tools<br/>web_research · web_fetch<br/>bash · read_file · write_file · edit_file<br/>list_dir · grep_code · glob_files"]
+    RA -. LLM .-> LLM
     RA -. search / fetch .-> WEB
 
     MA --> RD
