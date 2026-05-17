@@ -1,20 +1,11 @@
-import json
 import logging
 import time
 
 import httpx
 import openai
-import pydantic
 import weave
 
 from project_config import get_config
-from utils.llm_utils import append_message
-
-_MAX_STRUCTURED_OUTPUT_RETRIES = 3
-
-
-class StructuredOutputError(Exception):
-    pass
 
 
 RETRYABLE_HTTP_STATUS_CODES = {429, 500, 502, 503, 504}
@@ -140,18 +131,6 @@ def call_llm(
     if reasoning_params:
         create_params["reasoning"] = reasoning_params
 
-    use_parse = text_format is not None
-
-    if use_parse and not function_declarations:
-        create_params["text"] = {
-            "format": {
-                "type": "json_schema",
-                "name": text_format.__name__,
-                "schema": text_format.model_json_schema(),
-                "strict": True,
-            }
-        }
-
     if previous_response_id is not None:
         create_params["previous_response_id"] = previous_response_id
 
@@ -159,6 +138,8 @@ def call_llm(
         def _attempt():
             client = openai.OpenAI()
             create_params["input"] = contents
+            if text_format is not None:
+                return client.responses.parse(**create_params, text_format=text_format)
             return client.responses.create(**create_params)
 
         return _retry_with_backoff(
@@ -171,46 +152,5 @@ def call_llm(
     if text_format is None:
         return (response, input_tokens) if include_usage else response
 
-    current_messages = (
-        [append_message("user", messages)]
-        if isinstance(messages, str)
-        else list(messages)
-    )
-
-    for attempt in range(_MAX_STRUCTURED_OUTPUT_RETRIES):
-        raw_text = response.output_text
-        if raw_text is not None:
-            try:
-                parsed_result = text_format.model_validate_json(raw_text)
-                return (parsed_result, input_tokens) if include_usage else parsed_result
-            except (pydantic.ValidationError, json.JSONDecodeError) as e:
-                error_msg = str(e)
-        else:
-            error_msg = "Empty response (no text)"
-
-        if attempt == _MAX_STRUCTURED_OUTPUT_RETRIES - 1:
-            raise StructuredOutputError(
-                f"Structured output failed after {_MAX_STRUCTURED_OUTPUT_RETRIES} "
-                f"attempts: {error_msg}"
-            )
-
-        logging.warning(
-            "Structured output invalid (attempt %d/%d): %s. Response: %.500s",
-            attempt + 1,
-            _MAX_STRUCTURED_OUTPUT_RETRIES,
-            error_msg,
-            raw_text or "",
-        )
-
-        current_messages = current_messages + [
-            append_message("assistant", raw_text or ""),
-            append_message(
-                "user",
-                f"Your response was not valid JSON conforming to the required schema. "
-                f"Error: {error_msg}\n\n"
-                f"Please regenerate your response as valid JSON matching the schema.",
-            ),
-        ]
-
-        response = _make_request(current_messages)
-        input_tokens = response.usage.input_tokens if include_usage else None
+    parsed = response.output_parsed
+    return (parsed, input_tokens) if include_usage else parsed
