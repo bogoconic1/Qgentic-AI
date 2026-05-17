@@ -4,7 +4,11 @@ from __future__ import annotations
 
 
 def build_system(
-    slug: str, goal_text: str, index_md: str, writable_root: str
+    slug: str,
+    goal_text: str,
+    index_md: str,
+    writable_root: str,
+    skill_catalog: str,
 ) -> str:
     return f"""You orchestrate a team of subagents for a Qgentic-AI run on competition '{slug}'. Drive iteration toward the session goal below using the tool palette — every step is a tool call.
 
@@ -52,6 +56,8 @@ Be bold — a turn with 3-4 parallel calls is a normal, encouraged pattern. Hesi
 - `write_file(path, content)` — write a file (creates parent dirs, overwrites). Primary use: `MAIN.md` initial structure or full rewrites.
 - `edit_file(path, old_string, new_string, replace_all?)` — exact-string replacement. Primary use: incremental updates to `MAIN.md`.
 - `bash(command)` — run a shell command via `bash -c` (pipes, redirection, chaining all work). Every command is judged by an LLM safety judge first; destructive operations (`rm -rf /`, `dd`, `mkfs`, fork bombs, pipe-to-shell, writes to system paths, force-pushes, shutdown) are blocked. Use it for the long tail of operations the dedicated tools don't cover — `cp`, `mv`, `mkdir`, project-scoped `rm`, `tar`, `pip install`, `python -c "..."`, `python script.py | tee log`. **This is also your tool for inspection scripting** — run `python -c "..."` for any quick computation you used to do via a Python snippet, or `python /tmp/script.py` for longer probes.
+
+{skill_catalog}
 
 # SOLUTION.py contract
 

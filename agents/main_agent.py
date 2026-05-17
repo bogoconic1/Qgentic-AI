@@ -39,6 +39,7 @@ from utils.compact import compact_messages, should_compact
 from utils.idea_pool import add_idea, load_index, remove_idea, update_idea
 from utils.llm_utils import append_message, get_main_agent_tools
 from utils.output import truncate_for_llm
+from utils.skills import load_agent_skills, render_skill_catalog
 
 
 _INITIAL_USER_TURN = (
@@ -95,6 +96,7 @@ class MainAgent:
         )
         self._consecutive_text_only = 0
         self._done = False
+        self._skill_catalog = render_skill_catalog(load_agent_skills())
         if not (self.ideas_dir / "INDEX.md").exists():
             (self.ideas_dir / "INDEX.md").write_text("# Idea pool\n\n")
         if not self.main_md_path.exists():
@@ -112,6 +114,7 @@ class MainAgent:
             goal_text=self.goal_text,
             index_md=load_index(self.ideas_dir),
             writable_root=str(self.base_dir),
+            skill_catalog=self._skill_catalog,
         )
         if should_compact(self.last_input_tokens):
             self.input_list = compact_messages(self.input_list, model=_MAIN_AGENT_MODEL)

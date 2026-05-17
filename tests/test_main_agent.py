@@ -61,6 +61,7 @@ def _fake_multi(*calls: tuple[str, dict]):
 @pytest.fixture
 def patched_main_agent(monkeypatch, tmp_path):
     monkeypatch.setattr(main_agent, "_TASK_ROOT", tmp_path / "task")
+    monkeypatch.setattr(main_agent, "load_agent_skills", lambda: [])
 
     run_solution_calls: list = []
 
