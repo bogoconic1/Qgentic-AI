@@ -1,0 +1,515 @@
+[
+  {
+    "deprecated_api": "torch.onnx.dynamo_export",
+    "context": "in torch.onnx",
+    "version": "2.9.0",
+    "reason": "The function was removed; use torch.onnx.export instead.",
+    "replacement": "torch.onnx.export",
+    "category": "function",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "torch.onnx.enable_fake_mode",
+    "context": "in torch.onnx",
+    "version": "2.9.0",
+    "reason": "The function was removed; dynamo=True mode uses FakeTensors by default.",
+    "replacement": "No replacement needed; FakeTensor is used automatically.",
+    "category": "function",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "torch.onnx.symbolic_caffe2",
+    "context": "in torch.onnx",
+    "version": "2.9.0",
+    "reason": "Support for caffe2 in the ONNX exporter has ended and is removed.",
+    "replacement": "No replacement; caffe2 support is removed.",
+    "category": "function",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "draft_export",
+    "context": "as argument or function in torch.export",
+    "version": "2.9.0",
+    "reason": "Removed implicit draft tracing from the default exporter path.",
+    "replacement": "Set TORCH_ONNX_ENABLE_DRAFT_EXPORT=True to trigger draft export if needed.",
+    "category": "function",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "allow_complex_guards_as_runtime_asserts",
+    "context": "as argument to export",
+    "version": "2.9.0",
+    "reason": "Merged into prefer_deferred_runtime_asserts_over_guards.",
+    "replacement": "prefer_deferred_runtime_asserts_over_guards",
+    "category": "parameter",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "torch.onnx.verification",
+    "context": "in torch.onnx",
+    "version": "2.9.0",
+    "reason": "Deprecated members in torch.onnx.verification are removed.",
+    "replacement": "No replacement.",
+    "category": "import",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "torch.onnx.symbolic_opsets",
+    "context": "in torch.onnx",
+    "version": "2.9.0",
+    "reason": "Previously private torch.onnx.symbolic_opsets* functions will no longer be accessible.",
+    "replacement": "Copy the source code if needed.",
+    "category": "import",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "dynamo_export",
+    "context": "in torch.onnx",
+    "version": "2.7.0",
+    "reason": "torch.onnx.dynamo_export is deprecated in favor of torch.onnx.export with dynamo=True.",
+    "replacement": "torch.onnx.export with dynamo=True",
+    "category": "function",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "XNNPACKQuantizer",
+    "context": "in torch.ao.quantization.quantizer.xnnpack_quantizer",
+    "version": "2.7.0",
+    "reason": "XNNPACKQuantizer is moved to ExecuTorch.",
+    "replacement": "executorch.backends.xnnpack.quantizer.xnnpack_quantizer.XNNPACKQuantizer",
+    "category": "class",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "print_lr",
+    "context": "in LRScheduler",
+    "version": "2.7.0",
+    "reason": "print_lr method is removed; use get_last_lr instead.",
+    "replacement": "get_last_lr",
+    "category": "method",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "verbose",
+    "context": "as parameter to LRScheduler constructors",
+    "version": "2.7.0",
+    "reason": "verbose kwarg is removed; use get_last_lr for logging.",
+    "replacement": "get_last_lr",
+    "category": "parameter",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "capture_pre_autograd_graph",
+    "context": "in torch._export",
+    "version": "2.7.0",
+    "reason": "capture_pre_autograd_graph was a temporary API; use export instead.",
+    "replacement": "export",
+    "category": "function",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "get_control_flow_submodules",
+    "context": "in torch.ao.quantization.pt2e.graph_utils",
+    "version": "2.7.0",
+    "reason": "get_control_flow_submodules is no longer public; use _get_control_flow_submodules for private access.",
+    "replacement": "_get_control_flow_submodules",
+    "category": "import",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "export_for_inference",
+    "context": "in torch.export",
+    "version": "2.8.0",
+    "reason": "export_for_inference has been removed in favor of export_for_training().run_decompositions().",
+    "replacement": "export_for_training().run_decompositions()",
+    "category": "function",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "strict",
+    "context": "as parameter to torch.export.export and export_for_training",
+    "version": "2.8.0",
+    "reason": "Default changed to strict=False; must now be passed explicitly for old behavior.",
+    "replacement": "Pass strict=True explicitly if needed.",
+    "category": "parameter",
+    "severity": "info"
+  },
+  {
+    "deprecated_api": "opset_version",
+    "context": "as parameter to torch.onnx.export",
+    "version": "2.8.0",
+    "reason": "Default opset_version changed from 18 to 20 in 2.9.0.",
+    "replacement": "Explicitly set opset_version if needed.",
+    "category": "parameter",
+    "severity": "info"
+  },
+  {
+    "deprecated_api": "weights_only",
+    "context": "as parameter to torch.load",
+    "version": "2.6.0",
+    "reason": "Default value for weights_only changed to True; warning if not specified.",
+    "replacement": "Explicitly set weights_only parameter.",
+    "category": "parameter",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "torch.{device}.amp",
+    "context": "autocast API for device-specific autocast",
+    "version": "2.4.0",
+    "reason": "All autocast APIs are unified under torch.amp.",
+    "replacement": "torch.amp",
+    "category": "import",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "data_ptr",
+    "context": "as method on FakeTensor in eager-mode",
+    "version": "2.4.0",
+    "reason": "FakeTensors do not have a valid data pointer; accessing data_ptr is not safe.",
+    "replacement": "Do not access data_ptr on FakeTensor.",
+    "category": "method",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "no_dist",
+    "context": "as parameter to torch.distributed.checkpoint",
+    "version": "2.3.0",
+    "reason": "no_dist parameter is removed; now inferred from process group state.",
+    "replacement": "No replacement; behavior is automatic.",
+    "category": "parameter",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "coordinator_rank",
+    "context": "as parameter to torch.distributed.checkpoint",
+    "version": "2.3.0",
+    "reason": "coordinator_rank parameter is removed; rank 0 is always coordinator.",
+    "replacement": "No replacement; rank 0 is coordinator.",
+    "category": "parameter",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "tp_mesh_dim",
+    "context": "as parameter to parallelize_module",
+    "version": "2.3.0",
+    "reason": "tp_mesh_dim argument is removed; only DeviceMesh is accepted.",
+    "replacement": "Use DeviceMesh directly.",
+    "category": "parameter",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "torch.jit.quantized.quantize_rnn_cell_modules",
+    "context": "in torch.jit.quantized",
+    "version": "2.3.0",
+    "reason": "torch.jit.quantized APIs are removed; use torch.ao.nn.quantized.dynamic.RNNCell.",
+    "replacement": "torch.ao.nn.quantized.dynamic.RNNCell",
+    "category": "function",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "torch.jit.quantized.quantize_rnn_modules",
+    "context": "in torch.jit.quantized",
+    "version": "2.3.0",
+    "reason": "torch.jit.quantized APIs are removed; use torch.ao.quantization.quantize_dynamic.",
+    "replacement": "torch.ao.quantization.quantize_dynamic",
+    "category": "function",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "torch.jit.quantized.quantize_linear_modules",
+    "context": "in torch.jit.quantized",
+    "version": "2.3.0",
+    "reason": "torch.jit.quantized APIs are removed; use torch.ao.nn.quantized.dynamic.Linear.",
+    "replacement": "torch.ao.nn.quantized.dynamic.Linear",
+    "category": "function",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "torch.jit.quantized.QuantizedLinear",
+    "context": "in torch.jit.quantized",
+    "version": "2.3.0",
+    "reason": "torch.jit.quantized APIs are removed; use torch.ao.nn.quantized.dynamic.Linear.",
+    "replacement": "torch.ao.nn.quantized.dynamic.Linear",
+    "category": "class",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "torch.jit.QuantizedLinearFP16",
+    "context": "in torch.jit",
+    "version": "2.3.0",
+    "reason": "torch.jit.quantized APIs are removed; use torch.ao.nn.quantized.dynamic.Linear.",
+    "replacement": "torch.ao.nn.quantized.dynamic.Linear",
+    "category": "class",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "torch.jit.quantized.QuantizedGRU",
+    "context": "in torch.jit.quantized",
+    "version": "2.3.0",
+    "reason": "torch.jit.quantized APIs are removed; use torch.ao.nn.quantized.dynamic.GRU.",
+    "replacement": "torch.ao.nn.quantized.dynamic.GRU",
+    "category": "class",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "torch.jit.quantized.QuantizedGRUCell",
+    "context": "in torch.jit.quantized",
+    "version": "2.3.0",
+    "reason": "torch.jit.quantized APIs are removed; use torch.ao.nn.quantized.dynamic.GRUCell.",
+    "replacement": "torch.ao.nn.quantized.dynamic.GRUCell",
+    "category": "class",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "torch.jit.quantized.QuantizedLSTM",
+    "context": "in torch.jit.quantized",
+    "version": "2.3.0",
+    "reason": "torch.jit.quantized APIs are removed; use torch.ao.nn.quantized.dynamic.LSTM.",
+    "replacement": "torch.ao.nn.quantized.dynamic.LSTM",
+    "category": "class",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "torch.jit.quantized.QuantizedLSTMCell",
+    "context": "in torch.jit.quantized",
+    "version": "2.3.0",
+    "reason": "torch.jit.quantized APIs are removed; use torch.ao.nn.quantized.dynamic.LSTM.",
+    "replacement": "torch.ao.nn.quantized.dynamic.LSTM",
+    "category": "class",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "torch._export.export",
+    "context": "in torch._export",
+    "version": "2.3.0",
+    "reason": "Removed in favor of torch.export.export.",
+    "replacement": "torch.export.export",
+    "category": "function",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "CallSpec",
+    "context": "in torch.export",
+    "version": "2.3.0",
+    "reason": "CallSpec is removed.",
+    "replacement": "No replacement.",
+    "category": "class",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "constraints",
+    "context": "as parameter to torch.export.export",
+    "version": "2.3.0",
+    "reason": "Removed in favor of dynamic_shapes.",
+    "replacement": "dynamic_shapes",
+    "category": "parameter",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "equality_constraints",
+    "context": "as parameter to ExportedProgram",
+    "version": "2.3.0",
+    "reason": "Removed; dimensions with equal constraints now have the same symbol.",
+    "replacement": "No replacement.",
+    "category": "parameter",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "definitely_true",
+    "context": "in torch.fx.experimental.symbolic_shapes",
+    "version": "2.8.0",
+    "reason": "Removed in favor of guard_or_true.",
+    "replacement": "guard_or_true",
+    "category": "function",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "definitely_false",
+    "context": "in torch.fx.experimental.symbolic_shapes",
+    "version": "2.8.0",
+    "reason": "Removed in favor of guard_or_false.",
+    "replacement": "guard_or_false",
+    "category": "function",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "enable_cpp_framelocals_guard_eval",
+    "context": "as Dynamo config variable",
+    "version": "2.8.0",
+    "reason": "No longer has any effect.",
+    "replacement": "No replacement.",
+    "category": "parameter",
+    "severity": "info"
+  },
+  {
+    "deprecated_api": "rocm.n_max_profiling_configs",
+    "context": "as Inductor config variable",
+    "version": "2.8.0",
+    "reason": "Deprecated in favor of rocm.ck_max_profiling_configs and rocm.ck_tile_max_profiling_configs.",
+    "replacement": "rocm.ck_max_profiling_configs, rocm.ck_tile_max_profiling_configs",
+    "category": "parameter",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "autotune_fallback_to_aten",
+    "context": "as Inductor config variable",
+    "version": "2.8.0",
+    "reason": "Inductor will no longer silently fall back to ATen.",
+    "replacement": "Add 'ATEN' to max_autotune_gemm_backends for old behavior.",
+    "category": "parameter",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "use_mixed_mm",
+    "context": "as Inductor config variable",
+    "version": "2.8.0",
+    "reason": "Inductor now supports prologue fusion; no need for special cases.",
+    "replacement": "No replacement.",
+    "category": "parameter",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "mixed_mm_choice",
+    "context": "as Inductor config variable",
+    "version": "2.8.0",
+    "reason": "Inductor now supports prologue fusion; no need for special cases.",
+    "replacement": "No replacement.",
+    "category": "parameter",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "descriptive_names",
+    "context": "as Inductor config setting",
+    "version": "2.8.0",
+    "reason": "Deprecated; use 'torch', 'original_aten', or 'inductor_node' instead.",
+    "replacement": "'torch', 'original_aten', or 'inductor_node'",
+    "category": "parameter",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "custom_op_default_layout_constraint",
+    "context": "in torch._inductor.config",
+    "version": "2.8.0",
+    "reason": "Moved to functorch config.",
+    "replacement": "torch._functorch.config.custom_op_default_layout_constraint",
+    "category": "parameter",
+    "severity": "info"
+  },
+  {
+    "deprecated_api": "emit_current_arch_binary",
+    "context": "as AOTI config variable",
+    "version": "2.8.0",
+    "reason": "Deprecated.",
+    "replacement": "No replacement.",
+    "category": "parameter",
+    "severity": "warning"
+  },
+  {
+    "deprecated_api": "aot_inductor.embed_cubin",
+    "context": "as AOTI config variable",
+    "version": "2.8.0",
+    "reason": "Renamed to aot_inductor.embed_kernel_binary.",
+    "replacement": "aot_inductor.embed_kernel_binary",
+    "category": "parameter",
+    "severity": "info"
+  },
+  {
+    "deprecated_api": "aot_inductor.compile_wrapper_with_O0",
+    "context": "as AOTI config variable",
+    "version": "2.8.0",
+    "reason": "Renamed to compile_wrapper_opt_level.",
+    "replacement": "compile_wrapper_opt_level",
+    "category": "parameter",
+    "severity": "info"
+  },
+  {
+    "deprecated_api": "torch.autograd.function.traceable",
+    "context": "in torch.autograd.function",
+    "version": "2.4.0",
+    "reason": "API deleted; was only for internal purposes.",
+    "replacement": "No replacement.",
+    "category": "function",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "torch.distributed.pipeline",
+    "context": "import path",
+    "version": "2.4.0",
+    "reason": "Module removed; use torch.distributed.pipelining instead.",
+    "replacement": "torch.distributed.pipelining",
+    "category": "import",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "get_group",
+    "context": "in DeviceMesh",
+    "version": "2.4.0",
+    "reason": "Calling get_group without passing in the dim now errors; use get_all_groups.",
+    "replacement": "get_all_groups",
+    "category": "method",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "PROCESS_GROUP",
+    "context": "as backend argument to torch.distributed.rpc.init_rpc",
+    "version": "1.11.0",
+    "reason": "ProcessGroup RPC backend is removed.",
+    "replacement": "TENSORPIPE",
+    "category": "parameter",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "steps",
+    "context": "as parameter to torch.linspace and torch.logspace",
+    "version": "1.11.0",
+    "reason": "steps argument is no longer optional; must be specified.",
+    "replacement": "Specify steps parameter explicitly.",
+    "category": "parameter",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "torch.hub.import_module",
+    "context": "in torch.hub",
+    "version": "1.11.0",
+    "reason": "Function was mistakenly public; use torch.hub._import_module.",
+    "replacement": "torch.hub._import_module",
+    "category": "function",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "torch.eig",
+    "context": "in torch",
+    "version": "1.13.0",
+    "reason": "Function removed after deprecation cycle.",
+    "replacement": "torch.linalg.eig",
+    "category": "function",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "torch.matrix_rank",
+    "context": "in torch",
+    "version": "1.13.0",
+    "reason": "Function removed after deprecation cycle.",
+    "replacement": "torch.linalg.matrix_rank",
+    "category": "function",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "torch.lstsq",
+    "context": "in torch",
+    "version": "1.13.0",
+    "reason": "Function removed after deprecation cycle.",
+    "replacement": "torch.linalg.lstsq",
+    "category": "function",
+    "severity": "error"
+  },
+  {
+    "deprecated_api": "torch.{is,set}_deterministic",
+    "context": "in torch",
+    "version": "1.10.0",
+    "reason": "End of deprecation cycle; use torch.use_deterministic_algorithms and torch.are_deterministic_algorithms_enabled.",
+    "replacement": "torch.use_deterministic_algorithms, torch.are_deterministic_algorithms_enabled",
+    "category": "function",
+    "severity": "error"
+  }
+]
