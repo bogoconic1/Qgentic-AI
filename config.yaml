@@ -12,6 +12,10 @@ runtime:
   baseline_code_timeout: 43200  # 12 hours for baseline code execution
   log_monitor_interval: 120  # Seconds between LLM log monitor calls during code execution
   bash_timeout_seconds: 600  # Per-call timeout for the bash filesystem tool
+subagents:
+  codex:
+    model: "gpt-5.6-sol"        # passed to `codex exec -m`; no fallback in code
+    sandbox: "workspace-write"  # shell has no network; codex's web search still works
 paths:
   task_root: "task"
 guardrails:

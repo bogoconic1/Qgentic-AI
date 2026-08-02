@@ -14,7 +14,6 @@ albumentations
 polars
 catboost
 pyyaml
-exa-py
 firecrawl-py
 sentence-transformers
 python-dotenv

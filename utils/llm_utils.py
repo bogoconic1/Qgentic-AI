@@ -68,59 +68,6 @@ def get_monitor_tools():
     ]
 
 
-def get_deep_research_tools():
-    return [
-        {
-            "type": "function",
-            "name": "web_research",
-            "description": (
-                "Discover web pages for a query via Exa neural search. "
-                "Returns a list of results, each with url, title, full page text, "
-                "and published_date — not a snippet, the whole text. This is the "
-                "ONLY way to discover URLs; never guess or reconstruct URLs."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Natural-language search query.",
-                    },
-                    "num_results": {
-                        "type": "integer",
-                        "description": (
-                            "Optional number of results to return. Omit to use "
-                            "the Exa default."
-                        ),
-                    },
-                },
-                "required": ["query"],
-            },
-        },
-        {
-            "type": "function",
-            "name": "web_fetch",
-            "description": (
-                "Fetch a single URL's main content as markdown via Firecrawl. "
-                "Full page content is returned — no truncation. Only call with "
-                "URLs you got from a prior `web_research` result or from a "
-                "markdown link inside a prior `web_fetch` result."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "url": {
-                        "type": "string",
-                        "description": "Absolute URL to fetch.",
-                    },
-                },
-                "required": ["url"],
-            },
-        },
-        *get_filesystem_tools(),
-    ]
-
-
 def get_filesystem_tools():
     return [
         {
