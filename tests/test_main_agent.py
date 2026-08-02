@@ -12,40 +12,50 @@ from agents import main_agent
 from agents.main_agent import MainAgent
 
 
+_resp_counter = 0
+
+
+def _next_resp_id():
+    global _resp_counter
+    _resp_counter += 1
+    return f"resp_{_resp_counter}"
+
+
 def _fake_fc(name: str, **args):
-    """Build a response whose single part is a function_call matching the given name/args."""
-    fc = SimpleNamespace(name=name, args=args)
-    part = SimpleNamespace(function_call=fc)
-    content = SimpleNamespace(parts=[part])
-    content.model_dump = lambda **_: {
-        "role": "model",
-        "parts": [{"function_call": {"name": name, "args": dict(args)}}],
-    }
-    candidate = SimpleNamespace(content=content)
-    return SimpleNamespace(candidates=[candidate])
+    fc = SimpleNamespace(
+        type="function_call",
+        name=name,
+        arguments=json.dumps(args),
+        call_id=f"call_{name}",
+    )
+    resp = SimpleNamespace(id=_next_resp_id(), output=[fc], output_text=None)
+    resp.usage = SimpleNamespace(input_tokens=0)
+    return resp
 
 
 def _fake_text(text: str):
-    """Build a text-only response (no function_call attribute on the part)."""
-    part = SimpleNamespace(text=text)  # intentionally has no function_call
-    content = SimpleNamespace(parts=[part])
-    content.model_dump = lambda **_: {"role": "model", "parts": [{"text": text}]}
-    candidate = SimpleNamespace(content=content)
-    return SimpleNamespace(candidates=[candidate])
+    msg = SimpleNamespace(
+        type="message", content=[SimpleNamespace(type="output_text", text=text)]
+    )
+    resp = SimpleNamespace(id=_next_resp_id(), output=[msg], output_text=text)
+    resp.usage = SimpleNamespace(input_tokens=0)
+    return resp
 
 
 def _fake_multi(*calls: tuple[str, dict]):
-    """Build a response whose parts are several function_calls in the given order."""
-    parts = []
-    dumped_parts = []
+    items = []
     for name, args in calls:
-        fc = SimpleNamespace(name=name, args=dict(args))
-        parts.append(SimpleNamespace(function_call=fc))
-        dumped_parts.append({"function_call": {"name": name, "args": dict(args)}})
-    content = SimpleNamespace(parts=parts)
-    content.model_dump = lambda **_: {"role": "model", "parts": dumped_parts}
-    candidate = SimpleNamespace(content=content)
-    return SimpleNamespace(candidates=[candidate])
+        items.append(
+            SimpleNamespace(
+                type="function_call",
+                name=name,
+                arguments=json.dumps(args),
+                call_id=f"call_{name}",
+            )
+        )
+    resp = SimpleNamespace(id=_next_resp_id(), output=items, output_text=None)
+    resp.usage = SimpleNamespace(input_tokens=0)
+    return resp
 
 
 @pytest.fixture
@@ -119,38 +129,30 @@ def test_dispatches_each_tool(patched_main_agent, monkeypatch):
             _fake_fc("remove_idea", idea_id=1),
         ]
     )
-    monkeypatch.setattr(
-        main_agent, "call_llm", lambda **kwargs: (next(responses), 0)
-    )
+    monkeypatch.setattr(main_agent, "call_llm", lambda **kwargs: (next(responses), 0))
 
     for _ in range(7):
         agent._step([])
 
-    # start_dev_session allocated developer_v1/ with both scaffolds.
     version_dir = agent.base_dir / "developer_v1"
     assert version_dir.is_dir()
     assert (version_dir / "SOLUTION.py").exists()
     assert (version_dir / "SOLUTION.md").read_text(encoding="utf-8").startswith("# ")
     assert agent.dev_iter == 1
 
-    # run_solution forwarded to tools.developer.run_solution.
     assert len(patched_main_agent["run_solution_calls"]) == 1
     assert patched_main_agent["run_solution_calls"][0]["version_dir"] == str(
         version_dir
     )
 
-    # web_search_stack_trace forwarded to the underlying tool.
     assert len(patched_main_agent["web_search_calls"]) == 1
     assert patched_main_agent["web_search_calls"][0]["query"].startswith("Traceback")
 
-    # researcher subagent invoked once.
     assert len(patched_main_agent["research_calls"]) == 1
     assert patched_main_agent["research_calls"][0]["research_iter"] == 1
 
-    # idea pool mutated: add → update → remove leaves pool empty
     assert "try it" not in (agent.ideas_dir / "INDEX.md").read_text()
 
-    # chat log captured every step (7 assistant turns + 7 tool results = 14 records)
     records = [json.loads(line) for line in agent.chat_log.read_text().splitlines()]
     assert len(records) == 14
     assert [r["name"] for r in records[1::2]] == [
@@ -167,7 +169,6 @@ def test_dispatches_each_tool(patched_main_agent, monkeypatch):
 def test_run_solution_without_version_dir_returns_error(
     patched_main_agent, monkeypatch
 ):
-    """`run_solution()` with no version_dir returns an error and does NOT execute."""
     agent = MainAgent(slug="test", run_id="r1", goal_text="the session goal body")
 
     result = agent._dispatch("run_solution", {})
@@ -180,7 +181,6 @@ def test_run_solution_without_version_dir_returns_error(
 def test_start_dev_session_uses_idea_title_for_solution_md(
     patched_main_agent, monkeypatch
 ):
-    """When idea_id is supplied, SOLUTION.md is seeded with the idea's title."""
     agent = MainAgent(slug="test", run_id="r1", goal_text="goal")
     agent._dispatch(
         "add_idea", {"title": "fancy refactor", "description": "do something"}
@@ -197,7 +197,6 @@ def test_start_dev_session_uses_idea_title_for_solution_md(
 def test_start_dev_session_without_idea_id_uses_default_header(
     patched_main_agent, monkeypatch
 ):
-    """Without idea_id, SOLUTION.md gets a generic header (no crash)."""
     agent = MainAgent(slug="test", run_id="r1", goal_text="goal")
 
     result = json.loads(agent._dispatch("start_dev_session", {}))
@@ -208,10 +207,8 @@ def test_start_dev_session_without_idea_id_uses_default_header(
 
 
 def test_parallel_dispatch_preserves_order(patched_main_agent, monkeypatch):
-    """Multiple function_calls in one turn execute and keep original ordering."""
     agent = MainAgent(slug="test", run_id="r1", goal_text="do the thing")
 
-    # Filesystem tool calls are routed through execute_filesystem_tool — stub it.
     monkeypatch.setattr(
         main_agent,
         "execute_filesystem_tool",
@@ -220,7 +217,6 @@ def test_parallel_dispatch_preserves_order(patched_main_agent, monkeypatch):
         ),
     )
 
-    # Single LLM turn returning three parallel calls in a specific order.
     response = _fake_multi(
         ("read_file", {"path": "/tmp/seed.txt"}),
         ("start_dev_session", {}),
@@ -230,18 +226,16 @@ def test_parallel_dispatch_preserves_order(patched_main_agent, monkeypatch):
 
     agent._step([])
 
-    # start_dev_session ran (developer_v1/ exists).
     assert (agent.base_dir / "developer_v1").is_dir()
-    # research subagent invoked.
     assert len(patched_main_agent["research_calls"]) == 1
 
-    # function_response Content appended to input_list matches function_call order.
-    func_content = agent.input_list[-1]
-    assert func_content["role"] == "function"
-    emitted_names = [p["function_response"]["name"] for p in func_content["parts"]]
-    assert emitted_names == ["read_file", "start_dev_session", "research"]
+    tool_outputs = [
+        item
+        for item in agent.input_list
+        if isinstance(item, dict) and item.get("type") == "function_call_output"
+    ]
+    assert len(tool_outputs) == 3
 
-    # Chat log: assistant turn + 3 tool records in the original order.
     records = [json.loads(line) for line in agent.chat_log.read_text().splitlines()]
     tool_records = [r for r in records if r["role"] == "tool"]
     assert [r["name"] for r in tool_records] == [
@@ -254,12 +248,6 @@ def test_parallel_dispatch_preserves_order(patched_main_agent, monkeypatch):
 def test_stuck_nudge_fires_after_repeated_identical_calls(
     patched_main_agent, monkeypatch
 ):
-    """If the same single-call turn repeats N times, MainAgent appends a static
-    "push on / never stop" nudge to input_list and clears its history.
-
-    Regression for #257 — a live failure showed the same no-op tool call
-    repeated 623 times in a row.
-    """
     agent = MainAgent(slug="test", run_id="r1", goal_text="do the thing")
 
     monkeypatch.setattr(
@@ -279,39 +267,30 @@ def test_stuck_nudge_fires_after_repeated_identical_calls(
         for msg in messages:
             if msg.get("role") != "user":
                 continue
-            for part in msg.get("parts", []):
-                if nudge_text in part.get("text", ""):
-                    return True
+            if nudge_text in msg.get("content", ""):
+                return True
         return False
 
-    # First (threshold-1) repeats: no nudge yet — pattern not confirmed.
     for _ in range(threshold - 1):
         agent._step([])
     assert not _has_nudge(agent.input_list)
 
-    # The threshold'th identical turn triggers the nudge.
     agent._step([])
     last = agent.input_list[-1]
     assert last["role"] == "user"
-    assert nudge_text in last["parts"][0]["text"]
+    assert nudge_text in last["content"]
 
-    # JSONL transcript fidelity: the nudge the LLM sees must also land in
-    # the persisted chat log. Regression for the silent-divergence bug where
-    # the nudge was appended to input_list but never logged.
     records = [json.loads(line) for line in agent.chat_log.read_text().splitlines()]
     user_records = [r for r in records if r.get("role") == "user"]
     assert any(
-        nudge_text in (r.get("content", {}).get("parts", [{}])[0].get("text", ""))
-        for r in user_records
+        nudge_text in r.get("content", {}).get("content", "") for r in user_records
     ), "stuck nudge must be written to JSONL chat log, not just input_list"
 
-    # History reset, so the next identical turn does NOT immediately re-nudge.
     agent._step([])
-    assert agent.input_list[-1]["role"] == "function"
+    assert agent.input_list[-1].get("type") == "function_call_output"
 
 
 def test_stuck_nudge_does_not_fire_for_varied_calls(patched_main_agent, monkeypatch):
-    """A turn whose tool args differ from the previous resets the stuck window."""
     agent = MainAgent(slug="test", run_id="r1", goal_text="do the thing")
 
     threshold = main_agent._STUCK_REPEAT_THRESHOLD
@@ -327,9 +306,7 @@ def test_stuck_nudge_does_not_fire_for_varied_calls(patched_main_agent, monkeypa
     responses = iter(
         [_fake_fc("read_file", path=f"/tmp/{i}.txt") for i in range(threshold + 2)]
     )
-    monkeypatch.setattr(
-        main_agent, "call_llm", lambda **kwargs: (next(responses), 0)
-    )
+    monkeypatch.setattr(main_agent, "call_llm", lambda **kwargs: (next(responses), 0))
 
     for _ in range(threshold + 2):
         agent._step([])
@@ -337,14 +314,12 @@ def test_stuck_nudge_does_not_fire_for_varied_calls(patched_main_agent, monkeypa
     for msg in agent.input_list:
         if msg.get("role") != "user":
             continue
-        for part in msg.get("parts", []):
-            assert nudge_text not in part.get("text", "")
+        assert nudge_text not in msg.get("content", "")
 
 
 def test_filesystem_tool_calls_route_to_filesystem_helpers(
     patched_main_agent, monkeypatch
 ):
-    """A `list_dir` tool call from MainAgent is dispatched to tools.filesystem."""
     captured = {}
 
     def fake_execute_filesystem_tool(name, args, *, writable_root):
@@ -374,7 +349,6 @@ def test_filesystem_tool_calls_route_to_filesystem_helpers(
 
 
 def test_single_text_only_passes_through_silently(patched_main_agent, monkeypatch):
-    """A single text-only turn is legitimate; counter increments, no termination."""
     agent = MainAgent(slug="test", run_id="r1", goal_text="do the thing")
     monkeypatch.setattr(
         main_agent, "call_llm", lambda **kwargs: (_fake_text("hello"), 0)
@@ -384,15 +358,13 @@ def test_single_text_only_passes_through_silently(patched_main_agent, monkeypatc
 
     assert agent._consecutive_text_only == 1
     assert agent._done is False
-    # Only the assistant turn was appended; no user-nudge follow-up.
-    assert agent.input_list[-1]["role"] == "model"
+    assert agent.input_list[-1]["role"] == "assistant"
     records = [json.loads(line) for line in agent.chat_log.read_text().splitlines()]
     assert len(records) == 1
     assert records[0]["role"] == "assistant"
 
 
 def test_two_consecutive_text_only_does_not_terminate(patched_main_agent, monkeypatch):
-    """Two text-only turns increment the counter but stay below the watchdog."""
     agent = MainAgent(slug="test", run_id="r1", goal_text="do the thing")
     monkeypatch.setattr(
         main_agent, "call_llm", lambda **kwargs: (_fake_text("hello"), 0)
@@ -406,7 +378,6 @@ def test_two_consecutive_text_only_does_not_terminate(patched_main_agent, monkey
 
 
 def test_three_consecutive_text_only_sets_done_flag(patched_main_agent, monkeypatch):
-    """At the watchdog threshold MainAgent terminates the run cleanly."""
     agent = MainAgent(slug="test", run_id="r1", goal_text="do the thing")
     monkeypatch.setattr(
         main_agent, "call_llm", lambda **kwargs: (_fake_text("hello"), 0)
@@ -421,7 +392,6 @@ def test_three_consecutive_text_only_sets_done_flag(patched_main_agent, monkeypa
 
 
 def test_function_call_resets_text_only_counter(patched_main_agent, monkeypatch):
-    """A turn containing a function_call resets the consecutive-text-only counter."""
     agent = MainAgent(slug="test", run_id="r1", goal_text="do the thing")
 
     monkeypatch.setattr(
@@ -440,26 +410,16 @@ def test_function_call_resets_text_only_counter(patched_main_agent, monkeypatch)
             _fake_text("hmm"),
         ]
     )
-    monkeypatch.setattr(
-        main_agent, "call_llm", lambda **kwargs: (next(responses), 0)
-    )
+    monkeypatch.setattr(main_agent, "call_llm", lambda **kwargs: (next(responses), 0))
 
     for _ in range(4):
         agent._step([])
 
-    # text-only, text-only → counter=2; function_call → reset to 0;
-    # text-only → counter=1.
     assert agent._consecutive_text_only == 1
     assert agent._done is False
 
 
-# ---------------------------------------------------------------------------
-# MAIN.md scaffold (mirrors the RESEARCH.md pattern from #275)
-# ---------------------------------------------------------------------------
-
-
 def test_init_creates_main_md_scaffold(patched_main_agent):
-    """Constructing MainAgent scaffolds MAIN.md with `# {goal_text}\\n`."""
     goal = "win the competition by Friday"
     agent = MainAgent(slug="test", run_id="r1", goal_text=goal)
 
@@ -469,7 +429,6 @@ def test_init_creates_main_md_scaffold(patched_main_agent):
 
 
 def test_init_does_not_clobber_existing_main_md(patched_main_agent):
-    """Re-instantiating with the same (slug, run_id) leaves a populated MAIN.md untouched."""
     base_dir = main_agent._TASK_ROOT / "test" / "r1"
     base_dir.mkdir(parents=True, exist_ok=True)
     populated = "# done\n\n## What I tried\n\n- Idea 1: failed.\n"

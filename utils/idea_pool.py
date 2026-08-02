@@ -65,14 +65,11 @@ def load_index(ideas_dir: Path) -> str:
 
 def add_idea(ideas_dir: Path, title: str, description: str) -> int:
     existing = [
-        int(p.stem.split("_", 1)[0])
-        for p in ideas_dir.glob("[0-9][0-9][0-9]_*.md")
+        int(p.stem.split("_", 1)[0]) for p in ideas_dir.glob("[0-9][0-9][0-9]_*.md")
     ]
     idea_id = (max(existing) + 1) if existing else 1
     slug = re.sub(r"[^a-z0-9]+", "_", title.lower()).strip("_")
-    (ideas_dir / f"{idea_id:03d}_{slug}.md").write_text(
-        f"# {title}\n\n{description}\n"
-    )
+    (ideas_dir / f"{idea_id:03d}_{slug}.md").write_text(f"# {title}\n\n{description}\n")
     render_index(ideas_dir)
     return idea_id
 

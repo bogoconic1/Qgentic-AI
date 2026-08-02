@@ -1,9 +1,9 @@
 """Conversation compaction for unbounded agent loops.
 
-Triggered after every ``call_llm`` whose returned ``prompt_token_count``
+Triggered after every ``call_llm`` whose returned ``input_tokens``
 exceeds ``runtime.compaction_threshold_tokens``. Replaces the front of the
 ``input_list`` with a single user-role summary message produced by a
-one-shot Gemini call against the same model the agent is using.
+one-shot LLM call against the same model the agent is using.
 
 Public API:
     should_compact(last_input_tokens) -> bool
@@ -145,7 +145,7 @@ def compact_messages(input_list: list[dict], *, model: str) -> list[dict]:
         function_declarations=None,
         enable_google_search=False,
     )
-    summary_text = _format_summary((response.text or "").strip())
+    summary_text = _format_summary((response.output_text or "").strip())
     summary_msg = append_message("user", _SUMMARY_PREAMBLE + summary_text)
     return [summary_msg, *recent]
 

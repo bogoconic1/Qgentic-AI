@@ -184,7 +184,7 @@ def check_logging_basicconfig_order(code: str) -> dict:
                 if 0 < basic_line <= len(lines)
                 else "",
                 "reason": f"""logging.basicConfig() on line {basic_line} appears after \
-third-party import '{first_thirdparty['module']}' on line {first_thirdparty['line']}. \
+third-party import '{first_thirdparty["module"]}' on line {first_thirdparty["line"]}. \
 Third-party libraries may configure logging on import, making basicConfig a no-op.""",
             }
         )
@@ -269,9 +269,7 @@ def check_solution_txt_filehandler(code: str) -> dict:
 
     for call_expr in basic_calls:
         call = call_expr.value
-        handlers_kw = next(
-            (kw for kw in call.keywords if kw.arg == "handlers"), None
-        )
+        handlers_kw = next((kw for kw in call.keywords if kw.arg == "handlers"), None)
         if handlers_kw is None:
             return {
                 "status": "fail",

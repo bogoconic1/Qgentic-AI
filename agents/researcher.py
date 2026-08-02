@@ -6,9 +6,8 @@ It runs a multi-step tool loop over two inner research tools —
 ``web_research`` (Exa discovery) and ``web_fetch`` (Firecrawl scrape) —
 plus the shared filesystem palette (read/glob/grep/list/bash). Use ``bash``
 for any scripted execution (`python -c "..."` or `python script.py`).
-Gemini's built-in ``google_search`` is disabled inside the sub-agent so
-every URL the LLM dereferences is traceable back to a prior tool result
-(no invented URLs).
+Built-in web search is disabled inside the sub-agent so every URL the LLM
+dereferences is traceable back to a prior tool result (no invented URLs).
 
 Tool outputs are truncated to 30k chars before flowing back to the LLM.
 Full content is preserved in per-call audit records on disk.
@@ -38,7 +37,6 @@ import weave
 from dotenv import load_dotenv
 from exa_py import Exa
 from firecrawl import Firecrawl
-from google.genai import types
 
 from project_config import get_config
 from prompts.research import build_system, build_user
@@ -62,13 +60,7 @@ _TASK_ROOT = Path(_PATH_CFG["task_root"])
 _DEEP_RESEARCH_LLM_MODEL = _LLM_CFG["developer_tool_model"]
 
 
-# ---------------------------------------------------------------------------
-# Inner tool implementations
-# ---------------------------------------------------------------------------
-
-
 def _tool_web_research(query: str, num_results: int | None) -> str:
-    """Exa neural search. Returns full text for each result — no truncation."""
     logger.info("web_research query=%r num_results=%s", query, num_results)
 
     exa_client = Exa(api_key=os.environ["EXA_API_KEY"])
@@ -98,15 +90,12 @@ def _tool_web_research(query: str, num_results: int | None) -> str:
 
 
 def _tool_web_fetch(url: str) -> str:
-    """Firecrawl scrape → markdown. Full content, no truncation."""
     logger.info("web_fetch url=%s", url)
 
     firecrawl_client = Firecrawl(api_key=os.environ["FIRECRAWL_API_KEY"])
 
     try:
-        doc = firecrawl_client.scrape(
-            url, only_main_content=True, formats=["markdown"]
-        )
+        doc = firecrawl_client.scrape(url, only_main_content=True, formats=["markdown"])
     except Exception as exc:
         logger.exception("Firecrawl scrape failed for %s", url)
         return json.dumps({"error": f"firecrawl scrape failed: {exc}"})
@@ -120,7 +109,6 @@ def _tool_web_fetch(url: str) -> str:
 def _render_tool_record_markdown(
     tool_name: str, seq: int, args: dict, result_json: str
 ) -> str:
-    """Render one tool call (args + result) as a self-contained markdown audit note."""
     result = json.loads(result_json)
     header = f"# {tool_name} #{seq}\n\n"
 
@@ -152,14 +140,9 @@ def _render_tool_record_markdown(
     raise ValueError(f"Unknown tool_name for record rendering: {tool_name}")
 
 
-# ---------------------------------------------------------------------------
-# Dispatcher
-# ---------------------------------------------------------------------------
-
-
-def _execute_tool_call(item, state: dict) -> str:
-    args = dict(item.args)
-    tool_name = item.name
+def _execute_tool_call(fc, state: dict) -> str:
+    args = json.loads(fc.arguments)
+    tool_name = fc.name
 
     tool_seq = state["tool_seq"].get(tool_name, 0) + 1
     state["tool_seq"][tool_name] = tool_seq
@@ -176,7 +159,6 @@ def _execute_tool_call(item, state: dict) -> str:
             raise ValueError(f"Unknown tool: {tool_name}")
         return truncate_for_llm(fs_result)
 
-    # Write audit record with FULL result before truncating for the LLM.
     if tool_name in ("web_research", "web_fetch"):
         record_path = state["research_dir"] / tool_name / f"{tool_seq}.md"
         record_path.write_text(
@@ -186,19 +168,7 @@ def _execute_tool_call(item, state: dict) -> str:
     return truncate_for_llm(result_json)
 
 
-# ---------------------------------------------------------------------------
-# Public entry point
-# ---------------------------------------------------------------------------
-
-
 class ResearcherAgent:
-    """Deep Research sub-agent.
-
-    Parallel to ``Orchestrator`` in shape: construct with
-    ``(slug, run_id, research_iter)`` and call ``run(instruction)`` to
-    produce a markdown report.
-    """
-
     def __init__(
         self,
         slug: str,
@@ -215,7 +185,6 @@ class ResearcherAgent:
         self.chat_log = self.research_dir / "researcher_chat.jsonl"
 
     def _load_custom_instructions(self) -> str | None:
-        """Read `task/<slug>/RESEARCHER_INSTRUCTIONS.md` if it exists."""
         path = _TASK_ROOT / self.slug / "RESEARCHER_INSTRUCTIONS.md"
         if not path.exists():
             return None
@@ -223,20 +192,6 @@ class ResearcherAgent:
 
     @weave.op()
     def run(self, instruction: str) -> str:
-        """Run the Deep Research loop and return a markdown report.
-
-        Creates ``task/<slug>/<run_id>/research_<research_iter>/``, scaffolds
-        ``RESEARCH.md`` with a single H1 (``# {instruction}``) so the agent
-        has a known target to ``write_file``/``edit_file`` into, runs the
-        tool loop, and reads ``RESEARCH.md`` back at termination — that file
-        IS the report.
-
-        Args:
-            instruction: Free-form research instruction — as long as needed.
-
-        Returns:
-            Contents of ``RESEARCH.md`` after the run.
-        """
         for d in (self.web_research_dir, self.web_fetch_dir):
             d.mkdir(parents=True, exist_ok=True)
 
@@ -268,6 +223,8 @@ class ResearcherAgent:
         }
         input_list: list[dict] = [append_message("user", user_prompt)]
         last_input_tokens: int | None = None
+        previous_response_id: str | None = None
+        next_input: list[dict] | None = None
 
         step = 0
         while True:
@@ -278,58 +235,81 @@ class ResearcherAgent:
                 input_list = compact_messages(
                     input_list, model=_DEEP_RESEARCH_LLM_MODEL
                 )
+                previous_response_id = None
+                next_input = None
+            api_input = (
+                next_input
+                if next_input is not None and previous_response_id is not None
+                else input_list
+            )
 
             response, last_input_tokens = call_llm(
                 model=_DEEP_RESEARCH_LLM_MODEL,
                 system_instruction=system_prompt,
                 function_declarations=tools,
-                messages=input_list,
+                messages=api_input,
                 enable_google_search=False,
                 include_usage=True,
+                previous_response_id=previous_response_id,
             )
+            previous_response_id = response.id
+            next_input = None
 
-            parts = response.candidates[0].content.parts
-            has_function_calls = any(
-                part.function_call
-                for part in parts
-                if hasattr(part, "function_call")
-            )
+            output_items = response.output
+            function_calls = [
+                item for item in output_items if item.type == "function_call"
+            ]
+            has_function_calls = len(function_calls) > 0
 
-            assistant_content = response.candidates[0].content.model_dump(
-                mode="json", exclude_none=True
+            output_text = response.output_text or ""
+            if output_text:
+                input_list.append(append_message("assistant", output_text))
+            for fc in function_calls:
+                input_list.append(
+                    {
+                        "type": "function_call",
+                        "call_id": fc.call_id,
+                        "name": fc.name,
+                        "arguments": fc.arguments,
+                    }
+                )
+
+            self._log(
+                {
+                    "role": "assistant",
+                    "content": output_text,
+                    "function_calls": [
+                        {
+                            "name": fc.name,
+                            "arguments": fc.arguments,
+                            "call_id": fc.call_id,
+                        }
+                        for fc in function_calls
+                    ],
+                }
             )
-            input_list.append(assistant_content)
-            self._log({"role": "assistant", "content": assistant_content})
 
             if not has_function_calls:
                 logger.info("ResearcherAgent completed at step %d", step)
                 break
 
-            function_responses = []
-            for part in parts:
-                if hasattr(part, "function_call") and part.function_call:
-                    fc = part.function_call
-                    name = fc.name
-                    args = dict(fc.args)
-                    tool_result_str = _execute_tool_call(fc, state)
-                    function_responses.append(
-                        types.Part.from_function_response(
-                            name=name,
-                            response={"result": tool_result_str},
-                        )
-                    )
-                    self._log({
+            next_input = []
+            for fc in function_calls:
+                tool_result_str = _execute_tool_call(fc, state)
+                item = {
+                    "type": "function_call_output",
+                    "call_id": fc.call_id,
+                    "output": tool_result_str,
+                }
+                input_list.append(item)
+                next_input.append(item)
+                self._log(
+                    {
                         "role": "tool",
-                        "name": name,
-                        "args": args,
+                        "name": fc.name,
+                        "args": json.loads(fc.arguments),
                         "result": tool_result_str,
-                    })
-
-            if function_responses:
-                input_list.append(
-                    types.Content(
-                        role="function", parts=function_responses
-                    ).model_dump(mode="json", exclude_none=True)
+                    }
                 )
 
         report = self.research_md_path.read_text(encoding="utf-8")

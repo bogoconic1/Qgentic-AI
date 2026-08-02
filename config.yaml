@@ -1,9 +1,9 @@
 llm:
-  main_agent_model: "gemini-3.1-pro-preview"
-  developer_model: "gemini-3.1-pro-preview"
-  developer_tool_model: "gemini-3.1-pro-preview"
-  leakage_review_model: "gemini-3.1-pro-preview"
-  bash_judge_model: "gemini-3.1-pro-preview"  # judges every shell command before execution
+  main_agent_model: "gpt-5.5"
+  developer_model: "gpt-5.5"
+  developer_tool_model: "gpt-5.5"
+  leakage_review_model: "gpt-5.5"
+  bash_judge_model: "gpt-5.5"  # judges every shell command before execution
 runtime:
   llm_max_retries: 5
   llm_backoff_sequence: [1, 5, 10, 30, 60]

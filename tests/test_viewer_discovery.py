@@ -9,9 +9,14 @@ import pytest
 from scripts.viewer import discovery
 
 
-def _make_run(root: Path, slug: str, run_id: str, *,
-              with_main_log: bool = True,
-              research_indices: tuple[int, ...] = ()) -> Path:
+def _make_run(
+    root: Path,
+    slug: str,
+    run_id: str,
+    *,
+    with_main_log: bool = True,
+    research_indices: tuple[int, ...] = (),
+) -> Path:
     run = root / slug / run_id
     run.mkdir(parents=True, exist_ok=True)
     if with_main_log:

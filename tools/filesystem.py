@@ -217,9 +217,7 @@ def _tool_bash(command: str, *, writable_root: Path) -> str:
     """
     verdict = judge_bash_command(command, str(writable_root))
     if verdict.verdict != "allow":
-        return json.dumps(
-            {"error": f"Blocked by safety judge: {verdict.reason}"}
-        )
+        return json.dumps({"error": f"Blocked by safety judge: {verdict.reason}"})
 
     logger.info("bash exec (cwd=%s): %s", writable_root, command[:200])
     try:
@@ -231,7 +229,9 @@ def _tool_bash(command: str, *, writable_root: Path) -> str:
             cwd=str(writable_root),
         )
     except subprocess.TimeoutExpired:
-        return json.dumps({"error": f"Command timed out after {_BASH_TIMEOUT_SECONDS}s"})
+        return json.dumps(
+            {"error": f"Command timed out after {_BASH_TIMEOUT_SECONDS}s"}
+        )
     except Exception as exc:
         return json.dumps({"error": f"Command failed: {exc}"})
 
@@ -286,12 +286,16 @@ def _find_actual_string(file_content: str, search: str) -> str | None:
 
 def _apply_edit_to_file(content: str, old: str, new: str, replace_all: bool) -> str:
     if new != "":
-        return content.replace(old, new) if replace_all else content.replace(old, new, 1)
+        return (
+            content.replace(old, new) if replace_all else content.replace(old, new, 1)
+        )
     if not old.endswith("\n") and (old + "\n") in content:
         old_eff = old + "\n"
     else:
         old_eff = old
-    return content.replace(old_eff, "") if replace_all else content.replace(old_eff, "", 1)
+    return (
+        content.replace(old_eff, "") if replace_all else content.replace(old_eff, "", 1)
+    )
 
 
 def _tool_write_file(path: str, content: str, *, writable_root: Path) -> str:
@@ -302,7 +306,9 @@ def _tool_write_file(path: str, content: str, *, writable_root: Path) -> str:
     if resolved.exists() and resolved.is_dir():
         return json.dumps({"error": f"Path is a directory: {path}"})
     if len(content.encode("utf-8")) > _WRITE_FILE_MAX_BYTES:
-        return json.dumps({"error": f"Content exceeds {_WRITE_FILE_MAX_BYTES} byte cap"})
+        return json.dumps(
+            {"error": f"Content exceeds {_WRITE_FILE_MAX_BYTES} byte cap"}
+        )
     try:
         resolved.parent.mkdir(parents=True, exist_ok=True)
         existed = resolved.exists()

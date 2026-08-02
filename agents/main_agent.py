@@ -24,7 +24,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import weave
-from google.genai import types
 
 from agents.researcher import ResearcherAgent
 from project_config import get_config
@@ -49,27 +48,19 @@ _INITIAL_USER_TURN = (
     "then issue the tool call(s) — every turn must lead with prose, then act."
 )
 
-# Number of consecutive turns with byte-identical tool-call signatures before
-# the stuck-detection nudge fires. Set to 3 so a "double-check then act" pattern
-# doesn't false-positive, but a degenerate spin (e.g. repeated `analyze(time.sleep)`)
-# is caught before it burns much budget.
 _STUCK_REPEAT_THRESHOLD = 3
 
 _STUCK_NUDGE = (
     "You've made the same tool call(s) for the last "
     f"{_STUCK_REPEAT_THRESHOLD} turns. That's a sign you're out of ideas, not "
     "that the work is done. **Push on.** Concrete options: add a fresh idea "
-    "via `add_idea`; call `research(instruction=\"...\")` to web-search for "
+    'via `add_idea`; call `research(instruction="...")` to web-search for '
     "unblocking ideas; inspect a `developer_v{N}/` directory you haven't reviewed "
     "yet; reread INDEX.md and pick the next-most-promising idea. **Never "
     "stop** — the session has no termination condition. The user will SIGKILL "
     "when satisfied."
 )
 
-# Silent watchdog: after this many consecutive text-only turns (no
-# function_call), MainAgent treats the agent as disengaged from the task and
-# terminates the run cleanly. Any turn containing at least one function_call
-# resets the counter to 0.
 _TEXT_ONLY_TERMINATE_THRESHOLD = 3
 
 
@@ -81,8 +72,6 @@ _MAIN_AGENT_MODEL = _CONFIG["llm"]["main_agent_model"]
 
 
 class MainAgent:
-    """Top-level LLM-driven orchestrator. See module docstring."""
-
     def __init__(self, slug: str, run_id: str, goal_text: str):
         self.slug = slug
         self.run_id = run_id
@@ -94,32 +83,20 @@ class MainAgent:
         self.ideas_dir.mkdir(parents=True, exist_ok=True)
         self.dev_iter = 0
         self.research_iter = 0
-        # Locks protect shared state when multiple function_calls in a single
-        # Gemini turn dispatch concurrently (see `_step` parallel path).
-        self._iter_lock = threading.Lock()   # dev_iter, research_iter
-        self._idea_lock = threading.Lock()   # add_idea / remove_idea / update_idea
-        self._log_lock = threading.Lock()    # chat-log append
-        # google-genai requires at least one content entry per call; seed with
-        # a canonical starter user turn so the first `_step()` has something to
-        # send. Subsequent steps accumulate model responses + tool results in
-        # this list.
+        self._iter_lock = threading.Lock()
+        self._idea_lock = threading.Lock()
+        self._log_lock = threading.Lock()
         self.input_list: list[dict] = [append_message("user", _INITIAL_USER_TURN)]
         self.last_input_tokens: int | None = None
-        # Rolling window of per-turn tool-call signatures. When the deque is
-        # full and every entry is identical, the agent is spinning on a no-op
-        # — `_step` injects `_STUCK_NUDGE` to push it back to productive work.
+        self._previous_response_id: str | None = None
+        self._next_input: list[dict] | None = None
         self._recent_call_sigs: collections.deque[tuple[tuple[str, str], ...]] = (
             collections.deque(maxlen=_STUCK_REPEAT_THRESHOLD)
         )
-        # Silent text-only watchdog (see `_TEXT_ONLY_TERMINATE_THRESHOLD`).
         self._consecutive_text_only = 0
         self._done = False
-        # Ensure INDEX.md exists so `load_index` has something to read.
         if not (self.ideas_dir / "INDEX.md").exists():
             (self.ideas_dir / "INDEX.md").write_text("# Idea pool\n\n")
-        # Scaffold MAIN.md — the agent's living plan, maintained via write_file
-        # / edit_file. Idempotent guard so re-instantiation in the same run dir
-        # doesn't clobber accumulated state.
         if not self.main_md_path.exists():
             self.main_md_path.write_text(f"# {goal_text}\n", encoding="utf-8")
 
@@ -137,33 +114,55 @@ class MainAgent:
             writable_root=str(self.base_dir),
         )
         if should_compact(self.last_input_tokens):
-            self.input_list = compact_messages(
-                self.input_list, model=_MAIN_AGENT_MODEL
-            )
+            self.input_list = compact_messages(self.input_list, model=_MAIN_AGENT_MODEL)
+            self._previous_response_id = None
+            self._next_input = None
+        api_input = (
+            self._next_input
+            if self._next_input is not None and self._previous_response_id is not None
+            else self.input_list
+        )
         response, self.last_input_tokens = call_llm(
             model=_MAIN_AGENT_MODEL,
             system_instruction=system_prompt,
-            messages=self.input_list,
+            messages=api_input,
             function_declarations=tools,
             enable_google_search=False,
             include_usage=True,
+            previous_response_id=self._previous_response_id,
         )
+        self._previous_response_id = response.id
+        self._next_input = None
 
-        parts = response.candidates[0].content.parts
-        has_function_calls = any(
-            p.function_call for p in parts if hasattr(p, "function_call")
-        )
+        output_items = response.output
+        function_calls = [item for item in output_items if item.type == "function_call"]
+        has_function_calls = len(function_calls) > 0
 
-        self.input_list.append(
-            response.candidates[0].content.model_dump(mode="json", exclude_none=True)
+        output_text = response.output_text or ""
+        if output_text:
+            self.input_list.append(append_message("assistant", output_text))
+        for fc in function_calls:
+            self.input_list.append(
+                {
+                    "type": "function_call",
+                    "call_id": fc.call_id,
+                    "name": fc.name,
+                    "arguments": fc.arguments,
+                }
+            )
+
+        self._log(
+            {
+                "role": "assistant",
+                "content": output_text,
+                "function_calls": [
+                    {"name": fc.name, "arguments": fc.arguments, "call_id": fc.call_id}
+                    for fc in function_calls
+                ],
+            }
         )
-        self._log({"role": "assistant", "content": response.candidates[0].content.model_dump(mode="json", exclude_none=True)})
 
         if not has_function_calls:
-            # Text-only turns are legitimate in isolation (transient drift, a
-            # single "done / waiting" message). But sustained text-only signals
-            # the agent has disengaged — terminate the run cleanly once the
-            # watchdog threshold trips.
             self._consecutive_text_only += 1
             if self._consecutive_text_only >= _TEXT_ONLY_TERMINATE_THRESHOLD:
                 logger.info(
@@ -172,61 +171,44 @@ class MainAgent:
                     self._consecutive_text_only,
                 )
                 self._done = True
-            # Nothing to dispatch on a text-only turn either way; `run()`'s
-            # `while not self._done` checks the flag on the next iteration.
             return
         self._consecutive_text_only = 0
 
-        call_parts = [
-            p for p in parts if hasattr(p, "function_call") and p.function_call
-        ]
-        results: list[tuple[str, dict, str] | None] = [None] * len(call_parts)
+        results: list[tuple[str, dict, str, str] | None] = [None] * len(function_calls)
 
-        def _run(idx: int, fc) -> tuple[int, str, dict, str]:
-            args = dict(fc.args)
-            return idx, fc.name, args, self._dispatch(fc.name, args)
+        def _run(idx: int, fc) -> tuple[int, str, dict, str, str]:
+            args = json.loads(fc.arguments)
+            return idx, fc.name, args, self._dispatch(fc.name, args), fc.call_id
 
-        if len(call_parts) == 1:
-            idx, name, args, result = _run(0, call_parts[0].function_call)
-            results[idx] = (name, args, result)
+        if len(function_calls) == 1:
+            idx, name, args, result, call_id = _run(0, function_calls[0])
+            results[idx] = (name, args, result, call_id)
         else:
             logger.info(
                 "MainAgent dispatching %d function_calls in parallel: %s",
-                len(call_parts),
-                [cp.function_call.name for cp in call_parts],
+                len(function_calls),
+                [fc.name for fc in function_calls],
             )
-            with ThreadPoolExecutor(max_workers=len(call_parts)) as ex:
-                futs = [
-                    ex.submit(_run, i, cp.function_call)
-                    for i, cp in enumerate(call_parts)
-                ]
+            with ThreadPoolExecutor(max_workers=len(function_calls)) as ex:
+                futs = [ex.submit(_run, i, fc) for i, fc in enumerate(function_calls)]
                 for fut in futs:
-                    idx, name, args, result = fut.result()
-                    results[idx] = (name, args, result)
+                    idx, name, args, result, call_id = fut.result()
+                    results[idx] = (name, args, result, call_id)
 
-        function_responses = []
-        for name, args, result in results:
-            function_responses.append(
-                types.Part.from_function_response(
-                    name=name,
-                    response={"result": result},
-                )
-            )
+        self._next_input = []
+        for name, args, result, call_id in results:
+            item = {
+                "type": "function_call_output",
+                "call_id": call_id,
+                "output": result,
+            }
+            self.input_list.append(item)
+            self._next_input.append(item)
             self._log({"role": "tool", "name": name, "args": args, "result": result})
 
-        self.input_list.append(
-            types.Content(role="function", parts=function_responses).model_dump(
-                mode="json", exclude_none=True
-            )
-        )
-
-        # Stuck detection: if the last N turns made byte-identical tool calls,
-        # the agent is spinning on a no-op (e.g. repeated `analyze(time.sleep(2))`
-        # after it thinks the goal is met). Inject a static "push on / never stop"
-        # nudge so it tries something new instead.
         turn_sig = tuple(
             (name, json.dumps(args, sort_keys=True, ensure_ascii=False))
-            for name, args, _ in results
+            for name, args, _, _ in results
         )
         self._recent_call_sigs.append(turn_sig)
         if (
@@ -242,6 +224,7 @@ class MainAgent:
             )
             nudge_msg = append_message("user", _STUCK_NUDGE)
             self.input_list.append(nudge_msg)
+            self._next_input.append(nudge_msg)
             self._log({"role": "user", "content": nudge_msg})
             self._recent_call_sigs.clear()
 
@@ -273,9 +256,9 @@ class MainAgent:
         if name == "run_solution":
             version_dir = args.get("version_dir")
             if not version_dir:
-                return json.dumps({
-                    "error": "version_dir is required. Call start_dev_session first."
-                })
+                return json.dumps(
+                    {"error": "version_dir is required. Call start_dev_session first."}
+                )
             return truncate_for_llm(tool_run_solution(version_dir))
 
         if name == "web_search_stack_trace":
@@ -307,9 +290,7 @@ class MainAgent:
                 update_idea(self.ideas_dir, args["idea_id"], args["description"])
             return json.dumps({"ok": True})
 
-        fs_result = execute_filesystem_tool(
-            name, args, writable_root=self.base_dir
-        )
+        fs_result = execute_filesystem_tool(name, args, writable_root=self.base_dir)
         if fs_result is not None:
             return truncate_for_llm(fs_result)
 

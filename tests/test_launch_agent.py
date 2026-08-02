@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 
 import pytest
 
@@ -30,9 +29,9 @@ def test_sync_copies_both_files(repo_with_metadata, tmp_path):
     launch_agent._sync_task_metadata(base_dir)
 
     assert (base_dir / "GOAL.md").read_text(encoding="utf-8") == "# goal\n"
-    assert "primary sources" in (
-        base_dir / "RESEARCHER_INSTRUCTIONS.md"
-    ).read_text(encoding="utf-8")
+    assert "primary sources" in (base_dir / "RESEARCHER_INSTRUCTIONS.md").read_text(
+        encoding="utf-8"
+    )
 
 
 def test_sync_overwrites_stale_copies_in_task_dir(repo_with_metadata, tmp_path):
@@ -45,9 +44,9 @@ def test_sync_overwrites_stale_copies_in_task_dir(repo_with_metadata, tmp_path):
     launch_agent._sync_task_metadata(base_dir)
 
     assert (base_dir / "GOAL.md").read_text(encoding="utf-8") == "# goal\n"
-    assert "primary sources" in (
-        base_dir / "RESEARCHER_INSTRUCTIONS.md"
-    ).read_text(encoding="utf-8")
+    assert "primary sources" in (base_dir / "RESEARCHER_INSTRUCTIONS.md").read_text(
+        encoding="utf-8"
+    )
 
 
 def test_sync_throws_when_any_root_file_missing(monkeypatch, tmp_path):

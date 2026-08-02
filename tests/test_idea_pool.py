@@ -13,7 +13,9 @@ def test_full_lifecycle(tmp_path):
     ideas_dir.mkdir()
 
     # add: monotonic ids, slugified filenames, title as H1
-    assert [add_idea(ideas_dir, t, f"body-{t}") for t in ("alpha", "beta", "gamma")] == [1, 2, 3]
+    assert [
+        add_idea(ideas_dir, t, f"body-{t}") for t in ("alpha", "beta", "gamma")
+    ] == [1, 2, 3]
     assert (ideas_dir / "001_alpha.md").read_text() == "# alpha\n\nbody-alpha\n"
 
     # render_index wrote INDEX.md in id order

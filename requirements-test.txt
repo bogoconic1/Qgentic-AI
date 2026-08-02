@@ -8,7 +8,7 @@ pandas
 numpy
 kaggle
 kagglehub
-google-genai
+openai
 anthropic
 PyYAML
 requests
