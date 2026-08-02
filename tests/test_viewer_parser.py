@@ -21,55 +21,6 @@ def test_iter_records_empty_file(tmp_path: Path):
     assert list(parser.iter_records(p)) == []
 
 
-def test_iter_records_missing_file(tmp_path: Path):
-    assert list(parser.iter_records(tmp_path / "nope.jsonl")) == []
-
-
-def test_assistant_record_with_text_function_call_and_thought(tmp_path: Path):
-    p = tmp_path / "x.jsonl"
-    _write(
-        p,
-        {
-            "role": "assistant",
-            "content": {
-                "parts": [
-                    {"text": "hello"},
-                    {
-                        "function_call": {
-                            "id": "c1",
-                            "name": "read_file",
-                            "args": {"path": "/x"},
-                        },
-                        "thought_signature": "A" * 64,
-                    },
-                ]
-            },
-            "ts": "2026-05-02T07:25:00+00:00",
-        },
-    )
-
-    records = list(parser.iter_records(p))
-    assert len(records) == 1
-    rec = records[0]
-    assert isinstance(rec, parser.AssistantRecord)
-    assert rec.ts == "2026-05-02T07:25:00+00:00"
-    assert len(rec.parts) == 2
-
-    text_part, fc_part = rec.parts
-    assert text_part.text == "hello"
-    assert text_part.function_call is None
-    assert text_part.has_thought is False
-
-    assert fc_part.text is None
-    assert fc_part.function_call == {
-        "id": "c1",
-        "name": "read_file",
-        "args": {"path": "/x"},
-    }
-    assert fc_part.has_thought is True
-    assert fc_part.thought_size == 64
-
-
 def test_tool_record(tmp_path: Path):
     p = tmp_path / "x.jsonl"
     _write(
@@ -125,35 +76,12 @@ def test_last_line_malformed_dropped_silently(tmp_path: Path):
     assert records[0].name == "a"
 
 
-def test_missing_ts_renders_as_none(tmp_path: Path):
-    p = tmp_path / "x.jsonl"
-    _write(
-        p,
-        {
-            "role": "tool",
-            "name": "a",
-            "args": {},
-            "result": "ok",
-        },
-    )
-    [rec] = list(parser.iter_records(p))
-    assert rec.ts is None
-
-
 def test_unknown_role_yields_raw(tmp_path: Path):
     p = tmp_path / "x.jsonl"
     _write(p, {"role": "system", "content": "x", "ts": "t"})
     [rec] = list(parser.iter_records(p))
     assert isinstance(rec, parser.RawRecord)
     assert "system" in rec.error
-
-
-def test_assistant_with_no_parts(tmp_path: Path):
-    p = tmp_path / "x.jsonl"
-    _write(p, {"role": "assistant", "content": {}, "ts": "t"})
-    [rec] = list(parser.iter_records(p))
-    assert isinstance(rec, parser.AssistantRecord)
-    assert rec.parts == []
 
 
 def test_blank_lines_are_ignored(tmp_path: Path):

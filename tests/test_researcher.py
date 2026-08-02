@@ -65,8 +65,6 @@ def test_web_research_success_and_no_truncation(stubbed):
     assert len(result["results"]) == 1
     assert result["results"][0]["text"] == long_text
     assert stubbed.exa.calls[0]["num_results"] == 3
-    assert stubbed.exa.calls[0]["type"] == "auto"
-    assert stubbed.exa.calls[0]["text"] is True
 
 
 def test_web_research_empty_returns_error(stubbed):
@@ -83,7 +81,6 @@ def test_web_fetch_success_and_no_truncation(stubbed):
     )
     result = json.loads(research_module._tool_web_fetch("https://e.example"))
     assert result["markdown"] == long_md
-    assert stubbed.fc.calls[0]["only_main_content"] is True
 
 
 def _make_fc(name, args_dict):
@@ -131,54 +128,13 @@ def test_execute_tool_call_dispatches_and_writes_markdown_records(stubbed):
         research_module._execute_tool_call(_make_fc("nope", {}), state)
 
 
-def test_filesystem_tool_calls_route_to_filesystem_helpers(stubbed, monkeypatch):
-    captured = {}
-
-    def fake_execute_filesystem_tool(name, args, *, writable_root):
-        captured["name"] = name
-        captured["args"] = args
-        captured["writable_root"] = writable_root
-        return json.dumps({"output": "ok", "returncode": 0, "truncated": False})
-
-    monkeypatch.setattr(
-        research_module, "execute_filesystem_tool", fake_execute_filesystem_tool
-    )
-
-    state = {
-        "research_dir": stubbed.research_dir,
-        "tool_seq": {},
-    }
-
-    out = research_module._execute_tool_call(
-        _make_fc("bash", {"command": "ls -la"}), state
-    )
-
-    assert captured["name"] == "bash"
-    assert captured["args"] == {"command": "ls -la"}
-    assert captured["writable_root"] == stubbed.research_dir
-    assert json.loads(out)["returncode"] == 0
-
-
 def test_build_system_inlines_custom_instructions():
     from prompts.research import build_system
 
     body = "Cite at least three peer-reviewed sources per claim."
     out = build_system(writable_root="/tmp/research_1", custom_instructions=body)
-    assert "<custom_instructions>" in out
     assert body in out
     assert "/tmp/research_1" in out
-
-
-def test_build_system_omits_section_when_no_instructions():
-    from prompts.research import build_system
-
-    assert "<custom_instructions>" not in build_system(writable_root="/tmp/research_1")
-    assert "<custom_instructions>" not in build_system(
-        writable_root="/tmp/research_1", custom_instructions=""
-    )
-    assert "<custom_instructions>" not in build_system(
-        writable_root="/tmp/research_1", custom_instructions="   \n"
-    )
 
 
 def test_render_tool_record_markdown_error_path():

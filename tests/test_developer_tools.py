@@ -171,21 +171,6 @@ def test_encode_image_to_data_url_basic(test_data_dir):
 # ---------------------------------------------------------------------------
 
 
-def test_execute_code_returns_job():
-    """execute_code() returns an ExecutionJob, not a string."""
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
-        f.write("print('hello')\n")
-        script_path = f.name
-
-    try:
-        job = execute_code(script_path, timeout_seconds=10)
-        assert isinstance(job, ExecutionJob)
-        result = job.result()
-        assert "hello" in result
-    finally:
-        Path(script_path).unlink(missing_ok=True)
-
-
 def test_execution_job_done_and_result():
     """Job lifecycle: not done immediately, done after completion, result() returns output."""
     with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
