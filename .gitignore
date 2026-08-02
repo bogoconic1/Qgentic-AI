@@ -102,7 +102,12 @@ unit_test.md
 test.py
 submit*.py
 CLAUDE.md
+CLAUDE.local.md
+AGENTS.md
+AGENTS.local.md
 INSTRUCTIONS.md
+.claude/skills/
+docs/
 web_search/
 logs/
 demo/

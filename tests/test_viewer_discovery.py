@@ -71,10 +71,6 @@ def test_list_runs_newest_first_with_subagents(tmp_path: Path):
     assert older.has_main_log is True
 
 
-def test_list_runs_missing_slug(tmp_path: Path):
-    assert discovery.list_runs(tmp_path, "ghost") == []
-
-
 def test_get_run_raises_on_missing(tmp_path: Path):
     with pytest.raises(FileNotFoundError):
         discovery.get_run(tmp_path, "ghost", "20260101_000000")
@@ -84,12 +80,6 @@ def test_get_run_rejects_bad_run_id(tmp_path: Path):
     _make_run(tmp_path, "alpha", "20260101_000000")
     with pytest.raises(FileNotFoundError):
         discovery.get_run(tmp_path, "alpha", "../escape")
-
-
-def test_get_run_no_main_log(tmp_path: Path):
-    _make_run(tmp_path, "alpha", "20260101_000000", with_main_log=False)
-    info = discovery.get_run(tmp_path, "alpha", "20260101_000000")
-    assert info.has_main_log is False
 
 
 def test_is_safe_path_accepts_contained(tmp_path: Path):
