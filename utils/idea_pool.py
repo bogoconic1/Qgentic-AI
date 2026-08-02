@@ -11,9 +11,7 @@ Flat-file layout under ``task/<slug>/<run_id>/ideas/``:
 Each idea file is pure markdown with the title as the first ``# H1``. The
 integer id lives as a zero-padded prefix in the filename so lookups and
 orderings are cheap. INDEX.md is a one-line-per-idea summary that MainAgent
-always has in its system prompt; ``load_index`` applies line + byte caps
-(mirroring ``claude-code/memdir/memdir.ts:truncateEntrypointContent``) with a
-trailing warning when the pool outgrows them.
+always has in its system prompt.
 """
 
 from __future__ import annotations
@@ -24,25 +22,6 @@ from pathlib import Path
 _INDEX_FILENAME = "INDEX.md"
 _INDEX_HEADER = "# Idea pool"
 _H1 = re.compile(r"^#\s+(.+)$", re.MULTILINE)
-
-MAX_INDEX_LINES = 200
-MAX_INDEX_BYTES = 25_000
-
-
-def _truncate_with_warning(content: str) -> str:
-    trimmed = content.rstrip("\n")
-    lines = trimmed.split("\n")
-    if len(lines) <= MAX_INDEX_LINES and len(trimmed) <= MAX_INDEX_BYTES:
-        return trimmed + "\n"
-    truncated = "\n".join(lines[:MAX_INDEX_LINES])
-    if len(truncated) > MAX_INDEX_BYTES:
-        cut = truncated.rfind("\n", 0, MAX_INDEX_BYTES)
-        truncated = truncated[:cut]
-    warning = (
-        f"\n\n> WARNING: {_INDEX_FILENAME} truncated at {MAX_INDEX_LINES} "
-        f"lines / {MAX_INDEX_BYTES} bytes. Prune the pool."
-    )
-    return truncated + warning + "\n"
 
 
 def render_index(ideas_dir: Path) -> str:
@@ -60,7 +39,7 @@ def render_index(ideas_dir: Path) -> str:
 
 
 def load_index(ideas_dir: Path) -> str:
-    return _truncate_with_warning((ideas_dir / _INDEX_FILENAME).read_text())
+    return (ideas_dir / _INDEX_FILENAME).read_text()
 
 
 def add_idea(ideas_dir: Path, title: str, description: str) -> int:

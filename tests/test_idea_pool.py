@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-from utils import idea_pool
 from utils.idea_pool import add_idea, load_index, remove_idea, update_idea
 
 
@@ -40,14 +39,13 @@ def test_full_lifecycle(tmp_path):
         update_idea(ideas_dir, 99, "nope")
 
 
-def test_load_index_truncation_warning(monkeypatch, tmp_path):
+def test_load_index_returns_every_idea(tmp_path):
     ideas_dir = tmp_path / "ideas"
     ideas_dir.mkdir()
-    monkeypatch.setattr(idea_pool, "MAX_INDEX_LINES", 5)
 
-    for i in range(10):
+    for i in range(250):
         add_idea(ideas_dir, f"idea-{i}", "body")
 
     loaded = load_index(ideas_dir)
-    assert "WARNING" in loaded
-    assert loaded.rstrip().endswith("Prune the pool.")
+    assert loaded.count("- [") == 250
+    assert "- [250] idea-249" in loaded
