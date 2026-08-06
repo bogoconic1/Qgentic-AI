@@ -102,7 +102,7 @@ flowchart TB
 
     LA --> MA["MainAgent · GPT-5.5 loop<br/><br/>Tools<br/>start_dev_session · run_solution<br/>research · web_search_stack_trace<br/>add_idea / update_idea / remove_idea<br/>bash · read_file · write_file · edit_file<br/>list_dir · grep_code · glob_files"]
 
-    MA -. each bash call .-> JUDGE[/"LLM bash safety judge"/]
+    MA -. each bash call .-> JUDGE[/"codex bash safety judge<br/>read-only sandbox"/]
     MA -. run_solution .-> MON[/"codex training monitor<br/>read-only sandbox · watches logs"/]
     MA -. LLM .-> LLM
 

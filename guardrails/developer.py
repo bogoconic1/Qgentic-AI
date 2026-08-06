@@ -5,10 +5,6 @@ import sys
 from dotenv import load_dotenv
 from project_config import get_config
 
-from tools.helpers import call_llm
-from prompts.guardrails import leakage_review as prompt_leakage_review
-from utils.llm_utils import append_message
-from schemas.guardrails import LeakageReviewResponse
 
 
 load_dotenv()
@@ -16,7 +12,6 @@ logger = logging.getLogger(__name__)
 
 _CONFIG = get_config()
 _LLM_CFG = _CONFIG["llm"]
-_LEAKAGE_REVIEW_MODEL = _LLM_CFG["leakage_review_model"]
 
 # -----------------------------
 # Guardrails: Static logging AST
@@ -318,22 +313,3 @@ def check_solution_txt_filehandler(code: str) -> dict:
 
     return {"status": "pass", "violations": []}
 
-
-# ----------------------------------------------
-# Guardrails: LLM-based data leakage risk review
-# ----------------------------------------------
-def llm_leakage_review(code: str) -> LeakageReviewResponse:
-    """
-    Ask an LLM to review potential data leakage risks in the generated code.
-    Uses the configured leakage review model. Returns structured LeakageReviewResponse.
-    """
-    system_prompt = prompt_leakage_review()
-    messages = [append_message("user", "Python Training Script: \n\n" + code)]
-
-    return call_llm(
-        model=_LEAKAGE_REVIEW_MODEL,
-        system_instruction=system_prompt,
-        function_declarations=[],
-        messages=messages,
-        text_format=LeakageReviewResponse,
-    )

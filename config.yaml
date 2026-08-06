@@ -1,9 +1,6 @@
 llm:
   main_agent_model: "gpt-5.5"
-  developer_model: "gpt-5.5"
   developer_tool_model: "gpt-5.5"
-  leakage_review_model: "gpt-5.5"
-  bash_judge_model: "gpt-5.5"  # judges every shell command before execution
 runtime:
   llm_max_retries: 5
   llm_backoff_sequence: [1, 5, 10, 30, 60]
@@ -19,10 +16,6 @@ subagents:
     sandbox: "workspace-write"  # shell has no network; codex's web search still works
 paths:
   task_root: "task"
-guardrails:
-  logging_basicconfig_order: true
-  leakage_review: true
-  enable_code_safety: true
 tracking:
   wandb:
     entity: bogoconic1 # replace with your W&B entity
