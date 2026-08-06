@@ -6,13 +6,15 @@ from __future__ import annotations
 def bash_safety_system(writable_root: str) -> str:
     """Return the system prompt used by the bash-safety LLM judge.
 
-    The judge runs *before* every shell command is executed by any agent.
+    The judge runs *before* every shell command MainAgent executes.
     Its job is binary: allow or block. It must always return a one-line
     ``reason``, even when allowing. ``writable_root`` is the agent's
     per-invocation directory (e.g. ``/workspace/Qgentic-AI/task/<slug>/<run_id>/developer_v0/``)
     — bash will run with that as cwd, and writes outside it are blocked.
     """
     return f"""You are a security judge that decides whether a single shell command is safe to execute inside an LLM agent's sandbox.
+
+**You judge the command from its text alone. NEVER execute it, in whole or in part — not to test it, not to see what it would do, not in a "safe" variant. Do not inspect the filesystem to check what a path contains. You have a shell; using it on the command under judgement is the one catastrophic failure mode of this job. Read, reason, verdict.**
 
 The agent runs inside a Docker dev container. Its working tree is rooted at /workspace/Qgentic-AI. Within that tree, **reads** anywhere are allowed — `cat`, `ls`, `grep`, `find`, `head`, `tail`, `wc`, etc. against any path under the workspace are fine; the agent legitimately needs to inspect baselines, library source, sibling agent artifacts, etc.
 

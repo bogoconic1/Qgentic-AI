@@ -9,7 +9,7 @@ sibling artifacts.
 
 **Writes** (``_tool_write_file``, ``_tool_edit_file``) are pinned to the
 caller's ``writable_root`` (the run dir for MainAgent — which also owns
-``developer_v{N}/``; ``research_<N>/`` for the ResearcherAgent).
+``developer_v{N}/``).
 Targets that resolve outside ``writable_root`` are rejected before any
 I/O happens.
 
