@@ -21,6 +21,7 @@ Qgentic-AI is an automated ML engineering stack. LLM-driven agents take a proble
 
 - Python 3.12
 - CUDA-enabled GPU
+- [Codex CLI](https://developers.openai.com/codex/cli), signed in to a Codex plan — the Researcher subagent runs as `codex exec`, so its web research and reasoning bill to your Codex subscription rather than consuming API credit. The Researcher fails fast at first use if `codex` is missing from `PATH`.
 
 ```
 conda create --name qgentic-ai python=3.12 -y
@@ -93,7 +94,7 @@ flowchart TB
     GOAL["GOAL.md<br/>RESEARCHER_INSTRUCTIONS.md"]
     KH[("kagglehub")]
     LLM[("OpenAI GPT-5.5")]
-    WEB[("Exa + Firecrawl")]
+    CODEX[("codex exec<br/>user's Codex plan")]
 
     USER -->|"launch_agent.py --slug X"| LA["launch_agent.py<br/>copies inputs · downloads competition · creates run dir"]
     GOAL --> LA
@@ -105,9 +106,8 @@ flowchart TB
     MA -. run_solution .-> MON[/"LLM training monitor<br/>watches stdout / stderr live"/]
     MA -. LLM .-> LLM
 
-    MA -->|"research(instruction)"| RA["Researcher subagent · GPT-5.5 loop<br/><br/>Tools<br/>web_research · web_fetch<br/>bash · read_file · write_file · edit_file<br/>list_dir · grep_code · glob_files"]
-    RA -. LLM .-> LLM
-    RA -. search / fetch .-> WEB
+    MA -->|"research(instruction)"| RA["Researcher subagent · codex exec<br/>sandbox: workspace-write<br/><br/>codex owns the tools:<br/>web search · shell · apply_patch"]
+    RA -. subscription, not API credit .-> CODEX
 
     MA --> RD
     RA --> RD
@@ -116,7 +116,7 @@ flowchart TB
       MAIN["MAIN.md"]
       IDEAS["ideas/INDEX.md<br/>ideas/&lt;id&gt;.md"]
       DEV["developer_vN/<br/>SOLUTION.py · .txt · .json · .md<br/>submission.csv"]
-      RES["research_N/<br/>RESEARCH.md · web_research/ · web_fetch/"]
+      RES["research_N/<br/>RESEARCH.md · SOURCES.md<br/>codex_events.jsonl"]
       LOG1["main_agent_chat.jsonl"]
       LOG2["research_N/researcher_chat.jsonl"]
     end
@@ -129,13 +129,13 @@ flowchart TB
 
 - `task/<slug>/<run_id>/main_agent_chat.jsonl` — append-only audit log of every MainAgent step (assistant turn + tool result).
 - `task/<slug>/<run_id>/developer_v{N}/` — per-attempt artifacts MainAgent writes via `start_dev_session` (`SOLUTION.py`, `SOLUTION.txt`, `SOLUTION.json`, `submission.csv`, …).
-- `task/<slug>/<run_id>/research_<N>/` — per-call researcher artifacts (`RESEARCH.md` + `web_research/`/`web_fetch/` audit records) plus `researcher_chat.jsonl`.
+- `task/<slug>/<run_id>/research_<N>/` — per-call researcher artifacts (`RESEARCH.md`, `SOURCES.md`, the raw `codex_events.jsonl` stream, and any scratch files codex authored) plus `researcher_chat.jsonl`.
 - `task/<slug>/<run_id>/ideas/` — idea pool (memdir-style `INDEX.md` + one file per idea).
 - Weights & Biases / Weave tracking is configured via `config.yaml` under `tracking.wandb`.
 
 #### Web viewer
 
-A local Flask app reads the three `*_chat.jsonl` files and renders the full transcript with collapsible tool calls/results, links to companion artifacts (`MAIN.md`, `SOLUTION.{py,md,json,txt}`, `RESEARCH.md`, `web_research/`, `web_fetch/`), and a `?live=1` mode that meta-refreshes every 3 s.
+A local Flask app reads the three `*_chat.jsonl` files and renders the full transcript with collapsible tool calls/results, links to companion artifacts (`MAIN.md`, `SOLUTION.{py,md,json,txt}`, `RESEARCH.md`, `SOURCES.md`), and a `?live=1` mode that meta-refreshes every 3 s.
 
 ```bash
 python -m scripts.viewer --port 8765
