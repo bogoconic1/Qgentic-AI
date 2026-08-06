@@ -48,25 +48,6 @@ def append_message(role: str, message: str) -> dict:
     return {"role": role, "content": message}
 
 
-def get_monitor_tools():
-    return [
-        {
-            "type": "function",
-            "name": "execute_bash",
-            "description": "Execute a bash command for system diagnostics. Use for checking GPU utilization (nvidia-smi), process status (ps, top), memory (free), disk (df), etc.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "command": {
-                        "type": "string",
-                        "description": "Bash command to execute.",
-                    }
-                },
-                "required": ["command"],
-            },
-        }
-    ]
-
 
 def get_filesystem_tools():
     return [

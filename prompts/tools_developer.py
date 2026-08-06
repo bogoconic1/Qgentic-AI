@@ -32,14 +32,18 @@ Return "continue" when training looks healthy OR the evidence is ambiguous:
 - Silence is expected (data loading, model compilation, evaluation phase)
 - Slow but steady progress
 
-## Using execute_bash
+## Diagnosing an ambiguous log
 
-When log output alone is insufficient, use the execute_bash tool to diagnose:
+When the log tail alone is insufficient, run shell commands directly:
 - `nvidia-smi` — check GPU utilization and memory (0% GPU + silence = likely deadlock)
 - `ps -p <pid> -o %cpu,%mem,etime` — check if process is consuming CPU
 - `free -m` — check available system memory
 
-Only use tools when the logs are ambiguous. If the logs clearly show NaN loss or healthy training, return your verdict immediately without tool use.
+Your working directory is the run's `developer_v{N}/`, so you can also read `SOLUTION.txt` for the script's own curated log when the tail is not enough.
+
+You are sandboxed read-only: you can read and inspect anything, but you cannot write files or reach the network.
+
+Only run commands when the logs are ambiguous. If they clearly show NaN loss or healthy training, return your verdict immediately.
 
 ## Response format
 

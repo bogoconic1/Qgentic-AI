@@ -23,8 +23,6 @@ from __future__ import annotations
 
 import json
 import logging
-import shutil
-import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -33,6 +31,7 @@ from dotenv import load_dotenv
 
 from project_config import get_config
 from prompts.research import build_codex_prompt
+from utils.codex import preflight, run_codex
 
 
 load_dotenv()
@@ -40,10 +39,6 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 _TASK_ROOT = Path(get_config()["paths"]["task_root"])
-
-# stderr tail returned to the parent agent when codex exits non-zero. Enough to
-# carry a traceback or an auth error without flooding the caller's context.
-_STDERR_TAIL_CHARS = 4_000
 
 
 def translate_events(events_path: Path, chat_log_path: Path) -> None:
@@ -151,12 +146,7 @@ class ResearcherAgent:
         self.model = codex_cfg["model"]
         self.sandbox = codex_cfg["sandbox"]
 
-        if shutil.which("codex") is None:
-            raise RuntimeError(
-                "The `codex` CLI is not on PATH. Deep Research runs on codex "
-                "so it draws on your subscription instead of API credit — "
-                "install it and sign in before launching the agent."
-            )
+        preflight()
 
     def _load_custom_instructions(self) -> str | None:
         """Read `task/<slug>/RESEARCHER_INSTRUCTIONS.md` if it exists."""
@@ -189,14 +179,6 @@ class ResearcherAgent:
             encoding="utf-8",
         )
 
-        command = [
-            "codex", "exec", "--json",
-            "--cd", str(self.research_dir),
-            "--sandbox", self.sandbox,
-            "--skip-git-repo-check",
-            "-m", self.model,
-            "-",
-        ]
         logger.info(
             "ResearcherAgent slug=%s run_id=%s iter=%d dir=%s instruction=%r",
             self.slug,
@@ -210,31 +192,25 @@ class ResearcherAgent:
         # would kill real work. A wedged codex therefore blocks this call — the
         # elapsed-time log line below is what distinguishes a hang from depth.
         started = datetime.now(timezone.utc)
-        with (
-            self.prompt_path.open("r", encoding="utf-8") as stdin,
-            self.events_path.open("w", encoding="utf-8") as stdout,
-        ):
-            proc = subprocess.run(
-                command,
-                stdin=stdin,
-                stdout=stdout,
-                stderr=subprocess.PIPE,
-                text=True,
-                check=False,
-            )
+        result = run_codex(
+            self.prompt_path.read_text(encoding="utf-8"),
+            cwd=self.research_dir,
+            sandbox=self.sandbox,
+            model=self.model,
+            events_path=self.events_path,
+        )
         elapsed = (datetime.now(timezone.utc) - started).total_seconds()
         logger.info(
             "codex exec exited rc=%d after %.0fs (%s)",
-            proc.returncode,
+            result.returncode,
             elapsed,
             self.events_path,
         )
 
-        if proc.returncode != 0:
-            logger.error("codex exec failed: %s", proc.stderr[-_STDERR_TAIL_CHARS:])
+        if not result.ok:
             return json.dumps({
-                "error": f"codex exec exited {proc.returncode}",
-                "stderr": proc.stderr[-_STDERR_TAIL_CHARS:],
+                "error": f"codex exec exited {result.returncode}",
+                "stderr": result.stderr,
             })
 
         translate_events(self.events_path, self.chat_log)

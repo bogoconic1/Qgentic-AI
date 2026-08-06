@@ -10,7 +10,8 @@ runtime:
   compaction_threshold_tokens: 200000  # compact when last call's prompt_token_count exceeds this
   compaction_keep_last: 4               # turns kept verbatim after summary
   baseline_code_timeout: 43200  # 12 hours for baseline code execution
-  log_monitor_interval: 120  # Seconds between LLM log monitor calls during code execution
+  log_monitor_interval: 300  # Seconds between codex monitor calls during code execution
+  monitor_codex_timeout: 600  # Kill a wedged monitor codex call so the job's own hard timeout stays live
   bash_timeout_seconds: 600  # Per-call timeout for the bash filesystem tool
 subagents:
   codex:

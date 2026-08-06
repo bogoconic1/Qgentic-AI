@@ -21,7 +21,7 @@ Qgentic-AI is an automated ML engineering stack. LLM-driven agents take a proble
 
 - Python 3.12
 - CUDA-enabled GPU
-- [Codex CLI](https://developers.openai.com/codex/cli), signed in to a Codex plan — the Researcher subagent runs as `codex exec`, so its web research and reasoning bill to your Codex subscription rather than consuming API credit. The Researcher fails fast at first use if `codex` is missing from `PATH`.
+- [Codex CLI](https://developers.openai.com/codex/cli), signed in to a Codex plan — the Researcher subagent and the training log monitor run as `codex exec`, so their web research and reasoning bill to your Codex subscription rather than consuming API credit. `launch_agent.py` fails at startup if `codex` is not on `PATH`.
 
 ```
 conda create --name qgentic-ai python=3.12 -y
@@ -103,7 +103,7 @@ flowchart TB
     LA --> MA["MainAgent · GPT-5.5 loop<br/><br/>Tools<br/>start_dev_session · run_solution<br/>research · web_search_stack_trace<br/>add_idea / update_idea / remove_idea<br/>bash · read_file · write_file · edit_file<br/>list_dir · grep_code · glob_files"]
 
     MA -. each bash call .-> JUDGE[/"LLM bash safety judge"/]
-    MA -. run_solution .-> MON[/"LLM training monitor<br/>watches stdout / stderr live"/]
+    MA -. run_solution .-> MON[/"codex training monitor<br/>read-only sandbox · watches logs"/]
     MA -. LLM .-> LLM
 
     MA -->|"research(instruction)"| RA["Researcher subagent · codex exec<br/>sandbox: workspace-write<br/><br/>codex owns the tools:<br/>web search · shell · apply_patch"]
