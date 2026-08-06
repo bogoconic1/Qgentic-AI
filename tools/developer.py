@@ -12,10 +12,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 from project_config import get_config
 from tools.helpers import call_llm
-from utils.llm_utils import (
-    append_message,
-    get_monitor_tools,
-)
+from utils.codex import run_codex
+from utils.llm_utils import append_message
 from prompts.tools_developer import (
     build_stack_trace_prompt as prompt_stack_trace,
     log_monitor_system as prompt_log_monitor_system,
@@ -47,6 +45,8 @@ _DEVELOPER_TOOL_MODEL = _LLM_CFG["developer_tool_model"]
 _RUNTIME_CFG = _CONFIG["runtime"]
 _BASELINE_CODE_TIMEOUT = _RUNTIME_CFG["baseline_code_timeout"]
 _LOG_MONITOR_INTERVAL = _RUNTIME_CFG["log_monitor_interval"]
+_MONITOR_CODEX_TIMEOUT = _RUNTIME_CFG["monitor_codex_timeout"]
+_CODEX_MODEL = _CONFIG["subagents"]["codex"]["model"]
 
 
 SOLUTION_PY_SCAFFOLD = '''\
@@ -300,22 +300,8 @@ def execute_code(
     return ExecutionJob(proc, timeout_seconds, filepath)
 
 
-def _execute_monitor_tool_call(fc) -> str:
-    args = json.loads(fc.arguments)
-
-    if fc.name == "execute_bash":
-        command = args["command"]
-        logger.info("Monitor tool: execute_bash(%s)", command)
-        result = subprocess.run(
-            command,
-            shell=True,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        return json.dumps({"output": result.stdout + result.stderr})
-    else:
-        raise ValueError(f"Unknown monitor tool: {fc.name}")
+class MonitorUnavailableError(RuntimeError):
+    """The monitor could not produce a verdict. Never a reason to kill a job."""
 
 
 def monitor_logs(
@@ -323,92 +309,49 @@ def monitor_logs(
     seconds_since_last_output: float,
     total_elapsed_seconds: float,
     pid: int,
-    max_tool_steps: int = 3,
+    version_dir: str | Path,
 ) -> LogMonitorVerdict:
-    """Analyze training logs and system state to decide if the process should be killed.
+    """Decide whether a running training script is healthy or should be killed.
 
-    Uses an LLM with access to an execute_bash tool for system diagnostics.
-    Returns a LogMonitorVerdict with action ("continue" or "kill") and reason.
+    Runs one `codex exec` under a read-only sandbox: it reads the log tail and
+    can run its own diagnostics (`nvidia-smi`, `ps`, `free`) when the tail is
+    ambiguous, then returns a schema-validated verdict.
+
+    The codex call is bounded by ``runtime.monitor_codex_timeout``. Without a
+    cap, a wedged codex would block ``execute_with_monitor``'s loop before its
+    hard-timeout check, leaving the training job unwatched and unbounded.
+
+    Raises:
+        MonitorUnavailableError: codex exited non-zero, timed out, or its
+            output failed schema validation. Callers must treat this as "keep
+            running" — see ``execute_with_monitor``.
     """
-    system_prompt = prompt_log_monitor_system()
-    user_prompt = prompt_log_monitor_user(
-        log_output=log_output,
-        seconds_since_last_output=seconds_since_last_output,
-        total_elapsed_seconds=total_elapsed_seconds,
-        pid=pid,
+    prompt = (
+        prompt_log_monitor_system()
+        + "\n\n"
+        + prompt_log_monitor_user(
+            log_output=log_output,
+            seconds_since_last_output=seconds_since_last_output,
+            total_elapsed_seconds=total_elapsed_seconds,
+            pid=pid,
+        )
     )
 
-    tools = get_monitor_tools()
-    input_list = [append_message("user", user_prompt)]
-    previous_response_id = None
+    result = run_codex(
+        prompt,
+        cwd=Path(version_dir),
+        sandbox="read-only",
+        model=_CODEX_MODEL,
+        output_schema=LogMonitorVerdict,
+        timeout=_MONITOR_CODEX_TIMEOUT,
+    )
 
-    for step in range(max_tool_steps):
-        is_last_step = step == max_tool_steps - 1
-        text_format = LogMonitorVerdict if is_last_step else None
-
-        logger.info("Monitor step %d/%d", step + 1, max_tool_steps)
-
-        response = call_llm(
-            model=_DEVELOPER_TOOL_MODEL,
-            system_instruction=system_prompt,
-            function_declarations=tools if not is_last_step else [],
-            messages=input_list,
-            enable_google_search=False,
-            text_format=text_format,
-            previous_response_id=previous_response_id,
+    if not result.ok or result.parsed is None:
+        raise MonitorUnavailableError(
+            f"codex monitor unavailable (rc={result.returncode}): {result.stderr}"
         )
 
-        if hasattr(response, "action"):
-            return response
-
-        previous_response_id = response.id
-        output_items = response.output
-        function_calls = [item for item in output_items if item.type == "function_call"]
-
-        if not function_calls:
-            response = call_llm(
-                model=_DEVELOPER_TOOL_MODEL,
-                system_instruction=system_prompt,
-                messages=[],
-                enable_google_search=False,
-                text_format=LogMonitorVerdict,
-                previous_response_id=previous_response_id,
-            )
-            return response
-
-        next_input = []
-        output_text = response.output_text or ""
-        if output_text:
-            input_list.append(append_message("assistant", output_text))
-        for fc in function_calls:
-            input_list.append(
-                {
-                    "type": "function_call",
-                    "call_id": fc.call_id,
-                    "name": fc.name,
-                    "arguments": fc.arguments,
-                }
-            )
-            tool_result_str = _execute_monitor_tool_call(fc)
-            item = {
-                "type": "function_call_output",
-                "call_id": fc.call_id,
-                "output": tool_result_str,
-            }
-            input_list.append(item)
-            next_input.append(item)
-        input_list = next_input
-
-    logger.warning("Monitor exhausted %d steps, forcing final verdict", max_tool_steps)
-    response = call_llm(
-        model=_DEVELOPER_TOOL_MODEL,
-        system_instruction=system_prompt + "\n\nReturn your verdict now.",
-        messages=[],
-        enable_google_search=False,
-        text_format=LogMonitorVerdict,
-        previous_response_id=previous_response_id,
-    )
-    return response
+    return result.parsed
 
 
 def execute_with_monitor(
@@ -443,12 +386,16 @@ def execute_with_monitor(
             logger.warning("Hard timeout reached for %s", code_path)
             return job.kill("Hard timeout exceeded")
 
+        # Fail open. A monitor that cannot reach codex, or returns something
+        # unparseable, must never terminate a healthy 12-hour training run —
+        # only an explicit "kill" verdict does that.
         try:
             verdict = monitor_logs(
                 log_output=job.recent_output(),
                 seconds_since_last_output=job.idle_time(),
                 total_elapsed_seconds=job.elapsed(),
                 pid=job.pid,
+                version_dir=Path(code_path).parent,
             )
             logger.info(
                 "Monitor verdict for %s: %s (%s)",

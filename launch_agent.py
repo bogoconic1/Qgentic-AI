@@ -22,6 +22,7 @@ import weave
 
 from agents.main_agent import MainAgent
 from project_config import get_config, get_config_value
+from utils.codex import preflight
 from utils.competition_data import download_competition_data, generate_description_md
 
 
@@ -141,6 +142,11 @@ def main() -> None:
         help="Optional wandb run name override (defaults to '<run_id>-<slug>').",
     )
     args = parser.parse_args()
+
+    # Subagents (research, log monitor) run on the codex CLI. A missing binary
+    # would otherwise surface hours in — as a dead monitor or a failed first
+    # research call — so refuse to launch without it.
+    preflight()
 
     if args.run_id is None:
         args.run_id = time.strftime("%Y%m%d_%H%M%S")

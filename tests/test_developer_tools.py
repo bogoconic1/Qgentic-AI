@@ -1,19 +1,17 @@
 """Unit tests for shared developer tools (tools/developer.py)."""
 
-import json
-from types import SimpleNamespace
+import logging
 
 import pytest
 import tempfile
 from pathlib import Path
 
+from tools import developer
 from tools.developer import (
     execute_code,
-    monitor_logs,
     web_search_stack_trace,
     ExecutionJob,
 )
-from schemas.developer import LogMonitorVerdict
 
 
 @pytest.fixture
@@ -273,86 +271,34 @@ def test_execution_job_process_group_kill():
         Path(script_path).unlink(missing_ok=True)
 
 
-def test_monitor_logs_kill(monkeypatch):
-    """monitor_logs() returns kill verdict when LLM says kill."""
-    kill_verdict = LogMonitorVerdict(
-        reasoning="NaN loss detected at epoch 4",
-        action="kill",
+def test_monitor_failure_never_kills_a_healthy_job(monkeypatch, tmp_path):
+    """A monitor that cannot produce a verdict must not terminate the job.
+
+    The monitor runs as a `codex exec` subprocess; it can fail because codex is
+    missing, rate-limited, or returned something unparseable. None of those are
+    evidence the training run is unhealthy, and killing on them would end a
+    12-hour job for an unrelated reason.
+    """
+    script = tmp_path / "train.py"
+    script.write_text(
+        "import time\n"
+        "for i in range(3):\n"
+        "    print('epoch', i, 'loss', 1.0 / (i + 1), flush=True)\n"
+        "    time.sleep(0.05)\n",
+        encoding="utf-8",
     )
 
-    def fake_call_llm(*args, **kwargs):
-        return kill_verdict
+    def unavailable(**kwargs):
+        raise developer.MonitorUnavailableError("codex exec exited 1")
 
-    monkeypatch.setattr("tools.developer.call_llm", fake_call_llm)
+    monkeypatch.setattr(developer, "monitor_logs", unavailable)
 
-    verdict = monitor_logs(
-        log_output="Epoch 4/100 - loss: nan - acc: 0.00\n",
-        seconds_since_last_output=5.0,
-        total_elapsed_seconds=240.0,
-        pid=12345,
+    output = developer.execute_with_monitor(
+        code_path=script,
+        timeout_seconds=30,
+        log_monitor_interval=0,
+        logger=logging.getLogger(__name__),
     )
 
-    assert verdict.action == "kill"
-    assert "NaN" in verdict.reasoning
-
-
-def test_monitor_logs_continue(monkeypatch):
-    """monitor_logs() returns continue verdict when training is healthy."""
-    continue_verdict = LogMonitorVerdict(
-        reasoning="Loss decreasing normally",
-        action="continue",
-    )
-
-    def fake_call_llm(*args, **kwargs):
-        return continue_verdict
-
-    monkeypatch.setattr("tools.developer.call_llm", fake_call_llm)
-
-    verdict = monitor_logs(
-        log_output="Epoch 2/100 - loss: 1.876 - acc: 0.34\n",
-        seconds_since_last_output=10.0,
-        total_elapsed_seconds=120.0,
-        pid=12345,
-    )
-
-    assert verdict.action == "continue"
-
-
-def test_monitor_logs_with_bash_tool(monkeypatch):
-    """monitor_logs() handles execute_bash tool calls from the LLM."""
-    call_count = [0]
-
-    def fake_call_llm(*args, **kwargs):
-        call_count[0] += 1
-
-        if call_count[0] == 1:
-            fc = SimpleNamespace(
-                type="function_call",
-                name="execute_bash",
-                arguments=json.dumps({"command": "echo ok"}),
-                call_id="call_123",
-            )
-            resp = SimpleNamespace(
-                id="resp_monitor_1",
-                output=[fc],
-                output_text=None,
-            )
-            return resp
-
-        return LogMonitorVerdict(
-            reasoning="GPU at 0% utilization — process is deadlocked",
-            action="kill",
-        )
-
-    monkeypatch.setattr("tools.developer.call_llm", fake_call_llm)
-
-    verdict = monitor_logs(
-        log_output="",
-        seconds_since_last_output=600.0,
-        total_elapsed_seconds=900.0,
-        pid=12345,
-    )
-
-    assert call_count[0] >= 2
-    assert verdict.action == "kill"
-    assert "deadlocked" in verdict.reasoning.lower()
+    assert "epoch 2" in output, "job must run to completion despite monitor failure"
+    assert "killed" not in output.lower()
